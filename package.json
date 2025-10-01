@@ -1,0 +1,37 @@
+{
+  "name": "gluecksmomente-fullstack",
+  "version": "1.0.0",
+  "description": "Vollständige MERN Stack Anwendung für Gluecksmomente",
+  "scripts": {
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "test": "concurrently \"cd backend && npm test\" \"cd frontend && npm test\"",
+    "lint": "concurrently \"cd backend && npm run lint\" \"cd frontend && npm run lint\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OneCleverFox/soap_homepage.git"
+  },
+  "keywords": [
+    "mern",
+    "react",
+    "node",
+    "express",
+    "mongodb",
+    "e-commerce",
+    "fullstack"
+  ],
+  "author": "Gluecksmomente",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/OneCleverFox/soap_homepage/issues"
+  },
+  "homepage": "https://github.com/OneCleverFox/soap_homepage#readme"
+}
