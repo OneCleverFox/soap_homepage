@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "description": "Backend für Gluecksmomente Homepage - Bestandsverwaltung und Bestellabwicklung",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest"
+    "test": "jest",
+    "build": "echo 'No build required'"
   },
   "keywords": [
     "nodejs",
