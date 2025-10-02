@@ -56,8 +56,9 @@ Diese Anleitung zeigt Ihnen, wie Sie Ihre MERN Stack Anwendung kostenlos live sc
    ```
    NODE_ENV=production
    PORT=5000
-   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/gluecksmomente
-   JWT_SECRET=ihr-super-sicherer-jwt-geheimschluessel
+   MONGODB_URI=mongodb+srv://gluecksmomente-user:PASSWORD@cluster0.xxxxx.mongodb.net/gluecksmomente
+   JWT_SECRET=your-super-secure-jwt-secret-here
+   FRONTEND_URL=https://your-vercel-domain.vercel.app
    ```
 
 ### 2.4 Domain erhalten
