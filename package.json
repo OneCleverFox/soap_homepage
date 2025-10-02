@@ -2,13 +2,18 @@
   "name": "gluecksmomente-fullstack",
   "version": "1.0.0",
   "description": "Vollständige MERN Stack Anwendung für Gluecksmomente",
+  "main": "backend/src/server.js",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "scripts": {
     "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "backend": "cd backend && npm run dev",
     "frontend": "cd frontend && npm start",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd frontend && npm run build",
-    "start": "cd backend && npm start",
+    "install-all": "npm install && cd backend && npm install && cd frontend && npm install",
+    "build": "cd backend && npm install",
+    "start": "cd backend && npm install && npm start",
     "test": "concurrently \"cd backend && npm test\" \"cd frontend && npm test\"",
     "lint": "concurrently \"cd backend && npm run lint\" \"cd frontend && npm run lint\""
   },
