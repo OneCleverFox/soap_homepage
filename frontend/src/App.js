@@ -2,6 +2,10 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box } from '@mui/material';
 
+// Context Providers
+import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
+
 // Public Pages
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
@@ -11,9 +15,21 @@ import CheckoutPage from './pages/CheckoutPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
-import LoginPage from './pages/LoginPage';
+import LoginPageTest from './pages/LoginPageTest';
+
+// Legal Pages
+import ImpressumPage from './pages/ImpressumPage';
+import DatenschutzPage from './pages/DatenschutzPage';
+import AGBPage from './pages/AGBPage';
+
+// Test Pages
+import DataTestPage from './pages/DataTestPage';
 
 // Admin Pages
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminPanelTestNew from './pages/AdminPanelTestNew';
+
+// Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
 import AdminProducts from './admin/AdminProducts';
 import AdminOrders from './admin/AdminOrders';
@@ -26,49 +42,56 @@ import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ScrollToTop from './components/common/ScrollToTop';
-import LoadingSpinner from './components/common/LoadingSpinner';
-
-// Hooks
-import { useAuth } from './hooks/useAuth';
+import CookieConsent from './components/common/CookieConsent';
 
 function App() {
-  const { isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <Box 
-        display="flex" 
-        justifyContent="center" 
-        alignItems="center" 
-        minHeight="100vh"
-      >
-        <LoadingSpinner size={60} />
-      </Box>
-    );
-  }
-
   return (
-    <>
-      <ScrollToTop />
-      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <Routes>
-          {/* Public Routes with Navbar and Footer */}
-          <Route
-            path="/*"
-            element={
-              <>
-                <Navbar />
-                <Box component="main" sx={{ flexGrow: 1 }}>
-                  <Routes>
-                    <Route path="/" element={<HomePage />} />
-                    <Route path="/produkte" element={<ProductsPage />} />
-                    <Route path="/produkte/:id" element={<ProductDetailPage />} />
-                    <Route path="/warenkorb" element={<CartPage />} />
-                    <Route path="/kasse" element={<CheckoutPage />} />
-                    <Route path="/bestellung-verfolgen" element={<OrderTrackingPage />} />
-                    <Route path="/ueber-uns" element={<AboutPage />} />
-                    <Route path="/kontakt" element={<ContactPage />} />
-                    <Route path="/login" element={<LoginPage />} />
+    <AuthProvider>
+      <CartProvider>
+        <ScrollToTop />
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <Routes>
+            {/* Public Routes with Navbar and Footer */}
+            <Route
+              path="/*"
+              element={
+                <>
+                  <Navbar />
+                  <Box component="main" sx={{ flexGrow: 1 }}>
+                    <Routes>
+                      <Route path="/" element={<HomePage />} />
+                      <Route path="/products" element={<ProductsPage />} />
+                      <Route path="/products/:id" element={<ProductDetailPage />} />
+                      <Route path="/cart" element={<CartPage />} />
+                      <Route path="/checkout" element={<CheckoutPage />} />
+                      <Route path="/order-tracking" element={<OrderTrackingPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/contact" element={<ContactPage />} />
+                                        <Route path="/login" element={<LoginPageTest />} />
+                                        <Route path="/anmelden" element={<LoginPageTest />} />
+                    
+                    {/* Legal Pages */}
+                    <Route path="/impressum" element={<ImpressumPage />} />
+                    <Route path="/datenschutz" element={<DatenschutzPage />} />
+                    <Route path="/agb" element={<AGBPage />} />
+                    
+                    {/* Test Pages */}
+                    <Route path="/test" element={<DataTestPage />} />
+                    <Route path="/admin-test" element={<AdminPanelTestNew />} />
+                    
+                    {/* Admin Pages */}
+                    <Route path="/admin/login" element={<AdminLoginPage />} />
+                    <Route path="/admin" element={<AdminPanelTestNew />} />
+                    
+                    {/* Legacy Routes (German) */}
+                    <Route path="/produkte" element={<Navigate to="/products" replace />} />
+                    <Route path="/produkte/:id" element={<Navigate to="/products/:id" replace />} />
+                    <Route path="/warenkorb" element={<Navigate to="/cart" replace />} />
+                    <Route path="/kasse" element={<Navigate to="/checkout" replace />} />
+                    <Route path="/bestellung-verfolgen" element={<Navigate to="/order-tracking" replace />} />
+                    <Route path="/ueber-uns" element={<Navigate to="/about" replace />} />
+                    <Route path="/kontakt" element={<Navigate to="/contact" replace />} />
+                    
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Box>
@@ -129,7 +152,11 @@ function App() {
           />
         </Routes>
       </Box>
-    </>
+      
+      {/* Cookie Consent Banner */}
+      <CookieConsent />
+      </CartProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,64 +1,124 @@
-# Gluecksmomente - MERN Stack Homepage
+# Gluecksmomente - Handgemachte Naturkosmetik# Gluecksmomente - MERN Stack Homepage
 
-Eine vollständige E-Commerce Lösung für Kleinunternehmen mit Frontend (React), Backend (Node.js/Express), und MongoDB Datenbank.
 
-## 🚀 Features
 
-### Frontend (React)
-- ✅ Responsive Design mit Material-UI
-- ✅ Online Shop mit Produktkatalog
-- ✅ Warenkorb und Checkout-Prozess
-- ✅ Bestellverfolgung
+Eine moderne E-Commerce-Website für handgemachte Naturkosmetik und Seifen.Eine vollständige E-Commerce Lösung für Kleinunternehmen mit Frontend (React), Backend (Node.js/Express), und MongoDB Datenbank.
+
+
+
+## 🚀 Technologie-Stack## 🚀 Features
+
+
+
+- **Frontend:** React.js mit Material-UI### Frontend (React)
+
+- **Backend:** Node.js mit Express- ✅ Responsive Design mit Material-UI
+
+- **Datenbank:** MongoDB Atlas- ✅ Online Shop mit Produktkatalog
+
+- **Authentifizierung:** JWT- ✅ Warenkorb und Checkout-Prozess
+
+- **Styling:** Material-UI Theme System- ✅ Bestellverfolgung
+
 - ✅ SEO-optimiert
-- ✅ Performance-optimiert
+
+## 📱 Features- ✅ Performance-optimiert
+
 - ✅ Barrierefreie Bedienung
 
-### Backend (Node.js/Express)
-- ✅ REST API mit Express.js
-- ✅ MongoDB Integration mit Mongoose
-- ✅ JWT Authentifizierung
-- ✅ Benutzerrollen und Berechtigungen
+- ✅ Vollständig mobile-optimiert
+
+- ✅ Admin-Panel für Produktverwaltung### Backend (Node.js/Express)
+
+- ✅ Sichere Authentifizierung- ✅ REST API mit Express.js
+
+- ✅ MongoDB Atlas Integration- ✅ MongoDB Integration mit Mongoose
+
+- ✅ Responsive Design- ✅ JWT Authentifizierung
+
+- ✅ Production-ready- ✅ Benutzerrollen und Berechtigungen
+
 - ✅ Input-Validierung
-- ✅ Rate Limiting
+
+## 🛠️ Installation- ✅ Rate Limiting
+
 - ✅ Security Middleware (Helmet, CORS)
 
-### Admin-Panel
-- ✅ Produktverwaltung
-- ✅ Bestellabwicklung
-- ✅ Lagerverwaltung
-- ✅ Benutzerverwaltung
-- ✅ Analytics Dashboard
-- ✅ Lagerbestand-Tracking
+### Backend starten:
 
-### Datenbank (MongoDB)
-- ✅ Produktverwaltung
-- ✅ Bestellsystem
-- ✅ Benutzerverwaltung
+```bash### Admin-Panel
+
+cd backend- ✅ Produktverwaltung
+
+npm install- ✅ Bestellabwicklung
+
+npm start- ✅ Lagerverwaltung
+
+```- ✅ Benutzerverwaltung
+
+- ✅ Analytics Dashboard
+
+### Frontend starten:- ✅ Lagerbestand-Tracking
+
+```bash
+
+cd frontend### Datenbank (MongoDB)
+
+npm install- ✅ Produktverwaltung
+
+npm start- ✅ Bestellsystem
+
+```- ✅ Benutzerverwaltung
+
 - ✅ Lagerverwaltung
+
+## 🔐 Admin-Zugang
 
 ## 📁 Projektstruktur
 
-```
-soap_homepage/
+- **URL:** `/login`
+
+- **E-Mail:** `Ralle.jacob84@googlemail.com````
+
+- **Passwort:** `Ralle1984`soap_homepage/
+
 ├── backend/                 # Node.js/Express Server
-│   ├── src/
+
+## 📂 Projektstruktur│   ├── src/
+
 │   │   ├── controllers/     # Route Controller
-│   │   ├── middleware/      # Custom Middleware
-│   │   ├── models/          # MongoDB Models
-│   │   ├── routes/          # API Routes
-│   │   └── server.js        # Server Entry Point
-│   ├── package.json
-│   ├── .env                 # Umgebungsvariablen
+
+```│   │   ├── middleware/      # Custom Middleware
+
+├── frontend/          # React.js Frontend│   │   ├── models/          # MongoDB Models
+
+├── backend/           # Node.js Backend│   │   ├── routes/          # API Routes
+
+├── docs/             # Projektdokumentation│   │   └── server.js        # Server Entry Point
+
+└── README.md         # Diese Datei│   ├── package.json
+
+```│   ├── .env                 # Umgebungsvariablen
+
 │   └── .gitignore
-├── frontend/                # React Frontend
+
+## 🌐 Deployment├── frontend/                # React Frontend
+
 │   ├── public/              # Statische Dateien
-│   ├── src/
-│   │   ├── components/      # React Komponenten
-│   │   ├── pages/           # Seiten-Komponenten
+
+- **Frontend:** Port 3001│   ├── src/
+
+- **Backend:** Port 5000│   │   ├── components/      # React Komponenten
+
+- **Datenbank:** MongoDB Atlas (Production)│   │   ├── pages/           # Seiten-Komponenten
+
 │   │   ├── admin/           # Admin-Panel
-│   │   ├── context/         # React Context
+
+---│   │   ├── context/         # React Context
+
 │   │   ├── hooks/           # Custom Hooks
-│   │   ├── services/        # API Services
+
+*Entwickelt für Gluecksmomente Manufaktur*│   │   ├── services/        # API Services
 │   │   └── utils/           # Utility Funktionen
 │   ├── package.json
 │   └── .gitignore
