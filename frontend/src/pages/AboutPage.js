@@ -12,14 +12,6 @@ import {
   Stack,
   Divider
 } from '@mui/material';
-import { 
-  FavoriteOutlined,
-  GroupsOutlined,
-  HandymanOutlined,
-  DiamondOutlined,
-  SpaOutlined,
-  BrushOutlined
-} from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -71,8 +63,8 @@ const AboutPage = () => {
           Das sind wir
         </Typography>
         <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 800, mx: 'auto', lineHeight: 1.8 }}>
-          Eine Patchwork-Familie mit einer besonderen Vision: Ralf und sein 11-jähriger Sohn Jonas verbinden 
-          traditionelle Seifenproduktion mit moderner Schmuckkunst
+          Eine Patchwork-Familie mit einer besonderen Vision: Ralf und sein 11-jähriger Sohn Jonas haben 
+          ihre gemeinsame Leidenschaft für die Seifenproduktion und handwerkliche Kunst entdeckt
         </Typography>
       </Box>
 
@@ -83,7 +75,7 @@ const AboutPage = () => {
           mb: 4,
           color: '#333'
         }}>
-          <GroupsOutlined sx={{ mr: 2, verticalAlign: 'middle' }} />
+          <span style={{ marginRight: 16, fontSize: '1.5rem' }}>👨‍👩‍👦</span>
           Unsere Geschichte
         </Typography>
         
@@ -92,15 +84,16 @@ const AboutPage = () => {
             <StyledCard>
               <CardContent sx={{ p: 4 }}>
                 <Typography variant="h6" gutterBottom color="primary">
-                  Die Idee entsteht
+                  Jonas entdeckt seine Leidenschaft
                 </Typography>
                 <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-                  Alles begann mit einem einfachen Wunsch: Jonas träumte von einer eigenen Drohne. 
-                  Aus diesem Gedanken heraus entwickelte sich die Idee, gemeinsam etwas Besonderes zu schaffen, 
-                  um diesen Traum zu verwirklichen.
+                  Alles begann mit Jonas' Neugier auf die Seifenproduktion seines Vaters. 
+                  Was zunächst als kindliches Interesse begann, entwickelte sich schnell zu einer 
+                  echten Leidenschaft für das traditionelle Handwerk.
                 </Typography>
                 <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-                  Was als kleines Familienprojekt begann, wurde schnell zu unserer gemeinsamen Leidenschaft.
+                  Jonas war fasziniert von der Verwandlung einfacher Zutaten in wunderschöne, 
+                  duftende Seifen und wollte unbedingt selbst lernen und mithelfen.
                 </Typography>
               </CardContent>
             </StyledCard>
@@ -110,15 +103,17 @@ const AboutPage = () => {
             <StyledCard>
               <CardContent sx={{ p: 4 }}>
                 <Typography variant="h6" gutterBottom color="primary">
-                  Gemeinsame Zeit
+                  Vom Lernen zum Lehren
                 </Typography>
                 <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-                  Als Patchwork-Familie ist uns die gemeinsame Zeit besonders wertvoll. 
-                  Wann immer möglich, verbringen wir diese Zeit zusammen in unserer kleinen Manufaktur.
+                  Jonas lernte schnell die Grundlagen der Seifenherstellung und begann, 
+                  eigene kreative Ideen einzubringen. Seine natürliche Begabung für 
+                  Farben, Düfte und Formen überraschte die ganze Familie.
                 </Typography>
                 <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
-                  Hier entstehen nicht nur unsere Produkte, sondern auch unvergessliche Erinnerungen 
-                  und eine noch stärkere Familienbindung.
+                  Heute ist er nicht nur Schüler, sondern auch kreativer Partner, 
+                  der mit seinen frischen Ideen die Seifenproduktion bereichert und 
+                  gleichzeitig wunderschönen Schmuck designt.
                 </Typography>
               </CardContent>
             </StyledCard>
@@ -133,20 +128,20 @@ const AboutPage = () => {
           mb: 4,
           color: '#333'
         }}>
-          <HandymanOutlined sx={{ mr: 2, verticalAlign: 'middle' }} />
+          <span style={{ marginRight: 16, fontSize: '1.5rem' }}>🛠️</span>
           Unsere Produktbereiche
         </Typography>
         
         <Grid container spacing={4}>
           <Grid item xs={12} md={4}>
             <ProductCard elevation={3}>
-              <SpaOutlined sx={{ fontSize: 60, mb: 2 }} />
+              <span style={{ fontSize: 60, marginBottom: 16, display: 'block' }}>🧼</span>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
                 Natürliche Seifen
               </Typography>
               <Typography variant="body1" sx={{ lineHeight: 1.6 }}>
-                Ralf produziert mit jahrelanger Erfahrung hochwertige, natürliche Seifen 
-                aus sorgfältig ausgewählten Zutaten für die tägliche Pflege.
+                Ralf und Jonas produzieren gemeinsam mit jahrelanger Erfahrung und jugendlicher Kreativität 
+                hochwertige, natürliche Seifen aus sorgfältig ausgewählten Zutaten für die tägliche Pflege.
               </Typography>
             </ProductCard>
           </Grid>
@@ -155,14 +150,14 @@ const AboutPage = () => {
             <ProductCard elevation={3} sx={{
               background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
             }}>
-              <DiamondOutlined sx={{ fontSize: 60, mb: 2 }} />
+              <span style={{ fontSize: 60, marginBottom: 16, display: 'block' }}>💎</span>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
                 Individueller Schmuck
               </Typography>
               <Typography variant="body1" sx={{ lineHeight: 1.6 }}>
                 Jonas fertigt mit viel Liebe zum Detail einzigartige <strong>Halsketten</strong>, 
                 <strong> Armbänder</strong> und <strong>Ringe</strong>. 
-                Jedes Stück ist ein handgefertigtes Unikat.
+                Jedes Stück ist ein handgefertigtes Unikat, inspiriert von seiner Leidenschaft für Handwerkskunst.
               </Typography>
             </ProductCard>
           </Grid>
@@ -171,13 +166,14 @@ const AboutPage = () => {
             <ProductCard elevation={3} sx={{
               background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
             }}>
-              <BrushOutlined sx={{ fontSize: 60, mb: 2 }} />
+              <span style={{ fontSize: 60, marginBottom: 16, display: 'block' }}>🎨</span>
               <Typography variant="h5" gutterBottom sx={{ fontWeight: 'bold' }}>
-                Kreative Handwerkskunst
+                Familien-Handwerkskunst
               </Typography>
               <Typography variant="body1" sx={{ lineHeight: 1.6 }}>
-                Unsere Leidenschaft für Handwerk zeigt sich in jedem Detail. 
-                Von der Ideenfindung bis zum fertigen Produkt steckt pure Kreativität drin.
+                Unsere gemeinsame Leidenschaft für Handwerk zeigt sich in jedem Detail. 
+                Von der Ideenfindung bis zum fertigen Produkt - Vater und Sohn arbeiten Hand in Hand 
+                und erschaffen einzigartige Kunstwerke.
               </Typography>
             </ProductCard>
           </Grid>
@@ -193,7 +189,7 @@ const AboutPage = () => {
           mb: 4,
           color: '#333'
         }}>
-          <GroupsOutlined sx={{ mr: 2, verticalAlign: 'middle' }} />
+          <span style={{ marginRight: 16, fontSize: '1.5rem' }}>👨‍👩‍👦</span>
           Unser Team
         </Typography>
         
@@ -225,7 +221,6 @@ const AboutPage = () => {
                   label="Seifenproduktion" 
                   variant="outlined" 
                   size="small"
-                  icon={<SpaOutlined />}
                 />
                 <Chip 
                   label="Qualitätskontrolle" 
@@ -263,14 +258,19 @@ const AboutPage = () => {
                 Jonas (11)
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Nachwuchs-Schmuckdesigner
+                Nachwuchs-Designer & Seifenliebhaber
               </Typography>
               <Stack direction="row" spacing={1} justifyContent="center" mb={2} sx={{ flexWrap: 'wrap' }}>
+                <Chip 
+                  label="Seifenproduktion" 
+                  variant="filled" 
+                  size="small"
+                  sx={{ backgroundColor: 'rgba(255,255,255,0.8)', color: '#333' }}
+                />
                 <Chip 
                   label="Halsketten" 
                   variant="filled" 
                   size="small"
-                  icon={<DiamondOutlined />}
                   sx={{ backgroundColor: 'rgba(255,255,255,0.8)', color: '#333' }}
                 />
                 <Chip 
@@ -287,8 +287,9 @@ const AboutPage = () => {
                 />
               </Stack>
               <Typography variant="body2" sx={{ lineHeight: 1.6, color: '#333' }}>
-                Das kreative Talent der Familie! Jonas zeigt erstaunliche Begabung 
-                in der Schmuckherstellung und designt einzigartige Accessoires.
+                Das kreative Talent der Familie! Jonas entdeckte seine Leidenschaft für die Seifenproduktion 
+                und zeigt erstaunliche Begabung sowohl in der traditionellen Seifenherstellung als auch 
+                in der Schmuckkunst. Seine frischen Ideen bereichern jedes Projekt.
               </Typography>
             </TeamCard>
           </Grid>
@@ -345,7 +346,7 @@ const AboutPage = () => {
         px: 3
       }}>
         <Typography variant="h5" gutterBottom color="primary">
-          <FavoriteOutlined sx={{ mr: 1, verticalAlign: 'middle' }} />
+          <span style={{ marginRight: 8, fontSize: '1.2rem' }}>💝</span>
           Unsere Werte
         </Typography>
         <Typography variant="body1" sx={{ 
@@ -356,7 +357,8 @@ const AboutPage = () => {
         }}>
           Familie, Qualität und Kreativität stehen im Mittelpunkt unseres Schaffens. 
           Jedes Produkt wird mit Liebe gefertigt und spiegelt unsere gemeinsame 
-          Leidenschaft für handwerkliche Perfektion wider.
+          Leidenschaft für handwerkliche Perfektion und die Freude am Erschaffen schöner Dinge wider.
+          Jonas' Begeisterung für die Seifenproduktion hat unser Familienprojekt zu etwas ganz Besonderem gemacht.
         </Typography>
       </Box>
     </Container>
