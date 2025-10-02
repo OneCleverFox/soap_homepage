@@ -10,6 +10,7 @@ const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
 const inventoryRoutes = require('./routes/inventory');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -38,8 +39,13 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Database Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/gluecksmomente';
+const DATABASE_MODE = process.env.DATABASE_MODE || 'local';
+const MONGODB_URI = DATABASE_MODE === 'production' 
+  ? process.env.MONGODB_URI_PROD 
+  : process.env.MONGODB_URI || 'mongodb://localhost:27017/gluecksmomente';
+
 console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+console.log(`📊 Database Mode: ${DATABASE_MODE.toUpperCase()}`);
 
 mongoose.connect(MONGODB_URI)
 .then(() => console.log('✅ MongoDB erfolgreich verbunden'))
@@ -47,7 +53,8 @@ mongoose.connect(MONGODB_URI)
   console.error('❌ MongoDB Verbindungsfehler:', err.message);
   console.error('💡 Tipp: Stellen Sie sicher, dass MongoDB läuft oder verwenden Sie MongoDB Atlas');
   console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-  process.exit(1);
+  console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
+  // Nicht beenden, sondern weiter ohne DB laufen lassen
 });
 
 // Routes
@@ -55,6 +62,21 @@ app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Test Route für Datenempfang
+app.post('/api/test', (req, res) => {
+  console.log('📨 Daten empfangen:', req.body);
+  console.log('📨 Headers:', req.headers);
+  console.log('📨 Timestamp:', new Date().toISOString());
+  
+  res.status(200).json({
+    success: true,
+    message: 'Daten erfolgreich empfangen!',
+    receivedData: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
