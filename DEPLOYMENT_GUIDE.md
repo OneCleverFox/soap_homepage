@@ -36,6 +36,12 @@ Diese Anleitung zeigt Ihnen, wie Sie Ihre MERN Stack Anwendung kostenlos live sc
 3. Wählen Sie "Connect your application"
 4. Kopieren Sie den Connection String
 5. Ersetzen Sie `<password>` mit Ihrem echten Passwort
+6. Ersetzen Sie den Datenbanknamen mit `soap`
+
+**Beispiel Connection String:**
+```
+mongodb+srv://username:password@cluster.mongodb.net/soap
+```
 
 ## 2. Railway Setup (Backend)
 
@@ -47,7 +53,36 @@ Diese Anleitung zeigt Ihnen, wie Sie Ihre MERN Stack Anwendung kostenlos live sc
 1. Klicken Sie "New Project"
 2. Wählen Sie "Deploy from GitHub repo"
 3. Verbinden Sie Ihr GitHub Repository
-4. Railway erkennt automatisch Ihr Node.js Backend
+4. **Wichtig**: Setzen Sie das **Root Directory** auf `backend`
+5. Railway erkennt automatisch Ihr Node.js Backend
+
+**⚠️ Wichtiger Hinweis - Root Directory Problem:**
+Falls das `backend` Verzeichnis in Railway nicht erkannt wird:
+
+**Option A: Service Settings anpassen**
+1. Gehen Sie zu Ihrem Service in Railway
+2. Unter "Settings" → "Service Settings"
+3. Setzen Sie "Root Directory" auf `backend`
+4. Klicken Sie "Update"
+
+**Option B: Railway CLI verwenden**
+```bash
+# Railway CLI installieren
+npm install -g @railway/cli
+
+# In Ihr Projekt-Verzeichnis wechseln
+cd c:\Users\rj18401\CODE\soap_homepage
+
+# Railway CLI anmelden
+railway login
+
+# Projekt verknüpfen
+railway link
+
+# Backend deployen mit spezifischem Pfad
+cd backend
+railway up
+```
 
 ### 2.3 Environment Variables setzen
 1. Gehen Sie zu Ihrem Projekt
@@ -56,9 +91,9 @@ Diese Anleitung zeigt Ihnen, wie Sie Ihre MERN Stack Anwendung kostenlos live sc
    ```
    NODE_ENV=production
    PORT=5000
-   MONGODB_URI=mongodb+srv://gluecksmomente-user:PASSWORD@cluster0.xxxxx.mongodb.net/gluecksmomente
-   JWT_SECRET=your-super-secure-jwt-secret-here
-   FRONTEND_URL=https://your-vercel-domain.vercel.app
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/soap
+   JWT_SECRET=ihr-super-sicherer-jwt-geheimschluessel
+   FRONTEND_URL=https://gluecksmomente-manufaktur.vercel.app
    ```
 
 ### 2.4 Domain erhalten
@@ -94,6 +129,8 @@ REACT_APP_API_URL=https://ihr-backend.railway.app
    ```
    REACT_APP_API_URL=https://ihr-backend.railway.app
    ```
+
+**Status:** ✅ **Vercel läuft bereits unter:** https://gluecksmomente-manufaktur.vercel.app/
 
 ## 4. Frontend API URL konfigurieren
 
