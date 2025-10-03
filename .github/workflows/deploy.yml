@@ -1,4 +1,4 @@
-name: Deploy to Railway and Vercel
+name: Build and Test
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  deploy-backend:
+  test-backend:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -17,25 +17,17 @@ jobs:
       with:
         node-version: '18'
         
-    - name: Install Railway CLI
-      run: npm install -g @railway/cli
-      
-    - name: Deploy to Railway
-      env:
-        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        MONGODB_URI: ${{ secrets.MONGODB_URI }}
-        JWT_SECRET: ${{ secrets.JWT_SECRET }}
-        ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-        ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+    - name: Install Backend Dependencies
       run: |
-        railway login --token $RAILWAY_TOKEN
-        railway variables set MONGODB_URI="$MONGODB_URI"
-        railway variables set JWT_SECRET="$JWT_SECRET"
-        railway variables set ADMIN_EMAIL="$ADMIN_EMAIL"
-        railway variables set ADMIN_PASSWORD="$ADMIN_PASSWORD"
-        railway up
+        cd backend
+        npm ci
+        
+    - name: Test Backend
+      run: |
+        cd backend
+        npm test
 
-  deploy-frontend:
+  test-frontend:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -45,13 +37,17 @@ jobs:
       with:
         node-version: '18'
         
-    - name: Install Vercel CLI
-      run: npm install -g vercel
-      
-    - name: Deploy to Vercel
-      env:
-        VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-        VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    - name: Install Frontend Dependencies
       run: |
-        vercel --token $VERCEL_TOKEN --prod
+        cd frontend
+        npm ci
+        
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Test Frontend
+      run: |
+        cd frontend
+        npm test -- --coverage --watchAll=false
