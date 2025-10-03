@@ -1,7 +1,7 @@
 {
   "name": "gluecksmomente-frontend",
-  "version": "1.0.0",
-  "description": "Frontend für Gluecksmomente Homepage - Online Shop und Admin Panel",
+  "version": "1.0.1",
+  "description": "Frontend für Gluecksmomente Homepage - Online Shop und Admin Panel - PRODUKTIV",
   "private": true,
   "dependencies": {
     "react": "^18.2.0",
