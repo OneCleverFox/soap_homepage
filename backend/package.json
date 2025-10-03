@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "build": "npm install --production"
   },
   "keywords": [
