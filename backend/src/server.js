@@ -36,14 +36,23 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// CORS Konfiguration
+// CORS Konfiguration - EMERGENCY FIX für Vercel
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3001',
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://gluecksmomente-manufaktur.vercel.app'
-  ],
+  origin: function (origin, callback) {
+    // Erlaubt alle Vercel-Domains und localhost
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://gluecksmomente-manufaktur.vercel.app'
+    ];
+    
+    // Erlaube Vercel-Domains
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
