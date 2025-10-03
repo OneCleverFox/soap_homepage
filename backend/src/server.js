@@ -38,7 +38,7 @@ app.use('/api/', limiter);
 
 // CORS Konfiguration - NOTFALL: Alle Origins erlauben für Vercel-Deployment
 app.use(cors({
-  origin: true, // TEMPORÄR: Alle Origins erlauben
+  origin: process.env.CORS_ORIGIN || true, // Verwende Environment Variable
   credentials: true
 }));
 
