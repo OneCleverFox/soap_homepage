@@ -8,15 +8,4 @@
   restartPolicyMaxRetries = 10
 
 [env]
-  NODE_ENV = "production"ilder = "NIXPACKS"
-  buildCommand = "cd backend && npm ci && npm run build"
-
-[deploy]
-  startCommand = "cd backend && npm start"
-  healthcheckPath = "/health"
-  healthcheckTimeout = 300
-  restartPolicyType = "ON_FAILURE"
-  restartPolicyMaxRetries = 10
-
-[env]
   NODE_ENV = "production"
