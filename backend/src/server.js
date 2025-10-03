@@ -25,8 +25,20 @@ const kundenRoutes = require('./routes/kunden');
 
 const app = express();
 
-// Security Middleware
-app.use(helmet());
+// CORS Konfiguration - MUSS VOR HELMET KOMMEN!
+app.use(cors({
+  origin: '*', // Alle Origins erlauben
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
+}));
+
+// Security Middleware - NACH CORS!
+app.use(helmet({
+  crossOriginResourcePolicy: false, // CORS nicht blockieren
+  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -35,12 +47,6 @@ const limiter = rateLimit({
   message: 'Zu viele Anfragen von dieser IP, bitte versuchen Sie es später erneut.'
 });
 app.use('/api/', limiter);
-
-// CORS Konfiguration - NOTFALL: Alle Origins erlauben für Vercel-Deployment
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || true, // Verwende Environment Variable
-  credentials: true
-}));
 
 // Body Parser Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -73,20 +79,6 @@ if (MONGODB_URI) {
   console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
   console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
 }
-
-// Manueller CORS-Header für alle API-Requests (NOTFALL-FIX)
-app.use('/api', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
-});
 
 // Routes
 app.use('/api/auth', authRoutes);
