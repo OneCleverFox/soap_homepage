@@ -13,13 +13,13 @@ const auth = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
     
-    if (decoded.role === 'admin' && decoded.email === 'Ralle.jacob84@googlemail.com') {
+    if (decoded.role === 'admin') {
       req.user = decoded;
       next();
     } else {
       return res.status(401).json({
         success: false,
-        message: 'Ungültiger Benutzer'
+        message: 'Keine Admin-Berechtigung'
       });
     }
 

@@ -15,19 +15,14 @@ import CheckoutPage from './pages/CheckoutPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
-import LoginPageTest from './pages/LoginPageTest';
 
 // Legal Pages
 import ImpressumPage from './pages/ImpressumPage';
 import DatenschutzPage from './pages/DatenschutzPage';
 import AGBPage from './pages/AGBPage';
 
-// Test Pages
-import DataTestPage from './pages/DataTestPage';
-
 // Admin Pages
 import AdminLoginPage from './pages/AdminLoginPage';
-import AdminPanelTestNew from './pages/AdminPanelTestNew';
 
 // Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
@@ -67,21 +62,14 @@ function App() {
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
                     <Route path="/about" element={<AboutPage />} />
                     <Route path="/contact" element={<ContactPage />} />
-                                        <Route path="/login" element={<LoginPageTest />} />
-                                        <Route path="/anmelden" element={<LoginPageTest />} />
                     
                     {/* Legal Pages */}
                     <Route path="/impressum" element={<ImpressumPage />} />
                     <Route path="/datenschutz" element={<DatenschutzPage />} />
                     <Route path="/agb" element={<AGBPage />} />
                     
-                    {/* Test Pages */}
-                    <Route path="/test" element={<DataTestPage />} />
-                    <Route path="/admin-test" element={<AdminPanelTestNew />} />
-                    
                     {/* Admin Pages */}
                     <Route path="/admin/login" element={<AdminLoginPage />} />
-                    <Route path="/admin" element={<AdminPanelTestNew />} />
                     
                     {/* Legacy Routes (German) */}
                     <Route path="/produkte" element={<Navigate to="/products" replace />} />

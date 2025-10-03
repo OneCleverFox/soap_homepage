@@ -68,7 +68,7 @@ const HomePage = () => {
             color="text.secondary"
             sx={{ mb: { xs: 3, md: 4 } }}
           >
-            Handgemachte Naturkosmetik für besondere Momente
+            Handgemachte Produkte für besondere Momente
           </Typography>
           <Typography 
             variant="body1" 
@@ -80,7 +80,7 @@ const HomePage = () => {
               mx: 'auto'
             }}
           >
-            Entdecken Sie unsere liebevoll hergestellten Seifen und Pflegeprodukte aus natürlichen Zutaten.
+            Entdecken Sie unsere liebevoll hergestellten Seifen aus natürlichen Zutaten.
           </Typography>
           
           <Button
@@ -107,7 +107,7 @@ const HomePage = () => {
             gutterBottom
             sx={{ mb: { xs: 3, md: 5 } }}
           >
-            Warum Gluecksmomente?
+            Warum Glücksmomente?
           </Typography>
           
           <Grid container spacing={{ xs: 2, md: 4 }}>

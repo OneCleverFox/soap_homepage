@@ -11,6 +11,11 @@ const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/orders');
 const inventoryRoutes = require('./routes/inventory');
 const adminRoutes = require('./routes/admin');
+const portfolioRoutes = require('./routes/portfolio');
+const rohseifeRoutes = require('./routes/rohseife');
+const duftoeleRoutes = require('./routes/duftoele');
+const verpackungenRoutes = require('./routes/verpackungen');
+const kundenRoutes = require('./routes/kunden');
 
 const app = express();
 
@@ -27,7 +32,11 @@ app.use('/api/', limiter);
 
 // CORS Konfiguration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3001',
+    'http://localhost:3000',
+    'http://localhost:3001'
+  ],
   credentials: true
 }));
 
@@ -39,13 +48,12 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Database Connection
-const DATABASE_MODE = process.env.DATABASE_MODE || 'local';
-const MONGODB_URI = DATABASE_MODE === 'production' 
-  ? process.env.MONGODB_URI_PROD 
-  : process.env.MONGODB_URI || 'mongodb://localhost:27017/gluecksmomente';
+const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
+const MONGODB_URI = process.env.MONGODB_URI_PROD || process.env.MONGODB_URI;
 
 console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
 console.log(`📊 Database Mode: ${DATABASE_MODE.toUpperCase()}`);
+console.log('🌍 Umgebung: PRODUKTIVE DATENBANK');
 
 mongoose.connect(MONGODB_URI)
 .then(() => console.log('✅ MongoDB erfolgreich verbunden'))
@@ -54,7 +62,6 @@ mongoose.connect(MONGODB_URI)
   console.error('💡 Tipp: Stellen Sie sicher, dass MongoDB läuft oder verwenden Sie MongoDB Atlas');
   console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
   console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
-  // Nicht beenden, sondern weiter ohne DB laufen lassen
 });
 
 // Routes
@@ -63,6 +70,12 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/rohseife', rohseifeRoutes);
+app.use('/api/duftoele', duftoeleRoutes);
+app.use('/api/verpackungen', verpackungenRoutes);
+app.use('/api/kunden', kundenRoutes);
+app.use('/api/images', require('./routes/images'));
 
 // Test Route für Datenempfang
 app.post('/api/test', (req, res) => {

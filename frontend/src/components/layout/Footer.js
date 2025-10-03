@@ -29,9 +29,9 @@ const Footer = () => {
   };
 
   const socialLinks = [
-    { icon: 'f', url: 'https://facebook.com/gluecksmomente', label: 'Facebook' },
-    { icon: '📷', url: 'https://www.instagram.com/gluecksmomente_manufaktur/', label: 'Instagram' },
-    { icon: '🐦', url: 'https://twitter.com/gluecksmomente', label: 'Twitter' }
+    //{ icon: 'f', url: 'https://facebook.com/gluecksmomente', label: 'Facebook' },
+    { icon: '📷', url: 'https://www.instagram.com/gluecksmomente_manufaktur/', label: 'Instagram' }
+    //{ icon: '🐦', url: 'https://twitter.com/gluecksmomente', label: 'Twitter' }
   ];
 
   return (

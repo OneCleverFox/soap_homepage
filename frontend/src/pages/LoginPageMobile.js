@@ -54,29 +54,27 @@ const LoginPage = () => {
 
       console.log('🔐 Login-Versuch für:', email);
 
-      // Admin-Check (case insensitive)
-      if (email.toLowerCase() === 'ralle.jacob84@googlemail.com') {
-        // Admin-Login-Versuch
-        console.log('✅ Admin-E-Mail erkannt, sende Anfrage an Backend...');
-        
-        const response = await fetch('http://localhost:5000/api/auth/admin-login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
+      // Admin-Login über Backend-API
+      console.log('✅ Sende Anfrage an Backend...');
+      
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-        console.log('📡 Backend-Response Status:', response.status);
+      console.log('📡 Backend-Response Status:', response.status);
 
-        const data = await response.json();
-        console.log('📨 Backend-Response:', data);
+      const data = await response.json();
+      console.log('📨 Backend-Response:', data);
 
-        if (response.ok) {
-          if (data.success) {
-            // Admin-Token speichern
-            localStorage.setItem('adminToken', data.token);
-            localStorage.setItem('adminUser', JSON.stringify(data.user));
+      if (response.ok) {
+        if (data.success) {
+          // Admin-Token speichern
+          localStorage.setItem('adminToken', data.token);
+          localStorage.setItem('adminUser', JSON.stringify(data.user));
             
             console.log('✅ Admin-Login erfolgreich - Weiterleitung zu Admin-Panel');
             console.log('🎯 Navigiere zu /admin...');
@@ -89,17 +87,12 @@ const LoginPage = () => {
               console.log('🔄 Fallback: Erzwinge Seitennavigation...');
               window.location.href = '/admin';
             }, 1000);
-            return;
-          } else {
-            setError(data.message || 'Ungültige Admin-Anmeldedaten');
-          }
+          return;
         } else {
-          setError(data.message || 'Fehler beim Admin-Login');
+          setError(data.message || 'Ungültige Anmeldedaten');
         }
       } else {
-        // Normaler User-Login (falls implementiert)
-        console.log('📝 Normaler User-Login noch nicht implementiert');
-        setError('Normaler User-Login ist noch nicht verfügbar. Nur Admin-Zugang möglich.');
+        setError(data.message || 'Fehler beim Login');
       }
     } catch (err) {
       console.error('❌ Login-Fehler:', err);

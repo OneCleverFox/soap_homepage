@@ -87,7 +87,7 @@ const AboutPage = () => {
                   Jonas entdeckt seine Leidenschaft
                 </Typography>
                 <Typography variant="body1" paragraph sx={{ lineHeight: 1.8 }}>
-                  Alles begann mit Jonas' Neugier auf die Seifenproduktion seines Vaters. 
+                  Alles begann mit Jonas' Neugier auf die Seifenproduktion als er ein kleines Set geschenkt bekommen hat zur Herstellung von Seifen. 
                   Was zunächst als kindliches Interesse begann, entwickelte sich schnell zu einer 
                   echten Leidenschaft für das traditionelle Handwerk.
                 </Typography>
@@ -140,7 +140,7 @@ const AboutPage = () => {
                 Natürliche Seifen
               </Typography>
               <Typography variant="body1" sx={{ lineHeight: 1.6 }}>
-                Ralf und Jonas produzieren gemeinsam mit jahrelanger Erfahrung und jugendlicher Kreativität 
+                Ralf und Jonas produzieren gemeinsam mit viel Erfahrung und jugendlicher Kreativität 
                 hochwertige, natürliche Seifen aus sorgfältig ausgewählten Zutaten für die tägliche Pflege.
               </Typography>
             </ProductCard>
