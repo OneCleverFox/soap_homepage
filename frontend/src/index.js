@@ -10,8 +10,8 @@ import { Toaster } from 'react-hot-toast';
 
 import App from './App';
 import theme from './theme';
-import { AuthProvider } from './context/AuthContext';
-import { CartProvider } from './context/CartContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
 import './index.css';
 
 // React Query Client Konfiguration

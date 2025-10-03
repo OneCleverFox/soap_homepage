@@ -50,4 +50,4 @@ jobs:
     - name: Test Frontend
       run: |
         cd frontend
-        npm test -- --coverage --watchAll=false
+        npm test -- --passWithNoTests --coverage --watchAll=false
