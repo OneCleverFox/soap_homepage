@@ -358,15 +358,13 @@ JWT_SECRET=your_secure_jwt_secret
 
 # Admin (WICHTIG: Ändern Sie diese Werte!)
 
-ADMIN_EMAIL=your_admin_email- **E-Mail:** `Ralle.jacob84@googlemail.com`- **E-Mail:** `Ralle.jacob84@googlemail.com````
+ADMIN_EMAIL=your_admin_email
 
 ADMIN_PASSWORD=your_secure_admin_password
 
-- **Passwort:** `Ralle1984`
-
 # Frontend
 
-FRONTEND_URL=your_frontend_url- **Passwort:** `Ralle1984`soap_homepage/
+FRONTEND_URL=your_frontend_urlsoap_homepage/
 
 ```
 
@@ -521,7 +519,7 @@ GET  /api/auth/me          # Aktuellen Benutzer abrufen
 
 - **Backend API**: [Ihre Railway URL]
 
-### Products- **Admin Panel**: [Ihre Vercel URL]/admin (Demo: admin@test.com / admin123)
+- **Admin Panel**: [Ihre Vercel URL]/admin (Demo: Verwenden Sie Ihre .env Konfiguration)
 
 ```
 
@@ -782,14 +780,14 @@ PUT  /api/inventory/:id    # Lagerbestand aktualisieren (Admin)
 ## 🔐 Standard-Zugangsdaten
 
 ### Admin Account (Entwicklung)
-- **Email**: admin@gluecksmomente.de
-- **Passwort**: admin123
+- **Email**: Konfiguriert über ADMIN_EMAIL in .env
+- **Passwort**: Konfiguriert über ADMIN_PASSWORD in .env
 
 ### Test Customer
 - **Email**: kunde@test.de
 - **Passwort**: kunde123
 
-⚠️ **Wichtig**: Ändern Sie diese Zugangsdaten in der Produktion!
+⚠️ **Wichtig**: Verwenden Sie sichere Zugangsdaten in der Produktion!
 
 ## 🧪 Tests
 
@@ -925,8 +923,8 @@ Content-Type: application/json
 
 {
   "username": "admin",
-  "email": "admin@gluecksmomente.de",
-  "password": "AdminPasswort123",
+  "email": "ihre-admin@email.de",
+  "password": "IhrSicheresPasswort123",
   "firstName": "Admin",
   "lastName": "User",
   "role": "admin"

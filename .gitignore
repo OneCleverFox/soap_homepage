@@ -44,3 +44,8 @@ docs/
 documentation/
 *.md
 !README.md
+
+.env*
+.flaskenv*
+!.env.project
+!.env.vault

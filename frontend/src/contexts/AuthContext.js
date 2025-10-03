@@ -30,23 +30,27 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      // Mock login - replace with actual API call
-      const mockUser = {
-        id: 1,
-        email: email,
-        name: 'Test User',
-        role: 'customer'
-      };
-      
-      const mockToken = 'mock-jwt-token';
-      
-      localStorage.setItem('token', mockToken);
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      
-      setToken(mockToken);
-      setUser(mockUser);
-      
-      return { success: true };
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        
+        setToken(data.token);
+        setUser(data.user);
+        
+        return { success: true, user: data.user, token: data.token };
+      } else {
+        throw new Error(data.message || 'Login fehlgeschlagen');
+      }
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -83,10 +87,19 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Neue Funktion für direktes Login mit Benutzerdaten (für Admin-Login)
+  const loginWithUserData = (userData, userToken) => {
+    localStorage.setItem('token', userToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setToken(userToken);
+    setUser(userData);
+  };
+
   const value = {
     user,
     token,
     login,
+    loginWithUserData,
     register,
     logout,
     loading,

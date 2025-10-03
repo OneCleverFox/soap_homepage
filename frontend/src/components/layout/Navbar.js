@@ -27,6 +27,7 @@ const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountMenu, setAccountMenu] = useState(null);
   const [infoMenu, setInfoMenu] = useState(null);
+  const [adminMenu, setAdminMenu] = useState(null);
   
   const { user, logout } = useAuth();
   const { getCartItemsCount } = useCart();
@@ -49,12 +50,20 @@ const Navbar = () => {
     setInfoMenu(event.currentTarget);
   };
 
+  const handleAdminMenu = (event) => {
+    setAdminMenu(event.currentTarget);
+  };
+
   const handleCloseAccountMenu = () => {
     setAccountMenu(null);
   };
 
   const handleCloseInfoMenu = () => {
     setInfoMenu(null);
+  };
+
+  const handleCloseAdminMenu = () => {
+    setAdminMenu(null);
   };
 
   const handleLogout = () => {
@@ -76,6 +85,16 @@ const Navbar = () => {
     { label: 'Impressum', path: '/impressum', icon: '📄' },
     { label: 'Datenschutz', path: '/datenschutz', icon: '🔒' },
     { label: 'AGB', path: '/agb', icon: '⚖️' }
+  ];
+
+  const adminNavItems = [
+    { label: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
+    { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
+    { label: 'Produkte', path: '/admin/produkte', icon: '📦' },
+    { label: 'Bestellungen', path: '/admin/bestellungen', icon: '🛒' },
+    { label: 'Lager', path: '/admin/lager', icon: '📋' },
+    { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
+    { label: 'Analytics', path: '/admin/analytics', icon: '📈' }
   ];
 
   const drawer = (
@@ -146,14 +165,40 @@ const Navbar = () => {
               </ListItemIcon>
               <ListItemText primary={`Hallo, ${user.name}`} />
             </ListItemButton>
+            
+            {/* Admin-Bereiche für Mobile */}
             {user.role === 'admin' && (
-              <ListItemButton onClick={() => { setMobileOpen(false); navigate('/admin'); }}>
-                <ListItemIcon>
-                  ⚙️
-                </ListItemIcon>
-                <ListItemText primary="Admin Panel" />
-              </ListItemButton>
+              <>
+                <Divider />
+                <ListItem>
+                  <ListItemText 
+                    primary="Admin-Bereiche" 
+                    primaryTypographyProps={{ 
+                      variant: 'subtitle2', 
+                      color: 'primary.main',
+                      fontWeight: 'bold'
+                    }} 
+                  />
+                </ListItem>
+                {adminNavItems.map((item) => (
+                  <ListItemButton 
+                    key={item.path}
+                    component={Link}
+                    to={item.path}
+                    selected={isActive(item.path)}
+                    onClick={() => setMobileOpen(false)}
+                    sx={{ pl: 3 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                ))}
+                <Divider />
+              </>
             )}
+            
             <ListItemButton onClick={() => { setMobileOpen(false); handleLogout(); }}>
               <ListItemIcon>
                 🚪
@@ -252,6 +297,48 @@ const Navbar = () => {
                   </MenuItem>
                 ))}
               </Menu>
+
+              {/* Admin Dropdown - nur sichtbar wenn Admin eingeloggt */}
+              {user && user.role === 'admin' && (
+                <>
+                  <Button
+                    color="inherit"
+                    onClick={handleAdminMenu}
+                    sx={{ 
+                      textTransform: 'none',
+                      bgcolor: 'rgba(255,255,255,0.1)',
+                      ml: 1
+                    }}
+                  >
+                    ⚙️ Admin
+                  </Button>
+                  <Menu
+                    anchorEl={adminMenu}
+                    open={Boolean(adminMenu)}
+                    onClose={handleCloseAdminMenu}
+                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                    PaperProps={{
+                      sx: { minWidth: 200 }
+                    }}
+                  >
+                    {adminNavItems.map((item) => (
+                      <MenuItem
+                        key={item.path}
+                        component={Link}
+                        to={item.path}
+                        onClick={handleCloseAdminMenu}
+                        selected={isActive(item.path)}
+                      >
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          {item.icon}
+                        </ListItemIcon>
+                        {item.label}
+                      </MenuItem>
+                    ))}
+                  </Menu>
+                </>
+              )}
             </Box>
           )}
 
