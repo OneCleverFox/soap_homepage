@@ -26,8 +26,7 @@ const LoginPageSimple = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const adminEmail = 'Ralle.jacob84@googlemail.com';
-  const adminPassword = 'Ralle1984';
+  // Admin-Daten werden über API validiert - keine hardcodierte Zugangsdaten
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -44,15 +43,26 @@ const LoginPageSimple = () => {
     setError('');
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Authentifizierung über Backend-API
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
+      });
 
-      if (formData.email === adminEmail && formData.password === adminPassword) {
-        const token = btoa(`${adminEmail}:${Date.now()}`);
-        localStorage.setItem('adminToken', token);
-        localStorage.setItem('adminEmail', adminEmail);
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem('adminToken', data.token);
+        localStorage.setItem('adminEmail', data.user.email);
         navigate('/admin');
       } else {
-        setError('Ungültige E-Mail oder Passwort');
+        setError(data.message || 'Ungültige E-Mail oder Passwort');
       }
     } catch (err) {
       setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');

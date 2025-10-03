@@ -61,7 +61,8 @@ const AdminPanel = () => {
 
     try {
       const user = JSON.parse(adminUser);
-      if (user.email !== 'Ralle.jacob84@googlemail.com') {
+      // Überprüfe Admin-Berechtigung über Token
+      if (!user || user.role !== 'admin') {
         console.log('❌ Unauthorized user - Weiterleitung zur Login-Seite');
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');

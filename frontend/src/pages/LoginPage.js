@@ -54,54 +54,45 @@ const LoginPage = () => {
 
       console.log('🔐 Login-Versuch für:', email);
 
-      // Prüfen ob es sich um Admin-Anmeldedaten handelt (case-insensitive)
-      if (email.toLowerCase() === 'ralle.jacob84@googlemail.com') {
-        console.log('✅ Admin-E-Mail erkannt, sende Anfrage an Backend...');
-        
-        // Admin-Login-Versuch
-        const response = await fetch('http://localhost:5000/api/auth/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
-        });
+      // Admin-Login über Backend-API
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-        console.log('📡 Backend-Response Status:', response.status);
-        
-        if (response.ok) {
-          const data = await response.json();
-          console.log('📨 Backend-Response:', data);
+      console.log('📡 Backend-Response Status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📨 Backend-Response:', data);
 
-          if (data.success) {
-            // Admin-Token speichern
-            localStorage.setItem('adminToken', data.token);
-            localStorage.setItem('adminUser', JSON.stringify(data.user));
-            
-            console.log('✅ Admin-Login erfolgreich - Weiterleitung zu Admin-Panel');
-            console.log('🎯 Navigiere zu /admin...');
-            
-            // Sofortige Navigation ohne Verzögerung
-            navigate('/admin', { replace: true });
-            
-            // Fallback: Manuelle Navigation falls React Router versagt
-            setTimeout(() => {
-              console.log('🔄 Fallback: Erzwinge Seitennavigation...');
-              window.location.href = '/admin';
-            }, 1000);
-            return;
-          } else {
-            setError(data.message || 'Ungültige Admin-Anmeldedaten');
-          }
+        if (data.success) {
+          // Admin-Token speichern
+          localStorage.setItem('adminToken', data.token);
+          localStorage.setItem('adminUser', JSON.stringify(data.user));
+          
+          console.log('✅ Admin-Login erfolgreich - Weiterleitung zu Admin-Panel');
+          console.log('🎯 Navigiere zu /admin...');
+          
+          // Sofortige Navigation ohne Verzögerung
+          navigate('/admin', { replace: true });
+          
+          // Fallback: Manuelle Navigation falls React Router versagt
+          setTimeout(() => {
+            console.log('🔄 Fallback: Erzwinge Seitennavigation...');
+            window.location.href = '/admin';
+          }, 1000);
+          return;
         } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('❌ Backend-Fehler:', response.status, errorData);
-          setError(errorData.message || 'Server-Fehler beim Anmelden');
+          setError(data.message || 'Ungültige Anmeldedaten');
         }
       } else {
-        // Normale Benutzer-Anmeldung (falls später implementiert)
-        console.log('❌ Unbekannte E-Mail-Adresse:', email);
-        setError('Diese E-Mail-Adresse ist nicht registriert');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('❌ Backend-Fehler:', response.status, errorData);
+        setError(errorData.message || 'Server-Fehler beim Anmelden');
       }
     } catch (error) {
       console.error('❌ Login-Fehler:', error);

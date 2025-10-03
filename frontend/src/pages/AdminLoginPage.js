@@ -12,13 +12,6 @@ import {
   InputAdornment,
   IconButton
 } from '@mui/material';
-import {
-  AdminPanelSettingsOutlined,
-  EmailOutlined,
-  LockOutlined,
-  VisibilityOutlined,
-  VisibilityOffOutlined
-} from '@mui/icons-material';
 import AuthContext from '../contexts/AuthContext';
 
 const AdminLoginPage = () => {
@@ -26,7 +19,7 @@ const AdminLoginPage = () => {
   const { login } = useContext(AuthContext);
   
   const [formData, setFormData] = useState({
-    email: 'Ralle.jacob84@googlemail.com',  // Vorgefüllt für einfachere Tests
+    email: '',  // Entfernt hardcodierte E-Mail
     password: ''
   });
   
@@ -91,13 +84,9 @@ const AdminLoginPage = () => {
     <Container maxWidth="sm" sx={{ py: 8 }}>
       <Paper elevation={8} sx={{ p: 4 }}>
         <Box textAlign="center" mb={4}>
-          <AdminPanelSettingsOutlined 
-            sx={{ 
-              fontSize: 60, 
-              color: 'primary.main', 
-              mb: 2 
-            }} 
-          />
+          <Box sx={{ fontSize: 60, mb: 2 }}>
+            ⚙️
+          </Box>
           <Typography variant="h4" component="h1" gutterBottom>
             Admin-Login
           </Typography>
@@ -126,7 +115,7 @@ const AdminLoginPage = () => {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <EmailOutlined />
+                  📧
                 </InputAdornment>
               ),
             }}
@@ -145,7 +134,7 @@ const AdminLoginPage = () => {
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <LockOutlined />
+                  🔒
                 </InputAdornment>
               ),
               endAdornment: (
@@ -154,7 +143,7 @@ const AdminLoginPage = () => {
                     onClick={() => setShowPassword(!showPassword)}
                     edge="end"
                   >
-                    {showPassword ? <VisibilityOffOutlined /> : <VisibilityOutlined />}
+                    {showPassword ? '🙈' : '👁️'}
                   </IconButton>
                 </InputAdornment>
               ),
@@ -179,9 +168,8 @@ const AdminLoginPage = () => {
 
         <Box textAlign="center" sx={{ mt: 3, p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            <strong>🔐 Test-Zugang:</strong><br/>
-            E-Mail: Ralle.jacob84@googlemail.com<br/>
-            Passwort: Ralle1984
+            <strong>🔐 Admin-Zugang:</strong><br/>
+            Zugangsdaten werden über sichere Umgebungsvariablen verwaltet
           </Typography>
         </Box>
       </Paper>

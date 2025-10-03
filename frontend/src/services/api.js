@@ -131,6 +131,16 @@ export const analyticsAPI = {
   getCustomerAnalytics: (params = {}) => api.get('/analytics/customers', { params }),
 };
 
+// Portfolio API
+export const portfolioAPI = {
+  getAll: () => api.get('/portfolio'),
+  getWithPrices: () => api.get('/portfolio/with-prices'),
+  getById: (id) => api.get(`/portfolio/${id}`),
+  create: (portfolioData) => api.post('/portfolio', portfolioData),
+  update: (id, portfolioData) => api.put(`/portfolio/${id}`, portfolioData),
+  delete: (id) => api.delete(`/portfolio/${id}`),
+};
+
 // Health Check
 export const healthAPI = {
   check: () => api.get('/health'),

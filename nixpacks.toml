@@ -17,3 +17,4 @@ cmd = 'cd backend && npm start'
 
 [variables]
 NODE_ENV = 'production'
+DATABASE_MODE = 'production'
