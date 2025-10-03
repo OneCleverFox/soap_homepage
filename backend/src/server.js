@@ -57,18 +57,26 @@ app.use('/uploads', express.static('uploads'));
 const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
 const MONGODB_URI = process.env.MONGODB_URI_PROD || process.env.MONGODB_URI;
 
-console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-console.log(`📊 Database Mode: ${DATABASE_MODE.toUpperCase()}`);
+console.log('� DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
+console.log('📊 Database Mode:', DATABASE_MODE.toUpperCase());
 console.log('🌍 Umgebung: PRODUKTIVE DATENBANK');
 
-mongoose.connect(MONGODB_URI)
-.then(() => console.log('✅ MongoDB erfolgreich verbunden'))
-.catch(err => {
-  console.error('❌ MongoDB Verbindungsfehler:', err.message);
-  console.error('💡 Tipp: Stellen Sie sicher, dass MongoDB läuft oder verwenden Sie MongoDB Atlas');
-  console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-  console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
-});
+if (MONGODB_URI) {
+  console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+  mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ MongoDB erfolgreich verbunden'))
+  .catch(err => {
+    console.error('❌ MongoDB Verbindungsfehler:', err.message);
+    console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+    console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
+  });
+} else {
+  console.error('❌ MONGODB_URI ist nicht definiert!');
+  console.error('💡 Prüfen Sie Ihre Environment Variables:');
+  console.error('   - DOTENV_KEY:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
+  console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
+  console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
+}
 
 // Routes
 app.use('/api/auth', authRoutes);
