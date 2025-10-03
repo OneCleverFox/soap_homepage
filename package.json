@@ -1,7 +1,7 @@
 {
   "name": "gluecksmomente-backend",
-  "version": "1.0.0",
-  "description": "Backend für Gluecksmomente Homepage - Railway Deployment",
+  "version": "1.0.1",
+  "description": "Backend für Gluecksmomente Homepage - Railway Deployment - PRODUKTIV",
   "main": "src/server.js",
   "engines": {
     "node": ">=18.0.0",
