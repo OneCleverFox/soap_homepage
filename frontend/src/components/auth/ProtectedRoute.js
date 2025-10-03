@@ -1,24 +1,32 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import LoadingSpinner from '../common/LoadingSpinner';
+import { useAuth } from '../../contexts/AuthContext';
+import { Box, CircularProgress } from '@mui/material';
+
+const LoadingSpinner = () => (
+  <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+    <CircularProgress />
+  </Box>
+);
 
 const ProtectedRoute = ({ children, requiredRole, requiredPermission }) => {
-  const { isAuthenticated, isLoading, hasRole, hasPermission } = useAuth();
+  const { user, loading } = useAuth();
 
-  if (isLoading) {
+  if (loading) {
     return <LoadingSpinner />;
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredRole && !hasRole(requiredRole)) {
+  // Rolle prüfen
+  if (requiredRole && user.role !== requiredRole) {
     return <Navigate to="/" replace />;
   }
 
-  if (requiredPermission && !hasPermission(requiredPermission)) {
+  // Berechtigung prüfen (falls implementiert)
+  if (requiredPermission && user.permissions && !user.permissions.includes(requiredPermission)) {
     return <Navigate to="/" replace />;
   }
 

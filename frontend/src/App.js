@@ -15,6 +15,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import LoginPage from './pages/LoginPage';
 
 // Legal Pages
 import ImpressumPage from './pages/ImpressumPage';
@@ -22,7 +23,7 @@ import DatenschutzPage from './pages/DatenschutzPage';
 import AGBPage from './pages/AGBPage';
 
 // Admin Pages
-import AdminLoginPage from './pages/AdminLoginPage';
+import AdminPortfolio from './pages/AdminPortfolio';
 
 // Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
@@ -60,18 +61,26 @@ function App() {
                       <Route path="/cart" element={<CartPage />} />
                       <Route path="/checkout" element={<CheckoutPage />} />
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
-                    <Route path="/about" element={<AboutPage />} />
-                    <Route path="/contact" element={<ContactPage />} />
-                    
-                    {/* Legal Pages */}
-                    <Route path="/impressum" element={<ImpressumPage />} />
-                    <Route path="/datenschutz" element={<DatenschutzPage />} />
-                    <Route path="/agb" element={<AGBPage />} />
-                    
-                    {/* Admin Pages */}
-                    <Route path="/admin/login" element={<AdminLoginPage />} />
-                    
-                    {/* Legacy Routes (German) */}
+                      <Route path="/about" element={<AboutPage />} />
+                      <Route path="/contact" element={<ContactPage />} />
+                      <Route path="/login" element={<LoginPage />} />
+                      
+                      {/* Admin Portfolio Route with normal Navbar */}
+                      <Route 
+                        path="/admin/portfolio" 
+                        element={
+                          <ProtectedRoute requiredRole="admin">
+                            <AdminPortfolio />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      
+                      {/* Legal Pages */}
+                      <Route path="/impressum" element={<ImpressumPage />} />
+                      <Route path="/datenschutz" element={<DatenschutzPage />} />
+                      <Route path="/agb" element={<AGBPage />} />
+                      
+                      {/* Legacy Routes (German) */}
                     <Route path="/produkte" element={<Navigate to="/products" replace />} />
                     <Route path="/produkte/:id" element={<Navigate to="/products/:id" replace />} />
                     <Route path="/warenkorb" element={<Navigate to="/cart" replace />} />

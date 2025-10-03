@@ -1,0 +1,17 @@
+{
+  "functions": {
+    "frontend/src/**/*.js": {
+      "runtime": "@vercel/node"
+    }
+  },
+  "env": {
+    "REACT_APP_API_URL": "@api-url",
+    "REACT_APP_FRONTEND_URL": "@frontend-url"
+  },
+  "build": {
+    "env": {
+      "REACT_APP_API_URL": "https://your-railway-backend.railway.app",
+      "REACT_APP_FRONTEND_URL": "https://your-vercel-frontend.vercel.app"
+    }
+  }
+}

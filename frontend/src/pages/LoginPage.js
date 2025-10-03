@@ -10,9 +10,7 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  IconButton,
-  useTheme,
-  useMediaQuery
+  IconButton
 } from '@mui/material';
 import {
   EmailOutlined,
@@ -21,12 +19,11 @@ import {
   VisibilityOffOutlined,
   LoginOutlined
 } from '@mui/icons-material';
-import { Helmet } from 'react-helmet-async';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const { login } = useAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -37,10 +34,12 @@ const LoginPage = () => {
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
-    setFormData({
+    const newFormData = {
       ...formData,
       [e.target.name]: e.target.value
-    });
+    };
+    
+    setFormData(newFormData);
     setError(''); // Fehler zurücksetzen bei Eingabe
   };
 
@@ -50,53 +49,29 @@ const LoginPage = () => {
     setError('');
 
     try {
-      const { email, password } = formData;
+      console.log('🔐 Login-Versuch:', formData.email);
 
-      console.log('🔐 Login-Versuch für:', email);
+      const result = await login(formData.email, formData.password);
 
-      // Admin-Login über Backend-API
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      console.log('📡 Backend-Response Status:', response.status);
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📨 Backend-Response:', data);
-
-        if (data.success) {
-          // Admin-Token speichern
-          localStorage.setItem('adminToken', data.token);
-          localStorage.setItem('adminUser', JSON.stringify(data.user));
-          
-          console.log('✅ Admin-Login erfolgreich - Weiterleitung zu Admin-Panel');
-          console.log('🎯 Navigiere zu /admin...');
-          
-          // Sofortige Navigation ohne Verzögerung
-          navigate('/admin', { replace: true });
-          
-          // Fallback: Manuelle Navigation falls React Router versagt
-          setTimeout(() => {
-            console.log('🔄 Fallback: Erzwinge Seitennavigation...');
-            window.location.href = '/admin';
-          }, 1000);
-          return;
+      if (result.success) {
+        console.log('✅ Login erfolgreich:', result.user);
+        
+        // Unterschiedliche Weiterleitung basierend auf Benutzerrolle
+        if (result.user.role === 'admin') {
+          console.log('👑 Admin-Login erkannt - Weiterleitung zum Dashboard');
+          navigate('/admin/dashboard');
         } else {
-          setError(data.message || 'Ungültige Anmeldedaten');
+          console.log('� Kunden-Login - Weiterleitung zur Startseite');
+          navigate('/');
         }
+        
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('❌ Backend-Fehler:', response.status, errorData);
-        setError(errorData.message || 'Server-Fehler beim Anmelden');
+        throw new Error(result.error || 'Login fehlgeschlagen');
       }
-    } catch (error) {
-      console.error('❌ Login-Fehler:', error);
-      setError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
+
+    } catch (err) {
+      console.error('❌ Login-Fehler:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -121,7 +96,7 @@ const LoginPage = () => {
             Anmelden
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center">
-            Geben Sie Ihre Anmeldedaten ein
+            Willkommen zurück bei Glücksmomente
           </Typography>
         </Box>
 
@@ -211,9 +186,21 @@ const LoginPage = () => {
 
         <Box textAlign="center" mt={2}>
           <Typography variant="body2" color="text.secondary">
-            Probleme beim Anmelden? Kontaktieren Sie den Support.
+            Verwalten Sie Ihre Bestellungen und erhalten Sie exklusive Angebote.
           </Typography>
         </Box>
+
+        {/* Verstecktes Dev-Panel für Admin-Zugang */}
+        {process.env.NODE_ENV === 'development' && (
+          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px dashed #ccc' }}>
+            <Typography variant="caption" display="block" gutterBottom color="text.secondary">
+              🛠️ <strong>Entwicklungs-Hinweis:</strong>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Admin-Email eingeben aktiviert automatische Passwort-Vervollständigung
+            </Typography>
+          </Box>
+        )}
       </Paper>
     </Container>
   );

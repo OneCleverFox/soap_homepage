@@ -3,7 +3,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+
+// Dotenv-Vault Configuration
+if (process.env.DOTENV_KEY) {
+  require('dotenv-vault/config');
+} else {
+  require('dotenv').config();
+}
 
 // Route Imports
 const authRoutes = require('./routes/auth');
