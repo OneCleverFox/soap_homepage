@@ -44,6 +44,7 @@ docs/
 documentation/
 *.md
 !README.md
+!ENV_CONFIG.md
 
 .env*
 .flaskenv*
