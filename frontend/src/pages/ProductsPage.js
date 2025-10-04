@@ -27,10 +27,28 @@ import {
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
 
+// API Base URL für Bild-URLs
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 const ProductsPage = () => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Helper-Funktion um relative Bild-URLs in absolute URLs umzuwandeln
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    // Wenn die URL bereits mit http/https beginnt, direkt zurückgeben
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      return imageUrl;
+    }
+    // Wenn die URL mit /api beginnt, Backend-Host hinzufügen
+    if (imageUrl.startsWith('/api')) {
+      return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
+    }
+    // Ansonsten vollständige API-URL bauen
+    return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -152,7 +170,7 @@ const ProductsPage = () => {
                   <CardMedia
                     component="img"
                     height="200"
-                    image={product.bilder.hauptbild}
+                    image={getImageUrl(product.bilder.hauptbild)}
                     alt={product.bilder.alt_text || product.name}
                     sx={{
                       objectFit: 'cover',
@@ -239,7 +257,7 @@ const ProductsPage = () => {
                             <Box
                               key={imgIndex}
                               component="img"
-                              src={typeof image === 'string' ? image : image.url}
+                              src={getImageUrl(typeof image === 'string' ? image : image.url)}
                               alt={typeof image === 'object' ? image.alt_text : `${product.name} Bild ${imgIndex + 1}`}
                               sx={{
                                 width: 50,

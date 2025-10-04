@@ -485,6 +485,12 @@ router.get('/image/:filename', (req, res) => {
       case '.webp':
         contentType = 'image/webp';
         break;
+      case '.svg':
+        contentType = 'image/svg+xml';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
       case '.jpg':
       case '.jpeg':
         contentType = 'image/jpeg';
