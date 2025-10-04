@@ -3,7 +3,7 @@ node_modules
 # Environment variables (enthält sensible Daten!)
 .env
 .env.local
-.env.production
+# .env.production wird NICHT ignoriert (für Railway/Vercel Referenz)
 
 # Logs
 *.log
@@ -51,3 +51,4 @@ documentation/
 !.env.vault
 !backend/.env.example
 !frontend/.env.example
+!frontend/.env.production

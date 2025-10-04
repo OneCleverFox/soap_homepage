@@ -39,7 +39,9 @@ const allowedOrigins = [
   'https://soap-homepage-frontend.vercel.app',
   new RegExp('^https://gluecksmomente-manufaktur(?:-[a-z0-9-]+)?\\.vercel\\.app$'),
   'http://localhost:3000',
-  'http://127.0.0.1:3000'
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001'
 ];
 
 const normalizeOrigin = (origin) => {
