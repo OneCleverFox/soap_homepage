@@ -1,6 +1,5 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -26,29 +25,58 @@ const kundenRoutes = require('./routes/kunden');
 const app = express();
 
 // CORS-Konfiguration
+const envOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim()).filter(Boolean)
+  : [];
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL,
+  ...envOrigins,
   'https://gluecksmomente-manufaktur.vercel.app',
   'http://localhost:3000',
   'http://127.0.0.1:3000'
-].filter(Boolean);
+];
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
+app.use((req, res, next) => {
+  const requestOrigin = req.headers.origin;
+
+  if (!requestOrigin) {
+    return next();
+  }
+
+  const isAllowedOrigin = allowedOrigins.some((allowedOrigin) => {
+    if (!allowedOrigin) return false;
+    if (allowedOrigin instanceof RegExp) {
+      return allowedOrigin.test(requestOrigin);
     }
+    return allowedOrigin === requestOrigin;
+  });
 
-    console.warn('🚫 Blockierter CORS-Origin:', origin);
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
-};
+  if (!isAllowedOrigin) {
+    console.warn('🚫 Blockierter CORS-Origin:', requestOrigin);
+    if (req.method === 'OPTIONS') {
+      return res.status(403).json({
+        success: false,
+        message: 'Origin nicht erlaubt'
+      });
+    }
+    return res.status(403).json({
+      success: false,
+      message: 'Origin nicht erlaubt'
+    });
+  }
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+  res.header('Access-Control-Allow-Origin', requestOrigin);
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
 
 // Security Middleware - NACH CORS!
 app.use(helmet({
