@@ -32,10 +32,22 @@ const envOrigins = process.env.FRONTEND_URL
 const allowedOrigins = [
   ...envOrigins,
   'https://gluecksmomente-manufaktur.vercel.app',
-  new RegExp('^https://gluecksmomente-manufaktur(?:-[a-z0-9-]+)?\.vercel\.app$'),
+  'https://www.gluecksmomente-manufaktur.vercel.app',
+  'https://soap-homepage-frontend.vercel.app',
+  new RegExp('^https://gluecksmomente-manufaktur(?:-[a-z0-9-]+)?\\.vercel\\.app$'),
   'http://localhost:3000',
   'http://127.0.0.1:3000'
 ];
+
+const normalizeOrigin = (origin) => {
+  if (!origin) return '';
+  try {
+    const url = new URL(origin);
+    return `${url.protocol}//${url.host}`.toLowerCase();
+  } catch (error) {
+    return origin.replace(/\/$/, '').toLowerCase();
+  }
+};
 
 app.use((req, res, next) => {
   const requestOrigin = req.headers.origin;
@@ -51,12 +63,14 @@ app.use((req, res, next) => {
     console.log(`[CORS] Anfrage von ${requestOrigin} -> ${requestPath}`);
   }
 
+  const normalizedOrigin = normalizeOrigin(requestOrigin);
+
   const isAllowedOrigin = allowedOrigins.some((allowedOrigin) => {
     if (!allowedOrigin) return false;
     if (allowedOrigin instanceof RegExp) {
       return allowedOrigin.test(requestOrigin);
     }
-    return allowedOrigin === requestOrigin;
+    return normalizeOrigin(allowedOrigin) === normalizedOrigin;
   });
 
   if (!isAllowedOrigin) {
@@ -78,6 +92,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
     return res.sendStatus(204);
