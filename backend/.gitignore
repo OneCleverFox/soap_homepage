@@ -44,5 +44,6 @@ ehthumbs.db
 Thumbs.db
 .env*
 .flaskenv*
-!.env.project
+!.env.example
 !.env.vault
+!.env.project

@@ -49,3 +49,5 @@ documentation/
 .flaskenv*
 !.env.project
 !.env.vault
+!backend/.env.example
+!frontend/.env.example
