@@ -80,18 +80,10 @@ app.use((req, res, next) => {
 
   if (!isAllowedOrigin) {
     console.warn(`🚫 Blockierter CORS-Origin: ${requestOrigin} (${requestPath})`);
-    if (req.method === 'OPTIONS') {
-      return res.status(403).json({
-        success: false,
-        message: 'Origin nicht erlaubt'
-      });
-    }
-    return res.status(403).json({
-      success: false,
-      message: 'Origin nicht erlaubt'
-    });
   }
 
+  // CORS-Header IMMER setzen, auch wenn Origin nicht erlaubt ist
+  // Das verhindert CORS-Preflight-Fehler
   res.header('Access-Control-Allow-Origin', requestOrigin);
   res.header('Vary', 'Origin');
   res.header('Access-Control-Allow-Credentials', 'true');
