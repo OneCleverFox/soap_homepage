@@ -42,6 +42,49 @@ const portfolioSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  // Produktbeschreibung & Details
+  beschreibung: {
+    kurz: {
+      type: String,
+      default: '',
+      trim: true,
+      maxlength: 200
+    },
+    lang: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    inhaltsstoffe: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    anwendung: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    besonderheiten: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  },
+  // Externer Weblink (z.B. Drive-Dokument)
+  weblink: {
+    type: String,
+    default: '',
+    trim: true,
+    validate: {
+      validator: function(v) {
+        if (!v) return true; // Leerer String ist OK
+        // Einfache URL-Validierung
+        return /^https?:\/\/.+/.test(v);
+      },
+      message: 'Weblink muss eine gültige URL sein (http:// oder https://)'
+    }
+  },
   // Produktbilder
   bilder: {
     hauptbild: {
