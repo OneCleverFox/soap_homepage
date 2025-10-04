@@ -32,6 +32,7 @@ const envOrigins = process.env.FRONTEND_URL
 const allowedOrigins = [
   ...envOrigins,
   'https://gluecksmomente-manufaktur.vercel.app',
+  new RegExp('^https://gluecksmomente-manufaktur(?:-[a-z0-9-]+)?\.vercel\.app$'),
   'http://localhost:3000',
   'http://127.0.0.1:3000'
 ];
@@ -43,6 +44,13 @@ app.use((req, res, next) => {
     return next();
   }
 
+  const requestPath = `${req.method} ${req.originalUrl}`;
+
+  // Debug-Logging für CORS-Verhalten
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(`[CORS] Anfrage von ${requestOrigin} -> ${requestPath}`);
+  }
+
   const isAllowedOrigin = allowedOrigins.some((allowedOrigin) => {
     if (!allowedOrigin) return false;
     if (allowedOrigin instanceof RegExp) {
@@ -52,7 +60,7 @@ app.use((req, res, next) => {
   });
 
   if (!isAllowedOrigin) {
-    console.warn('🚫 Blockierter CORS-Origin:', requestOrigin);
+    console.warn(`🚫 Blockierter CORS-Origin: ${requestOrigin} (${requestPath})`);
     if (req.method === 'OPTIONS') {
       return res.status(403).json({
         success: false,
