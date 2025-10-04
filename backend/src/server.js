@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
@@ -7,7 +8,9 @@ const rateLimit = require('express-rate-limit');
 if (process.env.DOTENV_KEY) {
   require('dotenv-vault/config');
 } else {
-  require('dotenv').config();
+  require('dotenv').config({
+    path: path.resolve(__dirname, '../..', '.env')
+  });
 }
 
 // Route Imports
