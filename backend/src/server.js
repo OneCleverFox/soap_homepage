@@ -4,6 +4,13 @@ const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+// VERSION MARKER - Railway Deployment Check
+const APP_VERSION = '2.0.0-retry-mechanism';
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`🚀 BACKEND VERSION: ${APP_VERSION}`);
+console.log('📅 BUILD DATE:', new Date().toISOString());
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
 // Dotenv Configuration - lädt die richtige .env Datei basierend auf NODE_ENV
 if (process.env.DOTENV_KEY) {
   // Railway verwendet dotenv-vault
@@ -222,10 +229,40 @@ app.post('/api/test', (req, res) => {
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
+  const dbStatus = mongoose.connection.readyState;
+  const dbStatusMap = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+  
   res.status(200).json({
     status: 'OK',
     message: 'Gluecksmomente Backend läuft',
+    version: APP_VERSION,
+    database: dbStatusMap[dbStatus] || 'unknown',
+    mongodb: {
+      host: mongoose.connection.host || 'not connected',
+      name: mongoose.connection.name || 'not connected',
+      readyState: dbStatus
+    },
     timestamp: new Date().toISOString()
+  });
+});
+
+// Version Check Route
+app.get('/api/version', (req, res) => {
+  res.status(200).json({
+    version: APP_VERSION,
+    buildDate: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV,
+    retryMechanism: true,
+    mongooseOptions: {
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      family: 4
+    }
   });
 });
 
