@@ -8,6 +8,7 @@ const {
   updateOrderStatus
 } = require('../controllers/adminController');
 const { auth, requireAdmin } = require('../middleware/auth');
+const { optimizeMainImage } = require('../middleware/imageOptimization');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -41,7 +42,7 @@ const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB Limit
+    fileSize: 10 * 1024 * 1024 // 10MB Limit (wird durch Optimierung auf ~200KB reduziert)
   }
 });
 
@@ -303,9 +304,9 @@ router.delete('/portfolio/:id', async (req, res) => {
 });
 
 // @route   POST /api/admin/portfolio/:id/upload-image
-// @desc    Bild für Portfolio-Produkt hochladen (Base64)
+// @desc    Bild für Portfolio-Produkt hochladen (Base64) mit automatischer Optimierung
 // @access  Private (Admin only)
-router.post('/portfolio/:id/upload-image', upload.single('image'), async (req, res) => {
+router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainImage, async (req, res) => {
   try {
     const { id } = req.params;
     const { alt_text, isHauptbild } = req.body;
