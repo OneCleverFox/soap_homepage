@@ -142,7 +142,17 @@ console.log('� DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICH
 console.log('📊 Database Mode:', DATABASE_MODE.toUpperCase());
 console.log('🌍 Umgebung: PRODUKTIVE DATENBANK');
 
-if (MONGODB_URI) {
+// MongoDB Connection mit Retry-Logik für Railway
+async function connectToMongoDB(retries = 5, delay = 5000) {
+  if (!MONGODB_URI) {
+    console.error('❌ MONGODB_URI ist nicht definiert!');
+    console.error('💡 Prüfen Sie Ihre Environment Variables:');
+    console.error('   - DOTENV_KEY:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
+    console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
+    console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
+    return;
+  }
+
   console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
   
   // Mongoose Verbindungsoptionen für Railway + MongoDB Atlas
@@ -152,25 +162,33 @@ if (MONGODB_URI) {
     family: 4 // Force IPv4 (Railway hat manchmal IPv6 Probleme)
   };
   
-  mongoose.connect(MONGODB_URI, mongooseOptions)
-  .then(() => {
-    console.log('✅ MongoDB erfolgreich verbunden');
-    console.log('📊 Database:', mongoose.connection.db.databaseName);
-    console.log('🏢 Host:', mongoose.connection.host);
-  })
-  .catch(err => {
-    console.error('❌ MongoDB Verbindungsfehler:', err.message);
-    console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-    console.error('🔍 Error Name:', err.name);
-    console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
-  });
-} else {
-  console.error('❌ MONGODB_URI ist nicht definiert!');
-  console.error('💡 Prüfen Sie Ihre Environment Variables:');
-  console.error('   - DOTENV_KEY:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
-  console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
-  console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await mongoose.connect(MONGODB_URI, mongooseOptions);
+      console.log('✅ MongoDB erfolgreich verbunden');
+      console.log('📊 Database:', mongoose.connection.db.databaseName);
+      console.log('🏢 Host:', mongoose.connection.host);
+      console.log('🎯 Verbindung hergestellt nach', attempt, 'Versuch(en)');
+      return; // Erfolg - beende Funktion
+    } catch (err) {
+      console.error(`❌ MongoDB Verbindungsfehler (Versuch ${attempt}/${retries}):`, err.message);
+      console.error('� Error Name:', err.name);
+      
+      if (attempt < retries) {
+        const waitTime = delay * attempt; // Exponential backoff
+        console.warn(`⏳ Warte ${waitTime/1000} Sekunden vor nächstem Versuch...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else {
+        console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+        console.error('⚠️ Alle Verbindungsversuche fehlgeschlagen!');
+        console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
+      }
+    }
+  }
 }
+
+// Starte MongoDB Verbindung
+connectToMongoDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
