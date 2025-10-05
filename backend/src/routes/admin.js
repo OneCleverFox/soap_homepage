@@ -303,7 +303,7 @@ router.delete('/portfolio/:id', async (req, res) => {
 });
 
 // @route   POST /api/admin/portfolio/:id/upload-image
-// @desc    Bild für Portfolio-Produkt hochladen
+// @desc    Bild für Portfolio-Produkt hochladen (Base64)
 // @access  Private (Admin only)
 router.post('/portfolio/:id/upload-image', upload.single('image'), async (req, res) => {
   try {
@@ -327,32 +327,38 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), async (req, r
       });
     }
 
+    // Bild als Base64 einlesen
+    const imageBuffer = fs.readFileSync(req.file.path);
+    const base64Image = imageBuffer.toString('base64');
+    const contentType = req.file.mimetype;
+
+    // Temporäre Datei löschen (nicht mehr benötigt)
+    fs.unlinkSync(req.file.path);
+
     // Bilder-Objekt initialisieren falls nicht vorhanden
     if (!product.bilder) {
       product.bilder = {
         hauptbild: '',
+        hauptbildData: { data: '', contentType: '' },
         galerie: [],
         alt_text: ''
       };
     }
 
-    const imageUrl = `/api/portfolio/image/${req.file.filename}`;
-
     if (isHauptbild === 'true') {
-      // Altes Hauptbild löschen falls vorhanden
-      if (product.bilder.hauptbild) {
-        const oldImagePath = path.join(__dirname, '../../uploads/products', 
-          path.basename(product.bilder.hauptbild));
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-      product.bilder.hauptbild = imageUrl;
+      // Hauptbild als Base64 speichern
+      product.bilder.hauptbild = `data:${contentType};base64,${base64Image}`;
+      product.bilder.hauptbildData = {
+        data: base64Image,
+        contentType: contentType
+      };
       product.bilder.alt_text = alt_text || '';
     } else {
       // Zur Galerie hinzufügen
       product.bilder.galerie.push({
-        url: imageUrl,
+        url: `data:${contentType};base64,${base64Image}`,
+        data: base64Image,
+        contentType: contentType,
         alt_text: alt_text || ''
       });
     }
@@ -363,7 +369,7 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), async (req, r
       success: true,
       message: 'Bild erfolgreich hochgeladen',
       data: {
-        imageUrl: imageUrl,
+        imageUrl: isHauptbild === 'true' ? product.bilder.hauptbild : product.bilder.galerie[product.bilder.galerie.length - 1].url,
         isHauptbild: isHauptbild === 'true',
         product: product
       }

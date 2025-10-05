@@ -381,7 +381,7 @@ router.get('/stats/overview', auth, async (req, res) => {
 });
 
 // @route   POST /api/portfolio/:id/upload-image
-// @desc    Bild für ein Portfolio-Produkt hochladen
+// @desc    Bild für ein Portfolio-Produkt hochladen (Base64)
 // @access  Private
 router.post('/:id/upload-image', auth, upload.single('image'), async (req, res) => {
   try {
@@ -405,32 +405,38 @@ router.post('/:id/upload-image', auth, upload.single('image'), async (req, res) 
       });
     }
 
+    // Bild als Base64 einlesen
+    const imageBuffer = fs.readFileSync(req.file.path);
+    const base64Image = imageBuffer.toString('base64');
+    const contentType = req.file.mimetype;
+
+    // Temporäre Datei löschen (nicht mehr benötigt)
+    fs.unlinkSync(req.file.path);
+
     // Bilder-Objekt initialisieren falls nicht vorhanden
     if (!product.bilder) {
       product.bilder = {
         hauptbild: null,
+        hauptbildData: { data: '', contentType: '' },
         galerie: [],
         alt_text: ''
       };
     }
 
-    const imageUrl = `/api/portfolio/image/${req.file.filename}`;
-
     if (isHauptbild === 'true') {
-      // Altes Hauptbild löschen falls vorhanden
-      if (product.bilder.hauptbild) {
-        const oldImagePath = path.join(__dirname, '../../uploads/products', 
-          path.basename(product.bilder.hauptbild));
-        if (fs.existsSync(oldImagePath)) {
-          fs.unlinkSync(oldImagePath);
-        }
-      }
-      product.bilder.hauptbild = imageUrl;
+      // Hauptbild als Base64 speichern
+      product.bilder.hauptbild = `data:${contentType};base64,${base64Image}`;
+      product.bilder.hauptbildData = {
+        data: base64Image,
+        contentType: contentType
+      };
       product.bilder.alt_text = alt_text || '';
     } else {
       // Zur Galerie hinzufügen
       product.bilder.galerie.push({
-        url: imageUrl,
+        url: `data:${contentType};base64,${base64Image}`,
+        data: base64Image,
+        contentType: contentType,
         alt_text: alt_text || ''
       });
     }
@@ -441,7 +447,7 @@ router.post('/:id/upload-image', auth, upload.single('image'), async (req, res) 
       success: true,
       message: 'Bild erfolgreich hochgeladen',
       data: {
-        imageUrl: imageUrl,
+        imageUrl: isHauptbild === 'true' ? product.bilder.hauptbild : product.bilder.galerie[product.bilder.galerie.length - 1].url,
         isHauptbild: isHauptbild === 'true'
       }
     });
@@ -460,17 +466,18 @@ router.post('/:id/upload-image', auth, upload.single('image'), async (req, res) 
 });
 
 // @route   GET /api/portfolio/image/:filename
-// @desc    Produktbild servieren
+// @desc    Produktbild servieren (wird nicht mehr benötigt, da Base64 verwendet wird)
 // @access  Public
 router.get('/image/:filename', (req, res) => {
   try {
     const filename = req.params.filename;
     const imagePath = path.join(__dirname, '../../uploads/products', filename);
     
+    // Legacy support: Falls noch alte Dateien existieren
     if (!fs.existsSync(imagePath)) {
       return res.status(404).json({
         success: false,
-        message: 'Bild nicht gefunden'
+        message: 'Bild nicht gefunden. Bilder werden jetzt direkt in der Datenbank gespeichert.'
       });
     }
 

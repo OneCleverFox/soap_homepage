@@ -91,17 +91,35 @@ const portfolioSchema = new mongoose.Schema({
       message: 'Weblink muss eine gültige URL sein (http:// oder https://)'
     }
   },
-  // Produktbilder
+  // Produktbilder (Base64 für Cloud-Deployment)
   bilder: {
     hauptbild: {
       type: String,
       default: '',
       trim: true
     },
+    hauptbildData: {
+      data: {
+        type: String, // Base64-encoded image
+        default: ''
+      },
+      contentType: {
+        type: String, // MIME type (image/jpeg, image/png, etc.)
+        default: ''
+      }
+    },
     galerie: [{
       url: {
         type: String,
         trim: true
+      },
+      data: {
+        type: String, // Base64-encoded image
+        default: ''
+      },
+      contentType: {
+        type: String, // MIME type
+        default: ''
       },
       alt_text: {
         type: String,

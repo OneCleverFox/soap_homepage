@@ -68,6 +68,8 @@ const ProductDetailPage = () => {
 
   const getImageUrl = (url) => {
     if (!url) return null;
+    // Base64-Bilder direkt zurückgeben
+    if (url.startsWith('data:image/')) return url;
     if (url.startsWith('http')) return url;
     if (url.startsWith('/api')) {
       return `${API_BASE_URL.replace('/api', '')}${url}`;

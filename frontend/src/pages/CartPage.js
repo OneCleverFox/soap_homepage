@@ -50,6 +50,12 @@ const CartPage = () => {
       return null;
     }
     
+    // Base64-Bilder direkt zurückgeben
+    if (url.startsWith('data:image/')) {
+      console.log('🖼️ Base64 image detected');
+      return url;
+    }
+    
     if (url.startsWith('http')) {
       console.log('🖼️ URL already absolute:', url);
       return url;

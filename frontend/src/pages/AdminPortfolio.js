@@ -294,6 +294,8 @@ const AdminPortfolio = () => {
 
   const getImageUrl = (imageUrl) => {
     if (!imageUrl) return null;
+    // Base64-Bilder direkt zurückgeben
+    if (imageUrl.startsWith('data:image/')) return imageUrl;
     return imageUrl.startsWith('/api/') ? `${API_BASE.replace('/api', '')}${imageUrl}` : imageUrl;
   };
 
