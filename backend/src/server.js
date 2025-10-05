@@ -144,11 +144,24 @@ console.log('🌍 Umgebung: PRODUKTIVE DATENBANK');
 
 if (MONGODB_URI) {
   console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-  mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ MongoDB erfolgreich verbunden'))
+  
+  // Mongoose Verbindungsoptionen für Railway + MongoDB Atlas
+  const mongooseOptions = {
+    serverSelectionTimeoutMS: 30000, // 30 Sekunden für Server Selection
+    socketTimeoutMS: 45000, // 45 Sekunden für Socket Operations
+    family: 4 // Force IPv4 (Railway hat manchmal IPv6 Probleme)
+  };
+  
+  mongoose.connect(MONGODB_URI, mongooseOptions)
+  .then(() => {
+    console.log('✅ MongoDB erfolgreich verbunden');
+    console.log('📊 Database:', mongoose.connection.db.databaseName);
+    console.log('🏢 Host:', mongoose.connection.host);
+  })
   .catch(err => {
     console.error('❌ MongoDB Verbindungsfehler:', err.message);
     console.error('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+    console.error('🔍 Error Name:', err.name);
     console.warn('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
   });
 } else {
