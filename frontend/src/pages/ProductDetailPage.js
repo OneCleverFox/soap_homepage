@@ -92,7 +92,7 @@ const ProductDetailPage = () => {
       id: product._id,
       name: product.name,
       price: product.preis || 0,
-      image: getImageUrl(product.bilder?.hauptbild),
+      image: product.bilder?.hauptbild, // Speichere relative URL, nicht absolute
       gramm: product.gramm,
       seife: product.seife
     };
