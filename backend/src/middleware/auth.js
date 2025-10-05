@@ -1,5 +1,32 @@
 const jwt = require('jsonwebtoken');
 
+// Generische Authentifizierung für alle eingeloggten Benutzer
+const authenticateToken = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Kein Token gefunden'
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+    console.log('🔐 Decoded JWT Token:', decoded);
+    req.user = decoded;
+    next();
+
+  } catch (error) {
+    console.error('Auth Error:', error.message);
+    res.status(401).json({
+      success: false,
+      message: 'Token ungültig'
+    });
+  }
+};
+
+// Admin-only Authentifizierung (alte auth Funktion)
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -56,6 +83,7 @@ const checkPermission = (permission) => {
 
 module.exports = {
   auth,
+  authenticateToken,
   requireAdmin,
   checkPermission
 };

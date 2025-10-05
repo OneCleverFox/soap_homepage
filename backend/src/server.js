@@ -24,6 +24,9 @@ const rohseifeRoutes = require('./routes/rohseife');
 const duftoeleRoutes = require('./routes/duftoele');
 const verpackungenRoutes = require('./routes/verpackungen');
 const kundenRoutes = require('./routes/kunden');
+const usersRoutes = require('./routes/users');
+const cartRoutes = require('./routes/cart');
+const warenberechnungRoutes = require('./routes/warenberechnung');
 
 const app = express();
 
@@ -156,6 +159,9 @@ app.use('/api/rohseife', rohseifeRoutes);
 app.use('/api/duftoele', duftoeleRoutes);
 app.use('/api/verpackungen', verpackungenRoutes);
 app.use('/api/kunden', kundenRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/warenberechnung', warenberechnungRoutes);
 app.use('/api/images', require('./routes/images'));
 
 // Test Route für Datenempfang

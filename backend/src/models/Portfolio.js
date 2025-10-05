@@ -42,6 +42,12 @@ const portfolioSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  // Preis
+  preis: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   // Produktbeschreibung & Details
   beschreibung: {
     kurz: {
