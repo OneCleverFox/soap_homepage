@@ -199,18 +199,6 @@ Das System optimiert **alle** hochgeladenen Bilder automatisch:
 
 **Details**: Siehe [BILDOPTIMIERUNG.md](./BILDOPTIMIERUNG.md)
 
-## 🔑 Test Accounts
-
-### Admin-User
-- Email: `ralle.jacob84@googlemail.com`
-- Password: `Jonas2014`
-- Typ: Admin-User (voller Zugriff)
-
-### Admin-Kunde
-- Email: `sandraseeling@web.de`
-- Typ: Kunde mit Admin-Rolle
-- Kundennummer: `KD25106383`
-
 ## 🛣️ API Endpoints
 
 ### Public Routes
