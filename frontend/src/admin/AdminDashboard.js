@@ -31,10 +31,10 @@ const AdminDashboard = () => {
       color: 'primary'
     },
     {
-      title: 'Produkte',
-      description: 'Verwalten Sie das Produktsortiment und die Verfügbarkeit.',
+      title: 'Rohstoffe',
+      description: 'Verwalten Sie Rohseifen, Duftöle und Verpackungen.',
       icon: <InventoryIcon sx={{ fontSize: 40, color: 'secondary.main' }} />,
-      path: '/admin/produkte',
+      path: '/admin/rohstoffe',
       color: 'secondary'
     },
     {
@@ -59,10 +59,10 @@ const AdminDashboard = () => {
       color: 'warning'
     },
     {
-      title: 'Analytics',
-      description: 'Statistiken und Berichte zu Verkäufen und Nutzerverhalten.',
+      title: 'Warenberechnung',
+      description: 'Detaillierte Kostenberechnung für alle Portfolio-Produkte.',
       icon: <AnalyticsIcon sx={{ fontSize: 40, color: 'error.main' }} />,
-      path: '/admin/analytics',
+      path: '/admin/warenberechnung',
       color: 'error'
     }
   ];

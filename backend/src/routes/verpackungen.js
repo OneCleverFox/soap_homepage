@@ -7,11 +7,18 @@ const Verpackung = require('../models/Verpackung');
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { form, verfuegbar, vorratStatus } = req.query;
+    const { form, verfuegbar, vorratStatus, includeUnavailable } = req.query;
     
     let filter = {};
     if (form) filter.form = form;
-    if (verfuegbar !== undefined) filter.verfuegbar = verfuegbar === 'true';
+    
+    // Nur verfuegbar-Filter setzen, wenn nicht alle angezeigt werden sollen
+    if (includeUnavailable !== 'true' && verfuegbar !== undefined) {
+      filter.verfuegbar = verfuegbar === 'true';
+    } else if (includeUnavailable !== 'true') {
+      // Standardmäßig nur verfügbare anzeigen (außer includeUnavailable ist true)
+      filter.verfuegbar = true;
+    }
     
     const verpackungen = await Verpackung.find(filter)
       .sort({ bezeichnung: 1 });
@@ -325,6 +332,98 @@ router.get('/forms', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Verpackungsformen'
+    });
+  }
+});
+
+// @route   POST /api/verpackungen
+// @desc    Neue Verpackung erstellen
+// @access  Private (Admin only)
+router.post('/', async (req, res) => {
+  try {
+    const verpackung = new Verpackung(req.body);
+    const savedVerpackung = await verpackung.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Verpackung erfolgreich erstellt',
+      data: savedVerpackung
+    });
+  } catch (error) {
+    console.error('Verpackung Create Error:', error);
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Eine Verpackung mit dieser Bezeichnung existiert bereits'
+      });
+    }
+
+    res.status(400).json({
+      success: false,
+      message: 'Fehler beim Erstellen der Verpackung',
+      error: error.message
+    });
+  }
+});
+
+// @route   PUT /api/verpackungen/:id
+// @desc    Verpackung aktualisieren
+// @access  Private (Admin only)
+router.put('/:id', async (req, res) => {
+  try {
+    const verpackung = await Verpackung.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!verpackung) {
+      return res.status(404).json({
+        success: false,
+        message: 'Verpackung nicht gefunden'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Verpackung erfolgreich aktualisiert',
+      data: verpackung
+    });
+  } catch (error) {
+    console.error('Verpackung Update Error:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der Verpackung',
+      error: error.message
+    });
+  }
+});
+
+// @route   DELETE /api/verpackungen/:id
+// @desc    Verpackung löschen
+// @access  Private (Admin only)
+router.delete('/:id', async (req, res) => {
+  try {
+    const verpackung = await Verpackung.findByIdAndDelete(req.params.id);
+
+    if (!verpackung) {
+      return res.status(404).json({
+        success: false,
+        message: 'Verpackung nicht gefunden'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Verpackung erfolgreich gelöscht',
+      data: verpackung
+    });
+  } catch (error) {
+    console.error('Verpackung Delete Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen der Verpackung'
     });
   }
 });

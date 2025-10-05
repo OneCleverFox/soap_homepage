@@ -206,13 +206,15 @@ router.put('/portfolio/:id', async (req, res) => {
     // Daten aktualisieren (ohne bilder zu überschreiben)
     const allowedFields = [
       'name', 'seife', 'gramm', 'aroma', 'seifenform', 
-      'zusatz', 'optional', 'verpackung', 'aktiv', 'reihenfolge'
+      'zusatz', 'optional', 'verpackung', 'aktiv', 'reihenfolge', 'preis'
     ];
 
     allowedFields.forEach(field => {
       if (updateData[field] !== undefined) {
         if (field === 'gramm' || field === 'reihenfolge') {
           product[field] = parseInt(updateData[field]);
+        } else if (field === 'preis') {
+          product[field] = parseFloat(updateData[field]);
         } else {
           product[field] = updateData[field];
         }

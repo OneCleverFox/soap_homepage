@@ -27,11 +27,11 @@ import AdminPortfolio from './pages/AdminPortfolio';
 
 // Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
-import AdminProducts from './admin/AdminProducts';
+import AdminRohstoffe from './admin/AdminRohstoffe';
 import AdminOrders from './admin/AdminOrders';
 import AdminInventory from './admin/AdminInventory';
 import AdminUsers from './admin/AdminUsers';
-import AdminAnalytics from './admin/AdminAnalytics';
+import AdminWarenberechnung from './admin/AdminWarenberechnung';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -97,54 +97,72 @@ function App() {
             }
           />
 
-          {/* Admin Routes without Navbar and Footer */}
+          {/* Admin Routes with Navbar */}
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route
             path="/admin/dashboard"
             element={
-              <ProtectedRoute requiredRole="employee">
-                <AdminDashboard />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="employee">
+                  <AdminDashboard />
+                </ProtectedRoute>
+              </>
             }
           />
           <Route
-            path="/admin/produkte"
+            path="/admin/rohstoffe"
             element={
-              <ProtectedRoute requiredPermission="products.read">
-                <AdminProducts />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminRohstoffe />
+                </ProtectedRoute>
+              </>
             }
           />
           <Route
             path="/admin/bestellungen"
             element={
-              <ProtectedRoute requiredPermission="orders.read">
-                <AdminOrders />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredPermission="orders.read">
+                  <AdminOrders />
+                </ProtectedRoute>
+              </>
             }
           />
           <Route
             path="/admin/lager"
             element={
-              <ProtectedRoute requiredPermission="inventory.read">
-                <AdminInventory />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredPermission="inventory.read">
+                  <AdminInventory />
+                </ProtectedRoute>
+              </>
             }
           />
           <Route
             path="/admin/benutzer"
             element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminUsers />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminUsers />
+                </ProtectedRoute>
+              </>
             }
           />
           <Route
-            path="/admin/analytics"
+            path="/admin/warenberechnung"
             element={
-              <ProtectedRoute requiredPermission="analytics.read">
-                <AdminAnalytics />
-              </ProtectedRoute>
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminWarenberechnung />
+                </ProtectedRoute>
+              </>
             }
           />
         </Routes>

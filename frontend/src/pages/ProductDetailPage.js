@@ -12,7 +12,8 @@ import {
   Card,
   CardMedia,
   Divider,
-  Paper
+  Paper,
+  IconButton
 } from '@mui/material';
 import {
   ArrowBack,
@@ -20,19 +21,28 @@ import {
   LocalFlorist,
   Category,
   Link as LinkIcon,
-  Description
+  Description,
+  ShoppingCart,
+  Add as AddIcon,
+  Remove as RemoveIcon
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
+import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { addToCart } = useCart();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     fetchProduct();
@@ -63,6 +73,33 @@ const ProductDetailPage = () => {
       return `${API_BASE_URL.replace('/api', '')}${url}`;
     }
     return `${API_BASE_URL.replace('/api', '')}${url}`;
+  };
+
+  const handleAddToCart = () => {
+    if (!user) {
+      toast.error('Bitte melden Sie sich an, um Produkte in den Warenkorb zu legen');
+      navigate('/login');
+      return;
+    }
+
+    const cartProduct = {
+      id: product._id,
+      name: product.name,
+      price: product.preis || 0,
+      image: getImageUrl(product.bilder?.hauptbild),
+      gramm: product.gramm,
+      seife: product.seife
+    };
+
+    addToCart(cartProduct, quantity);
+    toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
+  };
+
+  const handleQuantityChange = (delta) => {
+    const newQuantity = quantity + delta;
+    if (newQuantity >= 1 && newQuantity <= 99) {
+      setQuantity(newQuantity);
+    }
   };
 
   if (loading) {
@@ -213,14 +250,75 @@ const ProductDetailPage = () => {
             )}
           </Box>
 
+          <Divider sx={{ my: 3 }} />
+
+          {/* Preis und Warenkorb-Bereich */}
+          {product.preis && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h4" color="primary.main" fontWeight="bold">
+                €{product.preis.toFixed(2)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                inkl. MwSt.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Mengenauswahl und Warenkorb-Button - für Admins und Kunden */}
+          {user && product.preis && product.preis > 0 && (
+            <Box sx={{ mt: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <Typography variant="body1" fontWeight="bold">
+                  Menge:
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', border: 1, borderColor: 'grey.300', borderRadius: 1 }}>
+                  <IconButton 
+                    onClick={() => handleQuantityChange(-1)}
+                    disabled={quantity <= 1}
+                    size="small"
+                  >
+                    <RemoveIcon />
+                  </IconButton>
+                  <Typography sx={{ px: 3, minWidth: 50, textAlign: 'center' }}>
+                    {quantity}
+                  </Typography>
+                  <IconButton 
+                    onClick={() => handleQuantityChange(1)}
+                    disabled={quantity >= 99}
+                    size="small"
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </Box>
+              </Box>
+
+              <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                startIcon={<ShoppingCart />}
+                onClick={handleAddToCart}
+                sx={{ mb: 2 }}
+              >
+                In den Warenkorb
+              </Button>
+            </Box>
+          )}
+
+          {!user && (
+            <Alert severity="info" sx={{ mt: 3 }}>
+              Bitte <Button onClick={() => navigate('/login')} size="small">melden Sie sich an</Button>, um Produkte zu bestellen.
+            </Alert>
+          )}
+
           {product.weblink && (
             <Button
-              variant="contained"
+              variant="outlined"
               fullWidth
               size="large"
               startIcon={<LinkIcon />}
               onClick={() => window.open(product.weblink, '_blank')}
-              sx={{ mt: 3 }}
+              sx={{ mt: 2 }}
             >
               Produktdokumentation öffnen
             </Button>
@@ -230,6 +328,7 @@ const ProductDetailPage = () => {
         <Grid item xs={12}>
           {product.beschreibung?.lang && (
             <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+```
               <Typography variant="h5" fontWeight="bold" gutterBottom>Beschreibung</Typography>
               <Typography sx={{ whiteSpace: 'pre-line' }}>{product.beschreibung.lang}</Typography>
             </Paper>

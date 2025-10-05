@@ -9,10 +9,11 @@ const router = express.Router();
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { duftrichtung, intensitaet } = req.query;
+    const { duftrichtung, intensitaet, includeUnavailable } = req.query;
     
     // Filter aufbauen
-    let filter = { verfuegbar: true };
+    let filter = includeUnavailable === 'true' ? {} : { verfuegbar: true };
+    
     if (duftrichtung) filter.duftrichtung = duftrichtung;
     if (intensitaet) filter.intensitaet = intensitaet;
 
@@ -448,6 +449,34 @@ router.get('/stats/overview', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Duftöl-Statistiken'
+    });
+  }
+});
+
+// @route   DELETE /api/duftoele/:id
+// @desc    Duftöl löschen
+// @access  Private (Admin only)
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const duftoil = await Duftoil.findByIdAndDelete(req.params.id);
+
+    if (!duftoil) {
+      return res.status(404).json({
+        success: false,
+        message: 'Duftöl nicht gefunden'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Duftöl erfolgreich gelöscht',
+      data: duftoil
+    });
+  } catch (error) {
+    console.error('Duftöl Delete Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Duftöls'
     });
   }
 });

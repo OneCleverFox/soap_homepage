@@ -2,7 +2,11 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 // API Base URL
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Im Development-Modus wird der Proxy aus package.json verwendet (/api -> http://localhost:5000/api)
+// In Production kommt die vollständige URL aus der Environment-Variable
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? '/api' 
+  : (process.env.REACT_APP_API_URL || '');
 
 // Axios Instance erstellen
 const api = axios.create({
@@ -16,7 +20,7 @@ const api = axios.create({
 // Request Interceptor für Token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -38,7 +42,7 @@ api.interceptors.response.use(
     if (response) {
       switch (response.status) {
         case 401:
-          localStorage.removeItem('authToken');
+          localStorage.removeItem('token');
           localStorage.removeItem('user');
           window.location.href = '/login';
           toast.error('Sitzung abgelaufen. Bitte erneut anmelden.');
@@ -120,7 +124,10 @@ export const usersAPI = {
   createUser: (userData) => api.post('/users', userData),
   updateUser: (id, userData) => api.put(`/users/${id}`, userData),
   deleteUser: (id) => api.delete(`/users/${id}`),
-  updateUserStatus: (id, statusData) => api.put(`/users/${id}/status`, statusData),
+  updatePassword: (id, passwordData) => api.put(`/users/${id}/password`, passwordData),
+  blockUser: (id) => api.put(`/users/${id}/block`),
+  unblockUser: (id) => api.put(`/users/${id}/unblock`),
+  getStats: () => api.get('/users/stats/overview'),
 };
 
 // Analytics API
@@ -139,6 +146,15 @@ export const portfolioAPI = {
   create: (portfolioData) => api.post('/portfolio', portfolioData),
   update: (id, portfolioData) => api.put(`/portfolio/${id}`, portfolioData),
   delete: (id) => api.delete(`/portfolio/${id}`),
+};
+
+// Cart API
+export const cartAPI = {
+  getCart: () => api.get('/cart'),
+  addToCart: (cartItem) => api.post('/cart/add', cartItem),
+  updateQuantity: (produktId, menge) => api.put('/cart/update', { produktId, menge }),
+  removeItem: (produktId) => api.delete(`/cart/remove/${produktId}`),
+  clearCart: () => api.delete('/cart/clear'),
 };
 
 // Health Check

@@ -13,24 +13,74 @@ import {
   CircularProgress,
   Alert,
   Fade,
-  CardActions
+  CardActions,
+  TextField,
+  IconButton
 } from '@mui/material';
 import {
   Inventory as WeightIcon,
   LocalFlorist as AromaIcon,
   Info as InfoIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  ShoppingCart as CartIcon,
+  Add as AddIcon,
+  Remove as RemoveIcon
 } from '@mui/icons-material';
-import { portfolioAPI } from '../services/api';
+import { portfolioAPI, cartAPI } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import toast from 'react-hot-toast';
 
 // API Base URL für Bild-URLs
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const ProductsPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [quantities, setQuantities] = useState({}); // { productId: quantity }
+
+  // Mengenauswahl für jedes Produkt initialisieren
+  useEffect(() => {
+    if (products.length > 0) {
+      const initialQuantities = {};
+      products.forEach(product => {
+        initialQuantities[product._id] = 1;
+      });
+      setQuantities(initialQuantities);
+    }
+  }, [products]);
+
+  // Menge ändern
+  const handleQuantityChange = (productId, delta) => {
+    setQuantities(prev => {
+      const newQuantity = Math.max(1, (prev[productId] || 1) + delta);
+      return { ...prev, [productId]: newQuantity };
+    });
+  };
+
+  // In den Warenkorb legen
+  const handleAddToCart = async (product) => {
+    if (!product.preis) {
+      toast.error('Produkt hat noch keinen Preis');
+      return;
+    }
+
+    try {
+      const quantity = quantities[product._id] || 1;
+      await cartAPI.addToCart({
+        produktId: product._id,
+        produktName: product.name,
+        menge: quantity,
+        preis: product.preis
+      });
+      toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
+    } catch (err) {
+      console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
+      toast.error('Fehler beim Hinzufügen zum Warenkorb');
+    }
+  };
 
   // Helper-Funktion um relative Bild-URLs in absolute URLs umzuwandeln
   const getImageUrl = (imageUrl) => {
@@ -223,34 +273,132 @@ const ProductsPage = () => {
                       </Typography>
                     </Box>
                   </Box>
+
+                  {/* Preis */}
+                  <Box 
+                    sx={{ 
+                      mt: 'auto',
+                      pt: 2,
+                      borderTop: '1px solid',
+                      borderColor: 'divider'
+                    }}
+                  >
+                    {product.preis ? (
+                      <Typography 
+                        variant="h5" 
+                        color="primary" 
+                        fontWeight="bold"
+                        sx={{ textAlign: 'center' }}
+                      >
+                        {product.preis.toFixed(2)} €
+                      </Typography>
+                    ) : (
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ textAlign: 'center', fontStyle: 'italic' }}
+                      >
+                        Preis noch nicht festgelegt
+                      </Typography>
+                    )}
+                  </Box>
                 </CardContent>
 
-                <CardActions sx={{ p: 2, pt: 0, gap: 1 }}>
-                  {/* Details Button */}
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    onClick={() => navigate(`/products/${product._id}`)}
-                    startIcon={<InfoIcon />}
-                  >
-                    Details
-                  </Button>
+                <CardActions sx={{ p: 2, pt: 0, flexDirection: 'column', gap: 1 }}>
+                  {/* Mengenauswahl und Warenkorb-Button in einer Zeile (nur für Admins) */}
+                  {user?.role === 'admin' && product.preis > 0 && (
+                    <Box sx={{ display: 'flex', gap: 1, width: '100%', alignItems: 'center' }}>
+                      {/* Kompakte Mengenauswahl */}
+                      <Box 
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center',
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: 1,
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuantityChange(product._id, -1);
+                          }}
+                          disabled={quantities[product._id] <= 1}
+                          sx={{ borderRadius: 0 }}
+                        >
+                          <RemoveIcon fontSize="small" />
+                        </IconButton>
+                        
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            minWidth: 30, 
+                            textAlign: 'center',
+                            px: 1,
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          {quantities[product._id] || 1}
+                        </Typography>
+                        
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleQuantityChange(product._id, 1);
+                          }}
+                          sx={{ borderRadius: 0 }}
+                        >
+                          <AddIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
 
-                  {/* Weblink Button (wenn vorhanden) */}
-                  {product.weblink && (
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(product.weblink, '_blank');
-                      }}
-                      startIcon={<LinkIcon />}
-                      sx={{ minWidth: 'auto', px: 2 }}
-                    >
-                      Doku
-                    </Button>
+                      {/* Kompakter Warenkorb-Button */}
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddToCart(product);
+                        }}
+                        startIcon={<CartIcon />}
+                        sx={{ flex: 1 }}
+                      >
+                        Warenkorb
+                      </Button>
+                    </Box>
                   )}
+
+                  {/* Details und Doku in einer Zeile */}
+                  <Box sx={{ display: 'flex', gap: 1, width: '100%' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      fullWidth
+                      onClick={() => navigate(`/products/${product._id}`)}
+                      startIcon={<InfoIcon />}
+                    >
+                      Details
+                    </Button>
+
+                    {product.weblink && (
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(product.weblink, '_blank');
+                        }}
+                        startIcon={<LinkIcon />}
+                      >
+                        Doku
+                      </Button>
+                    )}
+                  </Box>
                 </CardActions>
               </Card>
             </Fade>

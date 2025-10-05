@@ -9,7 +9,12 @@ const router = express.Router();
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const rohseifeMaterialien = await Rohseife.find({ verfuegbar: true })
+    const { includeUnavailable } = req.query;
+    
+    // Filter: wenn includeUnavailable=true, dann alle anzeigen, sonst nur verfügbare
+    const filter = includeUnavailable === 'true' ? {} : { verfuegbar: true };
+    
+    const rohseifeMaterialien = await Rohseife.find(filter)
       .sort({ bezeichnung: 1 });
 
     res.status(200).json({
@@ -292,6 +297,34 @@ router.get('/stats/overview', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Rohseife-Statistiken'
+    });
+  }
+});
+
+// @route   DELETE /api/rohseife/:id
+// @desc    Rohseife-Material löschen
+// @access  Private (Admin only)
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const rohseifeMaterial = await Rohseife.findByIdAndDelete(req.params.id);
+
+    if (!rohseifeMaterial) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rohseife-Material nicht gefunden'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Rohseife-Material erfolgreich gelöscht',
+      data: rohseifeMaterial
+    });
+  } catch (error) {
+    console.error('Rohseife Delete Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Rohseife-Materials'
     });
   }
 });

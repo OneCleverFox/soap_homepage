@@ -90,11 +90,11 @@ const Navbar = () => {
   const adminNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
     { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
-    { label: 'Produkte', path: '/admin/produkte', icon: '📦' },
+    { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
     { label: 'Bestellungen', path: '/admin/bestellungen', icon: '🛒' },
     { label: 'Lager', path: '/admin/lager', icon: '📋' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
-    { label: 'Analytics', path: '/admin/analytics', icon: '📈' }
+    { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' }
   ];
 
   const drawer = (
@@ -344,16 +344,18 @@ const Navbar = () => {
 
           {/* Right side buttons */}
           <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-            {/* Shopping Cart */}
-            <IconButton 
-              color="inherit" 
-              component={Link} 
-              to="/cart"
-            >
-              <Badge badgeContent={cartItemsCount} color="secondary">
-                🛒
-              </Badge>
-            </IconButton>
+            {/* Shopping Cart - nur für Kunden (nicht für Admins) */}
+            {user && user.role !== 'admin' && (
+              <IconButton 
+                color="inherit" 
+                component={Link} 
+                to="/cart"
+              >
+                <Badge badgeContent={cartItemsCount} color="secondary">
+                  🛒
+                </Badge>
+              </IconButton>
+            )}
 
             {/* User Account */}
             {user ? (

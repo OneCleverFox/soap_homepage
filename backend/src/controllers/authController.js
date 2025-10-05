@@ -30,47 +30,121 @@ const loginAdmin = async (req, res) => {
     // Admin-Benutzer aus Umgebungsvariablen abrufen
     const ADMIN_USER = getAdminUser();
 
-    // Admin-Benutzer prüfen
-    if (email.toLowerCase() !== ADMIN_USER.email.toLowerCase()) {
+    // Prüfen ob es der Admin ist
+    if (email.toLowerCase() === ADMIN_USER.email.toLowerCase()) {
+      // Admin-Login
+      if (password !== ADMIN_USER.password) {
+        console.log('❌ Falsches Passwort für Admin:', email);
+        return res.status(401).json({
+          success: false,
+          message: 'Ungültige Anmeldedaten'
+        });
+      }
+
+      // JWT Token für Admin erstellen
+      const token = jwt.sign(
+        {
+          id: 'admin-ralf',
+          email: ADMIN_USER.email,
+          role: ADMIN_USER.role,
+          permissions: ADMIN_USER.permissions
+        },
+        process.env.JWT_SECRET || 'fallback-secret-key',
+        { expiresIn: '24h' }
+      );
+
+      console.log('✅ Erfolgreicher Admin-Login:', email);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Erfolgreich angemeldet',
+        token,
+        user: {
+          id: 'admin-ralf',
+          email: ADMIN_USER.email,
+          name: ADMIN_USER.name,
+          role: ADMIN_USER.role,
+          permissions: ADMIN_USER.permissions
+        }
+      });
+    }
+
+    // Nicht der Admin - prüfen ob Kunde existiert
+    const Kunde = require('../models/Kunde');
+    
+    console.log('🔍 Suche Kunde mit E-Mail:', email.toLowerCase().trim());
+    const kunde = await Kunde.findOne({ email: email.toLowerCase().trim() });
+    
+    if (!kunde) {
+      // Debug: Alle Kunden-E-Mails anzeigen
+      const alleKunden = await Kunde.find({}).select('email vorname nachname').limit(5);
+      console.log('📋 Erste 5 Kunden in DB:', alleKunden.map(k => ({ email: k.email, name: `${k.vorname} ${k.nachname}` })));
+      
       console.log('❌ Unbekannte E-Mail:', email);
       return res.status(401).json({
         success: false,
         message: 'Ungültige Anmeldedaten'
       });
     }
+    
+    console.log('✅ Kunde gefunden:', { id: kunde._id, email: kunde.email, name: `${kunde.vorname} ${kunde.nachname}` });
 
-    if (password !== ADMIN_USER.password) {
-      console.log('❌ Falsches Passwort für:', email);
+    // Account-Status prüfen
+    if (!kunde.status.aktiv || kunde.status.gesperrt) {
+      console.log('❌ Account inaktiv oder gesperrt:', email);
+      return res.status(401).json({
+        success: false,
+        message: 'Account ist deaktiviert oder gesperrt'
+      });
+    }
+
+    // Passwort vergleichen
+    const istPasswortKorrekt = await kunde.vergleichePasswort(password);
+    if (!istPasswortKorrekt) {
+      kunde.anmeldeversuche = (kunde.anmeldeversuche || 0) + 1;
+      await kunde.save();
+      
+      console.log('❌ Falsches Passwort für Kunde:', email);
       return res.status(401).json({
         success: false,
         message: 'Ungültige Anmeldedaten'
       });
     }
 
-    // JWT Token erstellen
+    // Erfolgreiche Kunden-Anmeldung
+    kunde.letzteAnmeldung = new Date();
+    kunde.anmeldeversuche = 0;
+    await kunde.save();
+
+    // JWT Token für Kunde erstellen
     const token = jwt.sign(
-      {
-        id: 'admin-ralf',
-        email: ADMIN_USER.email,
-        role: ADMIN_USER.role,
-        permissions: ADMIN_USER.permissions
+      { 
+        id: kunde._id.toString(),
+        kundeId: kunde._id,
+        email: kunde.email,
+        kundennummer: kunde.kundennummer,
+        role: 'kunde'
       },
       process.env.JWT_SECRET || 'fallback-secret-key',
       { expiresIn: '24h' }
     );
 
-    console.log('✅ Erfolgreicher Admin-Login:', email);
+    console.log('✅ Erfolgreicher Kunden-Login:', email);
+
+    // Passwort aus Response entfernen
+    const kundeOhnePasswort = kunde.toObject();
+    delete kundeOhnePasswort.passwort;
 
     res.status(200).json({
       success: true,
       message: 'Erfolgreich angemeldet',
       token,
       user: {
-        id: 'admin-ralf',
-        email: ADMIN_USER.email,
-        name: ADMIN_USER.name,
-        role: ADMIN_USER.role,
-        permissions: ADMIN_USER.permissions
+        id: kunde._id.toString(),
+        email: kunde.email,
+        name: `${kunde.vorname} ${kunde.nachname}`,
+        role: 'kunde',
+        kundennummer: kunde.kundennummer
       }
     });
 
