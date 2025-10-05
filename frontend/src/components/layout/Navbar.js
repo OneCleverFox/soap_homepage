@@ -167,7 +167,7 @@ const Navbar = () => {
             </ListItemButton>
             
             {/* Admin-Bereiche für Mobile */}
-            {user.role === 'admin' && (
+            {(user.rolle === 'admin' || user.role === 'admin') && (
               <>
                 <Divider />
                 <ListItem>
@@ -299,7 +299,7 @@ const Navbar = () => {
               </Menu>
 
               {/* Admin Dropdown - nur sichtbar wenn Admin eingeloggt */}
-              {user && user.role === 'admin' && (
+              {user && (user.rolle === 'admin' || user.role === 'admin') && (
                 <>
                   <Button
                     color="inherit"
@@ -385,7 +385,7 @@ const Navbar = () => {
                     </ListItemIcon>
                     Mein Profil
                   </MenuItem>
-                  {user.role === 'admin' && (
+                  {(user.rolle === 'admin' || user.role === 'admin') && (
                     <MenuItem component={Link} to="/admin" onClick={handleCloseAccountMenu}>
                       <ListItemIcon>
                         ⚙️

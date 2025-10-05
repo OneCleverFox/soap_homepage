@@ -13,7 +13,8 @@ import {
   CardContent,
   Divider,
   Alert,
-  TextField
+  TextField,
+  CircularProgress
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -29,9 +30,44 @@ import { useAuth } from '../contexts/AuthContext';
 const CartPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { items, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemsCount } = useCart();
+  const { items, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemsCount, loading } = useCart();
+
+  console.log('🛒 CartPage Render:', {
+    userExists: !!user,
+    itemsCount: items.length,
+    items: items,
+    loading: loading
+  });
 
   const SHIPPING_COST = 7.69; // Versandkosten innerhalb Deutschlands
+
+  // Helper-Funktion um Bild-URLs zu korrigieren
+  const getImageUrl = (url) => {
+    console.log('🖼️ getImageUrl Input:', url);
+    
+    if (!url) {
+      console.log('🖼️ URL is null/undefined');
+      return null;
+    }
+    
+    if (url.startsWith('http')) {
+      console.log('🖼️ URL already absolute:', url);
+      return url;
+    }
+    
+    // Im Development-Modus: Proxy kümmert sich um /api URLs
+    // In Production: Vollständige URL mit Backend-Host
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🖼️ Development mode - using relative URL:', url);
+      return url; // Proxy leitet /api/* automatisch weiter
+    }
+    
+    // Production: Backend-URL hinzufügen
+    const backendUrl = process.env.REACT_APP_API_URL || '';
+    const finalUrl = backendUrl.replace('/api', '') + url;
+    console.log('🖼️ Production mode - final URL:', finalUrl);
+    return finalUrl;
+  };
 
   const handleQuantityChange = (productId, newQuantity) => {
     if (newQuantity >= 1 && newQuantity <= 99) {
@@ -57,6 +93,17 @@ const CartPage = () => {
         <Button variant="contained" onClick={() => navigate('/login')}>
           Zur Anmeldung
         </Button>
+      </Container>
+    );
+  }
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 8, textAlign: 'center' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Lade Warenkorb...
+        </Typography>
       </Container>
     );
   }
@@ -105,7 +152,7 @@ const CartPage = () => {
                     <CardMedia
                       component="img"
                       sx={{ width: 120, height: 120, objectFit: 'cover' }}
-                      image={item.image}
+                      image={getImageUrl(item.image)}
                       alt={item.name}
                     />
                   )}

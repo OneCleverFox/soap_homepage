@@ -40,7 +40,10 @@ const auth = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
     
-    if (decoded.role === 'admin') {
+    // Unterstütze sowohl 'role' (Admin-User) als auch 'rolle' (Kunde)
+    const userRole = decoded.rolle || decoded.role;
+    
+    if (userRole === 'admin') {
       req.user = decoded;
       next();
     } else {
@@ -60,7 +63,10 @@ const auth = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-  if (req.user?.role !== 'admin') {
+  // Unterstütze sowohl 'role' (Admin-User) als auch 'rolle' (Kunde)
+  const userRole = req.user?.rolle || req.user?.role;
+  
+  if (userRole !== 'admin') {
     return res.status(403).json({
       success: false,
       message: 'Admin-Berechtigung erforderlich'

@@ -251,6 +251,11 @@ const kundenSchema = new mongoose.Schema({
   },
   
   // Metadaten
+  rolle: {
+    type: String,
+    enum: ['kunde', 'admin'],
+    default: 'kunde'
+  },
   erstelltVon: {
     type: String,
     default: 'kunde' // 'kunde', 'admin', 'import'

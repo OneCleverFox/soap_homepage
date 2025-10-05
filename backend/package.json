@@ -10,6 +10,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "dev:local": "NODE_ENV=development node src/server.js",
+    "dev:prod": "NODE_ENV=production node src/server.js",
     "test": "jest --passWithNoTests",
     "build": "npm install --production"
   },

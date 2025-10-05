@@ -49,6 +49,10 @@ export const AuthProvider = ({ children }) => {
         setToken(data.token);
         setUser(data.user);
         
+        // Fire custom event to notify CartContext
+        window.dispatchEvent(new Event('userLoggedIn'));
+        console.log('🔐 Login erfolgreich - userLoggedIn Event gefeuert');
+        
         return { success: true, user: data.user, token: data.token };
       } else {
         throw new Error(data.message || 'Login fehlgeschlagen');
@@ -76,6 +80,10 @@ export const AuthProvider = ({ children }) => {
       setToken(mockToken);
       setUser(mockUser);
       
+      // Fire custom event to notify CartContext
+      window.dispatchEvent(new Event('userLoggedIn'));
+      console.log('🔐 Register erfolgreich - userLoggedIn Event gefeuert');
+      
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -87,6 +95,10 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
     setToken(null);
     setUser(null);
+    
+    // Fire custom event to notify CartContext
+    window.dispatchEvent(new Event('userLoggedOut'));
+    console.log('🚪 Logout erfolgreich - userLoggedOut Event gefeuert');
   };
 
   // Neue Funktion für direktes Login mit Benutzerdaten (für Admin-Login)
@@ -95,6 +107,10 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(userToken);
     setUser(userData);
+    
+    // Fire custom event to notify CartContext
+    window.dispatchEvent(new Event('userLoggedIn'));
+    console.log('🔐 Admin-Login erfolgreich - userLoggedIn Event gefeuert');
   };
 
   const value = {

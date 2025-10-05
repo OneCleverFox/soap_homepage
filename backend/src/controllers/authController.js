@@ -123,7 +123,7 @@ const loginAdmin = async (req, res) => {
         kundeId: kunde._id,
         email: kunde.email,
         kundennummer: kunde.kundennummer,
-        role: 'kunde'
+        rolle: kunde.rolle || 'kunde'  // Verwende kunde.rolle statt hartcodiert 'kunde'
       },
       process.env.JWT_SECRET || 'fallback-secret-key',
       { expiresIn: '24h' }
@@ -143,7 +143,7 @@ const loginAdmin = async (req, res) => {
         id: kunde._id.toString(),
         email: kunde.email,
         name: `${kunde.vorname} ${kunde.nachname}`,
-        role: 'kunde',
+        rolle: kunde.rolle || 'kunde',  // Verwende kunde.rolle statt hartcodiert 'kunde'
         kundennummer: kunde.kundennummer
       }
     });

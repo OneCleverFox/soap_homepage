@@ -5,9 +5,11 @@ const Portfolio = require('../models/Portfolio');
 const { authenticateToken } = require('../middleware/auth');
 const mongoose = require('mongoose');
 
-// Helper: Prüft ob User ein Kunde ist (keine Admin)
+// Helper: Prüft ob User ein Kunde ist (kein Admin)
 const isKunde = (user) => {
-  return user.role === 'kunde' || (!user.role && mongoose.Types.ObjectId.isValid(user.id));
+  // Akzeptiere 'kunde' (Kunde-Modell), 'customer', 'user', oder keine Rolle (Standard-Kunden)
+  // Nur 'admin' ist ausgeschlossen
+  return user.role !== 'admin';
 };
 
 // GET /api/cart - Warenkorb des eingeloggten Benutzers abrufen
@@ -58,8 +60,18 @@ router.get('/', authenticateToken, async (req, res) => {
 // POST /api/cart/add - Artikel zum Warenkorb hinzufügen
 router.post('/add', authenticateToken, async (req, res) => {
   try {
+    console.log('🛒 POST /cart/add - User:', {
+      id: req.user?.id,
+      userId: req.user?.userId,
+      _id: req.user?._id,
+      role: req.user?.role,
+      email: req.user?.email
+    });
+    console.log('🛒 isKunde result:', isKunde(req.user));
+    
     // Admin kann keine Artikel zum Warenkorb hinzufügen
     if (!isKunde(req.user)) {
+      console.log('❌ User ist kein Kunde - Role:', req.user?.role);
       return res.status(403).json({
         success: false,
         message: 'Administratoren können keinen Warenkorb verwenden'

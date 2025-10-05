@@ -14,7 +14,6 @@ import {
   Alert,
   Fade,
   CardActions,
-  TextField,
   IconButton
 } from '@mui/material';
 import {
@@ -28,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import { portfolioAPI, cartAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useCart } from '../contexts/CartContext';
 import toast from 'react-hot-toast';
 
 // API Base URL für Bild-URLs
@@ -36,6 +36,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api
 const ProductsPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { loadCart } = useCart();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,13 +70,23 @@ const ProductsPage = () => {
 
     try {
       const quantity = quantities[product._id] || 1;
+
       await cartAPI.addToCart({
         produktId: product._id,
-        produktName: product.name,
+        name: product.name,
+        preis: product.preis,
         menge: quantity,
-        preis: product.preis
+        bild: product.bilder?.hauptbild, // Nur relativen Pfad speichern
+        gramm: product.gramm,
+        seife: product.seife
       });
+      
       toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
+      
+      // Warenkorb neu laden um die Anzeige zu aktualisieren
+      console.log('🔄 Lade Warenkorb nach Hinzufügen neu...');
+      await loadCart();
+      
     } catch (err) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
       toast.error('Fehler beim Hinzufügen zum Warenkorb');
@@ -305,8 +316,8 @@ const ProductsPage = () => {
                 </CardContent>
 
                 <CardActions sx={{ p: 2, pt: 0, flexDirection: 'column', gap: 1 }}>
-                  {/* Mengenauswahl und Warenkorb-Button in einer Zeile (nur für Admins) */}
-                  {user?.role === 'admin' && product.preis > 0 && (
+                  {/* Mengenauswahl und Warenkorb-Button in einer Zeile (für alle angemeldeten Benutzer) */}
+                  {user && product.preis > 0 && (
                     <Box sx={{ display: 'flex', gap: 1, width: '100%', alignItems: 'center' }}>
                       {/* Kompakte Mengenauswahl */}
                       <Box 

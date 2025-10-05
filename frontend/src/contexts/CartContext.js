@@ -28,21 +28,42 @@ export const CartProvider = ({ children }) => {
     try {
       setLoading(true);
       const response = await cartAPI.getCart();
-      const cartItems = response.data.data.items.map(item => ({
-        id: item.produktId,
-        name: item.name,
-        price: item.preis,
-        quantity: item.menge,
-        image: item.bild,
-        gramm: item.gramm,
-        seife: item.seife
-      }));
+      console.log('📦 Raw Cart Data:', response.data.data);
+      
+      const cartItems = response.data.data.items.map(item => {
+        console.log('📦 Cart Item:', {
+          name: item.name,
+          bildUrl: item.bild,
+          produktId: item.produktId
+        });
+        return {
+          id: item.produktId,
+          name: item.name,
+          price: item.preis,
+          quantity: item.menge,
+          image: item.bild,
+          gramm: item.gramm,
+          seife: item.seife
+        };
+      });
+      
+      console.log('📦 Mapped Cart Items:', cartItems);
       setItems(cartItems);
     } catch (error) {
-      console.error('Fehler beim Laden des Warenkorbs:', error);
-      // Wenn nicht authentifiziert, Warenkorb leeren
-      if (error.response?.status === 401) {
+      console.error('❌ Fehler beim Laden des Warenkorbs:', error);
+      console.error('Error details:', {
+        status: error.response?.status,
+        message: error.message,
+        data: error.response?.data
+      });
+      
+      // Nur bei 401/403 Warenkorb leeren, bei anderen Fehlern behalten
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log('🚫 Authentifizierungsfehler - Warenkorb wird geleert');
         setItems([]);
+      } else {
+        console.log('⚠️ Warenkorb konnte nicht geladen werden, behalte vorherige Daten');
+        // Bei Netzwerkfehlern etc. die vorhandenen Items behalten
       }
     } finally {
       setLoading(false);
@@ -51,18 +72,49 @@ export const CartProvider = ({ children }) => {
 
   // Load cart on component mount if user is logged in
   useEffect(() => {
-    loadCart();
+    const token = localStorage.getItem('token');
+    console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
+    
+    if (token) {
+      console.log('📦 Lade Warenkorb beim Mount...');
+      loadCart();
+    } else {
+      console.log('⚠️ Kein Token - Warenkorb wird nicht geladen');
+    }
+  }, []); // Nur einmal beim Mount laden
+
+  // Listen for custom login event (wird gefeuert wenn User sich einloggt)
+  useEffect(() => {
+    const handleLogin = () => {
+      console.log('🔐 Login-Event empfangen - Lade Warenkorb...');
+      loadCart();
+    };
+
+    const handleLogout = () => {
+      console.log('🚪 Logout-Event empfangen - Leere Warenkorb...');
+      setItems([]);
+    };
+
+    window.addEventListener('userLoggedIn', handleLogin);
+    window.addEventListener('userLoggedOut', handleLogout);
+    
+    return () => {
+      window.removeEventListener('userLoggedIn', handleLogin);
+      window.removeEventListener('userLoggedOut', handleLogout);
+    };
   }, []);
 
-  // Listen for storage changes (login/logout events)
+  // Listen for storage changes (login/logout events from other tabs)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'token') {
         if (e.newValue) {
           // User logged in
+          console.log('🔐 Token-Änderung erkannt - Lade Warenkorb...');
           loadCart();
         } else {
           // User logged out
+          console.log('🚪 Logout erkannt - Leere Warenkorb...');
           setItems([]);
         }
       }
