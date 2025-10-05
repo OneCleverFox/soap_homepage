@@ -35,7 +35,6 @@ const CartPage = () => {
   const { items, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemsCount, loading } = useCart();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
 
   console.log('🛒 CartPage Render:', {
     userExists: !!user,

@@ -46,7 +46,6 @@ const AdminPortfolio = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
