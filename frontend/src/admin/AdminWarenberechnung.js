@@ -23,7 +23,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  useMediaQuery,
+  useTheme,
+  Card,
+  CardContent,
+  Stack
 } from '@mui/material';
 import api from '../services/api';
 
@@ -47,6 +52,9 @@ const AdminWarenberechnung = () => {
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editValues, setEditValues] = useState({});
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
     loadPortfolioProducts();
@@ -191,7 +199,7 @@ const AdminWarenberechnung = () => {
 
   if (loading) {
     return (
-      <Container sx={{ mt: 4 }}>
+      <Container sx={{ mt: isMobile ? 2 : 4 }}>
         <Typography>Lade Daten...</Typography>
       </Container>
     );
@@ -199,15 +207,15 @@ const AdminWarenberechnung = () => {
 
   if (error) {
     return (
-      <Container sx={{ mt: 4 }}>
-        <Typography variant="h4" gutterBottom>
+      <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
           📊 Warenberechnung
         </Typography>
         <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
         {portfolioProducts.length > 0 && (
-          <Paper sx={{ p: 3, mt: 2 }}>
+          <Paper sx={{ p: isMobile ? 2 : 3, mt: 2 }}>
             <Typography variant="h6" gutterBottom>Andere Produkte auswählen:</Typography>
-            <FormControl fullWidth>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Produkt auswählen</InputLabel>
               <Select
                 value={selectedProduct?._id || ''}
@@ -229,7 +237,7 @@ const AdminWarenberechnung = () => {
 
   if (portfolioProducts.length === 0) {
     return (
-      <Container sx={{ mt: 4 }}>
+      <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
         <Alert severity="info">
           Keine Portfolio-Produkte gefunden. Bitte legen Sie zuerst Produkte in der Portfolio-Verwaltung an.
         </Alert>
@@ -238,16 +246,16 @@ const AdminWarenberechnung = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom>
+    <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 4, mb: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+      <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
         📊 Warenberechnung
       </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+      <Typography variant={isMobile ? "caption" : "body1"} color="text.secondary" sx={{ mb: isMobile ? 2 : 3, display: 'block' }}>
         Detaillierte Kostenberechnung für Portfolio-Produkte
       </Typography>
 
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <FormControl fullWidth>
+      <Paper sx={{ p: isMobile ? 1.5 : 3, mb: isMobile ? 2 : 3 }}>
+        <FormControl fullWidth size={isMobile ? "small" : "medium"}>
           <InputLabel>Produkt auswählen</InputLabel>
           <Select
             value={selectedProduct?._id || ''}
@@ -264,40 +272,260 @@ const AdminWarenberechnung = () => {
       </Paper>
 
       {calculation && (
-        <Paper sx={{ p: 3 }}>
-          <Grid container spacing={3}>
+        <Paper sx={{ p: isMobile ? 1.5 : 3 }}>
+          <Grid container spacing={isMobile ? 2 : 3}>
             {/* Header */}
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h5">{selectedProduct.name}</Typography>
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-between', 
+                alignItems: isMobile ? 'stretch' : 'center',
+                gap: isMobile ? 1.5 : 2
+              }}>
+                <Typography variant={isMobile ? "h6" : "h5"}>{selectedProduct.name}</Typography>
+                <Stack 
+                  direction={isMobile ? "column" : "row"} 
+                  spacing={isMobile ? 1 : 2} 
+                  alignItems={isMobile ? 'stretch' : 'center'}
+                >
                   <Chip 
                     label={`VK: ${calculation.vkPreis.toFixed(2)} €`} 
                     color="primary" 
-                    sx={{ fontSize: '1.2rem', p: 2 }}
+                    sx={{ 
+                      fontSize: isMobile ? '1rem' : '1.2rem', 
+                      p: isMobile ? 1.5 : 2,
+                      width: isMobile ? '100%' : 'auto'
+                    }}
                   />
                   <Button 
                     variant="outlined" 
                     color="secondary"
                     onClick={handleRecalculate}
+                    size={isMobile ? "medium" : "large"}
+                    fullWidth={isMobile}
+                    startIcon={isMobile ? null : <span>🔄</span>}
                   >
-                    🔄 Neu berechnen
+                    {isMobile ? '🔄' : '🔄 Neu berechnen'}
                   </Button>
                   <Button 
                     variant="contained" 
                     color="primary"
                     onClick={handleEditClick}
+                    size={isMobile ? "medium" : "large"}
+                    fullWidth={isMobile}
+                    startIcon={isMobile ? null : <span>✏️</span>}
                   >
-                    ✏️ Bearbeiten
+                    {isMobile ? '✏️ Bearbeiten' : '✏️ Bearbeiten'}
                   </Button>
-                </Box>
+                </Stack>
               </Box>
             </Grid>
 
             {/* Hauptbestandteile */}
             <Grid item xs={12}>
               <Typography variant="h6" sx={{ mb: 2 }}>Rohstoffe</Typography>
-              <TableContainer>
+              
+              {isMobile ? (
+                // Mobile Card View
+                <Stack spacing={1.5}>
+                  {/* Rohseife */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Seife
+                      </Typography>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2">{calculation.rohseifeName}</Typography>
+                        <Typography variant="body2" fontWeight="bold">
+                          {calculation.rohseifeKosten?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        Menge: {calculation.gewichtInGramm}g
+                      </Typography>
+                    </CardContent>
+                  </Card>
+
+                  {/* Duftstoff */}
+                  {calculation.duftoelName && calculation.duftoelName !== '' && (
+                    <Card variant="outlined">
+                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="subtitle2" color="primary" gutterBottom>
+                          Duftstoff
+                        </Typography>
+                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Typography variant="body2">{calculation.duftoelName}</Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            {calculation.duftoelKosten?.toFixed(2)} €
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          Tropfen/Seife: {Math.round(calculation.gewichtInGramm / 50)}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Verpackung & Energie */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Verpackung & Extras
+                      </Typography>
+                      <Stack spacing={0.5}>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="caption">Seifenform:</Typography>
+                          <Typography variant="caption">{selectedProduct.seifenform || 'Standard'} (0,10 €)</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="caption">Zusatz:</Typography>
+                          <Typography variant="caption">{selectedProduct.zusatz || 0}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="caption">Optional:</Typography>
+                          <Typography variant="caption">{selectedProduct.optional || 0}</Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="body2">Verpackung:</Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            {calculation.verpackungKosten?.toFixed(2)} €
+                          </Typography>
+                        </Box>
+                        <Box display="flex" justifyContent="space-between">
+                          <Typography variant="body2">Energie:</Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            {calculation.energieKosten?.toFixed(2)} €
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+
+                  {/* Zwischensumme EK */}
+                  <Card sx={{ bgcolor: '#f5f5f5' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="subtitle2" fontWeight="bold">Zwischensumme</Typography>
+                        <Typography variant="h6" fontWeight="bold">
+                          {calculation.zwischensummeEK?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* Pauschale */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">Pauschale</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            EK × {calculation.pauschaleFaktor || 3}
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" fontWeight="bold">
+                          {calculation.pauschale?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* Gewinn */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">Gewinn</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {calculation.gewinnProzent || 0}%
+                          </Typography>
+                        </Box>
+                        <Typography variant="body2" fontWeight="bold">
+                          {calculation.gewinnBetrag?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* Zwischensumme vor Rabatt */}
+                  <Card sx={{ bgcolor: '#f5f5f5' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="subtitle2" fontWeight="bold">Zwischensumme</Typography>
+                        <Typography variant="h6" fontWeight="bold">
+                          {calculation.zwischensummeVorRabatt?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* Rabatt & Zusatz */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Stack spacing={1}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Box>
+                            <Typography variant="body2">Rabatt</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {calculation.rabattProzent || 0}%
+                            </Typography>
+                          </Box>
+                          <Typography variant="body2" color="error" fontWeight="bold">
+                            - {calculation.rabattBetrag?.toFixed(2)} €
+                          </Typography>
+                        </Box>
+                        {calculation.zusatzKosten > 0 && (
+                          <Box display="flex" justifyContent="space-between" alignItems="center">
+                            <Box>
+                              <Typography variant="body2">Zusatz</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {calculation.notizen || ''}
+                              </Typography>
+                            </Box>
+                            <Typography variant="body2" fontWeight="bold">
+                              {calculation.zusatzKosten?.toFixed(2)} €
+                            </Typography>
+                          </Box>
+                        )}
+                      </Stack>
+                    </CardContent>
+                  </Card>
+
+                  {/* VK Preis (exakt) */}
+                  <Card variant="outlined">
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="body2">VK Preis (exakt)</Typography>
+                        <Typography variant="body2" fontWeight="bold">
+                          {calculation.vkPreis?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                    </CardContent>
+                  </Card>
+
+                  {/* VK Preis (gerundet) - Highlight */}
+                  <Card sx={{ bgcolor: '#e3f2fd' }}>
+                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                        <Typography variant="subtitle2" fontWeight="bold">VK Preis (gerundet)</Typography>
+                        <Typography variant="h6" fontWeight="bold" color="primary">
+                          {calculation.vkPreisGerundet?.toFixed(2)} €
+                        </Typography>
+                      </Box>
+                      <Chip 
+                        label={getRundungsLabel(calculation.rundungsOption)} 
+                        size="small" 
+                        color="primary" 
+                        variant="outlined"
+                        sx={{ width: '100%' }}
+                      />
+                    </CardContent>
+                  </Card>
+                </Stack>
+              ) : (
+                // Desktop Table View
+                <TableContainer>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -455,20 +683,28 @@ const AdminWarenberechnung = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+              )}
             </Grid>
 
             {/* Vergleich mit aktuellem Preis */}
             <Grid item xs={12}>
               <Divider sx={{ my: 2 }} />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-between', 
+                alignItems: isMobile ? 'stretch' : 'center', 
+                gap: isMobile ? 1.5 : 2 
+              }}>
                 <Box>
-                  <Typography variant="body1">
+                  <Typography variant={isMobile ? "body2" : "body1"}>
                     Aktueller Portfolio-Preis: <strong>{(selectedProduct.preis || 0).toFixed(2)} €</strong>
                   </Typography>
                   {calculation.vkPreisGerundet !== (selectedProduct.preis || 0) && (
                     <Chip 
                       label={`Differenz: ${(calculation.vkPreisGerundet - (selectedProduct.preis || 0)).toFixed(2)} €`}
                       color={calculation.vkPreisGerundet > (selectedProduct.preis || 0) ? 'error' : 'success'}
+                      size={isMobile ? "small" : "medium"}
                       sx={{ mt: 1 }}
                     />
                   )}
@@ -478,9 +714,11 @@ const AdminWarenberechnung = () => {
                   color="success"
                   onClick={handlePreisUebernehmen}
                   disabled={calculation.vkPreisGerundet === (selectedProduct.preis || 0)}
-                  startIcon={<span>💰</span>}
+                  startIcon={isMobile ? null : <span>💰</span>}
+                  size={isMobile ? "medium" : "large"}
+                  fullWidth={isMobile}
                 >
-                  Preis übernehmen ({calculation.vkPreisGerundet?.toFixed(2)} €)
+                  {isMobile ? `💰 ${calculation.vkPreisGerundet?.toFixed(2)} € übernehmen` : `Preis übernehmen (${calculation.vkPreisGerundet?.toFixed(2)} €)`}
                 </Button>
               </Box>
             </Grid>
@@ -489,16 +727,22 @@ const AdminWarenberechnung = () => {
       )}
 
       {/* Edit Dialog */}
-      <Dialog open={editDialogOpen} onClose={handleEditClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={editDialogOpen} 
+        onClose={handleEditClose} 
+        maxWidth="md" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Kostenberechnung bearbeiten - {selectedProduct?.name}</DialogTitle>
         <DialogContent>
-          <Grid container spacing={3} sx={{ mt: 1 }}>
+          <Grid container spacing={isMobile ? 2 : 3} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Fixe Kosten (werden automatisch aus Rohstoffen berechnet)
               </Typography>
-              <Box sx={{ pl: 2, pb: 2, backgroundColor: '#f5f5f5', borderRadius: 1, p: 2 }}>
-                <Typography variant="body2">
+              <Box sx={{ pl: 2, pb: 2, backgroundColor: '#f5f5f5', borderRadius: 1, p: isMobile ? 1.5 : 2 }}>
+                <Typography variant={isMobile ? "caption" : "body2"}>
                   Rohseife: {calculation?.rohseifeKosten?.toFixed(2)} €<br/>
                   Duftöl: {calculation?.duftoelKosten?.toFixed(2)} €<br/>
                   Verpackung: {calculation?.verpackungKosten?.toFixed(2)} €
@@ -511,6 +755,7 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Energiekosten (€)"
                 type="number"
+                size={isMobile ? "small" : "medium"}
                 value={editValues.energieKosten || 0}
                 onChange={(e) => handleEditChange('energieKosten', parseFloat(e.target.value) || 0)}
                 inputProps={{ step: 0.01, min: 0 }}
@@ -522,6 +767,7 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Zusatzkosten (€)"
                 type="number"
+                size={isMobile ? "small" : "medium"}
                 value={editValues.zusatzKosten || 0}
                 onChange={(e) => handleEditChange('zusatzKosten', parseFloat(e.target.value) || 0)}
                 inputProps={{ step: 0.01 }}
@@ -533,6 +779,7 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Pauschale-Faktor (Standard: 3)"
                 type="number"
+                size={isMobile ? "small" : "medium"}
                 value={editValues.pauschaleFaktor || 3}
                 onChange={(e) => handleEditChange('pauschaleFaktor', parseFloat(e.target.value) || 3)}
                 inputProps={{ step: 0.1, min: 1 }}
@@ -545,6 +792,7 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Gewinn (%)"
                 type="number"
+                size={isMobile ? "small" : "medium"}
                 value={editValues.gewinnProzent || 0}
                 onChange={(e) => handleEditChange('gewinnProzent', parseFloat(e.target.value) || 0)}
                 inputProps={{ step: 1, min: 0, max: 100 }}
@@ -556,6 +804,7 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Rabatt (%)"
                 type="number"
+                size={isMobile ? "small" : "medium"}
                 value={editValues.rabattProzent || 0}
                 onChange={(e) => handleEditChange('rabattProzent', parseFloat(e.target.value) || 0)}
                 inputProps={{ step: 1, min: 0, max: 100 }}
@@ -563,7 +812,7 @@ const AdminWarenberechnung = () => {
             </Grid>
 
             <Grid item xs={12}>
-              <FormControl fullWidth>
+              <FormControl fullWidth size={isMobile ? "small" : "medium"}>
                 <InputLabel>Rundung VK-Preis</InputLabel>
                 <Select
                   value={editValues.rundungsOption || '0.50'}
@@ -584,7 +833,8 @@ const AdminWarenberechnung = () => {
                 fullWidth
                 label="Notizen"
                 multiline
-                rows={3}
+                rows={isMobile ? 2 : 3}
+                size={isMobile ? "small" : "medium"}
                 value={editValues.notizen || ''}
                 onChange={(e) => handleEditChange('notizen', e.target.value)}
                 placeholder="Zusätzliche Informationen zur Kalkulation..."
@@ -592,9 +842,16 @@ const AdminWarenberechnung = () => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleEditClose}>Abbrechen</Button>
-          <Button onClick={handleEditSave} variant="contained" color="primary">
+        <DialogActions sx={{ p: isMobile ? 2 : 3 }}>
+          <Button onClick={handleEditClose} size={isMobile ? "medium" : "large"}>
+            Abbrechen
+          </Button>
+          <Button 
+            onClick={handleEditSave} 
+            variant="contained" 
+            color="primary"
+            size={isMobile ? "medium" : "large"}
+          >
             Speichern
           </Button>
         </DialogActions>
