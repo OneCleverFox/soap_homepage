@@ -32,6 +32,8 @@ import {
   Snackbar,
   Tooltip,
   Collapse,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -49,6 +51,9 @@ import {
 import { kundenAPI } from '../services/api';
 
 function AdminUsers() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({});
   const [page, setPage] = useState(0);
@@ -336,56 +341,56 @@ function AdminUsers() {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom>
+    <Container maxWidth="xl" sx={{ mt: isMobile ? 2 : 4, mb: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+      <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
         Benutzerverwaltung
       </Typography>
 
       {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
+      <Grid container spacing={isMobile ? 1.5 : 3} sx={{ mb: isMobile ? 2 : 3 }}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
+            <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Gesamt
               </Typography>
-              <Typography variant="h4">
+              <Typography variant={isMobile ? "h6" : "h4"}>
                 {stats.total || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Aktive
+            <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
+                Aktiv
               </Typography>
-              <Typography variant="h4" color="success.main">
+              <Typography variant={isMobile ? "h6" : "h4"} color="success.main">
                 {stats.active || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
+            <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Gesperrt
               </Typography>
-              <Typography variant="h4" color="error.main">
+              <Typography variant={isMobile ? "h6" : "h4"} color="error.main">
                 {stats.blocked || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={3}>
           <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>
-                Administratoren
+            <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
+                Admins
               </Typography>
-              <Typography variant="h4" color="primary.main">
+              <Typography variant={isMobile ? "h6" : "h4"} color="primary.main">
                 {stats.admins || 0}
               </Typography>
             </CardContent>
@@ -394,25 +399,26 @@ function AdminUsers() {
       </Grid>
 
       {/* Filters and Actions */}
-      <Paper sx={{ p: 2, mb: 2 }}>
+      <Paper sx={{ p: isMobile ? 1.5 : 2, mb: 2 }}>
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               placeholder="Suchen..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon />
+                    <SearchIcon fontSize={isMobile ? "small" : "medium"} />
                   </InputAdornment>
                 ),
               }}
             />
           </Grid>
           <Grid item xs={12} sm={3}>
-            <FormControl fullWidth>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Status</InputLabel>
               <Select
                 value={statusFilter}
@@ -427,7 +433,7 @@ function AdminUsers() {
             </FormControl>
           </Grid>
           <Grid item xs={12} sm={3}>
-            <FormControl fullWidth>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Rolle</InputLabel>
               <Select
                 value={roleFilter}
@@ -445,17 +451,184 @@ function AdminUsers() {
             <Button
               fullWidth
               variant="contained"
-              startIcon={<AddIcon />}
+              startIcon={!isMobile && <AddIcon />}
               onClick={() => setOpenCreateDialog(true)}
+              size={isMobile ? "medium" : "large"}
             >
-              Neu
+              {isMobile ? <AddIcon /> : 'Neu'}
             </Button>
           </Grid>
         </Grid>
       </Paper>
 
-      {/* Users Table */}
-      <TableContainer component={Paper}>
+      {/* Users Table / Mobile Card View */}
+      {isMobile ? (
+        /* Mobile Card View */
+        <Box>
+          {loading ? (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Typography>Laden...</Typography>
+            </Paper>
+          ) : users.length === 0 ? (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Typography>Keine Benutzer gefunden</Typography>
+            </Paper>
+          ) : (
+            users.map((user) => (
+              <Card key={user._id} sx={{ mb: 2 }}>
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  {/* Header mit Avatar und Name */}
+                  <Box display="flex" alignItems="flex-start" gap={1.5} mb={2}>
+                    <Avatar sx={{ width: 48, height: 48 }}>
+                      {(user.firstName || user.vorname)?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <Box flex={1}>
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        {(user.firstName || user.vorname) && (user.lastName || user.nachname) 
+                          ? `${user.firstName || user.vorname} ${user.lastName || user.nachname}` 
+                          : user.email}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary" display="block">
+                        {user.email}
+                      </Typography>
+                      <Box display="flex" gap={0.5} mt={0.5} flexWrap="wrap">
+                        <Chip 
+                          label={getRoleLabel(user.rolle || user.role)} 
+                          size="small" 
+                          color={(user.rolle === 'admin' || user.role === 'admin') ? 'primary' : 'default'} 
+                        />
+                        <Chip 
+                          label={getStatusLabel(user.status)} 
+                          size="small" 
+                          color={getStatusColor(user.status)} 
+                        />
+                      </Box>
+                    </Box>
+                    <IconButton size="small" onClick={() => toggleRowExpand(user._id)}>
+                      {expandedRows[user._id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    </IconButton>
+                  </Box>
+
+                  {/* Kompakte Info-Zeilen */}
+                  {user.kundennummer && (
+                    <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.5 }}>
+                      Kundennr.: <Box component="span" fontFamily="monospace">{user.kundennummer}</Box>
+                    </Typography>
+                  )}
+                  {(user.phone || user.telefon) && (
+                    <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 0.5 }}>
+                      Tel.: {user.phone || user.telefon}
+                    </Typography>
+                  )}
+                  {user.createdAt && (
+                    <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
+                      Registriert: {new Date(user.createdAt).toLocaleDateString('de-DE')}
+                    </Typography>
+                  )}
+
+                  {/* Action Buttons */}
+                  <Box display="flex" gap={0.5} flexWrap="wrap" mt={1.5}>
+                    <Tooltip title="Bearbeiten">
+                      <IconButton size="small" onClick={() => openEditUserDialog(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Passwort ändern">
+                      <IconButton size="small" onClick={() => openChangePasswordDialog(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                        <PasswordIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    {user.status === 'blocked' ? (
+                      <Tooltip title="Entsperren">
+                        <IconButton size="small" color="success" onClick={() => handleUnblockUser(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                          <UnblockIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <Tooltip title="Sperren">
+                        <IconButton size="small" color="warning" onClick={() => handleBlockUser(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                          <BlockIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Löschen">
+                      <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+
+                  {/* Erweiterte Details */}
+                  <Collapse in={expandedRows[user._id]} timeout="auto" unmountOnExit>
+                    <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+                      <Typography variant="subtitle2" color="primary" gutterBottom>
+                        Weitere Details
+                      </Typography>
+                      
+                      {/* Adresse */}
+                      {user.adresse && (
+                        <Box mb={1.5}>
+                          <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                            Rechnungsadresse:
+                          </Typography>
+                          <Typography variant="body2">
+                            {user.adresse.strasse} {user.adresse.hausnummer}
+                            {user.adresse.zusatz && `, ${user.adresse.zusatz}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {user.adresse.plz} {user.adresse.stadt}, {user.adresse.land}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Lieferadresse */}
+                      {user.lieferadresse && (
+                        <Box mb={1.5}>
+                          <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                            Lieferadresse:
+                          </Typography>
+                          <Typography variant="body2">
+                            {user.lieferadresse.strasse} {user.lieferadresse.hausnummer}
+                            {user.lieferadresse.zusatz && `, ${user.lieferadresse.zusatz}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {user.lieferadresse.plz} {user.lieferadresse.stadt}, {user.lieferadresse.land}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Kommunikationspräferenzen */}
+                      {(user.kommunikation?.newsletter || user.kommunikation?.sms) && (
+                        <Box mb={1.5}>
+                          <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                            Kommunikation:
+                          </Typography>
+                          <Box display="flex" gap={0.5} flexWrap="wrap">
+                            {user.kommunikation.newsletter && <Chip label="Newsletter" size="small" variant="outlined" />}
+                            {user.kommunikation.sms && <Chip label="SMS" size="small" variant="outlined" />}
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Notizen */}
+                      {user.notizen && (
+                        <Box>
+                          <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                            Notizen:
+                          </Typography>
+                          <Typography variant="body2">{user.notizen}</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Collapse>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </Box>
+      ) : (
+        /* Desktop Table View */
+        <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
@@ -702,9 +875,35 @@ function AdminUsers() {
           labelDisplayedRows={({ from, to, count }) => `${from}-${to} von ${count}`}
         />
       </TableContainer>
+      )}
+
+      {/* Mobile Pagination */}
+      {isMobile && (
+        <Paper sx={{ mt: 2 }}>
+          <TablePagination
+            component="div"
+            count={totalCount}
+            page={page}
+            onPageChange={(e, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => {
+              setRowsPerPage(parseInt(e.target.value, 10));
+              setPage(0);
+            }}
+            labelRowsPerPage="Pro Seite:"
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} / ${count}`}
+          />
+        </Paper>
+      )}
 
       {/* Create User Dialog */}
-      <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={openCreateDialog} 
+        onClose={() => setOpenCreateDialog(false)} 
+        maxWidth="sm" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Neuen Benutzer erstellen</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -786,10 +985,13 @@ function AdminUsers() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setOpenCreateDialog(false); resetForm(); }}>Abbrechen</Button>
+          <Button onClick={() => { setOpenCreateDialog(false); resetForm(); }} size={isMobile ? "medium" : "large"}>
+            Abbrechen
+          </Button>
           <Button 
             onClick={handleCreateUser} 
             variant="contained"
+            size={isMobile ? "medium" : "large"}
             disabled={!formData.email || !formData.password || formData.password.length < 8 || !formData.firstName || !formData.lastName}
           >
             Erstellen
@@ -798,7 +1000,13 @@ function AdminUsers() {
       </Dialog>
 
       {/* Edit User Dialog */}
-      <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} maxWidth="md" fullWidth>
+      <Dialog 
+        open={openEditDialog} 
+        onClose={() => setOpenEditDialog(false)} 
+        maxWidth="md" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Benutzer bearbeiten</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -1005,28 +1213,64 @@ function AdminUsers() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setOpenEditDialog(false); resetForm(); }}>Abbrechen</Button>
-          <Button onClick={handleUpdateUser} variant="contained">Speichern</Button>
+          <Button onClick={() => { setOpenEditDialog(false); resetForm(); }} size={isMobile ? "medium" : "large"}>
+            Abbrechen
+          </Button>
+          <Button onClick={handleUpdateUser} variant="contained" size={isMobile ? "medium" : "large"}>
+            Speichern
+          </Button>
         </DialogActions>
       </Dialog>
 
       {/* Change Password Dialog */}
-      <Dialog open={openPasswordDialog} onClose={() => setOpenPasswordDialog(false)} maxWidth="xs" fullWidth>
+      <Dialog 
+        open={openPasswordDialog} 
+        onClose={() => setOpenPasswordDialog(false)} 
+        maxWidth="xs" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>Passwort ändern</DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
+            size={isMobile ? "small" : "medium"}
             label="Neues Passwort"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             sx={{ mt: 2 }}
             required
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                  >
+                    {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
+          <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+            Mindestens 8 Zeichen
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => { setOpenPasswordDialog(false); setNewPassword(''); }}>Abbrechen</Button>
-          <Button onClick={handleChangePassword} variant="contained">Ändern</Button>
+          <Button onClick={() => { setOpenPasswordDialog(false); setNewPassword(''); }} size={isMobile ? "medium" : "large"}>
+            Abbrechen
+          </Button>
+          <Button 
+            onClick={handleChangePassword} 
+            variant="contained"
+            disabled={newPassword.length < 8}
+            size={isMobile ? "medium" : "large"}
+          >
+            Ändern
+          </Button>
         </DialogActions>
       </Dialog>
 
