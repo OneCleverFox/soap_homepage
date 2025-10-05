@@ -7,6 +7,7 @@ const Rohseife = require('../models/Rohseife');
 const Verpackung = require('../models/Verpackung');
 const Duftoil = require('../models/Duftoil');
 const { auth } = require('../middleware/auth');
+const { optimizeMainImage } = require('../middleware/imageOptimization');
 
 // Multer-Konfiguration für Produktbilder
 const storage = multer.diskStorage({
@@ -24,18 +25,18 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml'];
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Nur JPEG, PNG und WebP Bilder sind erlaubt'), false);
+    cb(new Error('Nur JPEG, PNG, WebP und SVG Bilder sind erlaubt'), false);
   }
 };
 
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB (wird durch Optimierung reduziert)
 });
 
 const router = express.Router();
@@ -381,9 +382,9 @@ router.get('/stats/overview', auth, async (req, res) => {
 });
 
 // @route   POST /api/portfolio/:id/upload-image
-// @desc    Bild für ein Portfolio-Produkt hochladen (Base64)
+// @desc    Bild für ein Portfolio-Produkt hochladen (Base64) mit automatischer Optimierung
 // @access  Private
-router.post('/:id/upload-image', auth, upload.single('image'), async (req, res) => {
+router.post('/:id/upload-image', auth, upload.single('image'), optimizeMainImage, async (req, res) => {
   try {
     const { id } = req.params;
     const { alt_text, isHauptbild } = req.body;
