@@ -21,13 +21,15 @@ import {
   Alert,
   Snackbar,
   Chip,
-  CardMedia,
   IconButton,
   ImageList,
   ImageListItem,
   ImageListItemBar,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  useMediaQuery,
+  useTheme,
+  LinearProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,9 +40,14 @@ import {
   DeleteForever as DeleteForeverIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import LazyImage from '../components/LazyImage';
 
 const AdminPortfolio = () => {
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
@@ -319,16 +326,34 @@ const AdminPortfolio = () => {
   }
 
   return (
-    <Box p={3}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
+    <Box p={isMobile ? 2 : 3}>
+      {/* Upload Progress */}
+      {uploadingImage && (
+        <Box mb={2}>
+          <LinearProgress />
+          <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
+            Bild wird optimiert und hochgeladen...
+          </Typography>
+        </Box>
+      )}
+
+      <Box 
+        display="flex" 
+        flexDirection={isMobile ? 'column' : 'row'}
+        justifyContent="space-between" 
+        alignItems={isMobile ? 'stretch' : 'center'}
+        mb={3}
+        gap={isMobile ? 2 : 0}
+      >
+        <Typography variant={isMobile ? "h5" : "h4"} component="h1">
           Portfolio-Verwaltung
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog()}
-          size="large"
+          size={isMobile ? "medium" : "large"}
+          fullWidth={isMobile}
         >
           Neues Produkt
         </Button>
@@ -336,50 +361,50 @@ const AdminPortfolio = () => {
 
       {/* Statistiken */}
       {stats && (
-        <Grid container spacing={2} mb={3}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Grid container spacing={isMobile ? 1 : 2} mb={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Gesamte Produkte
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
+                  Gesamt
                 </Typography>
-                <Typography variant="h5">
+                <Typography variant={isMobile ? "h6" : "h5"}>
                   {stats.totalProducts}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Aktive Produkte
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
+                  Aktiv
                 </Typography>
-                <Typography variant="h5" color="primary">
+                <Typography variant={isMobile ? "h6" : "h5"} color="primary">
                   {stats.activeProducts}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Mit Bildern
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
+                  Mit Bilder
                 </Typography>
-                <Typography variant="h5" color="success.main">
+                <Typography variant={isMobile ? "h6" : "h5"} color="success.main">
                   {stats.productsWithImages}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Ohne Bilder
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
+                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
+                  Ohne
                 </Typography>
-                <Typography variant="h5" color="warning.main">
+                <Typography variant={isMobile ? "h6" : "h5"} color="warning.main">
                   {stats.productsWithoutImages}
                 </Typography>
               </CardContent>
@@ -389,18 +414,18 @@ const AdminPortfolio = () => {
       )}
 
       {/* Produktliste */}
-      <Grid container spacing={3}>
+      <Grid container spacing={isMobile ? 2 : 3}>
         {products.map((product) => (
-          <Grid item xs={12} md={6} lg={4} key={product._id}>
+          <Grid item xs={12} sm={6} md={6} lg={4} key={product._id}>
             <Card>
-              {/* Hauptbild */}
+              {/* Hauptbild mit LazyImage */}
               {product.bilder?.hauptbild ? (
                 <Box position="relative">
-                  <CardMedia
-                    component="img"
-                    height="200"
-                    image={getImageUrl(product.bilder.hauptbild)}
+                  <LazyImage
+                    src={getImageUrl(product.bilder.hauptbild)}
                     alt={product.bilder.alt_text || product.name}
+                    height={isMobile ? 150 : 200}
+                    objectFit="cover"
                   />
                   <IconButton
                     size="small"
@@ -418,19 +443,19 @@ const AdminPortfolio = () => {
                 </Box>
               ) : (
                 <Box
-                  height="200"
+                  height={isMobile ? 150 : 200}
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
                   bgcolor="grey.100"
                 >
-                  <Typography color="textSecondary">
+                  <Typography color="textSecondary" variant="body2">
                     Kein Hauptbild
                   </Typography>
                 </Box>
               )}
 
-              <CardContent>
+              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                   <Typography variant="h6" component="h2">
                     {product.name}
@@ -463,14 +488,14 @@ const AdminPortfolio = () => {
                     <Typography variant="caption" display="block" gutterBottom>
                       Galerie ({product.bilder.galerie.length} Bilder):
                     </Typography>
-                    <ImageList cols={3} rowHeight={60}>
+                    <ImageList cols={isMobile ? 2 : 3} rowHeight={isMobile ? 50 : 60}>
                       {product.bilder.galerie.map((img, index) => (
                         <ImageListItem key={index}>
-                          <img
+                          <LazyImage
                             src={getImageUrl(img.url)}
                             alt={img.alt_text}
-                            loading="lazy"
-                            style={{ width: '100%', height: '60px', objectFit: 'cover' }}
+                            height={isMobile ? 50 : 60}
+                            objectFit="cover"
                           />
                           <ImageListItemBar
                             actionIcon={
@@ -490,13 +515,14 @@ const AdminPortfolio = () => {
                 )}
               </CardContent>
 
-              <CardActions>
+              <CardActions sx={{ flexWrap: 'wrap', p: isMobile ? 1 : 1.5, gap: isMobile ? 0.5 : 0 }}>
                 <Button
                   size="small"
-                  startIcon={<EditIcon />}
+                  startIcon={!isMobile && <EditIcon />}
                   onClick={() => handleOpenDialog(product)}
+                  fullWidth={isMobile}
                 >
-                  Bearbeiten
+                  {isMobile ? <EditIcon /> : 'Bearbeiten'}
                 </Button>
                 
                 {/* Bild-Upload */}
@@ -574,7 +600,13 @@ const AdminPortfolio = () => {
       )}
 
       {/* Dialog für Produkt erstellen/bearbeiten */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="md" 
+        fullWidth
+        fullScreen={isMobile}
+      >
         <DialogTitle>
           {editingProduct ? 'Produkt bearbeiten' : 'Neues Produkt erstellen'}
         </DialogTitle>
