@@ -122,18 +122,83 @@ const ProductsPage = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
+    // Versuche zuerst gecachte Daten zu laden für sofortiges Display
+    const loadCachedProducts = () => {
+      try {
+        const cached = sessionStorage.getItem('cachedProducts');
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          // Verwende Cache wenn er weniger als 5 Minuten alt ist
+          if (Date.now() - timestamp < 5 * 60 * 1000) {
+            console.log('⚡ Loading cached products immediately');
+            setProducts(data);
+            setLoading(false);
+            
+            // Lade trotzdem frische Daten im Hintergrund
+            setTimeout(() => {
+              console.log('🔄 Refreshing products in background');
+              fetchProducts();
+            }, 100);
+            return true;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not load cached products:', e);
+      }
+      return false;
+    };
+    
+    // Wenn kein Cache geladen wurde, normale Ladung
+    if (!loadCachedProducts()) {
+      fetchProducts();
+    }
   }, []);
 
   const fetchProducts = async () => {
     try {
       setLoading(true);
       setError('');
+      
+      console.time('⏱️ Products API Call');
       const response = await portfolioAPI.getWithPrices();
-      console.log('API Response:', response); // Debug log
-      setProducts(response.data?.data || response.data || []);
+      console.timeEnd('⏱️ Products API Call');
+      
+      console.log('📦 API Response:', response);
+      console.log('📊 Products count:', response.data?.data?.length || response.data?.length || 0);
+      
+      const productsData = response.data?.data || response.data || [];
+      setProducts(productsData);
+      
+      // Cache Produktdaten im SessionStorage für schnelleres Nachladen
+      try {
+        sessionStorage.setItem('cachedProducts', JSON.stringify({
+          data: productsData,
+          timestamp: Date.now()
+        }));
+        console.log('💾 Products cached in SessionStorage');
+      } catch (e) {
+        console.warn('⚠️ Could not cache products:', e);
+      }
     } catch (err) {
-      console.error('Error fetching products:', err);
+      console.error('❌ Error fetching products:', err);
+      
+      // Versuche cached Daten zu laden wenn API fehlschlägt
+      try {
+        const cached = sessionStorage.getItem('cachedProducts');
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          // Verwende Cache wenn er weniger als 5 Minuten alt ist
+          if (Date.now() - timestamp < 5 * 60 * 1000) {
+            console.log('📦 Using cached products (API failed)');
+            setProducts(data);
+            setError('Keine Verbindung zum Server. Zeige gespeicherte Daten.');
+            return;
+          }
+        }
+      } catch (cacheErr) {
+        console.warn('⚠️ Could not load cached products:', cacheErr);
+      }
+      
       setError('Fehler beim Laden der Produkte: ' + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
