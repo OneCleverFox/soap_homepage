@@ -6,7 +6,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardMedia,
   Box,
   Chip,
   Button,
@@ -14,7 +13,9 @@ import {
   Alert,
   Fade,
   CardActions,
-  IconButton
+  IconButton,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import {
   Inventory as WeightIcon,
@@ -29,12 +30,17 @@ import { portfolioAPI, cartAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import toast from 'react-hot-toast';
+import LazyImage from '../components/LazyImage';
 
 // API Base URL für Bild-URLs
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const ProductsPage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const { user } = useAuth();
   const { loadCart } = useCart();
   const [products, setProducts] = useState([]);
@@ -162,11 +168,11 @@ const ProductsPage = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
       {/* Header */}
-      <Box textAlign="center" mb={6}>
+      <Box textAlign="center" mb={isMobile ? 3 : 6}>
         <Typography 
-          variant="h3" 
+          variant={isMobile ? "h4" : "h3"}
           component="h1" 
           gutterBottom
           sx={{ 
@@ -178,16 +184,16 @@ const ProductsPage = () => {
         >
           Unsere handgemachten Naturseifen
         </Typography>
-        <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
           Premium Qualität aus natürlichen Zutaten
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body2" color="text.secondary">
           {products.length} einzigartige Seifen-Kreationen verfügbar
         </Typography>
       </Box>
 
       {/* Produktkarten */}
-      <Grid container spacing={4}>
+      <Grid container spacing={isMobile ? 2 : 4}>
         {products.map((product, index) => (
           <Grid item xs={12} sm={6} md={4} key={product._id}>
             <Fade in={true} timeout={500 + index * 100}>
@@ -199,45 +205,37 @@ const ProductsPage = () => {
                   transition: 'all 0.3s ease-in-out',
                   cursor: 'pointer',
                   '&:hover': {
-                    transform: 'translateY(-8px)',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.2)'
+                    transform: isMobile ? 'none' : 'translateY(-8px)',
+                    boxShadow: isMobile ? 2 : '0 12px 30px rgba(0,0,0,0.2)'
                   }
                 }}
               >
-                {/* Großes Produktbild */}
+                {/* Großes Produktbild mit LazyImage */}
                 <Box
                   onClick={() => navigate(`/products/${product._id}`)}
                   sx={{ position: 'relative', overflow: 'hidden' }}
                 >
-                  {product.bilder?.hauptbild ? (
-                    <CardMedia
-                      component="img"
-                      height="300"
-                      image={getImageUrl(product.bilder.hauptbild)}
-                      alt={product.name}
-                      sx={{
-                        objectFit: 'cover',
-                        transition: 'transform 0.3s ease',
-                        '&:hover': {
-                          transform: 'scale(1.05)'
-                        }
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      sx={{
-                        height: 300,
-                        bgcolor: 'grey.100',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <Typography variant="h6" color="text.secondary">
-                        Kein Bild
-                      </Typography>
-                    </Box>
-                  )}
+                  <LazyImage
+                    src={getImageUrl(product.bilder?.hauptbild)}
+                    alt={product.name}
+                    height={isMobile ? 200 : 300}
+                    objectFit="cover"
+                    fallback={
+                      <Box
+                        sx={{
+                          height: isMobile ? 200 : 300,
+                          bgcolor: 'grey.100',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Typography variant="h6" color="text.secondary">
+                          Kein Bild
+                        </Typography>
+                      </Box>
+                    }
+                  />
                   
                   {/* Seifentyp Badge */}
                   <Chip 
