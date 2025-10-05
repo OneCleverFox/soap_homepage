@@ -30,11 +30,22 @@ const loginAdmin = async (req, res) => {
     // Admin-Benutzer aus Umgebungsvariablen abrufen
     const ADMIN_USER = getAdminUser();
 
+    console.log('🔍 Admin-Check:', {
+      eingabeEmail: email.toLowerCase(),
+      erwarteteEmail: ADMIN_USER.email?.toLowerCase(),
+      emailMatch: email.toLowerCase() === ADMIN_USER.email?.toLowerCase(),
+      adminPasswordVorhanden: !!ADMIN_USER.password,
+      adminPasswordLaenge: ADMIN_USER.password?.length
+    });
+
     // Prüfen ob es der Admin ist
-    if (email.toLowerCase() === ADMIN_USER.email.toLowerCase()) {
+    if (email.toLowerCase() === ADMIN_USER.email?.toLowerCase()) {
       // Admin-Login
       if (password !== ADMIN_USER.password) {
         console.log('❌ Falsches Passwort für Admin:', email);
+        console.log('🔍 Passwort-Vergleich fehlgeschlagen');
+        console.log('   - Eingegebenes Passwort Länge:', password?.length);
+        console.log('   - Erwartetes Passwort Länge:', ADMIN_USER.password?.length);
         return res.status(401).json({
           success: false,
           message: 'Ungültige Anmeldedaten'
