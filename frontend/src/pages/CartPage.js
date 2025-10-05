@@ -47,7 +47,7 @@ const CartPage = () => {
 
   // Helper-Funktion um Bild-URLs zu korrigieren
   const getImageUrl = (url) => {
-    console.log('🖼️ getImageUrl Input:', url);
+    console.log('🖼️ CartPage getImageUrl Input:', url);
     
     if (!url) {
       console.log('🖼️ URL is null/undefined');
@@ -65,17 +65,26 @@ const CartPage = () => {
       return url;
     }
     
-    // Im Development-Modus: Proxy kümmert sich um /api URLs
-    // In Production: Vollständige URL mit Backend-Host
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🖼️ Development mode - using relative URL:', url);
-      return url; // Proxy leitet /api/* automatisch weiter
+    // API_BASE_URL aus der Umgebung verwenden
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+    
+    // Wenn URL mit /api/uploads beginnt, direkt verwenden
+    if (url.startsWith('/api/uploads')) {
+      const finalUrl = `${API_BASE_URL.replace('/api', '')}${url}`;
+      console.log('🖼️ Image URL constructed:', finalUrl);
+      return finalUrl;
     }
     
-    // Production: Backend-URL hinzufügen
-    const backendUrl = process.env.REACT_APP_API_URL || '';
-    const finalUrl = backendUrl.replace('/api', '') + url;
-    console.log('🖼️ Production mode - final URL:', finalUrl);
+    // Wenn URL mit /uploads beginnt, /api davor hinzufügen
+    if (url.startsWith('/uploads')) {
+      const finalUrl = `${API_BASE_URL.replace('/api', '')}/api${url}`;
+      console.log('🖼️ Image URL constructed (added /api):', finalUrl);
+      return finalUrl;
+    }
+    
+    // Fallback: URL so verwenden wie sie ist
+    const finalUrl = `${API_BASE_URL.replace('/api', '')}${url}`;
+    console.log('🖼️ Fallback image URL:', finalUrl);
     return finalUrl;
   };
 
