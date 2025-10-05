@@ -17,19 +17,23 @@ if (process.env.NODE_ENV === 'production') {
 // Axios Instance erstellen
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000, // 15 Sekunden Timeout (erhöht für Railway)
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request Interceptor für Token
+// Request Interceptor für Token und Performance-Monitoring
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Performance-Tracking
+    config.metadata = { startTime: performance.now() };
+    
     return config;
   },
   (error) => {
@@ -37,12 +41,30 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor für Error Handling
+// Response Interceptor für Error Handling und Performance-Monitoring
 api.interceptors.response.use(
   (response) => {
+    // Performance-Tracking
+    if (response.config.metadata) {
+      const duration = performance.now() - response.config.metadata.startTime;
+      const url = response.config.url;
+      
+      if (duration > 2000) {
+        console.warn(`⚠️ Slow API call: ${url} took ${Math.round(duration)}ms`);
+      } else {
+        console.log(`✅ API call: ${url} took ${Math.round(duration)}ms`);
+      }
+    }
+    
     return response;
   },
   (error) => {
+    // Performance-Tracking auch bei Fehlern
+    if (error.config && error.config.metadata) {
+      const duration = performance.now() - error.config.metadata.startTime;
+      console.error(`❌ Failed API call: ${error.config.url} after ${Math.round(duration)}ms`);
+    }
+    
     const { response } = error;
     
     if (response) {
