@@ -11,15 +11,10 @@ console.log(`🚀 BACKEND VERSION: ${APP_VERSION}`);
 console.log('📅 BUILD DATE:', new Date().toISOString());
 console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-// Dotenv Configuration - lädt die richtige .env Datei basierend auf NODE_ENV
-if (process.env.DOTENV_KEY) {
-  // Railway verwendet dotenv-vault
-  require('dotenv-vault/config');
-} else {
-  // Lokal: Lade .env.development oder .env.production
-  const envFile = process.env.NODE_ENV === 'production' 
-    ? '.env.production' 
-    : '.env.development';
+// Dotenv Configuration - nur für lokale Entwicklung
+if (process.env.NODE_ENV !== 'production') {
+  // Lokal: Lade .env.development
+  const envFile = '.env.development';
   
   require('dotenv').config({
     path: path.resolve(__dirname, '..', envFile)
@@ -29,6 +24,11 @@ if (process.env.DOTENV_KEY) {
   console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
   console.log(`🔌 PORT: ${process.env.PORT}`);
   console.log(`🗄️  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
+} else {
+  // Production (Railway): Nutzt Environment Variables direkt
+  console.log('🔧 Production Mode: Using Railway Environment Variables');
+  console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`🔌 PORT: ${process.env.PORT}`);
 }
 
 // Route Imports
