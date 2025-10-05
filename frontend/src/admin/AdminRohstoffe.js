@@ -25,7 +25,13 @@ import {
   InputLabel,
   Alert,
   Chip,
-  Grid
+  Grid,
+  useMediaQuery,
+  useTheme,
+  Card,
+  CardContent,
+  Stack,
+  Divider
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -44,6 +50,9 @@ const getAuthHeaders = () => {
 };
 
 const AdminRohstoffe = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [currentTab, setCurrentTab] = useState(0);
   const [rohseife, setRohseife] = useState([]);
   const [duftoele, setDuftoele] = useState([]);
@@ -251,173 +260,430 @@ const AdminRohstoffe = () => {
     }
   };
 
-  const renderRohseifeTable = () => (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Bezeichnung</TableCell>
-            <TableCell>Beschreibung</TableCell>
-            <TableCell>Farbe</TableCell>
-            <TableCell align="right">EK-Preis (€)</TableCell>
-            <TableCell align="right">Preis/g (€)</TableCell>
-            <TableCell align="right">Vorrat (g)</TableCell>
-            <TableCell align="right">Mindestbestand</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="center">Aktionen</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
+  const renderRohseifeTable = () => {
+    if (isMobile) {
+      return (
+        <Stack spacing={2}>
           {rohseife.map((item) => (
-            <TableRow key={item._id}>
-              <TableCell>{item.bezeichnung}</TableCell>
-              <TableCell>{item.beschreibung}</TableCell>
-              <TableCell>{item.farbe}</TableCell>
-              <TableCell align="right">{item.ekPreis?.toFixed(2)}</TableCell>
-              <TableCell align="right">{item.preisProGramm?.toFixed(4)}</TableCell>
-              <TableCell align="right">{item.aktuellVorrat}</TableCell>
-              <TableCell align="right">{item.mindestbestand}</TableCell>
-              <TableCell>
-                <Chip 
-                  label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
-                  color={item.verfuegbar ? 'success' : 'error'}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell align="center">
-                <IconButton 
-                  size="small" 
-                  color="primary"
-                  onClick={() => handleOpenDialog('edit', item)}
-                >
-                  <EditIcon />
-                </IconButton>
-                <IconButton 
-                  size="small" 
-                  color="error"
-                  onClick={() => handleDelete(item._id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </TableCell>
-            </TableRow>
+            <Card key={item._id} variant="outlined">
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Typography variant="h6" component="div">
+                      {item.bezeichnung}
+                    </Typography>
+                    <Chip 
+                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                      color={item.verfuegbar ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  {item.beschreibung && (
+                    <Typography variant="body2" color="textSecondary">
+                      {item.beschreibung}
+                    </Typography>
+                  )}
+                  
+                  <Divider />
+                  
+                  <Stack spacing={0.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Farbe:</Typography>
+                      <Typography variant="body2">{item.farbe}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">EK-Preis:</Typography>
+                      <Typography variant="body2">{item.ekPreis?.toFixed(2)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Preis/g:</Typography>
+                      <Typography variant="body2">{item.preisProGramm?.toFixed(4)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Vorrat:</Typography>
+                      <Typography variant="body2" fontWeight={item.aktuellVorrat < item.mindestbestand ? 'bold' : 'normal'} color={item.aktuellVorrat < item.mindestbestand ? 'error' : 'inherit'}>
+                        {item.aktuellVorrat} g
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Mindestbestand:</Typography>
+                      <Typography variant="body2">{item.mindestbestand} g</Typography>
+                    </Box>
+                  </Stack>
+                  
+                  <Divider />
+                  
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleOpenDialog('edit', item)}
+                      sx={{ flex: 1 }}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDelete(item._id)}
+                      sx={{ flex: 1 }}
+                    >
+                      Löschen
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
           ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+        </Stack>
+      );
+    }
+    
+    // Desktop-Tabellenansicht
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Bezeichnung</TableCell>
+              <TableCell>Beschreibung</TableCell>
+              <TableCell>Farbe</TableCell>
+              <TableCell align="right">EK-Preis (€)</TableCell>
+              <TableCell align="right">Preis/g (€)</TableCell>
+              <TableCell align="right">Vorrat (g)</TableCell>
+              <TableCell align="right">Mindestbestand</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="center">Aktionen</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rohseife.map((item) => (
+              <TableRow key={item._id}>
+                <TableCell>{item.bezeichnung}</TableCell>
+                <TableCell>{item.beschreibung}</TableCell>
+                <TableCell>{item.farbe}</TableCell>
+                <TableCell align="right">{item.ekPreis?.toFixed(2)}</TableCell>
+                <TableCell align="right">{item.preisProGramm?.toFixed(4)}</TableCell>
+                <TableCell align="right">{item.aktuellVorrat}</TableCell>
+                <TableCell align="right">{item.mindestbestand}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                    color={item.verfuegbar ? 'success' : 'error'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="center">
+                  <IconButton 
+                    size="small" 
+                    color="primary"
+                    onClick={() => handleOpenDialog('edit', item)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    color="error"
+                    onClick={() => handleDelete(item._id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
 
-  const renderDuftoeleTable = () => (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Bezeichnung</TableCell>
-            <TableCell>Beschreibung</TableCell>
-            <TableCell>Duftrichtung</TableCell>
-            <TableCell>Intensität</TableCell>
-            <TableCell align="right">Gesamt (ml)</TableCell>
-            <TableCell align="right">EK-Preis (€)</TableCell>
-            <TableCell align="right">Kosten/Tropfen</TableCell>
-            <TableCell align="right">Vorrat (Tropfen)</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="center">Aktionen</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
+  const renderDuftoeleTable = () => {
+    if (isMobile) {
+      return (
+        <Stack spacing={2}>
           {duftoele.map((item) => (
-            <TableRow key={item._id}>
-              <TableCell>{item.bezeichnung}</TableCell>
-              <TableCell>{item.beschreibung}</TableCell>
-              <TableCell>{item.duftrichtung}</TableCell>
-              <TableCell>{item.intensitaet}</TableCell>
-              <TableCell align="right">{item.gesamtInMl}</TableCell>
-              <TableCell align="right">{item.ekPreis?.toFixed(2)}</TableCell>
-              <TableCell align="right">{item.kostenProTropfen?.toFixed(6)}</TableCell>
-              <TableCell align="right">{item.aktuellVorrat}</TableCell>
-              <TableCell>
-                <Chip 
-                  label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
-                  color={item.verfuegbar ? 'success' : 'error'}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell align="center">
-                <IconButton 
-                  size="small" 
-                  color="primary"
-                  onClick={() => handleOpenDialog('edit', item)}
-                >
-                  <EditIcon />
-                </IconButton>
-                <IconButton 
-                  size="small" 
-                  color="error"
-                  onClick={() => handleDelete(item._id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </TableCell>
-            </TableRow>
+            <Card key={item._id} variant="outlined">
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Typography variant="h6" component="div">
+                      {item.bezeichnung}
+                    </Typography>
+                    <Chip 
+                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                      color={item.verfuegbar ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  {item.beschreibung && (
+                    <Typography variant="body2" color="textSecondary">
+                      {item.beschreibung}
+                    </Typography>
+                  )}
+                  
+                  <Divider />
+                  
+                  <Stack spacing={0.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Duftrichtung:</Typography>
+                      <Typography variant="body2">{item.duftrichtung}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Intensität:</Typography>
+                      <Typography variant="body2">{item.intensitaet}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Gesamt:</Typography>
+                      <Typography variant="body2">{item.gesamtInMl} ml</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">EK-Preis:</Typography>
+                      <Typography variant="body2">{item.ekPreis?.toFixed(2)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Kosten/Tropfen:</Typography>
+                      <Typography variant="body2">{item.kostenProTropfen?.toFixed(6)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Vorrat:</Typography>
+                      <Typography variant="body2" fontWeight={item.aktuellVorrat < item.anzahlTropfen * 0.2 ? 'bold' : 'normal'} color={item.aktuellVorrat < item.anzahlTropfen * 0.2 ? 'error' : 'inherit'}>
+                        {item.aktuellVorrat} Tropfen
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  
+                  <Divider />
+                  
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleOpenDialog('edit', item)}
+                      sx={{ flex: 1 }}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDelete(item._id)}
+                      sx={{ flex: 1 }}
+                    >
+                      Löschen
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
           ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+        </Stack>
+      );
+    }
+    
+    // Desktop-Tabellenansicht
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Bezeichnung</TableCell>
+              <TableCell>Beschreibung</TableCell>
+              <TableCell>Duftrichtung</TableCell>
+              <TableCell>Intensität</TableCell>
+              <TableCell align="right">Gesamt (ml)</TableCell>
+              <TableCell align="right">EK-Preis (€)</TableCell>
+              <TableCell align="right">Kosten/Tropfen</TableCell>
+              <TableCell align="right">Vorrat (Tropfen)</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="center">Aktionen</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {duftoele.map((item) => (
+              <TableRow key={item._id}>
+                <TableCell>{item.bezeichnung}</TableCell>
+                <TableCell>{item.beschreibung}</TableCell>
+                <TableCell>{item.duftrichtung}</TableCell>
+                <TableCell>{item.intensitaet}</TableCell>
+                <TableCell align="right">{item.gesamtInMl}</TableCell>
+                <TableCell align="right">{item.ekPreis?.toFixed(2)}</TableCell>
+                <TableCell align="right">{item.kostenProTropfen?.toFixed(6)}</TableCell>
+                <TableCell align="right">{item.aktuellVorrat}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                    color={item.verfuegbar ? 'success' : 'error'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="center">
+                  <IconButton 
+                    size="small" 
+                    color="primary"
+                    onClick={() => handleOpenDialog('edit', item)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    color="error"
+                    onClick={() => handleDelete(item._id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
 
-  const renderVerpackungenTable = () => (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Bezeichnung</TableCell>
-            <TableCell>Form</TableCell>
-            <TableCell>Größe</TableCell>
-            <TableCell>Material</TableCell>
-            <TableCell align="right">Kosten/Stück (€)</TableCell>
-            <TableCell align="right">Vorrat</TableCell>
-            <TableCell>Status</TableCell>
-            <TableCell align="center">Aktionen</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
+  const renderVerpackungenTable = () => {
+    if (isMobile) {
+      return (
+        <Stack spacing={2}>
           {verpackungen.map((item) => (
-            <TableRow key={item._id}>
-              <TableCell>{item.bezeichnung}</TableCell>
-              <TableCell>{item.form}</TableCell>
-              <TableCell>{item.groesse || '-'}</TableCell>
-              <TableCell>{item.material || '-'}</TableCell>
-              <TableCell align="right">{item.kostenProStueck?.toFixed(2)}</TableCell>
-              <TableCell align="right">{item.aktuellVorrat}</TableCell>
-              <TableCell>
-                <Chip 
-                  label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
-                  color={item.verfuegbar ? 'success' : 'error'}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell align="center">
-                <IconButton 
-                  size="small" 
-                  color="primary"
-                  onClick={() => handleOpenDialog('edit', item)}
-                >
-                  <EditIcon />
-                </IconButton>
-                <IconButton 
-                  size="small" 
-                  color="error"
-                  onClick={() => handleDelete(item._id)}
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </TableCell>
-            </TableRow>
+            <Card key={item._id} variant="outlined">
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Typography variant="h6" component="div">
+                      {item.bezeichnung}
+                    </Typography>
+                    <Chip 
+                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                      color={item.verfuegbar ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  <Divider />
+                  
+                  <Stack spacing={0.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Form:</Typography>
+                      <Typography variant="body2">{item.form}</Typography>
+                    </Box>
+                    {item.groesse && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Größe:</Typography>
+                        <Typography variant="body2">{item.groesse}</Typography>
+                      </Box>
+                    )}
+                    {item.material && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Material:</Typography>
+                        <Typography variant="body2">{item.material}</Typography>
+                      </Box>
+                    )}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Kosten/Stück:</Typography>
+                      <Typography variant="body2">{item.kostenProStueck?.toFixed(2)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Vorrat:</Typography>
+                      <Typography variant="body2">
+                        {item.aktuellVorrat} Stück
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  
+                  <Divider />
+                  
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleOpenDialog('edit', item)}
+                      sx={{ flex: 1 }}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDelete(item._id)}
+                      sx={{ flex: 1 }}
+                    >
+                      Löschen
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
           ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+        </Stack>
+      );
+    }
+    
+    // Desktop-Tabellenansicht
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Bezeichnung</TableCell>
+              <TableCell>Form</TableCell>
+              <TableCell>Größe</TableCell>
+              <TableCell>Material</TableCell>
+              <TableCell align="right">Kosten/Stück (€)</TableCell>
+              <TableCell align="right">Vorrat</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="center">Aktionen</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {verpackungen.map((item) => (
+              <TableRow key={item._id}>
+                <TableCell>{item.bezeichnung}</TableCell>
+                <TableCell>{item.form}</TableCell>
+                <TableCell>{item.groesse || '-'}</TableCell>
+                <TableCell>{item.material || '-'}</TableCell>
+                <TableCell align="right">{item.kostenProStueck?.toFixed(2)}</TableCell>
+                <TableCell align="right">{item.aktuellVorrat}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                    color={item.verfuegbar ? 'success' : 'error'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="center">
+                  <IconButton 
+                    size="small" 
+                    color="primary"
+                    onClick={() => handleOpenDialog('edit', item)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    color="error"
+                    onClick={() => handleDelete(item._id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
 
   const renderDialogContent = () => {
     if (currentTab === 0) {
@@ -433,6 +699,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Bezeichnung *"
               name="bezeichnung"
               value={formData.bezeichnung || ''}
@@ -444,6 +711,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Beschreibung"
               name="beschreibung"
               value={formData.beschreibung || ''}
@@ -456,6 +724,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Farbe"
               name="farbe"
               value={formData.farbe || ''}
@@ -466,6 +735,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Lieferant"
               name="lieferant"
               value={formData.lieferant || ''}
@@ -483,6 +753,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Gesamt in Gramm *"
               name="gesamtInGramm"
               type="number"
@@ -496,6 +767,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="EK-Preis (€) *"
               name="ekPreis"
               type="number"
@@ -509,6 +781,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Preis pro Gramm (€)"
               name="preisProGramm"
               type="number"
@@ -533,6 +806,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Aktueller Vorrat (g) *"
               name="aktuellVorrat"
               type="number"
@@ -546,6 +820,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Mindestbestand (g)"
               name="mindestbestand"
               type="number"
@@ -556,7 +831,7 @@ const AdminRohstoffe = () => {
             />
           </Grid>
           <Grid item xs={4}>
-            <FormControl fullWidth>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Verfügbarkeit *</InputLabel>
               <Select
                 name="verfuegbar"
@@ -574,7 +849,7 @@ const AdminRohstoffe = () => {
     } else if (currentTab === 1) {
       // Duftöle Form
       return (
-        <Grid container spacing={2}>
+        <Grid container spacing={isMobile ? 1.5 : 2}>
           {/* Grundinformationen */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" color="textSecondary" gutterBottom>
@@ -584,6 +859,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Bezeichnung *"
               name="bezeichnung"
               value={formData.bezeichnung || ''}
@@ -595,6 +871,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Beschreibung"
               name="beschreibung"
               value={formData.beschreibung || ''}
@@ -604,8 +881,8 @@ const AdminRohstoffe = () => {
               placeholder="Detaillierte Beschreibung des Duftöls..."
             />
           </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Duftrichtung *</InputLabel>
               <Select
                 name="duftrichtung"
@@ -623,8 +900,8 @@ const AdminRohstoffe = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Intensität *</InputLabel>
               <Select
                 name="intensitaet"
@@ -638,9 +915,10 @@ const AdminRohstoffe = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Hersteller"
               name="hersteller"
               value={formData.hersteller || ''}
@@ -655,9 +933,10 @@ const AdminRohstoffe = () => {
               Preis- und Mengeninformationen
             </Typography>
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Gesamt in ml *"
               name="gesamtInMl"
               type="number"
@@ -668,9 +947,10 @@ const AdminRohstoffe = () => {
               helperText="Gesamtmenge"
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Tropfen pro ml *"
               name="tropfenProMl"
               type="number"
@@ -681,9 +961,10 @@ const AdminRohstoffe = () => {
               helperText="Standard: 20"
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Anzahl Tropfen"
               name="anzahlTropfen"
               type="number"
@@ -697,9 +978,10 @@ const AdminRohstoffe = () => {
               }}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="EK-Preis (€) *"
               name="ekPreis"
               type="number"
@@ -710,9 +992,10 @@ const AdminRohstoffe = () => {
               helperText="Einkaufspreis"
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Kosten pro Tropfen (€)"
               name="kostenProTropfen"
               type="number"
@@ -734,9 +1017,10 @@ const AdminRohstoffe = () => {
               Anwendungshinweise (Regel: 1 Tropfen pro 50g Seife)
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Empfohlen pro Seife"
               name="empfohlungProSeife"
               type="number"
@@ -746,9 +1030,10 @@ const AdminRohstoffe = () => {
               helperText="Tropfen (für 100g = 2 Tropfen)"
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Maximal pro Seife"
               name="maximalProSeife"
               type="number"
@@ -765,9 +1050,10 @@ const AdminRohstoffe = () => {
               Lagerverwaltung
             </Typography>
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Aktueller Vorrat (Tropfen) *"
               name="aktuellVorrat"
               type="number"
@@ -778,9 +1064,10 @@ const AdminRohstoffe = () => {
               helperText="Auf Lager"
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Mindestbestand (Tropfen)"
               name="mindestbestand"
               type="number"
@@ -790,8 +1077,8 @@ const AdminRohstoffe = () => {
               helperText="Warngrenze"
             />
           </Grid>
-          <Grid item xs={4}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Verfügbarkeit *</InputLabel>
               <Select
                 name="verfuegbar"
@@ -811,9 +1098,10 @@ const AdminRohstoffe = () => {
               Lagerungsinformationen
             </Typography>
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Haltbarkeit (Monate)"
               name="haltbarkeitMonate"
               type="number"
@@ -822,9 +1110,10 @@ const AdminRohstoffe = () => {
               inputProps={{ min: 1 }}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Lagertemperatur"
               name="lagertemperatur"
               value={formData.lagertemperatur || 'Raumtemperatur (15-25°C)'}
@@ -837,10 +1126,11 @@ const AdminRohstoffe = () => {
     } else if (currentTab === 2) {
       // Verpackungen Form
       return (
-        <Grid container spacing={2}>
+        <Grid container spacing={isMobile ? 1.5 : 2}>
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Bezeichnung"
               name="bezeichnung"
               value={formData.bezeichnung || ''}
@@ -851,6 +1141,7 @@ const AdminRohstoffe = () => {
           <Grid item xs={12}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Notizen"
               name="notizen"
               value={formData.notizen || ''}
@@ -859,8 +1150,8 @@ const AdminRohstoffe = () => {
               rows={3}
             />
           </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Form</InputLabel>
               <Select
                 name="form"
@@ -877,8 +1168,8 @@ const AdminRohstoffe = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Material</InputLabel>
               <Select
                 name="material"
@@ -895,27 +1186,30 @@ const AdminRohstoffe = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Größe (z.B. 9x13)"
               name="groesse"
               value={formData.groesse || ''}
               onChange={handleInputChange}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Farbe"
               name="farbe"
               value={formData.farbe || ''}
               onChange={handleInputChange}
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Menge pro Packung"
               name="menge"
               type="number"
@@ -924,9 +1218,10 @@ const AdminRohstoffe = () => {
               required
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Kosten in Euro"
               name="kostenInEuro"
               type="number"
@@ -936,9 +1231,10 @@ const AdminRohstoffe = () => {
               required
             />
           </Grid>
-          <Grid item xs={4}>
+          <Grid item xs={isMobile ? 12 : 4}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Kosten pro Stück (€)"
               name="kostenProStueck"
               type="number"
@@ -949,9 +1245,10 @@ const AdminRohstoffe = () => {
               disabled
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Max. Gewicht (g)"
               name="maximalGewicht"
               type="number"
@@ -959,9 +1256,10 @@ const AdminRohstoffe = () => {
               onChange={handleInputChange}
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Aktueller Vorrat (Stück)"
               name="aktuellVorrat"
               type="number"
@@ -970,9 +1268,10 @@ const AdminRohstoffe = () => {
               required
             />
           </Grid>
-          <Grid item xs={6}>
+          <Grid item xs={isMobile ? 12 : 6}>
             <TextField
               fullWidth
+              size={isMobile ? "small" : "medium"}
               label="Mindestbestand (Stück)"
               name="mindestbestand"
               type="number"
@@ -980,8 +1279,8 @@ const AdminRohstoffe = () => {
               onChange={handleInputChange}
             />
           </Grid>
-          <Grid item xs={6}>
-            <FormControl fullWidth>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Verfügbar</InputLabel>
               <Select
                 name="verfuegbar"
@@ -999,12 +1298,26 @@ const AdminRohstoffe = () => {
   };
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom>
+    <Container 
+      maxWidth="xl" 
+      sx={{ 
+        mt: isMobile ? 2 : 4, 
+        mb: isMobile ? 2 : 4, 
+        px: isMobile ? 1 : 3 
+      }}
+    >
+      <Box sx={{ mb: isMobile ? 2 : 4 }}>
+        <Typography 
+          variant={isMobile ? "h5" : "h3"} 
+          component="h1" 
+          gutterBottom
+        >
           Rohstoff-Verwaltung
         </Typography>
-        <Typography variant="body1" color="textSecondary">
+        <Typography 
+          variant={isMobile ? "body2" : "body1"} 
+          color="textSecondary"
+        >
           Verwalten Sie Rohseifen, Duftöle und Verpackungen
         </Typography>
       </Box>
@@ -1021,26 +1334,40 @@ const AdminRohstoffe = () => {
         </Alert>
       )}
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs value={currentTab} onChange={handleTabChange}>
-          <Tab label="Rohseifen" />
-          <Tab label="Duftöle" />
-          <Tab label="Verpackungen" />
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: isMobile ? 2 : 3 }}>
+        <Tabs 
+          value={currentTab} 
+          onChange={handleTabChange}
+          variant={isMobile ? "fullWidth" : "standard"}
+        >
+          <Tab label={isMobile ? "Seifen" : "Rohseifen"} />
+          <Tab label={isMobile ? "Düfte" : "Duftöle"} />
+          <Tab label={isMobile ? "Verp." : "Verpackungen"} />
         </Tabs>
       </Box>
 
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between', 
+        gap: isMobile ? 1 : 0,
+        mb: isMobile ? 2 : 3 
+      }}>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => handleOpenDialog('create')}
+          size={isMobile ? "medium" : "large"}
+          fullWidth={isMobile}
         >
-          Neuen Rohstoff hinzufügen
+          {isMobile ? "Neu" : "Neuen Rohstoff hinzufügen"}
         </Button>
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
           onClick={loadData}
+          size={isMobile ? "medium" : "large"}
+          fullWidth={isMobile}
         >
           Aktualisieren
         </Button>
@@ -1062,6 +1389,7 @@ const AdminRohstoffe = () => {
         onClose={handleCloseDialog}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
       >
         <DialogTitle>
           {dialogMode === 'create' ? 'Neuen Rohstoff erstellen' : 'Rohstoff bearbeiten'}
@@ -1072,8 +1400,13 @@ const AdminRohstoffe = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Abbrechen</Button>
-          <Button onClick={handleSubmit} variant="contained" color="primary">
+          <Button onClick={handleCloseDialog} fullWidth={isMobile}>Abbrechen</Button>
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained" 
+            color="primary"
+            fullWidth={isMobile}
+          >
             {dialogMode === 'create' ? 'Erstellen' : 'Speichern'}
           </Button>
         </DialogActions>
