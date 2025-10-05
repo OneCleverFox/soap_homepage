@@ -6,7 +6,13 @@ import toast from 'react-hot-toast';
 // In Production kommt die vollständige URL aus der Environment-Variable
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
   ? '/api' 
-  : (process.env.REACT_APP_API_URL || '');
+  : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
+
+// Debug: Log API URL on startup
+if (process.env.NODE_ENV === 'production') {
+  console.log('🔧 API Base URL:', API_BASE_URL);
+  console.log('🔧 REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+}
 
 // Axios Instance erstellen
 const api = axios.create({
