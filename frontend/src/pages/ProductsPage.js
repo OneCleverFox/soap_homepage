@@ -96,14 +96,22 @@ const ProductsPage = () => {
   // Helper-Funktion um relative Bild-URLs in absolute URLs umzuwandeln
   const getImageUrl = (imageUrl) => {
     if (!imageUrl) return null;
+    
+    // Wenn es ein Base64-Bild ist (data:image/...), direkt zurückgeben
+    if (imageUrl.startsWith('data:image/')) {
+      return imageUrl;
+    }
+    
     // Wenn die URL bereits mit http/https beginnt, direkt zurückgeben
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
       return imageUrl;
     }
-    // Wenn die URL mit /api beginnt, Backend-Host hinzufügen
+    
+    // Legacy: Wenn die URL mit /api beginnt, Backend-Host hinzufügen
     if (imageUrl.startsWith('/api')) {
       return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
     }
+    
     // Ansonsten vollständige API-URL bauen
     return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
   };
