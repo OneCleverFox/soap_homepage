@@ -1,9 +1,17 @@
 node_modules
 
-# Environment variables (enthält sensible Daten!)
+# Environment variables - NUR lokale .env Dateien ignorieren
 .env
 .env.local
-# .env.production wird NICHT ignoriert (für Railway/Vercel Referenz)
+.env.development
+backend/.env
+backend/.env.local
+backend/.env.development
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+# .env.production Dateien WERDEN committed (OHNE Secrets!)
+# .env.vault Dateien können committed werden (verschlüsselt)
 
 # Logs
 *.log
@@ -39,17 +47,17 @@ dist/
 tmp/
 temp/
 
-# Dokumentation (moved to docs/ folder)
-docs/
-documentation/
-*.md
-!README.md
-!ENV_CONFIG.md
+# Dokumentation - Wichtige Dateien NICHT ignorieren
+# *.md wird NICHT mehr ignoriert - alle .md Dateien werden committed
 
-.env*
-.flaskenv*
-!.env.project
+# Environment vault files
 !.env.vault
+!backend/.env.vault
+!backend/.env.example
+!frontend/.env.example
+!backend/.env.production
+!frontend/.env.production
+
 !backend/.env.example
 !frontend/.env.example
 !frontend/.env.production

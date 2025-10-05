@@ -116,7 +116,8 @@ const AdminPortfolio = () => {
   }, [API_BASE]);
 
   useEffect(() => {
-    if (user && user.role === 'admin') {
+    const userRole = user?.rolle || user?.role;
+    if (user && userRole === 'admin') {
       loadProducts();
       loadStats();
     }
@@ -296,7 +297,8 @@ const AdminPortfolio = () => {
     return imageUrl.startsWith('/api/') ? `${API_BASE.replace('/api', '')}${imageUrl}` : imageUrl;
   };
 
-  if (!user || user.role !== 'admin') {
+  const userRole = user?.rolle || user?.role;
+  if (!user || userRole !== 'admin') {
     return (
       <Box p={3}>
         <Alert severity="error">

@@ -46,7 +46,7 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
 } from '@mui/icons-material';
-import { usersAPI } from '../services/api';
+import { kundenAPI } from '../services/api';
 
 function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -118,7 +118,7 @@ function AdminUsers() {
       if (statusFilter !== 'all') params.status = statusFilter;
       if (roleFilter !== 'all') params.role = roleFilter;
       
-      const response = await usersAPI.getUsers(params);
+      const response = await kundenAPI.getKunden(params);
       setUsers(response.data.data || response.data.users || []);
       setTotalCount(response.data.total || response.data.pagination?.total || 0);
     } catch (error) {
@@ -131,7 +131,7 @@ function AdminUsers() {
 
   const loadStats = useCallback(async () => {
     try {
-      const response = await usersAPI.getStats();
+      const response = await kundenAPI.getStats();
       setStats(response.data);
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -143,90 +143,98 @@ function AdminUsers() {
     loadStats();
   }, [loadUsers, loadStats]);
 
-  const handleCreateUser = async () => {
-    try {
-      await usersAPI.createUser(formData);
-      showSnackbar('Benutzer erfolgreich erstellt', 'success');
-      setOpenCreateDialog(false);
-      resetForm();
-      loadUsers();
-      loadStats();
-    } catch (error) {
-      showSnackbar(error.response?.data?.message || 'Fehler beim Erstellen', 'error');
-    }
-  };
-
   const handleUpdateUser = async () => {
     try {
       const updateData = { ...formData };
       delete updateData.password; // Password not in update
-      await usersAPI.updateUser(selectedUser._id, updateData);
+      
+      // Map frontend role values to backend values
+      // Frontend: "customer", "user", "admin"
+      // Backend: "kunde", "admin"
+      const rolleMapping = {
+        'customer': 'kunde',
+        'user': 'kunde', 
+        'admin': 'admin'
+      };
+      
+      // Prepare data for backend
+      const kundeData = {
+        vorname: updateData.firstName,
+        nachname: updateData.lastName,
+        email: updateData.email,
+        telefon: updateData.phone,
+        geschlecht: updateData.geschlecht,
+        geburtsdatum: updateData.geburtsdatum,
+        rolle: rolleMapping[updateData.role] || updateData.role, // Map role
+        adresse: {
+          strasse: updateData.strasse,
+          hausnummer: updateData.hausnummer,
+          zusatz: updateData.zusatz,
+          plz: updateData.plz,
+          stadt: updateData.stadt,
+          land: updateData.land
+        },
+        kommunikation: {
+          newsletter: updateData.newsletter,
+          sms: updateData.sms
+        }
+      };
+      
+      console.log('🔄 Aktualisiere Kunde mit Daten:', kundeData);
+      await kundenAPI.updateKunde(selectedUser._id, kundeData);
       showSnackbar('Benutzer erfolgreich aktualisiert', 'success');
       setOpenEditDialog(false);
       resetForm();
       loadUsers();
     } catch (error) {
+      console.error('❌ Fehler beim Aktualisieren:', error);
       showSnackbar(error.response?.data?.message || 'Fehler beim Aktualisieren', 'error');
     }
   };
 
+  const handleCreateUser = async () => {
+    // Kunden registrieren sich selbst über die Registrierungsseite
+    showSnackbar('Neue Kunden registrieren sich über die Registrierungsseite', 'info');
+  };
+
   const handleChangePassword = async () => {
-    try {
-      await usersAPI.updatePassword(selectedUser._id, { password: newPassword });
-      showSnackbar('Passwort erfolgreich geändert', 'success');
-      setOpenPasswordDialog(false);
-      setNewPassword('');
-    } catch (error) {
-      showSnackbar(error.response?.data?.message || 'Fehler beim Ändern des Passworts', 'error');
-    }
+    // Password reset wird über das Kunden-Portal gehandhabt
+    showSnackbar('Passwort-Änderung erfolgt über das Kunden-Portal', 'info');
+    setOpenPasswordDialog(false);
+    setNewPassword('');
   };
 
   const handleBlockUser = async (user) => {
-    if (window.confirm(`Möchten Sie ${user.username} wirklich sperren?`)) {
-      try {
-        await usersAPI.blockUser(user._id);
-        showSnackbar('Benutzer gesperrt', 'success');
-        loadUsers();
-        loadStats();
-      } catch (error) {
-        showSnackbar(error.response?.data?.message || 'Fehler beim Sperren', 'error');
-      }
-    }
+    // TODO: Implement kunde status update (aktiv/inaktiv)
+    showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
   };
 
   const handleUnblockUser = async (user) => {
-    try {
-      await usersAPI.unblockUser(user._id);
-      showSnackbar('Benutzer entsperrt', 'success');
-      loadUsers();
-      loadStats();
-    } catch (error) {
-      showSnackbar(error.response?.data?.message || 'Fehler beim Entsperren', 'error');
-    }
+    // TODO: Implement kunde status update (aktiv/inaktiv)
+    showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
   };
 
   const handleDeleteUser = async (user) => {
-    if (window.confirm(`Möchten Sie ${user.username} wirklich löschen? Dies kann nicht rückgängig gemacht werden.`)) {
-      try {
-        await usersAPI.deleteUser(user._id);
-        showSnackbar('Benutzer gelöscht', 'success');
-        loadUsers();
-        loadStats();
-      } catch (error) {
-        showSnackbar(error.response?.data?.message || 'Fehler beim Löschen', 'error');
-      }
-    }
+    // Kunden sollten nicht gelöscht werden (DSGVO: Archivierung statt Löschung)
+    showSnackbar('Kunden können nicht gelöscht werden. Bitte deaktivieren Sie stattdessen.', 'warning');
   };
 
   const openEditUserDialog = (user) => {
     setSelectedUser(user);
+    
+    // Map backend role to frontend values
+    const rolleMapping = {
+      'kunde': 'customer',
+      'admin': 'admin'
+    };
+    
     setFormData({
       username: user.username || user.email,
       email: user.email,
-      firstName: user.firstName || '',
-      lastName: user.lastName || '',
-      phone: user.phone || '',
-      role: user.role,
+      firstName: user.firstName || user.vorname || '',
+      lastName: user.lastName || user.nachname || '',
+      phone: user.phone || user.telefon || '',
+      role: rolleMapping[user.rolle] || user.role || 'customer',
       geschlecht: user.geschlecht || '',
       geburtsdatum: user.geburtsdatum ? user.geburtsdatum.split('T')[0] : '',
       kundennummer: user.kundennummer || '',
@@ -276,6 +284,14 @@ function AdminUsers() {
   };
 
   const getStatusColor = (status) => {
+    // Kunden haben ein status-Objekt, nicht einen String
+    if (typeof status === 'object' && status !== null) {
+      if (status.gesperrt) return 'error';      // Rot für gesperrt
+      if (!status.aktiv) return 'error';        // Rot für inaktiv
+      return 'success';                         // Grün für aktiv
+    }
+    
+    // Fallback für String-Status (alte User)
     switch (status) {
       case 'active': return 'success';
       case 'blocked': return 'error';
@@ -285,20 +301,30 @@ function AdminUsers() {
   };
 
   const getRoleLabel = (role) => {
+    // Backend sendet 'kunde' oder 'admin', Frontend zeigt 'customer', 'user', 'admin'
     switch (role) {
       case 'admin': return 'Administrator';
+      case 'kunde': return 'Kunde';
       case 'user': return 'Benutzer';
       case 'customer': return 'Kunde';
-      default: return role;
+      default: return role || 'Kunde';
     }
   };
 
   const getStatusLabel = (status) => {
+    // Kunden haben ein status-Objekt, nicht einen String
+    if (typeof status === 'object' && status !== null) {
+      if (status.gesperrt) return `Gesperrt${status.sperrgrund ? ': ' + status.sperrgrund : ''}`;
+      if (!status.aktiv) return 'Inaktiv';
+      return 'Aktiv';
+    }
+    
+    // Fallback für String-Status (alte User)
     switch (status) {
       case 'active': return 'Aktiv';
       case 'blocked': return 'Gesperrt';
       case 'pending': return 'Ausstehend';
-      default: return status;
+      default: return status || 'Unbekannt';
     }
   };
 
@@ -465,11 +491,13 @@ function AdminUsers() {
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={1}>
                         <Avatar>
-                          {user.firstName?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
+                          {(user.firstName || user.vorname)?.charAt(0)?.toUpperCase() || user.email?.charAt(0)?.toUpperCase()}
                         </Avatar>
                         <Box>
                           <Typography variant="body2" fontWeight="bold">
-                            {user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email}
+                            {(user.firstName || user.vorname) && (user.lastName || user.nachname) 
+                              ? `${user.firstName || user.vorname} ${user.lastName || user.nachname}` 
+                              : user.email}
                           </Typography>
                           <Typography variant="caption" color="textSecondary">
                             {user.geschlecht && `${user.geschlecht}`}
@@ -484,9 +512,13 @@ function AdminUsers() {
                         {user.kundennummer || '-'}
                       </Typography>
                     </TableCell>
-                    <TableCell>{user.phone || '-'}</TableCell>
+                    <TableCell>{user.phone || user.telefon || '-'}</TableCell>
                     <TableCell>
-                      <Chip label={getRoleLabel(user.role)} size="small" color={user.role === 'admin' ? 'primary' : 'default'} />
+                      <Chip 
+                        label={getRoleLabel(user.rolle || user.role)} 
+                        size="small" 
+                        color={(user.rolle === 'admin' || user.role === 'admin') ? 'primary' : 'default'} 
+                      />
                     </TableCell>
                     <TableCell>
                       <Chip label={getStatusLabel(user.status)} size="small" color={getStatusColor(user.status)} />

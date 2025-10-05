@@ -130,6 +130,14 @@ export const usersAPI = {
   getStats: () => api.get('/users/stats/overview'),
 };
 
+// Kunden API (Customers)
+export const kundenAPI = {
+  getKunden: (params = {}) => api.get('/kunden', { params }),
+  getKunde: (id) => api.get(`/kunden/${id}`),
+  updateKunde: (id, kundeData) => api.put(`/kunden/${id}`, kundeData),
+  getStats: () => api.get('/kunden/stats/overview'),
+};
+
 // Analytics API
 export const analyticsAPI = {
   getDashboardStats: () => api.get('/analytics/dashboard'),

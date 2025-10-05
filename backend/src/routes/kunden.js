@@ -184,7 +184,8 @@ router.post('/login', async (req, res) => {
       { 
         kundeId: kunde._id,
         email: kunde.email,
-        kundennummer: kunde.kundennummer
+        kundennummer: kunde.kundennummer,
+        rolle: kunde.rolle || 'kunde'  // Rolle hinzufügen!
       },
       process.env.JWT_SECRET || 'fallback_secret',
       { expiresIn: '24h' }
@@ -299,6 +300,139 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Kundendaten'
+    });
+  }
+});
+
+// @route   PUT /api/kunden/:id
+// @desc    Kundendaten aktualisieren
+// @access  Private (Admin)
+router.put('/:id', async (req, res) => {
+  try {
+    const {
+      vorname,
+      nachname,
+      email,
+      telefon,
+      adresse,
+      lieferadresse,
+      geburtsdatum,
+      geschlecht,
+      praeferenzen,
+      interessen,
+      kommunikation,
+      rolle,  // Neue Rolle (admin oder kunde)
+      status
+    } = req.body;
+
+    const kunde = await Kunde.findById(req.params.id);
+
+    if (!kunde) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kunde nicht gefunden'
+      });
+    }
+
+    // Aktualisiere nur die übergebenen Felder
+    if (vorname !== undefined) kunde.vorname = vorname.trim();
+    if (nachname !== undefined) kunde.nachname = nachname.trim();
+    if (email !== undefined) kunde.email = email.toLowerCase().trim();
+    if (telefon !== undefined) kunde.telefon = telefon.trim();
+    if (geburtsdatum !== undefined) kunde.geburtsdatum = geburtsdatum ? new Date(geburtsdatum) : undefined;
+    if (geschlecht !== undefined) kunde.geschlecht = geschlecht;
+
+    // Adresse aktualisieren
+    if (adresse) {
+      kunde.adresse = {
+        strasse: adresse.strasse?.trim() || kunde.adresse.strasse,
+        hausnummer: adresse.hausnummer?.trim() || kunde.adresse.hausnummer,
+        zusatz: adresse.zusatz?.trim() || kunde.adresse.zusatz || '',
+        plz: adresse.plz?.trim() || kunde.adresse.plz,
+        stadt: adresse.stadt?.trim() || kunde.adresse.stadt,
+        land: adresse.land?.trim() || kunde.adresse.land || 'Deutschland'
+      };
+    }
+
+    // Lieferadresse aktualisieren
+    if (lieferadresse) {
+      kunde.lieferadresse = lieferadresse;
+    }
+
+    // Präferenzen aktualisieren
+    if (praeferenzen) {
+      kunde.praeferenzen = {
+        ...kunde.praeferenzen,
+        ...praeferenzen
+      };
+    }
+
+    // Interessen aktualisieren
+    if (interessen) {
+      kunde.interessen = {
+        ...kunde.interessen,
+        ...interessen
+      };
+    }
+
+    // Kommunikation aktualisieren
+    if (kommunikation) {
+      kunde.kommunikation = {
+        ...kunde.kommunikation,
+        ...kommunikation
+      };
+    }
+
+    // Rolle aktualisieren (wichtig für Admin-Zuweisung)
+    if (rolle !== undefined) {
+      console.log(`🔐 Rolle wird geändert von "${kunde.rolle}" zu "${rolle}"`);
+      kunde.rolle = rolle;
+    }
+
+    // Status aktualisieren
+    if (status) {
+      kunde.status = {
+        ...kunde.status,
+        ...status
+      };
+    }
+
+    const aktualisiertKunde = await kunde.save();
+
+    // Passwort aus Response entfernen
+    const kundeOhnePasswort = aktualisiertKunde.toObject();
+    delete kundeOhnePasswort.passwort;
+
+    console.log(`✅ Kunde ${kunde.kundennummer} erfolgreich aktualisiert. Neue Rolle: ${aktualisiertKunde.rolle}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Kundendaten erfolgreich aktualisiert',
+      data: kundeOhnePasswort
+    });
+
+  } catch (error) {
+    console.error('Kunde Update Error:', error);
+    
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'E-Mail-Adresse bereits vergeben'
+      });
+    }
+
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: validationErrors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der Kundendaten'
     });
   }
 });

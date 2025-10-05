@@ -4,13 +4,24 @@ const path = require('path');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-// Dotenv-Vault Configuration
+// Dotenv Configuration - lädt die richtige .env Datei basierend auf NODE_ENV
 if (process.env.DOTENV_KEY) {
+  // Railway verwendet dotenv-vault
   require('dotenv-vault/config');
 } else {
+  // Lokal: Lade .env.development oder .env.production
+  const envFile = process.env.NODE_ENV === 'production' 
+    ? '.env.production' 
+    : '.env.development';
+  
   require('dotenv').config({
-    path: path.resolve(__dirname, '../..', '.env')
+    path: path.resolve(__dirname, '..', envFile)
   });
+  
+  console.log(`🔧 Loaded environment from: ${envFile}`);
+  console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`🔌 PORT: ${process.env.PORT}`);
+  console.log(`🗄️  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
 }
 
 // Route Imports

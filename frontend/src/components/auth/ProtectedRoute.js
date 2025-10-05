@@ -20,8 +20,10 @@ const ProtectedRoute = ({ children, requiredRole, requiredPermission }) => {
     return <Navigate to="/login" replace />;
   }
 
-  // Rolle prüfen
-  if (requiredRole && user.role !== requiredRole) {
+  // Rolle prüfen - unterstützt sowohl 'role' (User) als auch 'rolle' (Kunde)
+  const userRole = user.rolle || user.role;
+  
+  if (requiredRole && userRole !== requiredRole) {
     return <Navigate to="/" replace />;
   }
 
