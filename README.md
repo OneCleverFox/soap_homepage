@@ -10,11 +10,8 @@ Eine moderne, vollständige E-Commerce-Lösung für handgemachte Naturkosmetik u
 
 ## 📚 Dokumentation
 
-Für detaillierte Informationen zu Setup und Deployment, siehe:
-
-- **[QUICKSTART.md](./QUICKSTART.md)** - Schnellstart für lokale Entwicklung (5 Minuten)
-- **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Umfassende Deployment-Anleitung (Railway + Vercel)
-- **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** - Schritt-für-Schritt Checkliste
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Systemarchitektur und technische Details
+- **[BILDOPTIMIERUNG.md](./BILDOPTIMIERUNG.md)** - Automatische Bildkomprimierung & Migration
 
 ## ✨ Features
 
@@ -37,6 +34,7 @@ Für detaillierte Informationen zu Setup und Deployment, siehe:
 - ✅ Portfolio-Verwaltung
 - ✅ Rohstoff-Verwaltung (Rohseife, Duftöle, Verpackungen)
 - ✅ Warenberechnung für Produktionsplanung
+- ✅ **Automatischer Bild-Upload mit Optimierung**
 
 ### 🔒 Sicherheit & Performance
 
@@ -44,6 +42,9 @@ Für detaillierte Informationen zu Setup und Deployment, siehe:
 - ✅ Passwort-Hashing mit bcrypt
 - ✅ Rate Limiting und CORS Protection
 - ✅ Input-Validierung und Security Headers
+- ✅ **MongoDB Retry Mechanism** (5 Versuche, Exponential Backoff)
+- ✅ **Automatische Bildoptimierung** (Sharp, WebP, ~95% kleiner)
+- ✅ **Base64-Bilder in MongoDB** (persistent, überlebt Deployments)
 - ✅ SEO-optimiert und Performance-optimiert
 
 ## 🛠️ Technologie Stack
@@ -51,6 +52,7 @@ Für detaillierte Informationen zu Setup und Deployment, siehe:
 ### Backend
 - **Node.js** & **Express.js** - Server Framework
 - **MongoDB Atlas** mit **Mongoose ODM** - Cloud-Datenbank
+- **Sharp** - Bildoptimierung und -komprimierung
 - **JWT** - Authentication & Authorization
 - **bcrypt** - Password Hashing
 - **Helmet** - Security Middleware
@@ -83,8 +85,13 @@ cd soap_homepage
 cd backend
 npm install
 
-# Environment File erstellen (siehe QUICKSTART.md)
-# Erstelle backend/.env.development mit MongoDB URI, JWT Secret, etc.
+# Environment File erstellen
+cp .env.development.example .env.development
+# Bearbeite .env.development mit deinen Daten:
+# - MONGODB_URI (MongoDB Atlas Connection String)
+# - JWT_SECRET (z.B. mit openssl rand -base64 64)
+# - ADMIN_EMAIL & ADMIN_PASSWORD
+# - FRONTEND_URL=http://localhost:3001
 
 npm start  # Backend startet auf Port 5000
 
@@ -93,25 +100,59 @@ cd ../frontend
 npm install
 
 # Environment File erstellen
-# Erstelle frontend/.env.development
+echo "REACT_APP_API_URL=http://localhost:5000/api" > .env.development
 
 npm start  # Frontend startet auf Port 3001
 ```
 
-**Detaillierte Anleitung**: Siehe [QUICKSTART.md](./QUICKSTART.md)
+### Erste Schritte
+
+1. **MongoDB Atlas Setup**:
+   - Erstelle kostenlosen Account auf mongodb.com
+   - Erstelle Cluster und Database User
+   - Füge `0.0.0.0/0` zu Network Access hinzu
+   - Kopiere Connection String in `.env.development`
+
+2. **Admin-Account**:
+   - Wird automatisch beim ersten Start erstellt
+   - Email & Passwort aus `.env.development`
+
+3. **Test-Produkte**:
+   - Admin-Panel öffnen: `http://localhost:3001/admin`
+   - Portfolio → Produkt erstellen
+   - Bild hochladen (wird automatisch optimiert!)
 
 ## 🚀 Deployment
 
-Das Projekt ist optimiert für **Railway (Backend)** und **Vercel (Frontend)**.
+### Railway (Backend)
 
-### Automatisches Deployment
+1. **GitHub Repository verbinden**
+2. **Create New Project** → Deploy from GitHub
+3. **Root Directory**: `/backend`
+4. **Environment Variables** setzen:
+   ```
+   NODE_ENV=production
+   PORT=5000
+   MONGODB_URI=mongodb+srv://...
+   JWT_SECRET=your-secure-secret
+   ADMIN_EMAIL=your@email.com
+   ADMIN_PASSWORD=securepassword
+   FRONTEND_URL=https://your-vercel-domain.vercel.app
+   CORS_ORIGIN=*
+   ```
+5. **Deploy** klicken
 
-1. **GitHub Repository** verbinden
-2. **Railway**: Backend automatisch deployen
-3. **Vercel**: Frontend automatisch deployen
-4. **Environment Variables** in beiden Plattformen setzen
+### Vercel (Frontend)
 
-**Vollständige Anleitung**: Siehe [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
+1. **GitHub Repository verbinden**
+2. **Root Directory**: `/frontend`
+3. **Environment Variables** setzen:
+   ```
+   REACT_APP_API_URL=https://your-railway-domain.railway.app/api
+   REACT_APP_FRONTEND_URL=https://your-vercel-domain.vercel.app
+   GENERATE_SOURCEMAP=false
+   ```
+4. **Deploy** klicken
 
 ## 📁 Projekt-Struktur
 
@@ -123,9 +164,12 @@ soap_homepage/
 │   │   ├── models/            # MongoDB Schemas
 │   │   ├── routes/            # API Routes
 │   │   ├── controllers/       # Business Logic
-│   │   └── middleware/        # Auth & Validation
-│   ├── .env.development       # Lokale Config (nicht in Git)
-│   ├── .env.production        # Deployment Referenz (in Git)
+│   │   ├── middleware/        # Auth, Validation & Image Optimization
+│   │   │   ├── auth.js
+│   │   │   ├── validation.js
+│   │   │   └── imageOptimization.js  # Sharp Middleware
+│   ├── scripts/               # Utility Scripts
+│   │   └── migrateImagesToBase64.js
 │   └── package.json
 │
 ├── frontend/                   # React Frontend
@@ -136,15 +180,24 @@ soap_homepage/
 │   │   ├── contexts/          # Context Providers (Auth, Cart)
 │   │   ├── services/          # API Services
 │   │   └── admin/             # Admin Panel Components
-│   ├── .env.development       # Lokale Config (nicht in Git)
-│   ├── .env.production        # Deployment Referenz (in Git)
 │   └── package.json
 │
-├── QUICKSTART.md              # Schnellstart Guide
-├── DEPLOYMENT_GUIDE.md        # Deployment Dokumentation
-├── DEPLOYMENT_CHECKLIST.md    # Deployment Checkliste
+├── ARCHITECTURE.md            # Architektur-Dokumentation
+├── BILDOPTIMIERUNG.md         # Bildoptimierung & Migration
 └── README.md                  # Diese Datei
 ```
+
+## 🎨 Bildoptimierung
+
+Das System optimiert **alle** hochgeladenen Bilder automatisch:
+
+- 📐 **Auto-Resize**: Max. 1200px Breite
+- 🎨 **WebP-Konvertierung**: ~30% kleiner als JPEG
+- 💾 **Base64 in MongoDB**: Persistent, überlebt Deployments
+- 🔒 **EXIF-Daten entfernt**: Datenschutz & Sicherheit
+- ⚡ **~95% Größenreduktion**: 3 MB → ~300 KB typisch
+
+**Details**: Siehe [BILDOPTIMIERUNG.md](./BILDOPTIMIERUNG.md)
 
 ## 🔑 Test Accounts
 
@@ -158,52 +211,89 @@ soap_homepage/
 - Typ: Kunde mit Admin-Rolle
 - Kundennummer: `KD25106383`
 
-## 🌍 Environment Variables
-
-### Backend (Railway)
-
-```bash
-NODE_ENV=production
-PORT=5000
-MONGODB_URI=mongodb+srv://...
-JWT_SECRET=your-secure-secret
-FRONTEND_URL=https://your-vercel-domain.vercel.app
-```
-
-### Frontend (Vercel)
-
-```bash
-REACT_APP_API_URL=https://your-railway-domain.railway.app/api
-REACT_APP_FRONTEND_URL=https://your-vercel-domain.vercel.app
-GENERATE_SOURCEMAP=false
-```
-
-**Vollständige Liste**: Siehe [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)
-
 ## 🛣️ API Endpoints
 
 ### Public Routes
-- `GET /api/products` - Alle Produkte
-- `GET /api/products/:id` - Einzelnes Produkt
-- `POST /api/auth/login` - Login
-- `POST /api/kunden/register` - Kundenregistrierung
+```
+GET  /api/health                    # Health Check
+GET  /api/version                   # Version Info
+GET  /api/portfolio/with-prices     # Alle Produkte
+POST /api/auth/login                # Login
+POST /api/kunden/register           # Kundenregistrierung
+```
 
 ### Protected Routes (JWT required)
-- `GET /api/cart` - Warenkorb abrufen
-- `POST /api/cart/add` - Produkt hinzufügen
-- `POST /api/orders` - Bestellung erstellen
+```
+GET  /api/cart                      # Warenkorb abrufen
+POST /api/cart/add                  # Produkt hinzufügen
+POST /api/orders                    # Bestellung erstellen
+```
 
 ### Admin Routes (Admin role required)
-- `GET /api/admin/portfolio` - Portfolio verwalten
-- `GET /api/rohseife` - Rohstoffe verwalten
-- `GET /api/kunden` - Kunden verwalten
-- `GET /api/warenberechnung` - Warenberechnung
+```
+GET  /api/admin/portfolio           # Portfolio verwalten
+POST /api/admin/portfolio/:id/upload-image  # Bild hochladen (auto-optimiert!)
+GET  /api/rohseife                  # Rohstoffe verwalten
+GET  /api/kunden                    # Kunden verwalten
+GET  /api/warenberechnung           # Warenberechnung
+```
 
-**Vollständige API Dokumentation**: Siehe Backend Code
+**Vollständige API Dokumentation**: Siehe [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+## 🏗️ Technische Highlights
+
+### Backend Features
+- ✅ **MongoDB Retry Mechanism**: 5 Versuche mit Exponential Backoff (5s → 25s)
+- ✅ **Automatische Bildoptimierung**: Sharp-Middleware für alle Uploads
+- ✅ **Base64-Speicherung**: Bilder direkt in MongoDB (persistent)
+- ✅ **Dual Role System**: Admin-User + Admin-Kunde gleichzeitig
+- ✅ **Security**: Helmet, Rate Limiting, JWT, bcrypt
+- ✅ **WebP-Konvertierung**: Moderne Browser-Optimierung
+
+### Frontend Features
+- ✅ **Material-UI**: Professionelles Design System
+- ✅ **Context API**: Zentrales State Management
+- ✅ **Responsive Design**: Mobile-first Approach
+- ✅ **SEO-optimiert**: Meta-Tags & Performance
+- ✅ **Base64-Bilder Support**: Automatische Anzeige
+
+## 📊 Performance
+
+- ⚡ **Bildoptimierung**: ~95% Größenreduktion
+- ⚡ **MongoDB**: Cloud-optimiert mit Retry Mechanism
+- ⚡ **CDN**: Vercel Edge Network für Frontend
+- ⚡ **Lazy Loading**: React.lazy() für Code-Splitting
+- ⚡ **Caching**: Browser & Server-side Caching
+
+## 🔄 Version History
+
+### Version 2.0.0 (2025-10-05)
+- ✨ Automatische Bildoptimierung mit Sharp
+- ✨ Base64-Speicherung in MongoDB
+- ✨ MongoDB Retry Mechanism (5 Versuche)
+- ✨ WebP-Konvertierung für moderne Browser
+- ✨ EXIF-Daten Entfernung (Datenschutz)
+- ✨ Migration-Script für bestehende Bilder
+- 🐛 Dual Role System Bug-Fix (Admin-Kunde Warenberechnung)
+- 📚 Konsolidierte Dokumentation
+
+### Version 1.0.0 (2025-09-01)
+- 🎉 Initial Release
+- ✅ MERN Stack E-Commerce Platform
+- ✅ Admin-Panel & Kundenregistrierung
+- ✅ Warenkorb & Checkout
+- ✅ Portfolio-Verwaltung
+- ✅ Rohstoff-Verwaltung
 
 ## 🤝 Mitwirken
 
 Contributions sind willkommen! Bitte erstelle einen Pull Request.
+
+1. Fork das Repository
+2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
+4. Push zum Branch (`git push origin feature/AmazingFeature`)
+5. Öffne einen Pull Request
 
 ## 📝 Lizenz
 
@@ -221,9 +311,11 @@ MIT License - siehe LICENSE Datei
 - MongoDB Atlas für die Cloud-Datenbank
 - Railway für Backend Hosting
 - Vercel für Frontend Hosting
+- Sharp für Bildoptimierung
 
 ---
 
 **Status**: In Production ✅  
-**Version**: 1.0.1  
-**Last Updated**: 5. Oktober 2025
+**Version**: 2.0.0  
+**Last Updated**: 5. Oktober 2025  
+**Features**: MongoDB Retry Mechanism • Automatische Bildoptimierung • Base64-Speicherung • Dual Role System
