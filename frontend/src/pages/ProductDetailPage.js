@@ -10,10 +10,11 @@ import {
   Alert,
   Grid,
   Card,
-  CardMedia,
   Divider,
   Paper,
-  IconButton
+  IconButton,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import {
   ArrowBack,
@@ -30,6 +31,7 @@ import { portfolioAPI } from '../services/api';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import LazyImage from '../components/LazyImage';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -38,6 +40,9 @@ const ProductDetailPage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { addToCart } = useCart();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -135,66 +140,75 @@ const ProductDetailPage = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
       <Button 
         startIcon={<ArrowBack />} 
         onClick={() => navigate('/products')} 
-        sx={{ mb: 3 }}
+        sx={{ mb: isMobile ? 2 : 3 }}
         variant="outlined"
+        size={isMobile ? "small" : "medium"}
       >
-        Zurück zur Übersicht
+        Zurück
       </Button>
 
-      <Grid container spacing={4}>
+      <Grid container spacing={isMobile ? 2 : 4}>
         <Grid item xs={12} md={6}>
           <Card elevation={3}>
-            <CardMedia
-              component="img"
-              image={getImageUrl(selectedImage || product.bilder?.hauptbild)}
+            <LazyImage
+              src={getImageUrl(selectedImage || product.bilder?.hauptbild)}
               alt={product.name}
-              sx={{ height: 500, objectFit: 'cover' }}
+              height={isMobile ? 300 : 500}
+              objectFit="cover"
             />
           </Card>
 
           {product.bilder?.galerie && product.bilder.galerie.length > 0 && (
             <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
               <Box
-                component="img"
-                src={getImageUrl(product.bilder.hauptbild)}
                 onClick={() => setSelectedImage(product.bilder.hauptbild)}
-                alt={`${product.name} - Hauptbild`}
                 sx={{
-                  width: 100,
-                  height: 100,
-                  objectFit: 'cover',
+                  width: isMobile ? 60 : 100,
+                  height: isMobile ? 60 : 100,
                   borderRadius: 1,
                   cursor: 'pointer',
                   border: selectedImage === product.bilder.hauptbild ? '3px solid' : '1px solid',
                   borderColor: selectedImage === product.bilder.hauptbild ? 'primary.main' : 'grey.300',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  overflow: 'hidden'
                 }}
-              />
+              >
+                <LazyImage
+                  src={getImageUrl(product.bilder.hauptbild)}
+                  alt={`${product.name} - Hauptbild`}
+                  height={isMobile ? 60 : 100}
+                  objectFit="cover"
+                />
+              </Box>
               
               {product.bilder.galerie.map((img, i) => {
                 const imgUrl = typeof img === 'string' ? img : img.url;
                 return (
                   <Box
                     key={i}
-                    component="img"
-                    src={getImageUrl(imgUrl)}
                     onClick={() => setSelectedImage(imgUrl)}
-                    alt={`${product.name} - Galerie ${i + 1}`}
                     sx={{
-                      width: 100,
-                      height: 100,
-                      objectFit: 'cover',
+                      width: isMobile ? 60 : 100,
+                      height: isMobile ? 60 : 100,
                       borderRadius: 1,
                       cursor: 'pointer',
                       border: selectedImage === imgUrl ? '3px solid' : '1px solid',
                       borderColor: selectedImage === imgUrl ? 'primary.main' : 'grey.300',
-                      transition: 'all 0.3s ease'
+                      transition: 'all 0.3s ease',
+                      overflow: 'hidden'
                     }}
-                  />
+                  >
+                    <LazyImage
+                      src={getImageUrl(imgUrl)}
+                      alt={`${product.name} - Galerie ${i + 1}`}
+                      height={isMobile ? 60 : 100}
+                      objectFit="cover"
+                    />
+                  </Box>
                 );
               })}
             </Box>
@@ -202,26 +216,31 @@ const ProductDetailPage = () => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Typography variant="h3" fontWeight="bold" gutterBottom>
+          <Typography variant={isMobile ? "h4" : "h3"} fontWeight="bold" gutterBottom>
             {product.name}
           </Typography>
 
-          <Chip label={product.seife} color="primary" sx={{ mt: 2, mb: 3 }} />
+          <Chip 
+            label={product.seife} 
+            color="primary" 
+            sx={{ mt: 2, mb: 3 }}
+            size={isMobile ? "small" : "medium"}
+          />
 
           {product.beschreibung?.kurz && (
-            <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
+            <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 3 }}>
               {product.beschreibung.kurz}
             </Typography>
           )}
 
-          <Divider sx={{ my: 3 }} />
+          <Divider sx={{ my: isMobile ? 2 : 3 }} />
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1.5 : 2 }}>
             <Box display="flex" alignItems="center">
-              <Inventory sx={{ mr: 2, color: 'primary.main' }} />
+              <Inventory sx={{ mr: 2, color: 'primary.main', fontSize: isMobile ? 20 : 24 }} />
               <Box>
-                <Typography variant="body2" color="text.secondary">Gewicht</Typography>
-                <Typography fontWeight="bold">{product.gramm}g</Typography>
+                <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">Gewicht</Typography>
+                <Typography fontWeight="bold" variant={isMobile ? "body2" : "body1"}>{product.gramm}g</Typography>
               </Box>
             </Box>
 
@@ -268,26 +287,39 @@ const ProductDetailPage = () => {
 
           {/* Mengenauswahl und Warenkorb-Button - für Admins und Kunden */}
           {user && product.preis && product.preis > 0 && (
-            <Box sx={{ mt: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Box sx={{ mt: isMobile ? 2 : 3 }}>
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'stretch' : 'center',
+                gap: 2, 
+                mb: 2 
+              }}>
                 <Typography variant="body1" fontWeight="bold">
                   Menge:
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', border: 1, borderColor: 'grey.300', borderRadius: 1 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  border: 1, 
+                  borderColor: 'grey.300', 
+                  borderRadius: 1,
+                  justifyContent: isMobile ? 'center' : 'flex-start'
+                }}>
                   <IconButton 
                     onClick={() => handleQuantityChange(-1)}
                     disabled={quantity <= 1}
-                    size="small"
+                    size={isMobile ? "medium" : "small"}
                   >
                     <RemoveIcon />
                   </IconButton>
-                  <Typography sx={{ px: 3, minWidth: 50, textAlign: 'center' }}>
+                  <Typography sx={{ px: isMobile ? 4 : 3, minWidth: isMobile ? 60 : 50, textAlign: 'center' }}>
                     {quantity}
                   </Typography>
                   <IconButton 
                     onClick={() => handleQuantityChange(1)}
                     disabled={quantity >= 99}
-                    size="small"
+                    size={isMobile ? "medium" : "small"}
                   >
                     <AddIcon />
                   </IconButton>
@@ -297,7 +329,7 @@ const ProductDetailPage = () => {
               <Button
                 variant="contained"
                 fullWidth
-                size="large"
+                size={isMobile ? "large" : "medium"}
                 startIcon={<ShoppingCart />}
                 onClick={handleAddToCart}
                 sx={{ mb: 2 }}
@@ -308,7 +340,7 @@ const ProductDetailPage = () => {
           )}
 
           {!user && (
-            <Alert severity="info" sx={{ mt: 3 }}>
+            <Alert severity="info" sx={{ mt: isMobile ? 2 : 3 }}>
               Bitte <Button onClick={() => navigate('/login')} size="small">melden Sie sich an</Button>, um Produkte zu bestellen.
             </Alert>
           )}
