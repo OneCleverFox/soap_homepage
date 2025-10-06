@@ -2,10 +2,10 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 // API Base URL
-// Im Development-Modus wird der Proxy aus package.json verwendet (/api -> http://localhost:5000/api)
+// Im Development-Modus verwenden wir die volle URL (Proxy funktioniert nicht immer zuverlässig)
 // In Production kommt die vollständige URL aus der Environment-Variable
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? '/api' 
+  ? 'http://localhost:5000/api' 
   : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
 
 // Export für direkten Zugriff
