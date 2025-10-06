@@ -235,11 +235,16 @@ const AdminLager = () => {
       const data = await response.json();
       
       if (data.success) {
+        // Rohstoffverbrauch anzeigen (falls vorhanden)
+        const rohstoffInfo = data.data?.verwendeteRohstoffe && data.data.verwendeteRohstoffe.length > 0
+          ? `\n\nVerwendete Rohstoffe:\n${data.data.verwendeteRohstoffe.map(r => 
+              `- ${r.name}: ${r.menge} ${r.einheit} (Neuer Bestand: ${r.neuerBestand})`
+            ).join('\n')}`
+          : '';
+        
         setMessage({ 
           type: 'success', 
-          text: `${data.message}\n\nRohstoffverbrauch:\n${data.data.rohstoffVerbrauch.map(r => 
-            `- ${r.rohstoff}: ${r.menge} ${r.einheit} (Neuer Bestand: ${r.neuerBestand})`
-          ).join('\n')}`
+          text: `${data.message}${rohstoffInfo}`
         });
         
         // REACTIVE UPDATE: Aktualisiere Produkt-Bestand direkt in UI
@@ -253,7 +258,7 @@ const AdminLager = () => {
           )
         }));
         
-        setProduktionDialog(false);
+        setProduktionDialog(false); // Dialog schließen
         loadBestand(); // Hintergrund-Reload für Datenkonsistenz
         loadWarnungen();
         
@@ -638,7 +643,7 @@ const AdminLager = () => {
                     artikelId: '',
                     einheit: e.target.value === 'rohseife' ? 'g' : 
                              e.target.value === 'duftoil' ? 'tropfen' : 
-                             e.target.value === 'verpackung' ? 'stück' : 'stück'
+                             e.target.value === 'verpackung' ? 'Stück' : 'Stück'
                   });
                 }}
               >
