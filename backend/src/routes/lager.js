@@ -554,7 +554,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     // Buche Fertigprodukt ein (Bestand-Collection)
     const produktBestand = await Bestand.findeOderErstelle('produkt', produktId, 'stück');
     const vorherProdukt = produktBestand.menge;
-    await produktBestand.erhoeheBestand(anzahl, 'Produktion abgeschlossen', notizen);
+    await produktBestand.erhoeheBestand(anzahl, 'produktion', notizen);
     
     // Erstelle Bewegungs-Log für Fertigprodukt
     try {
@@ -570,7 +570,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
         einheit: 'stück',
         bestandVorher: vorherProdukt,
         bestandNachher: produktBestand.menge,
-        grund: 'Produktion abgeschlossen',
+        grund: 'produktion',
         notizen,
         userId: req.user.id || req.user.userId || req.user._id,
         referenz: {
@@ -811,8 +811,7 @@ router.get('/historie/:bestandId', authenticateToken, requireAdmin, async (req, 
     
     const bewegungen = await Bewegung.find({ bestandId })
       .sort({ createdAt: -1 })
-      .limit(100)
-      .populate('userId', 'email name');
+      .limit(100);
     
     res.json({
       success: true,
