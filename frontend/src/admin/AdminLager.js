@@ -90,7 +90,8 @@ const AdminLager = () => {
     menge: 0,
     aktion: 'hinzufuegen', // 'hinzufuegen' oder 'entnehmen'
     notizen: '',
-    aktuellerBestand: 0 // Für Anzeige
+    aktuellerBestand: 0, // Für Anzeige
+    mindestbestand: 0 // Für Farb-Logik
   });
   
   const [historie, setHistorie] = useState([]);
@@ -281,7 +282,8 @@ const AdminLager = () => {
           menge: 0,
           aktion: 'hinzufuegen',
           notizen: '',
-          aktuellerBestand: 0
+          aktuellerBestand: 0,
+          mindestbestand: 0
         });
       } else {
         setMessage({ type: 'error', text: data.message });
@@ -375,7 +377,8 @@ const AdminLager = () => {
                           menge: 0,
                           aktion: 'hinzufuegen',
                           notizen: '',
-                          aktuellerBestand: item.menge
+                          aktuellerBestand: item.menge,
+                          mindestbestand: item.mindestbestand || 0
                         });
                         setKorrekturDialog(true);
                       }}
@@ -465,7 +468,8 @@ const AdminLager = () => {
                             menge: 0,
                             aktion: 'hinzufuegen',
                             notizen: '',
-                            aktuellerBestand: item.menge
+                            aktuellerBestand: item.menge,
+                            mindestbestand: item.mindestbestand || 0
                           });
                           setKorrekturDialog(true);
                         }}
@@ -762,27 +766,49 @@ const AdminLager = () => {
               Tragen Sie die <strong>Menge</strong> ein und wählen Sie, ob Sie diese hinzufügen oder entnehmen möchten.
             </Alert>
 
-            {korrekturForm.aktuellerBestand > 0 && (
+            {korrekturForm.aktuellerBestand >= 0 && korrekturForm.artikelId && (
               <Paper 
                 elevation={0} 
                 sx={{ 
                   p: 2, 
-                  bgcolor: 'primary.light', 
-                  color: 'primary.contrastText',
-                  borderRadius: 1
+                  bgcolor: korrekturForm.aktuellerBestand < korrekturForm.mindestbestand 
+                    ? 'warning.light' 
+                    : 'grey.100',
+                  color: korrekturForm.aktuellerBestand < korrekturForm.mindestbestand 
+                    ? 'warning.contrastText' 
+                    : 'text.primary',
+                  borderRadius: 1,
+                  border: korrekturForm.aktuellerBestand < korrekturForm.mindestbestand 
+                    ? '2px solid' 
+                    : '1px solid',
+                  borderColor: korrekturForm.aktuellerBestand < korrekturForm.mindestbestand 
+                    ? 'warning.main' 
+                    : 'grey.300'
                 }}
               >
-                <Typography variant="body2" gutterBottom>
-                  Aktueller Bestand:
-                </Typography>
-                <Typography variant="h5" fontWeight="bold">
-                  {korrekturForm.aktuellerBestand} {
-                    korrekturForm.typ === 'rohseife' ? 'g' :
-                    korrekturForm.typ === 'duftoil' ? 'Tropfen' :
-                    korrekturForm.typ === 'verpackung' ? 'Stück' :
-                    'Stück'
-                  }
-                </Typography>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Box>
+                    <Typography variant="body2" gutterBottom>
+                      Aktueller Bestand:
+                    </Typography>
+                    <Typography variant="h5" fontWeight="bold">
+                      {korrekturForm.aktuellerBestand} {
+                        korrekturForm.typ === 'rohseife' ? 'g' :
+                        korrekturForm.typ === 'duftoil' ? 'Tropfen' :
+                        korrekturForm.typ === 'verpackung' ? 'Stück' :
+                        'Stück'
+                      }
+                    </Typography>
+                  </Box>
+                  {korrekturForm.aktuellerBestand < korrekturForm.mindestbestand && (
+                    <Chip 
+                      label="Unter Mindestbestand!" 
+                      color="warning" 
+                      size="small" 
+                      icon={<WarningIcon />}
+                    />
+                  )}
+                </Stack>
               </Paper>
             )}
 
@@ -796,7 +822,8 @@ const AdminLager = () => {
                     ...korrekturForm,
                     typ: e.target.value,
                     artikelId: '',
-                    aktuellerBestand: 0
+                    aktuellerBestand: 0,
+                    mindestbestand: 0
                   });
                 }}
               >
@@ -821,7 +848,8 @@ const AdminLager = () => {
                   setKorrekturForm({ 
                     ...korrekturForm, 
                     artikelId: e.target.value,
-                    aktuellerBestand: selectedItem?.vorrat || 0
+                    aktuellerBestand: selectedItem?.vorrat || 0,
+                    mindestbestand: selectedItem?.mindestbestand || 0
                   });
                 }}
               >
@@ -869,8 +897,13 @@ const AdminLager = () => {
             />
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setKorrekturDialog(false)}>Abbrechen</Button>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button 
+            onClick={() => setKorrekturDialog(false)}
+            variant="outlined"
+          >
+            Abbrechen
+          </Button>
           <Button 
             onClick={() => {
               setKorrekturForm({ ...korrekturForm, aktion: 'hinzufuegen' });
@@ -880,9 +913,13 @@ const AdminLager = () => {
             startIcon={<AddIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
             sx={{
-              bgcolor: '#4CAF50',
+              bgcolor: '#10B981',
+              color: 'white',
               '&:hover': {
-                bgcolor: '#45a049'
+                bgcolor: '#059669'
+              },
+              '&:disabled': {
+                bgcolor: 'rgba(16, 185, 129, 0.3)'
               }
             }}
           >
@@ -897,9 +934,13 @@ const AdminLager = () => {
             startIcon={<EditIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
             sx={{
-              bgcolor: '#FF9800',
+              bgcolor: '#EF4444',
+              color: 'white',
               '&:hover': {
-                bgcolor: '#F57C00'
+                bgcolor: '#DC2626'
+              },
+              '&:disabled': {
+                bgcolor: 'rgba(239, 68, 68, 0.3)'
               }
             }}
           >

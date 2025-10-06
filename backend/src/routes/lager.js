@@ -832,9 +832,9 @@ router.get('/historie/:bestandId', authenticateToken, requireAdmin, async (req, 
 router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const [rohseifen, duftoele, verpackungen, produkte] = await Promise.all([
-      Rohseife.find().select('_id bezeichnung aktuellVorrat').lean(),
-      Duftoil.find().select('_id bezeichnung aktuellVorrat').lean(),
-      Verpackung.find().select('_id bezeichnung aktuellVorrat').lean(),
+      Rohseife.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      Duftoil.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      Verpackung.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
       Portfolio.find().select('_id name').lean()
     ]);
     
@@ -844,17 +844,20 @@ router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
         rohseifen: rohseifen.map(r => ({ 
           id: r._id, 
           name: r.bezeichnung,
-          vorrat: r.aktuellVorrat 
+          vorrat: r.aktuellVorrat,
+          mindestbestand: r.mindestbestand || 0
         })),
         duftoele: duftoele.map(d => ({ 
           id: d._id, 
           name: d.bezeichnung,
-          vorrat: d.aktuellVorrat
+          vorrat: d.aktuellVorrat,
+          mindestbestand: d.mindestbestand || 0
         })),
         verpackungen: verpackungen.map(v => ({ 
           id: v._id, 
           name: v.bezeichnung,
-          vorrat: v.aktuellVorrat
+          vorrat: v.aktuellVorrat,
+          mindestbestand: v.mindestbestand || 0
         })),
         produkte: produkte.map(p => ({ id: p._id, name: p.name }))
       }
