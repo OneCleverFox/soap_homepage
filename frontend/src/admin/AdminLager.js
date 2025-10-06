@@ -87,7 +87,8 @@ const AdminLager = () => {
   const [korrekturForm, setKorrekturForm] = useState({
     typ: 'rohseife',
     artikelId: '',
-    aenderung: 0,
+    menge: 0,
+    aktion: 'hinzufuegen', // 'hinzufuegen' oder 'entnehmen'
     notizen: ''
   });
   
@@ -247,13 +248,23 @@ const AdminLager = () => {
   const handleKorrektur = async () => {
     setLoading(true);
     try {
+      // Berechne die Änderung basierend auf Aktion
+      const aenderung = korrekturForm.aktion === 'hinzufuegen' 
+        ? korrekturForm.menge 
+        : -korrekturForm.menge;
+      
       const response = await fetch(`${API_URL}/lager/korrektur`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(korrekturForm)
+        body: JSON.stringify({
+          typ: korrekturForm.typ,
+          artikelId: korrekturForm.artikelId,
+          aenderung: aenderung,
+          notizen: korrekturForm.notizen
+        })
       });
       const data = await response.json();
       
@@ -264,8 +275,10 @@ const AdminLager = () => {
         loadWarnungen();
         // Reset form
         setKorrekturForm({
-          bestandId: '',
-          aenderung: 0,
+          typ: 'rohseife',
+          artikelId: '',
+          menge: 0,
+          aktion: 'hinzufuegen',
           notizen: ''
         });
       } else {
@@ -357,7 +370,8 @@ const AdminLager = () => {
                         setKorrekturForm({
                           typ: item.typ,
                           artikelId: item.artikelId,
-                          aenderung: 0,
+                          menge: 0,
+                          aktion: 'hinzufuegen',
                           notizen: ''
                         });
                         setKorrekturDialog(true);
@@ -445,7 +459,8 @@ const AdminLager = () => {
                           setKorrekturForm({
                             typ: item.typ,
                             artikelId: item.artikelId,
-                            aenderung: 0,
+                            menge: 0,
+                            aktion: 'hinzufuegen',
                             notizen: ''
                           });
                           setKorrekturDialog(true);
@@ -739,8 +754,8 @@ const AdminLager = () => {
         <DialogTitle>Bestand korrigieren</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="warning">
-              Geben Sie eine positive Zahl ein um den Bestand zu erhöhen, oder eine negative um ihn zu verringern.
+            <Alert severity="info">
+              Tragen Sie die <strong>Menge</strong> ein und wählen Sie, ob Sie diese hinzufügen oder entnehmen möchten.
             </Alert>
 
             <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
@@ -792,13 +807,14 @@ const AdminLager = () => {
             </FormControl>
 
             <TextField
-              label="Änderung"
+              label="Menge"
               type="number"
               fullWidth
               size={isMobile ? 'small' : 'medium'}
-              value={korrekturForm.aenderung}
-              onChange={(e) => setKorrekturForm({ ...korrekturForm, aenderung: parseFloat(e.target.value) })}
-              helperText="Positive Zahl = Erhöhung, Negative Zahl = Verringerung"
+              value={korrekturForm.menge}
+              onChange={(e) => setKorrekturForm({ ...korrekturForm, menge: Math.abs(parseFloat(e.target.value) || 0) })}
+              helperText="Geben Sie nur die Menge ein (immer positiv)"
+              inputProps={{ min: 0, step: 1 }}
             />
 
             <TextField
@@ -809,17 +825,35 @@ const AdminLager = () => {
               size={isMobile ? 'small' : 'medium'}
               value={korrekturForm.notizen}
               onChange={(e) => setKorrekturForm({ ...korrekturForm, notizen: e.target.value })}
+              placeholder="z.B. Inventur-Korrektur, Beschädigung, Retoure..."
             />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setKorrekturDialog(false)}>Abbrechen</Button>
           <Button 
-            onClick={handleKorrektur} 
+            onClick={() => {
+              setKorrekturForm({ ...korrekturForm, aktion: 'hinzufuegen' });
+              setTimeout(handleKorrektur, 0);
+            }}
             variant="contained"
-            disabled={loading || !korrekturForm.artikelId || korrekturForm.aenderung === 0}
+            color="success"
+            startIcon={<AddIcon />}
+            disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
           >
-            Korrigieren
+            Hinzufügen
+          </Button>
+          <Button 
+            onClick={() => {
+              setKorrekturForm({ ...korrekturForm, aktion: 'entnehmen' });
+              setTimeout(handleKorrektur, 0);
+            }}
+            variant="contained"
+            color="error"
+            startIcon={<EditIcon />}
+            disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
+          >
+            Entnehmen
           </Button>
         </DialogActions>
       </Dialog>
