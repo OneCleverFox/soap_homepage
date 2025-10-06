@@ -63,7 +63,7 @@ const AboutPage = () => {
           Das sind wir
         </Typography>
         <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 800, mx: 'auto', lineHeight: 1.8 }}>
-          Eine Patchwork-Familie mit einer besonderen Vision: Ralf und sein 11-jähriger Sohn Jonas haben 
+          Eine Patchwork-Familie mit einer besonderen Vision: Ralf und sein Sohn Jonas haben 
           ihre gemeinsame Leidenschaft für die Seifenproduktion und handwerkliche Kunst entdeckt
         </Typography>
       </Box>
@@ -75,7 +75,7 @@ const AboutPage = () => {
           mb: 4,
           color: '#333'
         }}>
-          <span style={{ marginRight: 16, fontSize: '1.5rem' }}>👨‍👩‍👦</span>
+          <span style={{ marginRight: 16, fontSize: '1.5rem' }}></span>
           Unsere Geschichte
         </Typography>
         
@@ -211,7 +211,7 @@ const AboutPage = () => {
                 R
               </Avatar>
               <Typography variant="h5" gutterBottom color="primary">
-                Ralf (41)
+                Ralf
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Seifenmeister & Familienvater
@@ -255,7 +255,7 @@ const AboutPage = () => {
                 J
               </Avatar>
               <Typography variant="h5" gutterBottom sx={{ color: '#333' }}>
-                Jonas (11)
+                Jonas
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Nachwuchs-Designer & Seifenliebhaber
