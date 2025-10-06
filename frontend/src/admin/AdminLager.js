@@ -6,7 +6,6 @@ import {
   Tabs,
   Tab,
   Box,
-  Grid,
   Card,
   CardContent,
   Button,
@@ -41,8 +40,7 @@ import {
   History as HistoryIcon,
   Warning as WarningIcon,
   ProductionQuantityLimits as ProductionIcon,
-  CheckCircle as CheckCircleIcon,
-  LocalShipping as LocalShippingIcon
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { API_URL } from '../services/api';
 
@@ -341,7 +339,8 @@ const AdminLager = () => {
                       startIcon={<EditIcon />}
                       onClick={() => {
                         setKorrekturForm({
-                          bestandId: item._id,
+                          typ: item.typ,
+                          artikelId: item.artikelId,
                           aenderung: 0,
                           notizen: ''
                         });
@@ -428,7 +427,8 @@ const AdminLager = () => {
                         color="primary"
                         onClick={() => {
                           setKorrekturForm({
-                            bestandId: item._id,
+                            typ: item.typ,
+                            artikelId: item.artikelId,
                             aenderung: 0,
                             notizen: ''
                           });
