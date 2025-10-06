@@ -24,52 +24,75 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { typ } = req.query;
     
-    const filter = typ ? { typ } : {};
+    // Hole Daten direkt aus den Rohstoff-Collections
+    const [rohseifen, duftoele, verpackungen, produkte] = await Promise.all([
+      Rohseife.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      Duftoil.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      Verpackung.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      Portfolio.find().lean()
+    ]);
     
-    const bestaende = await Bestand.find(filter)
-      .populate('artikelId')
-      .sort({ typ: 1, createdAt: -1 });
+    // Hole Produktbestände aus Bestand-Collection (nur für Fertigprodukte)
+    const produktBestaende = await Bestand.find({ typ: 'produkt' }).populate('artikelId');
     
-    // Gruppiere nach Typ
-    const grouped = {
-      rohseifen: [],
-      duftoele: [],
-      verpackungen: [],
-      produkte: []
-    };
+    // Formatiere Rohseifen
+    const rohseifenFormatted = rohseifen.map(r => ({
+      _id: r._id,
+      artikelId: r._id,
+      name: r.bezeichnung,
+      menge: r.aktuellVorrat,
+      einheit: 'g',
+      mindestbestand: r.mindestbestand,
+      unterMindestbestand: r.aktuellVorrat < r.mindestbestand,
+      typ: 'rohseife'
+    }));
     
-    bestaende.forEach(bestand => {
-      const item = {
-        _id: bestand._id,
-        artikelId: bestand.artikelId._id,
-        name: bestand.artikelId.name,
-        menge: bestand.menge,
-        einheit: bestand.einheit,
-        mindestbestand: bestand.mindestbestand,
-        unterMindestbestand: bestand.istUnterMindestbestand(),
-        letzteAenderung: bestand.letzteAenderung,
-        notizen: bestand.notizen
-      };
-      
-      switch (bestand.typ) {
-        case 'rohseife':
-          grouped.rohseifen.push(item);
-          break;
-        case 'duftoil':
-          grouped.duftoele.push(item);
-          break;
-        case 'verpackung':
-          grouped.verpackungen.push(item);
-          break;
-        case 'produkt':
-          grouped.produkte.push(item);
-          break;
-      }
-    });
+    // Formatiere Duftöle
+    const duftoeleFormatted = duftoele.map(d => ({
+      _id: d._id,
+      artikelId: d._id,
+      name: d.bezeichnung,
+      menge: d.aktuellVorrat,
+      einheit: 'tropfen',
+      mindestbestand: d.mindestbestand,
+      unterMindestbestand: d.aktuellVorrat < d.mindestbestand,
+      typ: 'duftoil'
+    }));
+    
+    // Formatiere Verpackungen
+    const verpackungenFormatted = verpackungen.map(v => ({
+      _id: v._id,
+      artikelId: v._id,
+      name: v.bezeichnung,
+      menge: v.aktuellVorrat,
+      einheit: 'stück',
+      mindestbestand: v.mindestbestand,
+      unterMindestbestand: v.aktuellVorrat < v.mindestbestand,
+      typ: 'verpackung'
+    }));
+    
+    // Formatiere Produkte
+    const produkteFormatted = produktBestaende.map(p => ({
+      _id: p._id,
+      artikelId: p.artikelId?._id,
+      name: p.artikelId?.name,
+      menge: p.menge,
+      einheit: 'stück',
+      mindestbestand: p.mindestbestand,
+      unterMindestbestand: p.istUnterMindestbestand(),
+      letzteAenderung: p.letzteAenderung,
+      notizen: p.notizen,
+      typ: 'produkt'
+    }));
     
     res.json({
       success: true,
-      data: grouped
+      data: {
+        rohseifen: rohseifenFormatted,
+        duftoele: duftoeleFormatted,
+        verpackungen: verpackungenFormatted,
+        produkte: produkteFormatted
+      }
     });
   } catch (error) {
     console.error('Fehler beim Abrufen der Bestände:', error);
@@ -84,21 +107,75 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
 // GET /api/lager/warnungen - Artikel unter Mindestbestand
 router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const warnungen = await Bestand.findeUnterMindestbestand();
+    const warnungen = [];
     
-    const formatted = warnungen.map(bestand => ({
-      _id: bestand._id,
-      typ: bestand.typ,
-      name: bestand.artikelId?.name || 'Unbekannt',
-      menge: bestand.menge,
-      mindestbestand: bestand.mindestbestand,
-      einheit: bestand.einheit,
-      differenz: bestand.mindestbestand - bestand.menge
-    }));
+    // Rohseifen unter Mindestbestand
+    const rohseifen = await Rohseife.find({
+      $expr: { $lt: ['$aktuellVorrat', '$mindestbestand'] }
+    });
+    rohseifen.forEach(r => {
+      warnungen.push({
+        _id: r._id,
+        typ: 'rohseife',
+        name: r.bezeichnung,
+        menge: r.aktuellVorrat,
+        mindestbestand: r.mindestbestand,
+        einheit: 'g',
+        differenz: r.mindestbestand - r.aktuellVorrat
+      });
+    });
+    
+    // Duftöle unter Mindestbestand
+    const duftoele = await Duftoil.find({
+      $expr: { $lt: ['$aktuellVorrat', '$mindestbestand'] }
+    });
+    duftoele.forEach(d => {
+      warnungen.push({
+        _id: d._id,
+        typ: 'duftoil',
+        name: d.bezeichnung,
+        menge: d.aktuellVorrat,
+        mindestbestand: d.mindestbestand,
+        einheit: 'tropfen',
+        differenz: d.mindestbestand - d.aktuellVorrat
+      });
+    });
+    
+    // Verpackungen unter Mindestbestand
+    const verpackungen = await Verpackung.find({
+      $expr: { $lt: ['$aktuellVorrat', '$mindestbestand'] }
+    });
+    verpackungen.forEach(v => {
+      warnungen.push({
+        _id: v._id,
+        typ: 'verpackung',
+        name: v.bezeichnung,
+        menge: v.aktuellVorrat,
+        mindestbestand: v.mindestbestand,
+        einheit: 'stück',
+        differenz: v.mindestbestand - v.aktuellVorrat
+      });
+    });
+    
+    // Produkte unter Mindestbestand
+    const produkte = await Bestand.findeUnterMindestbestand();
+    produkte.forEach(p => {
+      if (p.artikelId) {
+        warnungen.push({
+          _id: p._id,
+          typ: 'produkt',
+          name: p.artikelId.name,
+          menge: p.menge,
+          mindestbestand: p.mindestbestand,
+          einheit: 'stück',
+          differenz: p.mindestbestand - p.menge
+        });
+      }
+    });
     
     res.json({
       success: true,
-      data: formatted
+      data: warnungen
     });
   } catch (error) {
     console.error('Fehler beim Abrufen der Warnungen:', error);
@@ -113,7 +190,7 @@ router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
 // POST /api/lager/inventur - Inventur durchführen
 router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { typ, artikelId, menge, einheit, mindestbestand, notizen } = req.body;
+    const { typ, artikelId, menge, mindestbestand, notizen } = req.body;
     
     if (!typ || !artikelId || menge === undefined) {
       return res.status(400).json({
@@ -122,56 +199,172 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
     
-    // Finde oder erstelle Bestand
-    let bestand = await Bestand.findeOderErstelle(typ, artikelId, einheit || 'stück');
+    let artikel;
+    let vorher;
+    let einheit;
     
-    const vorher = bestand.menge;
-    
-    // Setze neuen Bestand
-    bestand.menge = menge;
-    if (mindestbestand !== undefined) {
-      bestand.mindestbestand = mindestbestand;
+    // Je nach Typ den aktuellVorrat im entsprechenden Model aktualisieren
+    switch (typ) {
+      case 'rohseife':
+        artikel = await Rohseife.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Rohseife nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        artikel.aktuellVorrat = menge;
+        if (mindestbestand !== undefined) {
+          artikel.mindestbestand = mindestbestand;
+        }
+        await artikel.save();
+        einheit = 'g';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'inventur',
+          bestandId: null, // Kein Bestand-Eintrag, direkt in Rohstoff
+          artikel: {
+            typ: 'rohseife',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: menge - vorher,
+          einheit: 'g',
+          bestandVorher: vorher,
+          bestandNachher: menge,
+          grund: 'Manuelle Inventur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'duftoil':
+        artikel = await Duftoil.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Duftöl nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        artikel.aktuellVorrat = menge;
+        if (mindestbestand !== undefined) {
+          artikel.mindestbestand = mindestbestand;
+        }
+        await artikel.save();
+        einheit = 'tropfen';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'inventur',
+          bestandId: null,
+          artikel: {
+            typ: 'duftoil',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: menge - vorher,
+          einheit: 'tropfen',
+          bestandVorher: vorher,
+          bestandNachher: menge,
+          grund: 'Manuelle Inventur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'verpackung':
+        artikel = await Verpackung.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Verpackung nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        artikel.aktuellVorrat = menge;
+        if (mindestbestand !== undefined) {
+          artikel.mindestbestand = mindestbestand;
+        }
+        await artikel.save();
+        einheit = 'stück';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'inventur',
+          bestandId: null,
+          artikel: {
+            typ: 'verpackung',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: menge - vorher,
+          einheit: 'stück',
+          bestandVorher: vorher,
+          bestandNachher: menge,
+          grund: 'Manuelle Inventur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'produkt':
+        // Für Produkte verwenden wir weiterhin Bestand-Collection
+        let bestand = await Bestand.findeOderErstelle('produkt', artikelId, 'stück');
+        vorher = bestand.menge;
+        bestand.menge = menge;
+        if (mindestbestand !== undefined) {
+          bestand.mindestbestand = mindestbestand;
+        }
+        bestand.letzteAenderung = {
+          datum: new Date(),
+          grund: 'inventur',
+          menge: menge - vorher,
+          vorher,
+          nachher: menge
+        };
+        if (notizen) {
+          bestand.notizen = notizen;
+        }
+        await bestand.save();
+        
+        const produktDoc = await Portfolio.findById(artikelId);
+        await Bewegung.erstelle({
+          typ: 'inventur',
+          bestandId: bestand._id,
+          artikel: {
+            typ: 'produkt',
+            artikelId: artikelId,
+            name: produktDoc?.name
+          },
+          menge: menge - vorher,
+          einheit: 'stück',
+          bestandVorher: vorher,
+          bestandNachher: menge,
+          grund: 'Manuelle Inventur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        einheit = 'stück';
+        break;
+        
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültiger Typ'
+        });
     }
-    bestand.letzteAenderung = {
-      datum: new Date(),
-      grund: 'inventur',
-      menge: menge - vorher,
-      vorher,
-      nachher: menge
-    };
-    if (notizen) {
-      bestand.notizen = notizen;
-    }
-    
-    await bestand.save();
-    
-    // Erstelle Bewegungs-Log
-    const artikel = await bestand.populate('artikelId');
-    await Bewegung.erstelle({
-      typ: 'inventur',
-      bestandId: bestand._id,
-      artikel: {
-        typ: bestand.typ,
-        artikelId: bestand.artikelId._id,
-        name: artikel.artikelId?.name
-      },
-      menge: menge - vorher,
-      einheit: bestand.einheit,
-      bestandVorher: vorher,
-      bestandNachher: menge,
-      grund: 'Manuelle Inventur',
-      notizen,
-      userId: req.user.id || req.user.userId
-    });
     
     res.json({
       success: true,
       message: 'Inventur erfolgreich durchgeführt',
       data: {
         bestand: {
-          _id: bestand._id,
-          menge: bestand.menge,
-          einheit: bestand.einheit,
+          _id: artikel?._id || artikelId,
+          menge,
+          einheit,
           aenderung: menge - vorher
         }
       }
@@ -189,7 +382,7 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
 // POST /api/lager/produktion - Produktion verbuchen
 router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { produktId, anzahl } = req.body;
+    const { produktId, anzahl, notizen } = req.body;
     
     if (!produktId || !anzahl || anzahl <= 0) {
       return res.status(400).json({
@@ -208,147 +401,159 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
       });
     }
     
-    // Prüfe ob alle Rohstoffe vorhanden sind
-    const rohstoffBedarf = [];
     const bewegungen = [];
+    const fehler = [];
     
-    // 1. ROHSEIFE - Suche nach Name
+    // 1. ROHSEIFE - Finde nach bezeichnung und ziehe aktuellVorrat ab
     if (produkt.seife && produkt.gramm) {
-      // Finde Rohseife nach Name
-      const rohseifeDoc = await Rohseife.findOne({ name: produkt.seife });
+      const rohseifeDoc = await Rohseife.findOne({ bezeichnung: produkt.seife });
       
       if (!rohseifeDoc) {
-        return res.status(400).json({
-          success: false,
-          message: `Rohseife "${produkt.seife}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
-        });
+        fehler.push(`Rohseife "${produkt.seife}" nicht in Datenbank gefunden`);
+      } else {
+        const benoetigt = produkt.gramm * anzahl; // in Gramm
+        
+        if (rohseifeDoc.aktuellVorrat < benoetigt) {
+          fehler.push(`Nicht genug "${produkt.seife}" auf Lager. Benötigt: ${benoetigt}g, Verfügbar: ${rohseifeDoc.aktuellVorrat}g`);
+        } else {
+          const vorher = rohseifeDoc.aktuellVorrat;
+          rohseifeDoc.aktuellVorrat -= benoetigt;
+          await rohseifeDoc.save();
+          
+          bewegungen.push({
+            typ: 'produktion',
+            bestandId: null,
+            artikel: {
+              typ: 'rohseife',
+              artikelId: rohseifeDoc._id,
+              name: rohseifeDoc.bezeichnung
+            },
+            menge: -benoetigt,
+            einheit: 'g',
+            bestandVorher: vorher,
+            bestandNachher: rohseifeDoc.aktuellVorrat,
+            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            notizen,
+            userId: req.user.id || req.user.userId,
+            referenz: {
+              typ: 'produktion',
+              produktId: produkt._id,
+              produktName: produkt.name,
+              anzahl
+            }
+          });
+        }
       }
-      
-      const benoetigt = (produkt.gramm * anzahl) / 1000; // in kg
-      const bestand = await Bestand.findeOderErstelle('rohseife', rohseifeDoc._id, 'kg');
-      
-      if (bestand.menge < benoetigt) {
-        return res.status(400).json({
-          success: false,
-          message: `Nicht genug Rohseife "${produkt.seife}" auf Lager. Benötigt: ${benoetigt.toFixed(2)} kg, Verfügbar: ${bestand.menge} kg`
-        });
-      }
-      
-      rohstoffBedarf.push({
-        typ: 'rohseife',
-        bestand,
-        menge: benoetigt,
-        name: produkt.seife,
-        artikelId: rohseifeDoc._id
-      });
     }
     
-    // 2. DUFTÖL - Suche nach Name (aroma)
+    // 2. DUFTÖL - Finde nach bezeichnung (aroma)
     if (produkt.aroma && produkt.aroma !== 'Keine' && produkt.aroma !== '-') {
-      // Finde Duftöl nach Name
-      const duftoel = await Duftoil.findOne({ name: produkt.aroma });
+      const duftoel = await Duftoil.findOne({ bezeichnung: produkt.aroma });
       
       if (!duftoel) {
-        return res.status(400).json({
-          success: false,
-          message: `Duftöl "${produkt.aroma}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
-        });
+        fehler.push(`Duftöl "${produkt.aroma}" nicht in Datenbank gefunden`);
+      } else {
+        // Standard: 10 Tropfen pro Produkt (anpassbar)
+        const tropfenProProdukt = 10;
+        const benoetigt = anzahl * tropfenProProdukt;
+        
+        if (duftoel.aktuellVorrat < benoetigt) {
+          fehler.push(`Nicht genug "${produkt.aroma}" auf Lager. Benötigt: ${benoetigt} Tropfen, Verfügbar: ${duftoel.aktuellVorrat} Tropfen`);
+        } else {
+          const vorher = duftoel.aktuellVorrat;
+          duftoel.aktuellVorrat -= benoetigt;
+          await duftoel.save();
+          
+          bewegungen.push({
+            typ: 'produktion',
+            bestandId: null,
+            artikel: {
+              typ: 'duftoil',
+              artikelId: duftoel._id,
+              name: duftoel.bezeichnung
+            },
+            menge: -benoetigt,
+            einheit: 'tropfen',
+            bestandVorher: vorher,
+            bestandNachher: duftoel.aktuellVorrat,
+            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            notizen,
+            userId: req.user.id || req.user.userId,
+            referenz: {
+              typ: 'produktion',
+              produktId: produkt._id,
+              produktName: produkt.name,
+              anzahl
+            }
+          });
+        }
       }
-      
-      // Standard: 1 ml pro Produkt (kann angepasst werden)
-      const mlProProdukt = 1;
-      const benoetigt = anzahl * mlProProdukt;
-      const bestand = await Bestand.findeOderErstelle('duftoil', duftoel._id, 'ml');
-      
-      if (bestand.menge < benoetigt) {
-        return res.status(400).json({
-          success: false,
-          message: `Nicht genug Duftöl "${produkt.aroma}" auf Lager. Benötigt: ${benoetigt} ml, Verfügbar: ${bestand.menge} ml`
-        });
-      }
-      
-      rohstoffBedarf.push({
-        typ: 'duftoil',
-        bestand,
-        menge: benoetigt,
-        name: produkt.aroma,
-        artikelId: duftoel._id
-      });
     }
     
-    // 3. VERPACKUNG - Suche nach Name
+    // 3. VERPACKUNG - Finde nach bezeichnung
     if (produkt.verpackung) {
-      // Finde Verpackung nach Name
-      const verpackung = await Verpackung.findOne({ name: produkt.verpackung });
+      const verpackung = await Verpackung.findOne({ bezeichnung: produkt.verpackung });
       
       if (!verpackung) {
-        return res.status(400).json({
-          success: false,
-          message: `Verpackung "${produkt.verpackung}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
-        });
+        fehler.push(`Verpackung "${produkt.verpackung}" nicht in Datenbank gefunden`);
+      } else {
+        const benoetigt = anzahl;
+        
+        if (verpackung.aktuellVorrat < benoetigt) {
+          fehler.push(`Nicht genug "${produkt.verpackung}" auf Lager. Benötigt: ${benoetigt} Stück, Verfügbar: ${verpackung.aktuellVorrat} Stück`);
+        } else {
+          const vorher = verpackung.aktuellVorrat;
+          verpackung.aktuellVorrat -= benoetigt;
+          await verpackung.save();
+          
+          bewegungen.push({
+            typ: 'produktion',
+            bestandId: null,
+            artikel: {
+              typ: 'verpackung',
+              artikelId: verpackung._id,
+              name: verpackung.bezeichnung
+            },
+            menge: -benoetigt,
+            einheit: 'stück',
+            bestandVorher: vorher,
+            bestandNachher: verpackung.aktuellVorrat,
+            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            notizen,
+            userId: req.user.id || req.user.userId,
+            referenz: {
+              typ: 'produktion',
+              produktId: produkt._id,
+              produktName: produkt.name,
+              anzahl
+            }
+          });
+        }
       }
-      
-      const benoetigt = anzahl;
-      const bestand = await Bestand.findeOderErstelle('verpackung', verpackung._id, 'stück');
-      
-      if (bestand.menge < benoetigt) {
-        return res.status(400).json({
-          success: false,
-          message: `Nicht genug Verpackung "${produkt.verpackung}" auf Lager. Benötigt: ${benoetigt} Stück, Verfügbar: ${bestand.menge} Stück`
-        });
-      }
-      
-      rohstoffBedarf.push({
-        typ: 'verpackung',
-        bestand,
-        menge: benoetigt,
-        name: produkt.verpackung,
-        artikelId: verpackung._id
+    }
+    
+    // Falls Fehler aufgetreten sind, keine Änderungen speichern
+    if (fehler.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Produktion konnte nicht durchgeführt werden',
+        fehler
       });
     }
     
-    // Buche Rohstoffe aus
-    for (const rohstoff of rohstoffBedarf) {
-      const vorher = rohstoff.bestand.menge;
-      await rohstoff.bestand.verringereBestand(rohstoff.menge, 'produktion');
-      
-      // Erstelle Bewegungs-Log
-      await Bewegung.erstelle({
-        typ: 'ausgang',
-        bestandId: rohstoff.bestand._id,
-        artikel: {
-          typ: rohstoff.typ,
-          artikelId: rohstoff.artikelId,
-          name: rohstoff.name
-        },
-        menge: -rohstoff.menge,
-        einheit: rohstoff.bestand.einheit,
-        bestandVorher: vorher,
-        bestandNachher: rohstoff.bestand.menge,
-        grund: `Produktion von ${anzahl}x ${produkt.name}`,
-        referenz: {
-          typ: 'produktion',
-          id: produktId
-        },
-        userId: req.user.id || req.user.userId
-      });
-      
-      bewegungen.push({
-        rohstoff: rohstoff.name,
-        menge: rohstoff.menge,
-        einheit: rohstoff.bestand.einheit,
-        neuerBestand: rohstoff.bestand.menge
-      });
+    // Erstelle alle Bewegungs-Logs für Rohstoffe
+    for (const bewegungData of bewegungen) {
+      await Bewegung.erstelle(bewegungData);
     }
     
-    // Buche Fertigprodukt ein
+    // Buche Fertigprodukt ein (Bestand-Collection)
     const produktBestand = await Bestand.findeOderErstelle('produkt', produktId, 'stück');
     const vorherProdukt = produktBestand.menge;
-    await produktBestand.erhoeheBestand(anzahl, 'produktion');
+    await produktBestand.erhoeheBestand(anzahl, 'Produktion abgeschlossen', notizen);
     
     // Erstelle Bewegungs-Log für Fertigprodukt
     await Bewegung.erstelle({
-      typ: 'eingang',
+      typ: 'produktion',
       bestandId: produktBestand._id,
       artikel: {
         typ: 'produkt',
@@ -359,8 +564,15 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
       einheit: 'stück',
       bestandVorher: vorherProdukt,
       bestandNachher: produktBestand.menge,
-      grund: 'Produktion',
-      userId: req.user.id || req.user.userId
+      grund: 'Produktion abgeschlossen',
+      notizen,
+      userId: req.user.id || req.user.userId,
+      referenz: {
+        typ: 'produktion',
+        produktId: produkt._id,
+        produktName: produkt.name,
+        anzahl
+      }
     });
     
     res.json({
@@ -368,11 +580,18 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
       message: `${anzahl}x ${produkt.name} erfolgreich produziert`,
       data: {
         produkt: {
+          _id: produkt._id,
           name: produkt.name,
-          anzahl,
+          produziert: anzahl,
           neuerBestand: produktBestand.menge
         },
-        rohstoffVerbrauch: bewegungen
+        verwendeteRohstoffe: bewegungen.map(b => ({
+          name: b.artikel.name,
+          typ: b.artikel.typ,
+          menge: Math.abs(b.menge),
+          einheit: b.einheit,
+          neuerBestand: b.bestandNachher
+        }))
       }
     });
   } catch (error) {
@@ -388,58 +607,172 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
 // POST /api/lager/korrektur - Bestand manuell korrigieren
 router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { bestandId, aenderung, notizen } = req.body;
+    const { typ, artikelId, aenderung, notizen } = req.body;
     
-    if (!bestandId || aenderung === undefined) {
+    if (!typ || !artikelId || aenderung === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'BestandId und Änderung sind erforderlich'
+        message: 'Typ, ArtikelId und Änderung sind erforderlich'
       });
     }
     
-    const bestand = await Bestand.findById(bestandId).populate('artikelId');
+    let artikel;
+    let vorher;
+    let nachher;
+    let einheit;
     
-    if (!bestand) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bestand nicht gefunden'
-      });
+    // Je nach Typ den aktuellVorrat im entsprechenden Model korrigieren
+    switch (typ) {
+      case 'rohseife':
+        artikel = await Rohseife.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Rohseife nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        nachher = Math.max(0, vorher + aenderung);
+        artikel.aktuellVorrat = nachher;
+        await artikel.save();
+        einheit = 'g';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'korrektur',
+          bestandId: null,
+          artikel: {
+            typ: 'rohseife',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: aenderung,
+          einheit: 'g',
+          bestandVorher: vorher,
+          bestandNachher: nachher,
+          grund: 'Manuelle Korrektur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'duftoil':
+        artikel = await Duftoil.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Duftöl nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        nachher = Math.max(0, vorher + aenderung);
+        artikel.aktuellVorrat = nachher;
+        await artikel.save();
+        einheit = 'tropfen';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'korrektur',
+          bestandId: null,
+          artikel: {
+            typ: 'duftoil',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: aenderung,
+          einheit: 'tropfen',
+          bestandVorher: vorher,
+          bestandNachher: nachher,
+          grund: 'Manuelle Korrektur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'verpackung':
+        artikel = await Verpackung.findById(artikelId);
+        if (!artikel) {
+          return res.status(404).json({
+            success: false,
+            message: 'Verpackung nicht gefunden'
+          });
+        }
+        vorher = artikel.aktuellVorrat;
+        nachher = Math.max(0, vorher + aenderung);
+        artikel.aktuellVorrat = nachher;
+        await artikel.save();
+        einheit = 'stück';
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'korrektur',
+          bestandId: null,
+          artikel: {
+            typ: 'verpackung',
+            artikelId: artikel._id,
+            name: artikel.bezeichnung
+          },
+          menge: aenderung,
+          einheit: 'stück',
+          bestandVorher: vorher,
+          bestandNachher: nachher,
+          grund: 'Manuelle Korrektur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      case 'produkt':
+        // Für Produkte verwenden wir weiterhin Bestand-Collection
+        let bestand = await Bestand.findById(artikelId).populate('artikelId');
+        if (!bestand) {
+          return res.status(404).json({
+            success: false,
+            message: 'Bestand nicht gefunden'
+          });
+        }
+        
+        vorher = bestand.menge;
+        nachher = Math.max(0, vorher + aenderung);
+        bestand.menge = nachher;
+        bestand.letzteAenderung = {
+          datum: new Date(),
+          grund: 'korrektur',
+          menge: aenderung,
+          vorher,
+          nachher
+        };
+        if (notizen) {
+          bestand.notizen = notizen;
+        }
+        await bestand.save();
+        einheit = bestand.einheit;
+        
+        // Log Bewegung
+        await Bewegung.erstelle({
+          typ: 'korrektur',
+          bestandId: bestand._id,
+          artikel: {
+            typ: 'produkt',
+            artikelId: bestand.artikelId._id,
+            name: bestand.artikelId?.name
+          },
+          menge: aenderung,
+          einheit: bestand.einheit,
+          bestandVorher: vorher,
+          bestandNachher: nachher,
+          grund: 'Manuelle Korrektur',
+          notizen,
+          userId: req.user.id || req.user.userId
+        });
+        break;
+        
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültiger Typ'
+        });
     }
-    
-    const vorher = bestand.menge;
-    const nachher = Math.max(0, vorher + aenderung);
-    
-    bestand.menge = nachher;
-    bestand.letzteAenderung = {
-      datum: new Date(),
-      grund: 'korrektur',
-      menge: aenderung,
-      vorher,
-      nachher
-    };
-    if (notizen) {
-      bestand.notizen = notizen;
-    }
-    
-    await bestand.save();
-    
-    // Erstelle Bewegungs-Log
-    await Bewegung.erstelle({
-      typ: 'korrektur',
-      bestandId: bestand._id,
-      artikel: {
-        typ: bestand.typ,
-        artikelId: bestand.artikelId._id,
-        name: bestand.artikelId?.name
-      },
-      menge: aenderung,
-      einheit: bestand.einheit,
-      bestandVorher: vorher,
-      bestandNachher: nachher,
-      grund: 'Manuelle Korrektur',
-      notizen,
-      userId: req.user.id || req.user.userId
-    });
     
     res.json({
       success: true,
@@ -447,7 +780,8 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
       data: {
         vorher,
         nachher,
-        aenderung
+        aenderung,
+        einheit
       }
     });
   } catch (error) {
@@ -488,18 +822,30 @@ router.get('/historie/:bestandId', authenticateToken, requireAdmin, async (req, 
 router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const [rohseifen, duftoele, verpackungen, produkte] = await Promise.all([
-      Rohseife.find().select('_id name').lean(),
-      Duftoil.find().select('_id name').lean(),
-      Verpackung.find().select('_id name').lean(),
+      Rohseife.find().select('_id bezeichnung aktuellVorrat').lean(),
+      Duftoil.find().select('_id bezeichnung aktuellVorrat').lean(),
+      Verpackung.find().select('_id bezeichnung aktuellVorrat').lean(),
       Portfolio.find().select('_id name').lean()
     ]);
     
     res.json({
       success: true,
       data: {
-        rohseifen: rohseifen.map(r => ({ id: r._id, name: r.name })),
-        duftoele: duftoele.map(d => ({ id: d._id, name: d.name })),
-        verpackungen: verpackungen.map(v => ({ id: v._id, name: v.name })),
+        rohseifen: rohseifen.map(r => ({ 
+          id: r._id, 
+          name: r.bezeichnung,
+          vorrat: r.aktuellVorrat 
+        })),
+        duftoele: duftoele.map(d => ({ 
+          id: d._id, 
+          name: d.bezeichnung,
+          vorrat: d.aktuellVorrat
+        })),
+        verpackungen: verpackungen.map(v => ({ 
+          id: v._id, 
+          name: v.bezeichnung,
+          vorrat: v.aktuellVorrat
+        })),
         produkte: produkte.map(p => ({ id: p._id, name: p.name }))
       }
     });

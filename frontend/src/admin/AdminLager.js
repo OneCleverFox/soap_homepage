@@ -76,7 +76,7 @@ const AdminLager = () => {
     typ: 'rohseife',
     artikelId: '',
     menge: 0,
-    einheit: 'kg',
+    einheit: 'g',
     mindestbestand: 0,
     notizen: ''
   });
@@ -87,7 +87,8 @@ const AdminLager = () => {
   });
   
   const [korrekturForm, setKorrekturForm] = useState({
-    bestandId: '',
+    typ: 'rohseife',
+    artikelId: '',
     aenderung: 0,
     notizen: ''
   });
@@ -175,7 +176,7 @@ const AdminLager = () => {
           typ: 'rohseife',
           artikelId: '',
           menge: 0,
-          einheit: 'kg',
+          einheit: 'g',
           mindestbestand: 0,
           notizen: ''
         });
@@ -279,21 +280,6 @@ const AdminLager = () => {
     } catch (error) {
       console.error('Fehler beim Laden der Historie:', error);
       setMessage({ type: 'error', text: 'Fehler beim Laden der Historie' });
-    }
-  };
-
-  const getEinheitenFuerTyp = (typ) => {
-    switch (typ) {
-      case 'rohseife':
-        return ['kg', 'g'];
-      case 'duftoil':
-        return ['ml', 'l'];
-      case 'verpackung':
-        return ['stück'];
-      case 'produkt':
-        return ['stück'];
-      default:
-        return ['stück'];
     }
   };
 
@@ -574,8 +560,9 @@ const AdminLager = () => {
                     ...inventurForm,
                     typ: e.target.value,
                     artikelId: '',
-                    einheit: e.target.value === 'rohseife' ? 'kg' : 
-                             e.target.value === 'duftoil' ? 'ml' : 'stück'
+                    einheit: e.target.value === 'rohseife' ? 'g' : 
+                             e.target.value === 'duftoil' ? 'tropfen' : 
+                             e.target.value === 'verpackung' ? 'stück' : 'stück'
                   });
                 }}
               >
@@ -593,16 +580,22 @@ const AdminLager = () => {
                 label="Artikel"
                 onChange={(e) => setInventurForm({ ...inventurForm, artikelId: e.target.value })}
               >
-                {inventurForm.typ === 'rohseife' && availableItems.rohseifen.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                {inventurForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat}g)
+                  </MenuItem>
                 ))}
-                {inventurForm.typ === 'duftoil' && availableItems.duftoele.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                {inventurForm.typ === 'duftoil' && availableItems.duftoele?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat} Tropfen)
+                  </MenuItem>
                 ))}
-                {inventurForm.typ === 'verpackung' && availableItems.verpackungen.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                {inventurForm.typ === 'verpackung' && availableItems.verpackungen?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat} Stück)
+                  </MenuItem>
                 ))}
-                {inventurForm.typ === 'produkt' && availableItems.produkte.map(item => (
+                {inventurForm.typ === 'produkt' && availableItems.produkte?.map(item => (
                   <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
                 ))}
               </Select>
@@ -617,18 +610,16 @@ const AdminLager = () => {
               onChange={(e) => setInventurForm({ ...inventurForm, menge: parseFloat(e.target.value) })}
             />
 
-            <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
-              <InputLabel>Einheit</InputLabel>
-              <Select
-                value={inventurForm.einheit}
-                label="Einheit"
-                onChange={(e) => setInventurForm({ ...inventurForm, einheit: e.target.value })}
-              >
-                {getEinheitenFuerTyp(inventurForm.typ).map(einheit => (
-                  <MenuItem key={einheit} value={einheit}>{einheit}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <TextField
+              label="Einheit"
+              fullWidth
+              size={isMobile ? 'small' : 'medium'}
+              value={inventurForm.einheit}
+              disabled
+              InputProps={{
+                readOnly: true,
+              }}
+            />
 
             <TextField
               label="Mindestbestand"
@@ -729,6 +720,54 @@ const AdminLager = () => {
               Geben Sie eine positive Zahl ein um den Bestand zu erhöhen, oder eine negative um ihn zu verringern.
             </Alert>
 
+            <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
+              <InputLabel>Typ</InputLabel>
+              <Select
+                value={korrekturForm.typ}
+                label="Typ"
+                onChange={(e) => {
+                  setKorrekturForm({
+                    ...korrekturForm,
+                    typ: e.target.value,
+                    artikelId: ''
+                  });
+                }}
+              >
+                <MenuItem value="rohseife">Rohseife</MenuItem>
+                <MenuItem value="duftoil">Duftöl</MenuItem>
+                <MenuItem value="verpackung">Verpackung</MenuItem>
+                <MenuItem value="produkt">Fertigprodukt</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
+              <InputLabel>Artikel</InputLabel>
+              <Select
+                value={korrekturForm.artikelId}
+                label="Artikel"
+                onChange={(e) => setKorrekturForm({ ...korrekturForm, artikelId: e.target.value })}
+              >
+                {korrekturForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat}g)
+                  </MenuItem>
+                ))}
+                {korrekturForm.typ === 'duftoil' && availableItems.duftoele?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat} Tropfen)
+                  </MenuItem>
+                ))}
+                {korrekturForm.typ === 'verpackung' && availableItems.verpackungen?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>
+                    {item.name} (Vorrat: {item.vorrat} Stück)
+                  </MenuItem>
+                ))}
+                {korrekturForm.typ === 'produkt' && availableItems.produkte?.map(item => (
+                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             <TextField
               label="Änderung"
               type="number"
@@ -755,7 +794,7 @@ const AdminLager = () => {
           <Button 
             onClick={handleKorrektur} 
             variant="contained"
-            disabled={loading || korrekturForm.aenderung === 0}
+            disabled={loading || !korrekturForm.artikelId || korrekturForm.aenderung === 0}
           >
             Korrigieren
           </Button>
