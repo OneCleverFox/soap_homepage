@@ -17,7 +17,7 @@ const bewegungSchema = new mongoose.Schema({
   bestandId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Bestand',
-    required: true,
+    required: false, // Nicht required, da Rohstoffe kein Bestand-Dokument haben
     index: true
   },
   
@@ -45,7 +45,7 @@ const bewegungSchema = new mongoose.Schema({
   einheit: {
     type: String,
     required: true,
-    enum: ['kg', 'g', 'ml', 'l', 'stück']
+    enum: ['kg', 'g', 'ml', 'l', 'stück', 'tropfen'] // 'tropfen' hinzugefügt
   },
   
   // Bestand vorher/nachher
@@ -76,7 +76,7 @@ const bewegungSchema = new mongoose.Schema({
   
   // Benutzer der die Bewegung durchgeführt hat
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String, // Geändert zu String, da JWT userId ein String ist
     ref: 'User'
   }
 }, {
