@@ -73,9 +73,9 @@ const AdminLager = () => {
   const [inventurForm, setInventurForm] = useState({
     typ: 'rohseife',
     artikelId: '',
-    menge: 0,
+    menge: '',
     einheit: 'g',
-    mindestbestand: 0,
+    mindestbestand: '',
     notizen: ''
   });
   
@@ -87,7 +87,7 @@ const AdminLager = () => {
   const [korrekturForm, setKorrekturForm] = useState({
     typ: 'rohseife',
     artikelId: '',
-    menge: 0,
+    menge: '',
     aktion: 'hinzufuegen', // 'hinzufuegen' oder 'entnehmen'
     notizen: '',
     aktuellerBestand: 0, // Für Anzeige
@@ -173,13 +173,20 @@ const AdminLager = () => {
   const handleInventur = async () => {
     setLoading(true);
     try {
+      // Konvertiere Strings zu Zahlen
+      const payload = {
+        ...inventurForm,
+        menge: Number(inventurForm.menge) || 0,
+        mindestbestand: Number(inventurForm.mindestbestand) || 0
+      };
+      
       const response = await fetch(`${API_URL}/lager/inventur`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(inventurForm)
+        body: JSON.stringify(payload)
       });
       const data = await response.json();
       
@@ -192,9 +199,9 @@ const AdminLager = () => {
         setInventurForm({
           typ: 'rohseife',
           artikelId: '',
-          menge: 0,
+          menge: '',
           einheit: 'g',
-          mindestbestand: 0,
+          mindestbestand: '',
           notizen: ''
         });
       } else {
@@ -237,7 +244,11 @@ const AdminLager = () => {
           anzahl: 1
         });
       } else {
-        setMessage({ type: 'error', text: data.message });
+        // Zeige auch die detaillierten Fehler an
+        const fehlerText = data.fehler && data.fehler.length > 0
+          ? `${data.message}\n\nFehler:\n${data.fehler.map(f => `• ${f}`).join('\n')}`
+          : data.message;
+        setMessage({ type: 'error', text: fehlerText });
       }
     } catch (error) {
       console.error('Fehler bei Produktion:', error);
@@ -251,9 +262,10 @@ const AdminLager = () => {
     setLoading(true);
     try {
       // Berechne die Änderung basierend auf Aktion
+      const menge = Number(korrekturForm.menge) || 0;
       const aenderung = korrekturForm.aktion === 'hinzufuegen' 
-        ? korrekturForm.menge 
-        : -korrekturForm.menge;
+        ? menge 
+        : -menge;
       
       const response = await fetch(`${API_URL}/lager/korrektur`, {
         method: 'POST',
@@ -279,7 +291,7 @@ const AdminLager = () => {
         setKorrekturForm({
           typ: 'rohseife',
           artikelId: '',
-          menge: 0,
+          menge: '',
           aktion: 'hinzufuegen',
           notizen: '',
           aktuellerBestand: 0,
@@ -373,7 +385,8 @@ const AdminLager = () => {
                       onClick={() => {
                         setKorrekturForm({
                           typ: item.typ,
-                          artikelId: item.artikelId,
+                          // Für Produkte verwenden wir die Bestand-ID (_id), für andere die artikelId
+                          artikelId: item.typ === 'produkt' ? item._id : item.artikelId,
                           menge: 0,
                           aktion: 'hinzufuegen',
                           notizen: '',
@@ -651,7 +664,7 @@ const AdminLager = () => {
               fullWidth
               size={isMobile ? 'small' : 'medium'}
               value={inventurForm.menge}
-              onChange={(e) => setInventurForm({ ...inventurForm, menge: parseFloat(e.target.value) })}
+              onChange={(e) => setInventurForm({ ...inventurForm, menge: e.target.value })}
               helperText={`Trage hier die tatsächlich gezählte Menge in ${inventurForm.einheit} ein`}
             />
 
@@ -672,7 +685,7 @@ const AdminLager = () => {
               fullWidth
               size={isMobile ? 'small' : 'medium'}
               value={inventurForm.mindestbestand}
-              onChange={(e) => setInventurForm({ ...inventurForm, mindestbestand: parseFloat(e.target.value) })}
+              onChange={(e) => setInventurForm({ ...inventurForm, mindestbestand: e.target.value })}
               helperText="Wenn gesetzt, erscheint eine Warnung bei Unterschreitung"
             />
 
