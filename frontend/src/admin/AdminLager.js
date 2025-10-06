@@ -300,6 +300,7 @@ const AdminLager = () => {
         body: JSON.stringify({
           typ: korrekturForm.typ,
           artikelId: korrekturForm.artikelId,
+          portfolioId: korrekturForm.portfolioId, // Für Produkte: Portfolio-ID
           aenderung: aenderung,
           notizen: korrekturForm.notizen
         })
@@ -409,8 +410,9 @@ const AdminLager = () => {
                       onClick={() => {
                         setKorrekturForm({
                           typ: item.typ,
-                          // Für Produkte verwenden wir die Bestand-ID (_id), für andere die artikelId
+                          // Für Produkte: sende Bestand-ID (_id) UND Portfolio-ID (artikelId)
                           artikelId: item.typ === 'produkt' ? item._id : item.artikelId,
+                          portfolioId: item.typ === 'produkt' ? item.artikelId : undefined,
                           menge: '',
                           aktion: 'hinzufuegen',
                           notizen: '',
