@@ -42,7 +42,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       const item = {
         _id: bestand._id,
         artikelId: bestand.artikelId._id,
-        name: bestand.artikelId.name || bestand.artikelId.titel,
+        name: bestand.artikelId.name,
         menge: bestand.menge,
         einheit: bestand.einheit,
         mindestbestand: bestand.mindestbestand,
@@ -89,7 +89,7 @@ router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
     const formatted = warnungen.map(bestand => ({
       _id: bestand._id,
       typ: bestand.typ,
-      name: bestand.artikelId?.name || bestand.artikelId?.titel || 'Unbekannt',
+      name: bestand.artikelId?.name || 'Unbekannt',
       menge: bestand.menge,
       mindestbestand: bestand.mindestbestand,
       einheit: bestand.einheit,
@@ -153,7 +153,7 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
       artikel: {
         typ: bestand.typ,
         artikelId: bestand.artikelId._id,
-        name: artikel.artikelId?.name || artikel.artikelId?.titel
+        name: artikel.artikelId?.name
       },
       menge: menge - vorher,
       einheit: bestand.einheit,
@@ -199,10 +199,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     }
     
     // Hole Produkt mit Rezept
-    const produkt = await Portfolio.findById(produktId)
-      .populate('rohseife')
-      .populate('duftoel')
-      .populate('verpackung');
+    const produkt = await Portfolio.findById(produktId);
     
     if (!produkt) {
       return res.status(404).json({
@@ -215,15 +212,25 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     const rohstoffBedarf = [];
     const bewegungen = [];
     
-    // Rohseife (in Gramm)
-    if (produkt.rohseife && produkt.gramm) {
+    // 1. ROHSEIFE - Suche nach Name
+    if (produkt.seife && produkt.gramm) {
+      // Finde Rohseife nach Name
+      const rohseifeDoc = await Rohseife.findOne({ name: produkt.seife });
+      
+      if (!rohseifeDoc) {
+        return res.status(400).json({
+          success: false,
+          message: `Rohseife "${produkt.seife}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
+        });
+      }
+      
       const benoetigt = (produkt.gramm * anzahl) / 1000; // in kg
-      const bestand = await Bestand.findeOderErstelle('rohseife', produkt.rohseife._id, 'kg');
+      const bestand = await Bestand.findeOderErstelle('rohseife', rohseifeDoc._id, 'kg');
       
       if (bestand.menge < benoetigt) {
         return res.status(400).json({
           success: false,
-          message: `Nicht genug Rohseife auf Lager. Benötigt: ${benoetigt} kg, Verfügbar: ${bestand.menge} kg`
+          message: `Nicht genug Rohseife "${produkt.seife}" auf Lager. Benötigt: ${benoetigt.toFixed(2)} kg, Verfügbar: ${bestand.menge} kg`
         });
       }
       
@@ -231,19 +238,32 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
         typ: 'rohseife',
         bestand,
         menge: benoetigt,
-        name: produkt.rohseife.name
+        name: produkt.seife,
+        artikelId: rohseifeDoc._id
       });
     }
     
-    // Duftöl (in ml)
-    if (produkt.duftoel) {
-      const benoetigt = anzahl; // 1 ml pro Produkt (anpassen nach Bedarf)
-      const bestand = await Bestand.findeOderErstelle('duftoil', produkt.duftoel._id, 'ml');
+    // 2. DUFTÖL - Suche nach Name (aroma)
+    if (produkt.aroma && produkt.aroma !== 'Keine' && produkt.aroma !== '-') {
+      // Finde Duftöl nach Name
+      const duftoel = await Duftoil.findOne({ name: produkt.aroma });
+      
+      if (!duftoel) {
+        return res.status(400).json({
+          success: false,
+          message: `Duftöl "${produkt.aroma}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
+        });
+      }
+      
+      // Standard: 1 ml pro Produkt (kann angepasst werden)
+      const mlProProdukt = 1;
+      const benoetigt = anzahl * mlProProdukt;
+      const bestand = await Bestand.findeOderErstelle('duftoil', duftoel._id, 'ml');
       
       if (bestand.menge < benoetigt) {
         return res.status(400).json({
           success: false,
-          message: `Nicht genug Duftöl auf Lager. Benötigt: ${benoetigt} ml, Verfügbar: ${bestand.menge} ml`
+          message: `Nicht genug Duftöl "${produkt.aroma}" auf Lager. Benötigt: ${benoetigt} ml, Verfügbar: ${bestand.menge} ml`
         });
       }
       
@@ -251,19 +271,30 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
         typ: 'duftoil',
         bestand,
         menge: benoetigt,
-        name: produkt.duftoel.name
+        name: produkt.aroma,
+        artikelId: duftoel._id
       });
     }
     
-    // Verpackung (Stück)
+    // 3. VERPACKUNG - Suche nach Name
     if (produkt.verpackung) {
+      // Finde Verpackung nach Name
+      const verpackung = await Verpackung.findOne({ name: produkt.verpackung });
+      
+      if (!verpackung) {
+        return res.status(400).json({
+          success: false,
+          message: `Verpackung "${produkt.verpackung}" nicht in Datenbank gefunden. Bitte erst unter Rohstoffe anlegen.`
+        });
+      }
+      
       const benoetigt = anzahl;
-      const bestand = await Bestand.findeOderErstelle('verpackung', produkt.verpackung._id, 'stück');
+      const bestand = await Bestand.findeOderErstelle('verpackung', verpackung._id, 'stück');
       
       if (bestand.menge < benoetigt) {
         return res.status(400).json({
           success: false,
-          message: `Nicht genug Verpackung auf Lager. Benötigt: ${benoetigt} Stück, Verfügbar: ${bestand.menge} Stück`
+          message: `Nicht genug Verpackung "${produkt.verpackung}" auf Lager. Benötigt: ${benoetigt} Stück, Verfügbar: ${bestand.menge} Stück`
         });
       }
       
@@ -271,7 +302,8 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
         typ: 'verpackung',
         bestand,
         menge: benoetigt,
-        name: produkt.verpackung.name
+        name: produkt.verpackung,
+        artikelId: verpackung._id
       });
     }
     
@@ -286,14 +318,14 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
         bestandId: rohstoff.bestand._id,
         artikel: {
           typ: rohstoff.typ,
-          artikelId: rohstoff.bestand.artikelId,
+          artikelId: rohstoff.artikelId,
           name: rohstoff.name
         },
         menge: -rohstoff.menge,
         einheit: rohstoff.bestand.einheit,
         bestandVorher: vorher,
         bestandNachher: rohstoff.bestand.menge,
-        grund: `Produktion von ${anzahl}x ${produkt.titel}`,
+        grund: `Produktion von ${anzahl}x ${produkt.name}`,
         referenz: {
           typ: 'produktion',
           id: produktId
@@ -321,7 +353,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
       artikel: {
         typ: 'produkt',
         artikelId: produktId,
-        name: produkt.titel
+        name: produkt.name
       },
       menge: anzahl,
       einheit: 'stück',
@@ -333,10 +365,10 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     
     res.json({
       success: true,
-      message: `${anzahl}x ${produkt.titel} erfolgreich produziert`,
+      message: `${anzahl}x ${produkt.name} erfolgreich produziert`,
       data: {
         produkt: {
-          name: produkt.titel,
+          name: produkt.name,
           anzahl,
           neuerBestand: produktBestand.menge
         },
@@ -398,7 +430,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
       artikel: {
         typ: bestand.typ,
         artikelId: bestand.artikelId._id,
-        name: bestand.artikelId?.name || bestand.artikelId?.titel
+        name: bestand.artikelId?.name
       },
       menge: aenderung,
       einheit: bestand.einheit,
@@ -459,7 +491,7 @@ router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
       Rohseife.find().select('_id name').lean(),
       Duftoil.find().select('_id name').lean(),
       Verpackung.find().select('_id name').lean(),
-      Portfolio.find().select('_id titel').lean()
+      Portfolio.find().select('_id name').lean()
     ]);
     
     res.json({
@@ -468,7 +500,7 @@ router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
         rohseifen: rohseifen.map(r => ({ id: r._id, name: r.name })),
         duftoele: duftoele.map(d => ({ id: d._id, name: d.name })),
         verpackungen: verpackungen.map(v => ({ id: v._id, name: v.name })),
-        produkte: produkte.map(p => ({ id: p._id, name: p.titel }))
+        produkte: produkte.map(p => ({ id: p._id, name: p.name }))
       }
     });
   } catch (error) {
