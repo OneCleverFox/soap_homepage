@@ -901,6 +901,7 @@ const AdminLager = () => {
           <Button 
             onClick={() => setKorrekturDialog(false)}
             variant="outlined"
+            sx={{ borderColor: 'grey.400', color: 'grey.700' }}
           >
             Abbrechen
           </Button>
@@ -913,13 +914,17 @@ const AdminLager = () => {
             startIcon={<AddIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
             sx={{
-              bgcolor: '#10B981',
-              color: 'white',
+              bgcolor: '#22C55E !important',
+              color: 'white !important',
+              fontWeight: 600,
+              boxShadow: '0 2px 8px rgba(34, 197, 94, 0.3)',
               '&:hover': {
-                bgcolor: '#059669'
+                bgcolor: '#16A34A !important',
+                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.4)'
               },
               '&:disabled': {
-                bgcolor: 'rgba(16, 185, 129, 0.3)'
+                bgcolor: 'rgba(34, 197, 94, 0.3) !important',
+                color: 'rgba(255, 255, 255, 0.5) !important'
               }
             }}
           >
@@ -934,13 +939,17 @@ const AdminLager = () => {
             startIcon={<EditIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
             sx={{
-              bgcolor: '#EF4444',
-              color: 'white',
+              bgcolor: '#EF4444 !important',
+              color: 'white !important',
+              fontWeight: 600,
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
               '&:hover': {
-                bgcolor: '#DC2626'
+                bgcolor: '#DC2626 !important',
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)'
               },
               '&:disabled': {
-                bgcolor: 'rgba(239, 68, 68, 0.3)'
+                bgcolor: 'rgba(239, 68, 68, 0.3) !important',
+                color: 'rgba(255, 255, 255, 0.5) !important'
               }
             }}
           >
