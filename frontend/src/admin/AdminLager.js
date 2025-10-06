@@ -89,7 +89,8 @@ const AdminLager = () => {
     artikelId: '',
     menge: 0,
     aktion: 'hinzufuegen', // 'hinzufuegen' oder 'entnehmen'
-    notizen: ''
+    notizen: '',
+    aktuellerBestand: 0 // Für Anzeige
   });
   
   const [historie, setHistorie] = useState([]);
@@ -279,7 +280,8 @@ const AdminLager = () => {
           artikelId: '',
           menge: 0,
           aktion: 'hinzufuegen',
-          notizen: ''
+          notizen: '',
+          aktuellerBestand: 0
         });
       } else {
         setMessage({ type: 'error', text: data.message });
@@ -372,7 +374,8 @@ const AdminLager = () => {
                           artikelId: item.artikelId,
                           menge: 0,
                           aktion: 'hinzufuegen',
-                          notizen: ''
+                          notizen: '',
+                          aktuellerBestand: item.menge
                         });
                         setKorrekturDialog(true);
                       }}
@@ -461,7 +464,8 @@ const AdminLager = () => {
                             artikelId: item.artikelId,
                             menge: 0,
                             aktion: 'hinzufuegen',
-                            notizen: ''
+                            notizen: '',
+                            aktuellerBestand: item.menge
                           });
                           setKorrekturDialog(true);
                         }}
@@ -758,6 +762,30 @@ const AdminLager = () => {
               Tragen Sie die <strong>Menge</strong> ein und wählen Sie, ob Sie diese hinzufügen oder entnehmen möchten.
             </Alert>
 
+            {korrekturForm.aktuellerBestand > 0 && (
+              <Paper 
+                elevation={0} 
+                sx={{ 
+                  p: 2, 
+                  bgcolor: 'primary.light', 
+                  color: 'primary.contrastText',
+                  borderRadius: 1
+                }}
+              >
+                <Typography variant="body2" gutterBottom>
+                  Aktueller Bestand:
+                </Typography>
+                <Typography variant="h5" fontWeight="bold">
+                  {korrekturForm.aktuellerBestand} {
+                    korrekturForm.typ === 'rohseife' ? 'g' :
+                    korrekturForm.typ === 'duftoil' ? 'Tropfen' :
+                    korrekturForm.typ === 'verpackung' ? 'Stück' :
+                    'Stück'
+                  }
+                </Typography>
+              </Paper>
+            )}
+
             <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
               <InputLabel>Typ</InputLabel>
               <Select
@@ -767,7 +795,8 @@ const AdminLager = () => {
                   setKorrekturForm({
                     ...korrekturForm,
                     typ: e.target.value,
-                    artikelId: ''
+                    artikelId: '',
+                    aktuellerBestand: 0
                   });
                 }}
               >
@@ -783,7 +812,18 @@ const AdminLager = () => {
               <Select
                 value={korrekturForm.artikelId}
                 label="Artikel"
-                onChange={(e) => setKorrekturForm({ ...korrekturForm, artikelId: e.target.value })}
+                onChange={(e) => {
+                  const selectedItem = korrekturForm.typ === 'rohseife' ? availableItems.rohseifen?.find(i => i.id === e.target.value) :
+                                      korrekturForm.typ === 'duftoil' ? availableItems.duftoele?.find(i => i.id === e.target.value) :
+                                      korrekturForm.typ === 'verpackung' ? availableItems.verpackungen?.find(i => i.id === e.target.value) :
+                                      availableItems.produkte?.find(i => i.id === e.target.value);
+                  
+                  setKorrekturForm({ 
+                    ...korrekturForm, 
+                    artikelId: e.target.value,
+                    aktuellerBestand: selectedItem?.vorrat || 0
+                  });
+                }}
               >
                 {korrekturForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
                   <MenuItem key={item.id} value={item.id}>
@@ -829,7 +869,7 @@ const AdminLager = () => {
             />
           </Stack>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setKorrekturDialog(false)}>Abbrechen</Button>
           <Button 
             onClick={() => {
@@ -837,9 +877,14 @@ const AdminLager = () => {
               setTimeout(handleKorrektur, 0);
             }}
             variant="contained"
-            color="success"
             startIcon={<AddIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
+            sx={{
+              bgcolor: '#4CAF50',
+              '&:hover': {
+                bgcolor: '#45a049'
+              }
+            }}
           >
             Hinzufügen
           </Button>
@@ -849,9 +894,14 @@ const AdminLager = () => {
               setTimeout(handleKorrektur, 0);
             }}
             variant="contained"
-            color="error"
             startIcon={<EditIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
+            sx={{
+              bgcolor: '#FF9800',
+              '&:hover': {
+                bgcolor: '#F57C00'
+              }
+            }}
           >
             Entnehmen
           </Button>
