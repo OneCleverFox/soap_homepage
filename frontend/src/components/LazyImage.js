@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Box, CircularProgress, Skeleton } from '@mui/material';
+import { Box } from '@mui/material';
 
 /**
- * LazyImage Component - Optimiert für mobile Geräte
+ * LazyImage Component - Optimiert für schnellstes Laden
  * 
  * Features:
  * - Lazy Loading mit Intersection Observer
  * - Progressive Image Loading (Blur-up)
- * - Automatische Base64-Dekodierung
+ * - Priorität für sichtbare Bilder
  * - Error Handling mit Fallback
  * - Memory-effizient (cleanup)
  * 
@@ -19,6 +19,7 @@ import { Box, CircularProgress, Skeleton } from '@mui/material';
  * @param {React.ReactNode} props.fallback - Fallback bei Fehler
  * @param {Function} props.onLoad - Callback bei erfolgreichem Laden
  * @param {Function} props.onError - Callback bei Fehler
+ * @param {boolean} props.priority - High priority loading (für Above-the-fold Bilder)
  */
 const LazyImage = ({
   src,
@@ -28,17 +29,18 @@ const LazyImage = ({
   fallback = null,
   onLoad,
   onError,
+  priority = false,
   ...props
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
+  const [isInView, setIsInView] = useState(priority); // Priority-Bilder sofort laden
   const [hasError, setHasError] = useState(false);
   const imgRef = useRef(null);
   const observerRef = useRef(null);
 
   // Intersection Observer für Lazy Loading
   useEffect(() => {
-    if (!imgRef.current || !src) return;
+    if (!imgRef.current || !src || priority) return; // Priority-Bilder überspringen Observer
 
     // Wenn schon geladen, Observer nicht mehr nötig
     if (isLoaded) return;
@@ -59,7 +61,7 @@ const LazyImage = ({
         });
       },
       {
-        rootMargin: '50px', // Lade 50px bevor sichtbar
+        rootMargin: '100px', // Lade 100px bevor sichtbar (erhöht von 50px)
         threshold: 0.01
       }
     );
@@ -74,7 +76,7 @@ const LazyImage = ({
         observerRef.current.unobserve(currentImg);
       }
     };
-  }, [src, isLoaded]);
+  }, [src, isLoaded, priority]);
 
   // Image Load Handler
   const handleLoad = () => {
@@ -127,55 +129,40 @@ const LazyImage = ({
       bgcolor="grey.50"
       {...props}
     >
-      {/* Loading Skeleton */}
+      {/* Minimales Skeleton - nur Hintergrundfarbe statt Animation */}
       {!isLoaded && (
-        <Skeleton
-          variant="rectangular"
-          width="100%"
-          height={height}
-          animation="wave"
+        <Box
           sx={{
             position: 'absolute',
             top: 0,
             left: 0,
+            width: '100%',
+            height: '100%',
+            bgcolor: 'grey.100',
             zIndex: 1
           }}
         />
       )}
 
-      {/* Actual Image - nur laden wenn in View */}
+      {/* Actual Image - nur laden wenn in View oder Priority */}
       {isInView && (
         <img
           src={src}
           alt={alt}
           onLoad={handleLoad}
           onError={handleError}
-          loading="lazy" // Native Browser Lazy Loading als Fallback
+          loading={priority ? 'eager' : 'lazy'} // Priority: eager, sonst lazy
           decoding="async" // Async Dekodierung für bessere Performance
+          fetchpriority={priority ? 'high' : 'auto'} // HTML-Attribut für Priorität
           style={{
             width: '100%',
             height: '100%',
             objectFit: objectFit,
             opacity: isLoaded ? 1 : 0,
-            transition: 'opacity 0.3s ease-in-out',
+            transition: 'opacity 0.2s ease-in', // Schnellere Transition
             display: 'block'
           }}
         />
-      )}
-
-      {/* Loading Spinner (optional, nur bei großen Bildern) */}
-      {isInView && !isLoaded && height > 300 && (
-        <Box
-          position="absolute"
-          top="50%"
-          left="50%"
-          sx={{
-            transform: 'translate(-50%, -50%)',
-            zIndex: 2
-          }}
-        >
-          <CircularProgress size={40} />
-        </Box>
       )}
     </Box>
   );

@@ -9,13 +9,13 @@ import {
   Box,
   Chip,
   Button,
-  CircularProgress,
   Alert,
   Fade,
   CardActions,
   IconButton,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Skeleton
 } from '@mui/material';
 import {
   Inventory as WeightIcon,
@@ -44,6 +44,7 @@ const ProductsPage = () => {
   const { loadCart } = useCart();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
   const [error, setError] = useState('');
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
 
@@ -122,7 +123,7 @@ const ProductsPage = () => {
   };
 
   useEffect(() => {
-    // Versuche zuerst gecachte Daten zu laden für sofortiges Display
+    // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
         const cached = sessionStorage.getItem('cachedProducts');
@@ -132,12 +133,13 @@ const ProductsPage = () => {
           if (Date.now() - timestamp < 5 * 60 * 1000) {
             console.log('⚡ Loading cached products immediately');
             setProducts(data);
+            setInitialLoading(false); // Zeige Content statt Skeleton
             setLoading(false);
             
-            // Lade trotzdem frische Daten im Hintergrund
+            // Lade frische Daten im Hintergrund
             setTimeout(() => {
               console.log('🔄 Refreshing products in background');
-              fetchProducts();
+              fetchProducts(true); // true = background update
             }, 100);
             return true;
           }
@@ -150,13 +152,15 @@ const ProductsPage = () => {
     
     // Wenn kein Cache geladen wurde, normale Ladung
     if (!loadCachedProducts()) {
-      fetchProducts();
+      fetchProducts(false);
     }
   }, []);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (isBackgroundUpdate = false) => {
     try {
-      setLoading(true);
+      if (!isBackgroundUpdate) {
+        setLoading(true);
+      }
       setError('');
       
       console.time('⏱️ Products API Call');
@@ -168,6 +172,7 @@ const ProductsPage = () => {
       
       const productsData = response.data?.data || response.data || [];
       setProducts(productsData);
+      setInitialLoading(false);
       
       // Cache Produktdaten im SessionStorage für schnelleres Nachladen
       try {
@@ -183,42 +188,91 @@ const ProductsPage = () => {
       console.error('❌ Error fetching products:', err);
       
       // Versuche cached Daten zu laden wenn API fehlschlägt
-      try {
-        const cached = sessionStorage.getItem('cachedProducts');
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          // Verwende Cache wenn er weniger als 5 Minuten alt ist
-          if (Date.now() - timestamp < 5 * 60 * 1000) {
-            console.log('📦 Using cached products (API failed)');
-            setProducts(data);
-            setError('Keine Verbindung zum Server. Zeige gespeicherte Daten.');
-            return;
+      if (!isBackgroundUpdate) {
+        try {
+          const cached = sessionStorage.getItem('cachedProducts');
+          if (cached) {
+            const { data, timestamp } = JSON.parse(cached);
+            // Verwende Cache wenn er weniger als 5 Minuten alt ist
+            if (Date.now() - timestamp < 5 * 60 * 1000) {
+              console.log('📦 Using cached products (API failed)');
+              setProducts(data);
+              setInitialLoading(false);
+              setError('Keine Verbindung zum Server. Zeige gespeicherte Daten.');
+              return;
+            }
           }
+        } catch (cacheErr) {
+          console.warn('⚠️ Could not load cached products:', cacheErr);
         }
-      } catch (cacheErr) {
-        console.warn('⚠️ Could not load cached products:', cacheErr);
+        
+        setError('Fehler beim Laden der Produkte: ' + (err.response?.data?.message || err.message));
       }
-      
-      setError('Fehler beim Laden der Produkte: ' + (err.response?.data?.message || err.message));
     } finally {
-      setLoading(false);
+      if (!isBackgroundUpdate) {
+        setLoading(false);
+      }
     }
   };
 
-  if (loading) {
+  if (initialLoading && products.length === 0) {
     return (
-      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-        <Box textAlign="center">
-          <CircularProgress size={60} />
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Lade Produkte...
+      <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
+        {/* Header - sofort sichtbar */}
+        <Box textAlign="center" mb={isMobile ? 3 : 6}>
+          <Typography 
+            variant={isMobile ? "h4" : "h3"}
+            component="h1" 
+            gutterBottom
+            sx={{ 
+              fontWeight: 'bold',
+              background: 'linear-gradient(45deg, #2E7D32, #4CAF50)',
+              backgroundClip: 'text',
+              textFillColor: 'transparent',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}
+          >
+            Unsere handgemachten Naturseifen
           </Typography>
+          <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
+            Premium Qualität aus natürlichen Zutaten
+          </Typography>
+          <Skeleton variant="text" width={200} sx={{ mx: 'auto' }} />
         </Box>
+
+        {/* Skeleton Cards */}
+        <Grid container spacing={isMobile ? 2 : 4}>
+          {[1, 2, 3, 4, 5, 6].map((index) => (
+            <Grid item xs={12} sm={6} md={4} key={index}>
+              <Card sx={{ height: '100%' }}>
+                <Skeleton 
+                  variant="rectangular" 
+                  height={isMobile ? 200 : 300}
+                  animation="wave"
+                />
+                <CardContent>
+                  <Skeleton variant="text" height={40} width="80%" />
+                  <Skeleton variant="text" height={20} width="100%" sx={{ mt: 1 }} />
+                  <Skeleton variant="text" height={20} width="90%" />
+                  <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                    <Skeleton variant="text" width={60} />
+                    <Skeleton variant="text" width={80} />
+                  </Box>
+                  <Skeleton variant="text" height={35} width="50%" sx={{ mt: 2, mx: 'auto' }} />
+                </CardContent>
+                <CardActions sx={{ p: 2, pt: 0 }}>
+                  <Skeleton variant="rectangular" height={36} width="100%" />
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
       </Container>
     );
   }
 
-  if (error) {
+  if (error && products.length === 0) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4 }}>
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -260,17 +314,19 @@ const ProductsPage = () => {
       <Grid container spacing={isMobile ? 2 : 4}>
         {products.map((product, index) => (
           <Grid item xs={12} sm={6} md={4} key={product._id}>
-            <Fade in={true} timeout={500 + index * 100}>
+            <Fade in={true} timeout={300} style={{ transitionDelay: `${Math.min(index * 50, 200)}ms` }}>
               <Card 
                 sx={{ 
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
-                  transition: 'all 0.3s ease-in-out',
+                  transition: 'all 0.2s ease-in-out',
                   cursor: 'pointer',
+                  contentVisibility: 'auto', // Browser optimiert Rendering
+                  containIntrinsicSize: '1px 600px', // Geschätzte Größe für besseres Scrolling
                   '&:hover': {
-                    transform: isMobile ? 'none' : 'translateY(-8px)',
-                    boxShadow: isMobile ? 2 : '0 12px 30px rgba(0,0,0,0.2)'
+                    transform: isMobile ? 'none' : 'translateY(-4px)',
+                    boxShadow: isMobile ? 2 : '0 8px 24px rgba(0,0,0,0.15)'
                   }
                 }}
               >
@@ -284,6 +340,7 @@ const ProductsPage = () => {
                     alt={product.name}
                     height={isMobile ? 200 : 300}
                     objectFit="cover"
+                    priority={index < 3} // Erste 3 Bilder haben Priorität
                     fallback={
                       <Box
                         sx={{
