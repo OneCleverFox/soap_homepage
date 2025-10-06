@@ -104,14 +104,30 @@ const AdminLager = () => {
 
   const loadBestand = async () => {
     try {
+      const token = localStorage.getItem('token');
+      console.log('🔐 Token vorhanden:', !!token);
+      console.log('🔐 Token (first 20 chars):', token?.substring(0, 20));
+      
       const response = await fetch(`${API_URL}/lager/bestand`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
+      
+      console.log('📡 Response Status:', response.status);
       const data = await response.json();
+      console.log('📦 Bestand API Response:', data);
+      
       if (data.success) {
+        console.log('✅ Setting bestand:', data.data);
+        console.log('   Rohseifen:', data.data.rohseifen?.length);
+        console.log('   Duftöle:', data.data.duftoele?.length);
+        console.log('   Verpackungen:', data.data.verpackungen?.length);
+        console.log('   Produkte:', data.data.produkte?.length);
         setBestand(data.data);
+      } else {
+        console.error('❌ API returned error:', data.message);
+        setMessage({ type: 'error', text: data.message || 'Fehler beim Laden des Bestands' });
       }
     } catch (error) {
       console.error('Fehler beim Laden des Bestands:', error);
@@ -549,6 +565,11 @@ const AdminLager = () => {
       >
         <DialogTitle>Inventur durchführen</DialogTitle>
         <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Bei der Inventur wird der <strong>tatsächlich gezählte Bestand</strong> eingetragen. 
+            Der aktuelle Bestand wird auf diese Menge gesetzt.
+          </Alert>
+          
           <Stack spacing={2} sx={{ mt: 1 }}>
             <FormControl fullWidth size={isMobile ? 'small' : 'medium'}>
               <InputLabel>Typ</InputLabel>
@@ -582,17 +603,17 @@ const AdminLager = () => {
               >
                 {inventurForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat}g)
+                    {item.name} (Aktuell: {item.vorrat}g)
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'duftoil' && availableItems.duftoele?.map(item => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat} Tropfen)
+                    {item.name} (Aktuell: {item.vorrat} Tropfen)
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'verpackung' && availableItems.verpackungen?.map(item => (
                   <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat} Stück)
+                    {item.name} (Aktuell: {item.vorrat} Stück)
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'produkt' && availableItems.produkte?.map(item => (
@@ -602,12 +623,13 @@ const AdminLager = () => {
             </FormControl>
 
             <TextField
-              label="Menge"
+              label="Gezählte Menge (absoluter Bestand)"
               type="number"
               fullWidth
               size={isMobile ? 'small' : 'medium'}
               value={inventurForm.menge}
               onChange={(e) => setInventurForm({ ...inventurForm, menge: parseFloat(e.target.value) })}
+              helperText={`Trage hier die tatsächlich gezählte Menge in ${inventurForm.einheit} ein`}
             />
 
             <TextField
@@ -622,12 +644,13 @@ const AdminLager = () => {
             />
 
             <TextField
-              label="Mindestbestand"
+              label="Mindestbestand (optional)"
               type="number"
               fullWidth
               size={isMobile ? 'small' : 'medium'}
               value={inventurForm.mindestbestand}
               onChange={(e) => setInventurForm({ ...inventurForm, mindestbestand: parseFloat(e.target.value) })}
+              helperText="Wenn gesetzt, erscheint eine Warnung bei Unterschreitung"
             />
 
             <TextField
@@ -648,7 +671,7 @@ const AdminLager = () => {
             variant="contained"
             disabled={loading || !inventurForm.artikelId}
           >
-            Speichern
+            Bestand aktualisieren
           </Button>
         </DialogActions>
       </Dialog>
