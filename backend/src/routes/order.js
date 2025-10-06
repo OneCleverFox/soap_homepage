@@ -6,6 +6,8 @@ const Portfolio = require('../models/Portfolio');
 const Rohseife = require('../models/Rohseife');
 const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
+const Bestand = require('../models/Bestand');
+const Bewegung = require('../models/Bewegung');
 
 // 🛒 Alle Bestellungen abrufen (mit Filteroptionen)
 router.get('/', async (req, res) => {
@@ -292,6 +294,51 @@ router.post('/', async (req, res) => {
 
     await neueBestellung.save();
 
+    // 📦 Lagerbestand aktualisieren für Portfolio-Produkte
+    try {
+      for (const artikel_item of validierteArtikel) {
+        if (artikel_item.produktType === 'portfolio') {
+          const bestand = await Bestand.findOne({
+            typ: 'produkt',
+            artikelId: artikel_item.produktId
+          });
+          
+          if (bestand) {
+            const vorher = bestand.menge;
+            await bestand.verringereBestand(artikel_item.menge, 'bestellung');
+            
+            // Erstelle Bewegungs-Log
+            await Bewegung.erstelle({
+              typ: 'ausgang',
+              bestandId: bestand._id,
+              artikel: {
+                typ: 'produkt',
+                artikelId: artikel_item.produktId,
+                name: artikel_item.produktSnapshot.name
+              },
+              menge: -artikel_item.menge,
+              einheit: 'stück',
+              bestandVorher: vorher,
+              bestandNachher: bestand.menge,
+              grund: `Bestellung ${neueBestellung.bestellnummer}`,
+              referenz: {
+                typ: 'bestellung',
+                id: neueBestellung._id
+              },
+              notizen: `Kunde: ${besteller.email}`
+            });
+            
+            console.log(`📦 Lagerbestand aktualisiert: ${artikel_item.produktSnapshot.name} -${artikel_item.menge} (Neuer Bestand: ${bestand.menge})`);
+          } else {
+            console.warn(`⚠️ Kein Lagerbestand für Produkt ${artikel_item.produktId} gefunden`);
+          }
+        }
+      }
+    } catch (lagerError) {
+      console.error('Fehler bei Lageraktualisierung:', lagerError);
+      // Bestellung ist trotzdem erfolgreich, nur Warnung loggen
+    }
+
     // Bestätigung-E-Mail (hier nur Logging)
     console.log(`📧 Bestellbestätigung für ${besteller.email} - Bestellung ${neueBestellung.bestellnummer}`);
 
@@ -337,14 +384,59 @@ router.patch('/:id/status', async (req, res) => {
     }
 
     // Status aktualisieren
+    const alterStatus = order.status;
     await order.aktualisiereStatus(status, notiz, bearbeiter);
+
+    // 📦 Bei Stornierung oder Retoure: Lagerbestand wieder erhöhen
+    if ((status === 'storniert' || status === 'retourniert') && alterStatus !== status) {
+      try {
+        for (const artikel_item of order.artikel) {
+          if (artikel_item.produktType === 'portfolio') {
+            const bestand = await Bestand.findOne({
+              typ: 'produkt',
+              artikelId: artikel_item.produktId
+            });
+            
+            if (bestand) {
+              const vorher = bestand.menge;
+              await bestand.erhoeheBestand(artikel_item.menge, 'retoure');
+              
+              // Erstelle Bewegungs-Log
+              await Bewegung.erstelle({
+                typ: 'eingang',
+                bestandId: bestand._id,
+                artikel: {
+                  typ: 'produkt',
+                  artikelId: artikel_item.produktId,
+                  name: artikel_item.produktSnapshot.name
+                },
+                menge: artikel_item.menge,
+                einheit: 'stück',
+                bestandVorher: vorher,
+                bestandNachher: bestand.menge,
+                grund: `${status === 'storniert' ? 'Stornierung' : 'Retoure'} ${order.bestellnummer}`,
+                referenz: {
+                  typ: status === 'storniert' ? 'stornierung' : 'retoure',
+                  id: order._id
+                },
+                notizen: notiz || ''
+              });
+              
+              console.log(`📦 Lagerbestand erhöht (${status}): ${artikel_item.produktSnapshot.name} +${artikel_item.menge} (Neuer Bestand: ${bestand.menge})`);
+            }
+          }
+        }
+      } catch (lagerError) {
+        console.error('Fehler bei Lageraktualisierung (Retoure):', lagerError);
+      }
+    }
 
     res.json({
       success: true,
       message: `Status erfolgreich zu "${status}" geändert`,
       data: {
         bestellnummer: order.bestellnummer,
-        alterStatus: order.statusVerlauf[order.statusVerlauf.length - 2]?.status,
+        alterStatus,
         neuerStatus: status,
         statusVerlauf: order.statusVerlauf
       }
