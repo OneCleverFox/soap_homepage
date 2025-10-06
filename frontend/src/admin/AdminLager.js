@@ -411,7 +411,7 @@ const AdminLager = () => {
                           typ: item.typ,
                           // Für Produkte verwenden wir die Bestand-ID (_id), für andere die artikelId
                           artikelId: item.typ === 'produkt' ? item._id : item.artikelId,
-                          menge: 0,
+                          menge: '',
                           aktion: 'hinzufuegen',
                           notizen: '',
                           aktuellerBestand: item.menge,
