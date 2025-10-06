@@ -169,13 +169,36 @@ router.post('/add', authenticateToken, async (req, res) => {
 
     await cart.save();
 
+    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
+    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
+      try {
+        // Hole aktuelles Produkt aus Portfolio
+        const product = await Portfolio.findById(item.produktId);
+        
+        if (product && product.bilder && product.bilder.hauptbild) {
+          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          return {
+            ...item.toObject(),
+            bild: product.bilder.hauptbild
+          };
+        }
+        
+        // Fallback: behalte vorhandene Bild-URL
+        return item.toObject();
+      } catch (err) {
+        console.error('Fehler beim Laden des Produkts:', item.produktId, err);
+        // Bei Fehler: behalte Artikel wie er ist
+        return item.toObject();
+      }
+    }));
+
     res.json({
       success: true,
       message: 'Artikel zum Warenkorb hinzugefügt',
       data: {
-        items: cart.artikel,
-        total: cart.artikel.reduce((sum, item) => sum + (item.preis * item.menge), 0),
-        itemCount: cart.artikel.reduce((sum, item) => sum + item.menge, 0)
+        items: enrichedItems,
+        total: enrichedItems.reduce((sum, item) => sum + (item.preis * item.menge), 0),
+        itemCount: enrichedItems.reduce((sum, item) => sum + item.menge, 0)
       }
     });
   } catch (error) {
@@ -239,13 +262,36 @@ router.put('/update', authenticateToken, async (req, res) => {
 
     await cart.save();
 
+    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
+    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
+      try {
+        // Hole aktuelles Produkt aus Portfolio
+        const product = await Portfolio.findById(item.produktId);
+        
+        if (product && product.bilder && product.bilder.hauptbild) {
+          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          return {
+            ...item.toObject(),
+            bild: product.bilder.hauptbild
+          };
+        }
+        
+        // Fallback: behalte vorhandene Bild-URL
+        return item.toObject();
+      } catch (err) {
+        console.error('Fehler beim Laden des Produkts:', item.produktId, err);
+        // Bei Fehler: behalte Artikel wie er ist
+        return item.toObject();
+      }
+    }));
+
     res.json({
       success: true,
       message: 'Warenkorb aktualisiert',
       data: {
-        items: cart.artikel,
-        total: cart.artikel.reduce((sum, item) => sum + (item.preis * item.menge), 0),
-        itemCount: cart.artikel.reduce((sum, item) => sum + item.menge, 0)
+        items: enrichedItems,
+        total: enrichedItems.reduce((sum, item) => sum + (item.preis * item.menge), 0),
+        itemCount: enrichedItems.reduce((sum, item) => sum + item.menge, 0)
       }
     });
   } catch (error) {
@@ -287,13 +333,36 @@ router.delete('/remove/:produktId', authenticateToken, async (req, res) => {
 
     await cart.save();
 
+    // Aktualisiere Bild-URLs aus Portfolio für alle verbleibenden Artikel
+    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
+      try {
+        // Hole aktuelles Produkt aus Portfolio
+        const product = await Portfolio.findById(item.produktId);
+        
+        if (product && product.bilder && product.bilder.hauptbild) {
+          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          return {
+            ...item.toObject(),
+            bild: product.bilder.hauptbild
+          };
+        }
+        
+        // Fallback: behalte vorhandene Bild-URL
+        return item.toObject();
+      } catch (err) {
+        console.error('Fehler beim Laden des Produkts:', item.produktId, err);
+        // Bei Fehler: behalte Artikel wie er ist
+        return item.toObject();
+      }
+    }));
+
     res.json({
       success: true,
       message: 'Artikel entfernt',
       data: {
-        items: cart.artikel,
-        total: cart.artikel.reduce((sum, item) => sum + (item.preis * item.menge), 0),
-        itemCount: cart.artikel.reduce((sum, item) => sum + item.menge, 0)
+        items: enrichedItems,
+        total: enrichedItems.reduce((sum, item) => sum + (item.preis * item.menge), 0),
+        itemCount: enrichedItems.reduce((sum, item) => sum + item.menge, 0)
       }
     });
   } catch (error) {
