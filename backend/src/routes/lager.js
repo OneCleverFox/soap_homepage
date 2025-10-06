@@ -617,7 +617,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
 // POST /api/lager/korrektur - Bestand manuell korrigieren
 router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { typ, artikelId, aenderung, notizen } = req.body;
+    const { typ, artikelId, portfolioId, aenderung, notizen } = req.body;
     
     if (!typ || !artikelId || aenderung === undefined) {
       return res.status(400).json({
@@ -733,12 +733,26 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
         break;
         
       case 'produkt':
-        // Für Produkte verwenden wir weiterhin Bestand-Collection
+        // Für Produkte: artikelId ist Bestand-ID, portfolioId ist Portfolio-ID (optional)
         let bestand = await Bestand.findById(artikelId).populate('artikelId');
-        if (!bestand) {
+        
+        if (!bestand && portfolioId) {
+          // Kein Bestand gefunden, aber portfolioId vorhanden - erstelle Bestand
+          const portfolioProdukt = await Portfolio.findById(portfolioId);
+          if (!portfolioProdukt) {
+            return res.status(404).json({
+              success: false,
+              message: 'Produkt nicht gefunden'
+            });
+          }
+          
+          // Erstelle neuen Bestand-Eintrag mit findeOderErstelle
+          bestand = await Bestand.findeOderErstelle('produkt', portfolioId, 'stück');
+          console.log(`✨ Neuer Bestand-Eintrag erstellt für ${portfolioProdukt.name}`);
+        } else if (!bestand) {
           return res.status(404).json({
             success: false,
-            message: 'Bestand-Eintrag nicht gefunden. Bitte verwenden Sie "Inventur" um einen neuen Bestand anzulegen oder "Produktion" um das Produkt zu produzieren.'
+            message: 'Bestand-Eintrag nicht gefunden'
           });
         }
         
