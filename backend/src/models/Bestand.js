@@ -88,7 +88,7 @@ bestandSchema.virtual('artikel', {
 });
 
 // Methode: Bestand erhöhen
-bestandSchema.methods.erhoeheBestand = function(menge, grund = 'inventur') {
+bestandSchema.methods.erhoeheBestand = function(menge, grund = 'inventur', notizen = '') {
   const vorher = this.menge;
   this.menge += menge;
   this.letzteAenderung = {
@@ -98,11 +98,14 @@ bestandSchema.methods.erhoeheBestand = function(menge, grund = 'inventur') {
     vorher,
     nachher: this.menge
   };
+  if (notizen) {
+    this.notizen = notizen;
+  }
   return this.save();
 };
 
 // Methode: Bestand verringern
-bestandSchema.methods.verringereBestand = function(menge, grund = 'bestellung') {
+bestandSchema.methods.verringereBestand = function(menge, grund = 'bestellung', notizen = '') {
   const vorher = this.menge;
   this.menge = Math.max(0, this.menge - menge);
   this.letzteAenderung = {
@@ -112,6 +115,9 @@ bestandSchema.methods.verringereBestand = function(menge, grund = 'bestellung') 
     vorher,
     nachher: this.menge
   };
+  if (notizen) {
+    this.notizen = notizen;
+  }
   return this.save();
 };
 
