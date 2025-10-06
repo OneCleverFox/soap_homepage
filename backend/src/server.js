@@ -45,6 +45,7 @@ const kundenRoutes = require('./routes/kunden');
 const usersRoutes = require('./routes/users');
 const cartRoutes = require('./routes/cart');
 const warenberechnungRoutes = require('./routes/warenberechnung');
+const lagerRoutes = require('./routes/lager');
 
 const app = express();
 
@@ -211,6 +212,7 @@ app.use('/api/kunden', kundenRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/warenberechnung', warenberechnungRoutes);
+app.use('/api/lager', lagerRoutes);
 app.use('/api/images', require('./routes/images'));
 
 // Test Route für Datenempfang
