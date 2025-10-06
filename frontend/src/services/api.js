@@ -8,6 +8,9 @@ const API_BASE_URL = process.env.NODE_ENV === 'development'
   ? '/api' 
   : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
 
+// Export für direkten Zugriff
+export const API_URL = API_BASE_URL;
+
 // Debug: Log API URL on startup
 if (process.env.NODE_ENV === 'production') {
   console.log('🔧 API Base URL:', API_BASE_URL);
