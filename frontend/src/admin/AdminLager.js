@@ -81,7 +81,7 @@ const AdminLager = () => {
   
   const [produktionForm, setProduktionForm] = useState({
     produktId: '',
-    anzahl: 1
+    anzahl: ''
   });
   
   const [korrekturForm, setKorrekturForm] = useState({
@@ -218,13 +218,19 @@ const AdminLager = () => {
   const handleProduktion = async () => {
     setLoading(true);
     try {
+      // Konvertiere String zu Zahl
+      const payload = {
+        ...produktionForm,
+        anzahl: Number(produktionForm.anzahl) || 0
+      };
+      
       const response = await fetch(`${API_URL}/lager/produktion`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(produktionForm)
+        body: JSON.stringify(payload)
       });
       const data = await response.json();
       
@@ -235,13 +241,26 @@ const AdminLager = () => {
             `- ${r.rohstoff}: ${r.menge} ${r.einheit} (Neuer Bestand: ${r.neuerBestand})`
           ).join('\n')}`
         });
+        
+        // REACTIVE UPDATE: Aktualisiere Produkt-Bestand direkt in UI
+        const produzierteAnzahl = Number(produktionForm.anzahl) || 0;
+        setBestand(prevBestand => ({
+          ...prevBestand,
+          produkte: prevBestand.produkte.map(p => 
+            p.artikelId === produktionForm.produktId
+              ? { ...p, menge: p.menge + produzierteAnzahl }
+              : p
+          )
+        }));
+        
         setProduktionDialog(false);
-        loadBestand();
+        loadBestand(); // Hintergrund-Reload für Datenkonsistenz
         loadWarnungen();
-        // Reset form
+        
+        // Reset form mit leerem Wert
         setProduktionForm({
           produktId: '',
-          anzahl: 1
+          anzahl: ''
         });
       } else {
         // Zeige auch die detaillierten Fehler an
