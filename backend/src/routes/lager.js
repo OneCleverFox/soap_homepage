@@ -434,7 +434,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
             bestandNachher: rohseifeDoc.aktuellVorrat,
             grund: `Produktion: ${anzahl}x ${produkt.name}`,
             notizen,
-            userId: req.user.id || req.user.userId,
+            userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
               typ: 'produktion',
               produktId: produkt._id,
@@ -478,7 +478,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
             bestandNachher: duftoel.aktuellVorrat,
             grund: `Produktion: ${anzahl}x ${produkt.name}`,
             notizen,
-            userId: req.user.id || req.user.userId,
+            userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
               typ: 'produktion',
               produktId: produkt._id,
@@ -520,7 +520,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
             bestandNachher: verpackung.aktuellVorrat,
             grund: `Produktion: ${anzahl}x ${produkt.name}`,
             notizen,
-            userId: req.user.id || req.user.userId,
+            userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
               typ: 'produktion',
               produktId: produkt._id,
@@ -543,7 +543,12 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     
     // Erstelle alle Bewegungs-Logs für Rohstoffe
     for (const bewegungData of bewegungen) {
-      await Bewegung.erstelle(bewegungData);
+      try {
+        await Bewegung.erstelle(bewegungData);
+      } catch (err) {
+        console.error('Fehler beim Erstellen der Bewegung:', err);
+        // Fahre fort auch wenn Bewegung-Log fehlschlägt
+      }
     }
     
     // Buche Fertigprodukt ein (Bestand-Collection)
@@ -552,28 +557,33 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     await produktBestand.erhoeheBestand(anzahl, 'Produktion abgeschlossen', notizen);
     
     // Erstelle Bewegungs-Log für Fertigprodukt
-    await Bewegung.erstelle({
-      typ: 'produktion',
-      bestandId: produktBestand._id,
-      artikel: {
-        typ: 'produkt',
-        artikelId: produktId,
-        name: produkt.name
-      },
-      menge: anzahl,
-      einheit: 'stück',
-      bestandVorher: vorherProdukt,
-      bestandNachher: produktBestand.menge,
-      grund: 'Produktion abgeschlossen',
-      notizen,
-      userId: req.user.id || req.user.userId,
-      referenz: {
+    try {
+      await Bewegung.erstelle({
         typ: 'produktion',
-        produktId: produkt._id,
-        produktName: produkt.name,
-        anzahl
-      }
-    });
+        bestandId: produktBestand._id,
+        artikel: {
+          typ: 'produkt',
+          artikelId: produktId,
+          name: produkt.name
+        },
+        menge: anzahl,
+        einheit: 'stück',
+        bestandVorher: vorherProdukt,
+        bestandNachher: produktBestand.menge,
+        grund: 'Produktion abgeschlossen',
+        notizen,
+        userId: req.user.id || req.user.userId || req.user._id,
+        referenz: {
+          typ: 'produktion',
+          produktId: produkt._id,
+          produktName: produkt.name,
+          anzahl
+        }
+      });
+    } catch (err) {
+      console.error('Fehler beim Erstellen der Produkt-Bewegung:', err);
+      // Fahre fort auch wenn Bewegung-Log fehlschlägt
+    }
     
     res.json({
       success: true,
