@@ -65,7 +65,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       artikelId: v._id,
       name: v.bezeichnung,
       menge: v.aktuellVorrat,
-      einheit: 'stück',
+      einheit: 'Stück',
       mindestbestand: v.mindestbestand,
       unterMindestbestand: v.aktuellVorrat < v.mindestbestand,
       typ: 'verpackung'
@@ -77,7 +77,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       artikelId: p.artikelId?._id,
       name: p.artikelId?.name,
       menge: p.menge,
-      einheit: 'stück',
+      einheit: 'Stück',
       mindestbestand: p.mindestbestand,
       unterMindestbestand: p.istUnterMindestbestand(),
       letzteAenderung: p.letzteAenderung,
@@ -152,7 +152,7 @@ router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
         name: v.bezeichnung,
         menge: v.aktuellVorrat,
         mindestbestand: v.mindestbestand,
-        einheit: 'stück',
+        einheit: 'Stück',
         differenz: v.mindestbestand - v.aktuellVorrat
       });
     });
@@ -167,7 +167,7 @@ router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
           name: p.artikelId.name,
           menge: p.menge,
           mindestbestand: p.mindestbestand,
-          einheit: 'stück',
+          einheit: 'Stück',
           differenz: p.mindestbestand - p.menge
         });
       }
@@ -289,7 +289,7 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
           artikel.mindestbestand = mindestbestand;
         }
         await artikel.save();
-        einheit = 'stück';
+        einheit = 'Stück';
         
         // Log Bewegung
         await Bewegung.erstelle({
@@ -301,7 +301,7 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
             name: artikel.bezeichnung
           },
           menge: menge - vorher,
-          einheit: 'stück',
+          einheit: 'Stück',
           bestandVorher: vorher,
           bestandNachher: menge,
           grund: 'Manuelle Inventur',
@@ -312,7 +312,7 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
         
       case 'produkt':
         // Für Produkte verwenden wir weiterhin Bestand-Collection
-        let bestand = await Bestand.findeOderErstelle('produkt', artikelId, 'stück');
+        let bestand = await Bestand.findeOderErstelle('produkt', artikelId, 'Stück');
         vorher = bestand.menge;
         bestand.menge = menge;
         if (mindestbestand !== undefined) {
@@ -340,14 +340,14 @@ router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
             name: produktDoc?.name
           },
           menge: menge - vorher,
-          einheit: 'stück',
+          einheit: 'Stück',
           bestandVorher: vorher,
           bestandNachher: menge,
           grund: 'Manuelle Inventur',
           notizen,
           userId: req.user.id || req.user.userId
         });
-        einheit = 'stück';
+        einheit = 'Stück';
         break;
         
       default:
@@ -515,7 +515,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
               name: verpackung.bezeichnung
             },
             menge: -benoetigt,
-            einheit: 'stück',
+            einheit: 'Stück',
             bestandVorher: vorher,
             bestandNachher: verpackung.aktuellVorrat,
             grund: `Produktion: ${anzahl}x ${produkt.name}`,
@@ -552,7 +552,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
     }
     
     // Buche Fertigprodukt ein (Bestand-Collection)
-    const produktBestand = await Bestand.findeOderErstelle('produkt', produktId, 'stück');
+    const produktBestand = await Bestand.findeOderErstelle('produkt', produktId, 'Stück');
     const vorherProdukt = produktBestand.menge;
     await produktBestand.erhoeheBestand(anzahl, 'produktion', notizen);
     
@@ -567,7 +567,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
           name: produkt.name
         },
         menge: anzahl,
-        einheit: 'stück',
+        einheit: 'Stück',
         bestandVorher: vorherProdukt,
         bestandNachher: produktBestand.menge,
         grund: 'produktion',
@@ -711,7 +711,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
         nachher = Math.max(0, vorher + aenderung);
         artikel.aktuellVorrat = nachher;
         await artikel.save();
-        einheit = 'stück';
+        einheit = 'Stück';
         
         // Log Bewegung
         await Bewegung.erstelle({
@@ -723,7 +723,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
             name: artikel.bezeichnung
           },
           menge: aenderung,
-          einheit: 'stück',
+          einheit: 'Stück',
           bestandVorher: vorher,
           bestandNachher: nachher,
           grund: 'Manuelle Korrektur',
@@ -738,7 +738,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
         if (!bestand) {
           return res.status(404).json({
             success: false,
-            message: 'Bestand nicht gefunden'
+            message: 'Bestand-Eintrag nicht gefunden. Bitte verwenden Sie "Inventur" um einen neuen Bestand anzulegen oder "Produktion" um das Produkt zu produzieren.'
           });
         }
         
