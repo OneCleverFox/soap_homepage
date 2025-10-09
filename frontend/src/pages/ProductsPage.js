@@ -24,7 +24,9 @@ import {
   Link as LinkIcon,
   ShoppingCart as CartIcon,
   Add as AddIcon,
-  Remove as RemoveIcon
+  Remove as RemoveIcon,
+  Inventory2 as InventoryIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { portfolioAPI, cartAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -62,7 +64,10 @@ const ProductsPage = () => {
   // Menge ändern
   const handleQuantityChange = (productId, delta) => {
     setQuantities(prev => {
-      const newQuantity = Math.max(1, (prev[productId] || 1) + delta);
+      const product = products.find(p => p._id === productId);
+      const maxMenge = product?.bestand?.menge || 0;
+      const currentQuantity = prev[productId] || 1;
+      const newQuantity = Math.max(1, Math.min(maxMenge, currentQuantity + delta));
       return { ...prev, [productId]: newQuantity };
     });
   };
@@ -74,8 +79,19 @@ const ProductsPage = () => {
       return;
     }
 
+    if (!product.bestand?.verfuegbar) {
+      toast.error('Produkt ist nicht auf Lager');
+      return;
+    }
+
     try {
       const quantity = quantities[product._id] || 1;
+
+      // Prüfe ob genug Bestand vorhanden ist
+      if (quantity > product.bestand.menge) {
+        toast.error(`Nur noch ${product.bestand.menge} Stück verfügbar`);
+        return;
+      }
 
       await cartAPI.addToCart({
         produktId: product._id,
@@ -92,6 +108,10 @@ const ProductsPage = () => {
       // Warenkorb neu laden um die Anzeige zu aktualisieren
       console.log('🔄 Lade Warenkorb nach Hinzufügen neu...');
       await loadCart();
+      
+      // Produkte neu laden um aktuellen Bestand anzuzeigen
+      console.log('🔄 Aktualisiere Produktbestände...');
+      fetchProducts(true);
       
     } catch (err) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
@@ -384,6 +404,29 @@ const ProductsPage = () => {
                     {product.name}
                   </Typography>
 
+                  {/* Verfügbarkeitsanzeige */}
+                  {product.bestand && (
+                    <Box sx={{ mb: 2 }}>
+                      {product.bestand.verfuegbar ? (
+                        <Chip
+                          label={`${product.bestand.menge} ${product.bestand.einheit} vorrätig`}
+                          color="success"
+                          size="small"
+                          icon={<InventoryIcon />}
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      ) : (
+                        <Chip
+                          label="Aktuell nicht auf Lager"
+                          color="error"
+                          size="small"
+                          icon={<WarningIcon />}
+                          sx={{ fontWeight: 'bold' }}
+                        />
+                      )}
+                    </Box>
+                  )}
+
                   {/* Kurzbeschreibung */}
                   {product.beschreibung?.kurz && (
                     <Typography 
@@ -452,9 +495,10 @@ const ProductsPage = () => {
                           display: 'flex', 
                           alignItems: 'center',
                           border: '1px solid',
-                          borderColor: 'divider',
+                          borderColor: product.bestand?.verfuegbar ? 'divider' : 'grey.300',
                           borderRadius: 1,
-                          overflow: 'hidden'
+                          overflow: 'hidden',
+                          opacity: product.bestand?.verfuegbar ? 1 : 0.5
                         }}
                       >
                         <IconButton
@@ -463,7 +507,7 @@ const ProductsPage = () => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, -1);
                           }}
-                          disabled={quantities[product._id] <= 1}
+                          disabled={!product.bestand?.verfuegbar || quantities[product._id] <= 1}
                           sx={{ borderRadius: 0 }}
                         >
                           <RemoveIcon fontSize="small" />
@@ -487,6 +531,7 @@ const ProductsPage = () => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, 1);
                           }}
+                          disabled={!product.bestand?.verfuegbar || (quantities[product._id] || 1) >= (product.bestand?.menge || 0)}
                           sx={{ borderRadius: 0 }}
                         >
                           <AddIcon fontSize="small" />
@@ -496,16 +541,26 @@ const ProductsPage = () => {
                       {/* Kompakter Warenkorb-Button */}
                       <Button
                         variant="contained"
-                        color="success"
+                        color={product.bestand?.verfuegbar ? "success" : "inherit"}
                         size="small"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleAddToCart(product);
                         }}
                         startIcon={<CartIcon />}
-                        sx={{ flex: 1 }}
+                        disabled={!product.bestand?.verfuegbar}
+                        sx={{ 
+                          flex: 1,
+                          ...(product.bestand?.verfuegbar ? {} : {
+                            bgcolor: 'grey.300',
+                            color: 'grey.600',
+                            '&:hover': {
+                              bgcolor: 'grey.400'
+                            }
+                          })
+                        }}
                       >
-                        Warenkorb
+                        {product.bestand?.verfuegbar ? 'Warenkorb' : 'Nicht verfügbar'}
                       </Button>
                     </Box>
                   )}

@@ -101,15 +101,11 @@ const AdminLager = () => {
   // Load data on mount
   useEffect(() => {
     loadBestand();
-    loadWarnungen();
-    loadAvailableItems();
   }, []);
 
   const loadBestand = async () => {
     try {
       const token = localStorage.getItem('token');
-      console.log('🔐 Token vorhanden:', !!token);
-      console.log('🔐 Token (first 20 chars):', token?.substring(0, 20));
       
       const response = await fetch(`${API_URL}/lager/bestand`, {
         headers: {
@@ -119,15 +115,44 @@ const AdminLager = () => {
       
       console.log('📡 Response Status:', response.status);
       const data = await response.json();
-      console.log('📦 Bestand API Response:', data);
+      console.log('📦 Raw API Response:', data);
       
       if (data.success) {
-        console.log('✅ Setting bestand:', data.data);
-        console.log('   Rohseifen:', data.data.rohseifen?.length);
-        console.log('   Duftöle:', data.data.duftoele?.length);
-        console.log('   Verpackungen:', data.data.verpackungen?.length);
-        console.log('   Produkte:', data.data.produkte?.length);
+        console.log('✅ Bestand geladen:', {
+          rohseifen: data.data?.rohseifen?.length || 0,
+          duftoele: data.data?.duftoele?.length || 0,
+          verpackungen: data.data?.verpackungen?.length || 0,
+          produkte: data.data?.produkte?.length || 0
+        });
+        
+        console.log('📊 Beispiel Rohseife:', data.data?.rohseifen?.[0]);
+        console.log('📊 Beispiel Duftöl:', data.data?.duftoele?.[0]);
+        console.log('📊 Beispiel Verpackung:', data.data?.verpackungen?.[0]);
+        console.log('📊 Beispiel Produkt:', data.data?.produkte?.[0]);
+        
+        // Setze Bestand und AvailableItems gleichzeitig (gleiche Daten)
         setBestand(data.data);
+        setAvailableItems(data.data);
+        
+        // Berechne Warnungen aus den Bestandsdaten
+        const allWarnungen = [];
+        
+        // Prüfe alle Kategorien auf Mindestbestand
+        ['rohseifen', 'duftoele', 'verpackungen', 'produkte'].forEach(kategorie => {
+          if (data.data[kategorie]) {
+            data.data[kategorie].forEach(item => {
+              if (item.unterMindestbestand) {
+                allWarnungen.push({
+                  ...item,
+                  kategorie: kategorie
+                });
+              }
+            });
+          }
+        });
+        
+        console.log('⚠️ Warnungen:', allWarnungen.length);
+        setWarnungen(allWarnungen);
       } else {
         console.error('❌ API returned error:', data.message);
         setMessage({ type: 'error', text: data.message || 'Fehler beim Laden des Bestands' });
@@ -135,38 +160,6 @@ const AdminLager = () => {
     } catch (error) {
       console.error('Fehler beim Laden des Bestands:', error);
       setMessage({ type: 'error', text: 'Fehler beim Laden des Bestands' });
-    }
-  };
-
-  const loadWarnungen = async () => {
-    try {
-      const response = await fetch(`${API_URL}/lager/warnungen`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setWarnungen(data.data);
-      }
-    } catch (error) {
-      console.error('Fehler beim Laden der Warnungen:', error);
-    }
-  };
-
-  const loadAvailableItems = async () => {
-    try {
-      const response = await fetch(`${API_URL}/lager/artikel`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAvailableItems(data.data);
-      }
-    } catch (error) {
-      console.error('Fehler beim Laden der Artikel:', error);
     }
   };
 
@@ -193,8 +186,7 @@ const AdminLager = () => {
       if (data.success) {
         setMessage({ type: 'success', text: data.message });
         setInventurDialog(false);
-        loadBestand();
-        loadWarnungen();
+        loadBestand(); // Lädt auch Warnungen neu
         // Reset form
         setInventurForm({
           typ: 'rohseife',
@@ -259,8 +251,7 @@ const AdminLager = () => {
         }));
         
         setProduktionDialog(false); // Dialog schließen
-        loadBestand(); // Hintergrund-Reload für Datenkonsistenz
-        loadWarnungen();
+        loadBestand(); // Hintergrund-Reload für Datenkonsistenz (lädt auch Warnungen)
         
         // Reset form mit leerem Wert
         setProduktionForm({
@@ -282,14 +273,17 @@ const AdminLager = () => {
     }
   };
 
-  const handleKorrektur = async () => {
+  const handleKorrektur = async (aktionOverride) => {
     setLoading(true);
     try {
       // Berechne die Änderung basierend auf Aktion
       const menge = Number(korrekturForm.menge) || 0;
-      const aenderung = korrekturForm.aktion === 'hinzufuegen' 
+      const aktion = aktionOverride || korrekturForm.aktion;
+      const aenderung = aktion === 'hinzufuegen' 
         ? menge 
         : -menge;
+      
+      console.log('🔧 Korrektur wird durchgeführt:', { aktion, menge, aenderung });
       
       const response = await fetch(`${API_URL}/lager/korrektur`, {
         method: 'POST',
@@ -310,8 +304,7 @@ const AdminLager = () => {
       if (data.success) {
         setMessage({ type: 'success', text: data.message });
         setKorrekturDialog(false);
-        loadBestand();
-        loadWarnungen();
+        loadBestand(); // Lädt auch Warnungen neu
         // Reset form
         setKorrekturForm({
           typ: 'rohseife',
@@ -503,7 +496,9 @@ const AdminLager = () => {
                         onClick={() => {
                           setKorrekturForm({
                             typ: item.typ,
-                            artikelId: item.artikelId,
+                            // Für Produkte: sende Bestand-ID (_id) UND Portfolio-ID (artikelId)
+                            artikelId: item.typ === 'produkt' ? item._id : item.artikelId,
+                            portfolioId: item.typ === 'produkt' ? item.artikelId : undefined,
                             menge: 0,
                             aktion: 'hinzufuegen',
                             notizen: '',
@@ -664,22 +659,22 @@ const AdminLager = () => {
                 onChange={(e) => setInventurForm({ ...inventurForm, artikelId: e.target.value })}
               >
                 {inventurForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Aktuell: {item.vorrat}g)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Aktuell: {item.menge}{item.einheit})
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'duftoil' && availableItems.duftoele?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Aktuell: {item.vorrat} Tropfen)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Aktuell: {item.menge} {item.einheit})
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'verpackung' && availableItems.verpackungen?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Aktuell: {item.vorrat} Stück)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Aktuell: {item.menge} {item.einheit})
                   </MenuItem>
                 ))}
                 {inventurForm.typ === 'produkt' && availableItems.produkte?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                  <MenuItem key={item.artikelId} value={item.artikelId}>{item.name} (Aktuell: {item.menge} {item.einheit})</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -760,8 +755,8 @@ const AdminLager = () => {
                 label="Produkt"
                 onChange={(e) => setProduktionForm({ ...produktionForm, produktId: e.target.value })}
               >
-                {availableItems.produkte.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                {availableItems.produkte?.map(item => (
+                  <MenuItem key={item.artikelId} value={item.artikelId}>{item.name} (Bestand: {item.menge})</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -879,36 +874,36 @@ const AdminLager = () => {
                 value={korrekturForm.artikelId}
                 label="Artikel"
                 onChange={(e) => {
-                  const selectedItem = korrekturForm.typ === 'rohseife' ? availableItems.rohseifen?.find(i => i.id === e.target.value) :
-                                      korrekturForm.typ === 'duftoil' ? availableItems.duftoele?.find(i => i.id === e.target.value) :
-                                      korrekturForm.typ === 'verpackung' ? availableItems.verpackungen?.find(i => i.id === e.target.value) :
-                                      availableItems.produkte?.find(i => i.id === e.target.value);
+                  const selectedItem = korrekturForm.typ === 'rohseife' ? availableItems.rohseifen?.find(i => i.artikelId === e.target.value) :
+                                      korrekturForm.typ === 'duftoil' ? availableItems.duftoele?.find(i => i.artikelId === e.target.value) :
+                                      korrekturForm.typ === 'verpackung' ? availableItems.verpackungen?.find(i => i.artikelId === e.target.value) :
+                                      availableItems.produkte?.find(i => i.artikelId === e.target.value);
                   
                   setKorrekturForm({ 
                     ...korrekturForm, 
                     artikelId: e.target.value,
-                    aktuellerBestand: selectedItem?.vorrat || 0,
+                    aktuellerBestand: selectedItem?.menge || 0,
                     mindestbestand: selectedItem?.mindestbestand || 0
                   });
                 }}
               >
                 {korrekturForm.typ === 'rohseife' && availableItems.rohseifen?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat}g)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Vorrat: {item.menge}{item.einheit})
                   </MenuItem>
                 ))}
                 {korrekturForm.typ === 'duftoil' && availableItems.duftoele?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat} Tropfen)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Vorrat: {item.menge} {item.einheit})
                   </MenuItem>
                 ))}
                 {korrekturForm.typ === 'verpackung' && availableItems.verpackungen?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>
-                    {item.name} (Vorrat: {item.vorrat} Stück)
+                  <MenuItem key={item.artikelId} value={item.artikelId}>
+                    {item.name} (Vorrat: {item.menge} {item.einheit})
                   </MenuItem>
                 ))}
                 {korrekturForm.typ === 'produkt' && availableItems.produkte?.map(item => (
-                  <MenuItem key={item.id} value={item.id}>{item.name}</MenuItem>
+                  <MenuItem key={item.artikelId} value={item.artikelId}>{item.name} (Vorrat: {item.menge} {item.einheit})</MenuItem>
                 ))}
               </Select>
             </FormControl>
@@ -945,10 +940,7 @@ const AdminLager = () => {
             Abbrechen
           </Button>
           <Button 
-            onClick={() => {
-              setKorrekturForm({ ...korrekturForm, aktion: 'hinzufuegen' });
-              setTimeout(handleKorrektur, 0);
-            }}
+            onClick={() => handleKorrektur('hinzufuegen')}
             variant="contained"
             startIcon={<AddIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
@@ -970,10 +962,7 @@ const AdminLager = () => {
             Hinzufügen
           </Button>
           <Button 
-            onClick={() => {
-              setKorrekturForm({ ...korrekturForm, aktion: 'entnehmen' });
-              setTimeout(handleKorrektur, 0);
-            }}
+            onClick={() => handleKorrektur('entnehmen')}
             variant="contained"
             startIcon={<EditIcon />}
             disabled={loading || !korrekturForm.artikelId || korrekturForm.menge <= 0}
