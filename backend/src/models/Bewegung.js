@@ -45,7 +45,7 @@ const bewegungSchema = new mongoose.Schema({
   einheit: {
     type: String,
     required: true,
-    enum: ['kg', 'g', 'ml', 'l', 'stück', 'tropfen'] // 'tropfen' hinzugefügt
+    enum: ['kg', 'g', 'ml', 'l', 'stück', 'Stück', 'tropfen', 'Tropfen'] // Klein- und Großschreibung
   },
   
   // Bestand vorher/nachher
