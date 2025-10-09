@@ -25,7 +25,9 @@ import {
   Description,
   ShoppingCart,
   Add as AddIcon,
-  Remove as RemoveIcon
+  Remove as RemoveIcon,
+  Inventory2 as InventoryIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
 import { useCart } from '../contexts/CartContext';
@@ -88,6 +90,16 @@ const ProductDetailPage = () => {
       return;
     }
 
+    if (!product.bestand?.verfuegbar) {
+      toast.error('Produkt ist aktuell nicht auf Lager');
+      return;
+    }
+
+    if (quantity > (product.bestand?.menge || 0)) {
+      toast.error(`Nur noch ${product.bestand?.menge} Stück verfügbar`);
+      return;
+    }
+
     const cartProduct = {
       id: product._id,
       name: product.name,
@@ -99,11 +111,17 @@ const ProductDetailPage = () => {
 
     addToCart(cartProduct, quantity);
     toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
+    
+    // Produktdaten neu laden um aktuellen Bestand anzuzeigen
+    setTimeout(() => {
+      fetchProduct();
+    }, 500);
   };
 
   const handleQuantityChange = (delta) => {
+    const maxMenge = product.bestand?.menge || 99;
     const newQuantity = quantity + delta;
-    if (newQuantity >= 1 && newQuantity <= 99) {
+    if (newQuantity >= 1 && newQuantity <= Math.min(maxMenge, 99)) {
       setQuantity(newQuantity);
     }
   };
@@ -226,6 +244,29 @@ const ProductDetailPage = () => {
             size={isMobile ? "small" : "medium"}
           />
 
+          {/* Verfügbarkeitsanzeige */}
+          {product.bestand && (
+            <Box sx={{ mb: 3 }}>
+              {product.bestand.verfuegbar ? (
+                <Chip
+                  label={`${product.bestand.menge} ${product.bestand.einheit} vorrätig`}
+                  color="success"
+                  size={isMobile ? "small" : "medium"}
+                  icon={<InventoryIcon />}
+                  sx={{ fontWeight: 'bold' }}
+                />
+              ) : (
+                <Chip
+                  label="Aktuell nicht auf Lager"
+                  color="error"
+                  size={isMobile ? "small" : "medium"}
+                  icon={<WarningIcon />}
+                  sx={{ fontWeight: 'bold' }}
+                />
+              )}
+            </Box>
+          )}
+
           {product.beschreibung?.kurz && (
             <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 3 }}>
               {product.beschreibung.kurz}
@@ -301,13 +342,14 @@ const ProductDetailPage = () => {
                   display: 'flex', 
                   alignItems: 'center', 
                   border: 1, 
-                  borderColor: 'grey.300', 
+                  borderColor: product.bestand?.verfuegbar ? 'grey.300' : 'grey.200',
                   borderRadius: 1,
-                  justifyContent: isMobile ? 'center' : 'flex-start'
+                  justifyContent: isMobile ? 'center' : 'flex-start',
+                  opacity: product.bestand?.verfuegbar ? 1 : 0.5
                 }}>
                   <IconButton 
                     onClick={() => handleQuantityChange(-1)}
-                    disabled={quantity <= 1}
+                    disabled={!product.bestand?.verfuegbar || quantity <= 1}
                     size={isMobile ? "medium" : "small"}
                   >
                     <RemoveIcon />
@@ -317,7 +359,7 @@ const ProductDetailPage = () => {
                   </Typography>
                   <IconButton 
                     onClick={() => handleQuantityChange(1)}
-                    disabled={quantity >= 99}
+                    disabled={!product.bestand?.verfuegbar || quantity >= Math.min((product.bestand?.menge || 0), 99)}
                     size={isMobile ? "medium" : "small"}
                   >
                     <AddIcon />
@@ -327,14 +369,31 @@ const ProductDetailPage = () => {
 
               <Button
                 variant="contained"
+                color={product.bestand?.verfuegbar ? "success" : "inherit"}
                 fullWidth
                 size={isMobile ? "large" : "medium"}
                 startIcon={<ShoppingCart />}
                 onClick={handleAddToCart}
-                sx={{ mb: 2 }}
+                disabled={!product.bestand?.verfuegbar}
+                sx={{ 
+                  mb: 2,
+                  ...(product.bestand?.verfuegbar ? {} : {
+                    bgcolor: 'grey.300',
+                    color: 'grey.600',
+                    '&:hover': {
+                      bgcolor: 'grey.400'
+                    }
+                  })
+                }}
               >
-                In den Warenkorb
+                {product.bestand?.verfuegbar ? 'In den Warenkorb' : 'Nicht verfügbar'}
               </Button>
+              
+              {product.bestand?.verfuegbar && product.bestand?.menge <= 5 && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  Nur noch {product.bestand.menge} Stück verfügbar!
+                </Alert>
+              )}
             </Box>
           )}
 

@@ -24,6 +24,8 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { typ } = req.query;
     
+    console.log('🔍 Bestand-Abfrage gestartet...');
+    
     // Hole Daten direkt aus den Rohstoff-Collections
     const [rohseifen, duftoele, verpackungen, produkte] = await Promise.all([
       Rohseife.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
@@ -32,8 +34,17 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       Portfolio.find().lean()
     ]);
     
+    console.log('📊 Rohdaten geladen:', {
+      rohseifen: rohseifen.length,
+      duftoele: duftoele.length,
+      verpackungen: verpackungen.length,
+      produkte: produkte.length
+    });
+    
     // Hole Produktbestände aus Bestand-Collection (nur für Fertigprodukte)
     const produktBestaende = await Bestand.find({ typ: 'produkt' }).populate('artikelId');
+    
+    console.log('📦 Produktbestände:', produktBestaende.length);
     
     // Formatiere Rohseifen
     const rohseifenFormatted = rohseifen.map(r => ({
@@ -53,7 +64,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       artikelId: d._id,
       name: d.bezeichnung,
       menge: d.aktuellVorrat,
-      einheit: 'tropfen',
+      einheit: 'Tropfen',
       mindestbestand: d.mindestbestand,
       unterMindestbestand: d.aktuellVorrat < d.mindestbestand,
       typ: 'duftoil'
@@ -85,7 +96,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       typ: 'produkt'
     }));
     
-    res.json({
+    const result = {
       success: true,
       data: {
         rohseifen: rohseifenFormatted,
@@ -93,9 +104,18 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
         verpackungen: verpackungenFormatted,
         produkte: produkteFormatted
       }
+    };
+    
+    console.log('✅ Antwort wird gesendet:', {
+      rohseifen: result.data.rohseifen.length,
+      duftoele: result.data.duftoele.length,
+      verpackungen: result.data.verpackungen.length,
+      produkte: result.data.produkte.length
     });
+    
+    res.json(result);
   } catch (error) {
-    console.error('Fehler beim Abrufen der Bestände:', error);
+    console.error('❌ Fehler beim Abrufen der Bestände:', error);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Bestände',
@@ -617,14 +637,19 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
 // POST /api/lager/korrektur - Bestand manuell korrigieren
 router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    console.log('🔧 Korrektur-Request empfangen:', req.body);
+    
     const { typ, artikelId, portfolioId, aenderung, notizen } = req.body;
     
     if (!typ || !artikelId || aenderung === undefined) {
+      console.log('❌ Fehlende Parameter:', { typ, artikelId, aenderung });
       return res.status(400).json({
         success: false,
         message: 'Typ, ArtikelId und Änderung sind erforderlich'
       });
     }
+    
+    console.log('✅ Parameter validiert:', { typ, artikelId, aenderung, portfolioId });
     
     let artikel;
     let vorher;
@@ -711,7 +736,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
         nachher = Math.max(0, vorher + aenderung);
         artikel.aktuellVorrat = nachher;
         await artikel.save();
-        einheit = 'Stück';
+        einheit = 'stück';
         
         // Log Bewegung
         await Bewegung.erstelle({
@@ -723,7 +748,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
             name: artikel.bezeichnung
           },
           menge: aenderung,
-          einheit: 'Stück',
+          einheit: 'stück',
           bestandVorher: vorher,
           bestandNachher: nachher,
           grund: 'Manuelle Korrektur',
@@ -733,13 +758,20 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
         break;
         
       case 'produkt':
+        console.log('🎯 Produkt-Korrektur - artikelId:', artikelId, 'portfolioId:', portfolioId);
+        
         // Für Produkte: artikelId ist Bestand-ID, portfolioId ist Portfolio-ID (optional)
         let bestand = await Bestand.findById(artikelId).populate('artikelId');
         
+        console.log('📦 Bestand gefunden:', !!bestand, bestand?._id);
+        
         if (!bestand && portfolioId) {
+          console.log('⚠️ Kein Bestand gefunden, erstelle neu mit portfolioId:', portfolioId);
+          
           // Kein Bestand gefunden, aber portfolioId vorhanden - erstelle Bestand
           const portfolioProdukt = await Portfolio.findById(portfolioId);
           if (!portfolioProdukt) {
+            console.log('❌ Portfolio-Produkt nicht gefunden');
             return res.status(404).json({
               success: false,
               message: 'Produkt nicht gefunden'
@@ -750,6 +782,7 @@ router.post('/korrektur', authenticateToken, requireAdmin, async (req, res) => {
           bestand = await Bestand.findeOderErstelle('produkt', portfolioId, 'stück');
           console.log(`✨ Neuer Bestand-Eintrag erstellt für ${portfolioProdukt.name}`);
         } else if (!bestand) {
+          console.log('❌ Bestand nicht gefunden und keine portfolioId');
           return res.status(404).json({
             success: false,
             message: 'Bestand-Eintrag nicht gefunden'

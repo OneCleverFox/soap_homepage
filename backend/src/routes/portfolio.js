@@ -139,18 +139,32 @@ router.get('/', async (req, res) => {
 });
 
 // @route   GET /api/portfolio/with-prices
-// @desc    Alle Portfolio-Einträge mit berechneten Preisen abrufen
+// @desc    Alle Portfolio-Einträge mit berechneten Preisen und Bestandsinformationen abrufen
 // @access  Public
 router.get('/with-prices', async (req, res) => {
   try {
     const portfolioItems = await Portfolio.find({ aktiv: true })
       .sort({ reihenfolge: 1, name: 1 });
 
+    // Importiere Bestand-Model dynamisch
+    const Bestand = require('../models/Bestand');
+    
+    // Hole alle Produktbestände in einem Batch
+    const alleBestaende = await Bestand.find({ typ: 'produkt' }).lean();
+    const bestandMap = new Map(
+      alleBestaende.map(b => [b.artikelId.toString(), b])
+    );
+
     // Preise für jedes Portfolio-Element berechnen
     const portfolioWithPrices = await Promise.all(
       portfolioItems.map(async (item) => {
         try {
           const priceData = await calculatePortfolioPrice(item);
+          
+          // Bestandsinformationen hinzufügen
+          const bestand = bestandMap.get(item._id.toString());
+          const verfuegbareMenge = bestand ? bestand.menge : 0;
+          const istVerfuegbar = verfuegbareMenge > 0;
           
           // Bilder-URLs hinzufügen
           const imageData = {
@@ -173,6 +187,11 @@ router.get('/with-prices', async (req, res) => {
             berechneterPreis: priceData.gesamtpreis,
             preisDetails: priceData.details,
             verkaufspreis: Math.ceil(priceData.gesamtpreis * 1.5), // 50% Marge
+            bestand: {
+              verfuegbar: istVerfuegbar,
+              menge: verfuegbareMenge,
+              einheit: 'Stück'
+            },
             bilder: {
               ...item.bilder?.toObject(),
               ...imageData
@@ -180,6 +199,11 @@ router.get('/with-prices', async (req, res) => {
           };
         } catch (priceError) {
           console.warn(`Preisberechnung für ${item.name} fehlgeschlagen:`, priceError.message);
+          
+          // Bestandsinformationen auch bei Preisfehler hinzufügen
+          const bestand = bestandMap.get(item._id.toString());
+          const verfuegbareMenge = bestand ? bestand.menge : 0;
+          const istVerfuegbar = verfuegbareMenge > 0;
           
           // Bilder auch bei Preisfehler hinzufügen
           const imageData = {
@@ -202,6 +226,11 @@ router.get('/with-prices', async (req, res) => {
             berechneterPreis: 0,
             preisDetails: { error: 'Preisberechnung nicht möglich' },
             verkaufspreis: 0,
+            bestand: {
+              verfuegbar: istVerfuegbar,
+              menge: verfuegbareMenge,
+              einheit: 'Stück'
+            },
             bilder: {
               ...item.bilder?.toObject(),
               ...imageData
