@@ -511,4 +511,64 @@ router.get('/portfolio/stats', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/cart
+// @desc    Admin Warenkorb abrufen
+// @access  Private (Admin)
+router.get('/cart', async (req, res) => {
+  try {
+    const Cart = require('../models/Cart');
+    const kundeId = req.user.id || req.user.userId;
+    
+    let cart = await Cart.findOne({ kundeId });
+    
+    if (!cart) {
+      // Leeren Warenkorb erstellen, falls nicht vorhanden
+      cart = new Cart({
+        kundeId,
+        artikel: []
+      });
+      await cart.save();
+    }
+
+    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
+    const Portfolio = require('../models/Portfolio');
+    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
+      try {
+        // Hole aktuelles Produkt aus Portfolio
+        const product = await Portfolio.findById(item.produktId);
+        
+        if (product && product.bilder && product.bilder.hauptbild) {
+          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          return {
+            ...item.toObject(),
+            bild: product.bilder.hauptbild
+          };
+        }
+        
+        // Fallback: behalte vorhandene Bild-URL
+        return item.toObject();
+      } catch (err) {
+        console.error('Fehler beim Laden des Produkts:', item.produktId, err);
+        // Bei Fehler: behalte Artikel wie er ist
+        return item.toObject();
+      }
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        items: enrichedItems,
+        total: enrichedItems.reduce((sum, item) => sum + (item.preis * item.menge), 0),
+        itemCount: enrichedItems.reduce((sum, item) => sum + item.menge, 0)
+      }
+    });
+  } catch (error) {
+    console.error('Admin Cart Load Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Admin-Warenkorbs'
+    });
+  }
+});
+
 module.exports = router;

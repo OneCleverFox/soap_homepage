@@ -32,7 +32,8 @@ import AdminOrders from './admin/AdminOrders';
 import AdminInventory from './admin/AdminInventory';
 import AdminUsers from './admin/AdminUsers';
 import AdminWarenberechnung from './admin/AdminWarenberechnung';
-import AdminLager from './admin/AdminLager';
+import AdminLager from './admin/AdminLagerNew';
+import AdminCart from './admin/AdminCart';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -173,6 +174,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <AdminWarenberechnung />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/warenkorb"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminCart />
                 </ProtectedRoute>
               </>
             }

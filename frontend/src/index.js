@@ -40,23 +40,49 @@ root.render(
               <CartProvider>
                 <App />
                 <Toaster
-                  position="top-right"
+                  position="bottom-right"
+                  gutter={8}
+                  containerStyle={{
+                    bottom: '20px',
+                    right: '20px',
+                    zIndex: 9999, // Über anderen Elementen aber unter Modals
+                  }}
                   toastOptions={{
                     duration: 4000,
                     style: {
                       background: '#363636',
                       color: '#fff',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      fontSize: '14px',
+                      maxWidth: '350px',
                     },
                     success: {
                       duration: 3000,
                       style: {
                         background: '#4caf50',
+                        color: '#fff',
+                      },
+                      iconTheme: {
+                        primary: '#fff',
+                        secondary: '#4caf50',
                       },
                     },
                     error: {
                       duration: 5000,
                       style: {
                         background: '#f44336',
+                        color: '#fff',
+                      },
+                      iconTheme: {
+                        primary: '#fff',
+                        secondary: '#f44336',
+                      },
+                    },
+                    loading: {
+                      style: {
+                        background: '#2196f3',
+                        color: '#fff',
                       },
                     },
                   }}

@@ -15,7 +15,8 @@ import {
   People as UsersIcon,
   Analytics as AnalyticsIcon,
   Photo as PortfolioIcon,
-  Dashboard as DashboardIcon
+  Dashboard as DashboardIcon,
+  ShoppingBag as CartIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -64,6 +65,13 @@ const AdminDashboard = () => {
       icon: <AnalyticsIcon sx={{ fontSize: 40, color: 'error.main' }} />,
       path: '/admin/warenberechnung',
       color: 'error'
+    },
+    {
+      title: 'Mein Warenkorb',
+      description: 'Verwalten Sie Ihren persönlichen Administrator-Warenkorb.',
+      icon: <CartIcon sx={{ fontSize: 40, color: 'secondary.main' }} />,
+      path: '/admin/warenkorb',
+      color: 'secondary'
     }
   ];
 
