@@ -192,14 +192,6 @@ router.post('/add', authenticateToken, async (req, res) => {
 // PUT /api/cart/update - Artikelmenge aktualisieren
 router.put('/update', authenticateToken, async (req, res) => {
   try {
-    // Admin kann Warenkorb nicht bearbeiten
-    if (!isKunde(req.user)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Administratoren können keinen Warenkorb verwenden'
-      });
-    }
-
     const { produktId, menge } = req.body;
 
     if (!produktId || menge === undefined) {
@@ -285,14 +277,6 @@ router.put('/update', authenticateToken, async (req, res) => {
 // DELETE /api/cart/remove/:produktId - Artikel aus Warenkorb entfernen
 router.delete('/remove/:produktId', authenticateToken, async (req, res) => {
   try {
-    // Admin kann Warenkorb nicht bearbeiten
-    if (!isKunde(req.user)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Administratoren können keinen Warenkorb verwenden'
-      });
-    }
-
     const { produktId } = req.params;
 
     const kundeId = req.user.id || req.user.userId;
@@ -356,14 +340,6 @@ router.delete('/remove/:produktId', authenticateToken, async (req, res) => {
 // DELETE /api/cart/clear - Warenkorb leeren
 router.delete('/clear', authenticateToken, async (req, res) => {
   try {
-    // Admin kann Warenkorb nicht bearbeiten
-    if (!isKunde(req.user)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Administratoren können keinen Warenkorb verwenden'
-      });
-    }
-
     const kundeId = req.user.id || req.user.userId;
     const cart = await Cart.findOne({ kundeId });
 
