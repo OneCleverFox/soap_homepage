@@ -37,8 +37,7 @@ const cartItemSchema = new mongoose.Schema({
 
 const cartSchema = new mongoose.Schema({
   kundeId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Kunde',
+    type: String, // Geändert von ObjectId zu String für JWT-basierte User-IDs
     required: true,
     unique: true
   },

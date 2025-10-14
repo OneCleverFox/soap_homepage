@@ -90,9 +90,10 @@ const Navbar = () => {
   const adminNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
     { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
+    { label: 'Mein Warenkorb', path: '/admin/warenkorb', icon: '🛒' },
     { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
-    { label: 'Bestellungen', path: '/admin/bestellungen', icon: '🛒' },
-    { label: 'Lager', path: '/admin/lager', icon: '📋' },
+    { label: 'Bestellungen', path: '/admin/bestellungen', icon: '�' },
+    { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' }
   ];
@@ -344,12 +345,13 @@ const Navbar = () => {
 
           {/* Right side buttons */}
           <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-            {/* Shopping Cart - nur für Kunden (nicht für Admins) */}
-            {user && user.role !== 'admin' && (
+            {/* Shopping Cart - für alle angemeldeten Benutzer */}
+            {user && (
               <IconButton 
                 color="inherit" 
                 component={Link} 
-                to="/cart"
+                to={user.role === 'admin' ? "/admin/warenkorb" : "/cart"}
+                title={user.role === 'admin' ? "Admin Warenkorb" : "Warenkorb"}
               >
                 <Badge badgeContent={cartItemsCount} color="secondary">
                   🛒

@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Portfolio = require('../models/Portfolio');
+const Bestand = require('../models/Bestand');
 const Rohseife = require('../models/Rohseife');
 const Verpackung = require('../models/Verpackung');
 const Duftoil = require('../models/Duftoil');
@@ -124,10 +125,29 @@ router.get('/', async (req, res) => {
     const portfolioItems = await Portfolio.find({ aktiv: true })
       .sort({ reihenfolge: 1, name: 1 });
 
+    // Lade Bestand-Daten für jedes Portfolio-Item
+    const portfolioWithBestand = await Promise.all(
+      portfolioItems.map(async (item) => {
+        const bestand = await Bestand.findOne({ 
+          typ: 'produkt', 
+          artikelId: item._id 
+        });
+        
+        const itemObj = item.toObject();
+        
+        // Füge Bestand-Informationen hinzu
+        itemObj.verfuegbareMenge = bestand ? bestand.menge : 0;
+        itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
+        itemObj.bestandId = bestand ? bestand._id : null;
+        
+        return itemObj;
+      })
+    );
+
     res.status(200).json({
       success: true,
-      count: portfolioItems.length,
-      data: portfolioItems
+      count: portfolioWithBestand.length,
+      data: portfolioWithBestand
     });
   } catch (error) {
     console.error('Portfolio Fetch Error:', error);

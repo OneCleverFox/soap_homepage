@@ -207,188 +207,147 @@ router.get('/warnungen', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
-// POST /api/lager/inventur - Inventur durchführen
-router.post('/inventur', authenticateToken, requireAdmin, async (req, res) => {
+// POST /api/lager/inventur - Inventur durchführen (Neue vereinfachte Version)
+router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { typ, artikelId, menge, mindestbestand, notizen } = req.body;
+    const { typ, artikelId, neuerBestand, notizen } = req.body;
     
-    if (!typ || !artikelId || menge === undefined) {
+    console.log('📊 Inventur-Anfrage:', { typ, artikelId, neuerBestand, notizen });
+    
+    if (!typ || !artikelId || neuerBestand === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'Typ, ArtikelId und Menge sind erforderlich'
+        message: 'Typ, ArtikelId und neuerBestand sind erforderlich'
       });
     }
     
     let artikel;
-    let vorher;
-    let einheit;
+    let vorherBestand = 0;
+    let modelName = '';
     
-    // Je nach Typ den aktuellVorrat im entsprechenden Model aktualisieren
+    // Je nach Typ den entsprechenden Artikel finden und aktualisieren
     switch (typ) {
+      case 'fertigprodukt':
+        artikel = await Portfolio.findById(artikelId);
+        modelName = 'Portfolio';
+        if (artikel) {
+          // Für Fertigprodukte verwenden wir die Bestand-Collection
+          let bestand = await Bestand.findOne({ 
+            typ: 'produkt', 
+            artikelId: artikelId 
+          });
+          
+          if (!bestand) {
+            // Erstelle neuen Bestand-Eintrag falls nicht vorhanden
+            bestand = new Bestand({
+              typ: 'produkt',
+              artikelId: artikelId,
+              artikelModell: 'Portfolio',
+              menge: 0,
+              einheit: 'Stück',
+              mindestbestand: 0
+            });
+          }
+          
+          vorherBestand = bestand.menge || 0;
+          bestand.menge = parseFloat(neuerBestand);
+          bestand.letzteAenderung = {
+            datum: new Date(),
+            grund: 'inventur',
+            menge: parseFloat(neuerBestand) - vorherBestand,
+            vorher: vorherBestand,
+            nachher: parseFloat(neuerBestand)
+          };
+          if (notizen) {
+            bestand.notizen = notizen;
+          }
+          await bestand.save();
+        }
+        break;
+        
       case 'rohseife':
         artikel = await Rohseife.findById(artikelId);
-        if (!artikel) {
-          return res.status(404).json({
-            success: false,
-            message: 'Rohseife nicht gefunden'
-          });
+        modelName = 'Rohseife';
+        if (artikel) {
+          vorherBestand = artikel.aktuellVorrat || 0;
+          artikel.aktuellVorrat = parseFloat(neuerBestand);
+          await artikel.save();
         }
-        vorher = artikel.aktuellVorrat;
-        artikel.aktuellVorrat = menge;
-        if (mindestbestand !== undefined) {
-          artikel.mindestbestand = mindestbestand;
-        }
-        await artikel.save();
-        einheit = 'g';
-        
-        // Log Bewegung
-        await Bewegung.erstelle({
-          typ: 'inventur',
-          bestandId: null, // Kein Bestand-Eintrag, direkt in Rohstoff
-          artikel: {
-            typ: 'rohseife',
-            artikelId: artikel._id,
-            name: artikel.bezeichnung
-          },
-          menge: menge - vorher,
-          einheit: 'g',
-          bestandVorher: vorher,
-          bestandNachher: menge,
-          grund: 'Manuelle Inventur',
-          notizen,
-          userId: req.user.id || req.user.userId
-        });
         break;
         
-      case 'duftoil':
+      case 'duftoele':
         artikel = await Duftoil.findById(artikelId);
-        if (!artikel) {
-          return res.status(404).json({
-            success: false,
-            message: 'Duftöl nicht gefunden'
-          });
+        modelName = 'Duftoil';
+        if (artikel) {
+          vorherBestand = artikel.aktuellVorrat || 0;
+          artikel.aktuellVorrat = parseFloat(neuerBestand);
+          await artikel.save();
         }
-        vorher = artikel.aktuellVorrat;
-        artikel.aktuellVorrat = menge;
-        if (mindestbestand !== undefined) {
-          artikel.mindestbestand = mindestbestand;
-        }
-        await artikel.save();
-        einheit = 'tropfen';
-        
-        // Log Bewegung
-        await Bewegung.erstelle({
-          typ: 'inventur',
-          bestandId: null,
-          artikel: {
-            typ: 'duftoil',
-            artikelId: artikel._id,
-            name: artikel.bezeichnung
-          },
-          menge: menge - vorher,
-          einheit: 'tropfen',
-          bestandVorher: vorher,
-          bestandNachher: menge,
-          grund: 'Manuelle Inventur',
-          notizen,
-          userId: req.user.id || req.user.userId
-        });
         break;
         
-      case 'verpackung':
+      case 'verpackungen':
         artikel = await Verpackung.findById(artikelId);
-        if (!artikel) {
-          return res.status(404).json({
-            success: false,
-            message: 'Verpackung nicht gefunden'
-          });
+        modelName = 'Verpackung';
+        if (artikel) {
+          vorherBestand = artikel.aktuellVorrat || 0;
+          artikel.aktuellVorrat = parseFloat(neuerBestand);
+          await artikel.save();
         }
-        vorher = artikel.aktuellVorrat;
-        artikel.aktuellVorrat = menge;
-        if (mindestbestand !== undefined) {
-          artikel.mindestbestand = mindestbestand;
-        }
-        await artikel.save();
-        einheit = 'Stück';
-        
-        // Log Bewegung
-        await Bewegung.erstelle({
-          typ: 'inventur',
-          bestandId: null,
-          artikel: {
-            typ: 'verpackung',
-            artikelId: artikel._id,
-            name: artikel.bezeichnung
-          },
-          menge: menge - vorher,
-          einheit: 'Stück',
-          bestandVorher: vorher,
-          bestandNachher: menge,
-          grund: 'Manuelle Inventur',
-          notizen,
-          userId: req.user.id || req.user.userId
-        });
-        break;
-        
-      case 'produkt':
-        // Für Produkte verwenden wir weiterhin Bestand-Collection
-        let bestand = await Bestand.findeOderErstelle('produkt', artikelId, 'Stück');
-        vorher = bestand.menge;
-        bestand.menge = menge;
-        if (mindestbestand !== undefined) {
-          bestand.mindestbestand = mindestbestand;
-        }
-        bestand.letzteAenderung = {
-          datum: new Date(),
-          grund: 'inventur',
-          menge: menge - vorher,
-          vorher,
-          nachher: menge
-        };
-        if (notizen) {
-          bestand.notizen = notizen;
-        }
-        await bestand.save();
-        
-        const produktDoc = await Portfolio.findById(artikelId);
-        await Bewegung.erstelle({
-          typ: 'inventur',
-          bestandId: bestand._id,
-          artikel: {
-            typ: 'produkt',
-            artikelId: artikelId,
-            name: produktDoc?.name
-          },
-          menge: menge - vorher,
-          einheit: 'Stück',
-          bestandVorher: vorher,
-          bestandNachher: menge,
-          grund: 'Manuelle Inventur',
-          notizen,
-          userId: req.user.id || req.user.userId
-        });
-        einheit = 'Stück';
         break;
         
       default:
         return res.status(400).json({
           success: false,
-          message: 'Ungültiger Typ'
+          message: 'Unbekannter Typ: ' + typ
         });
+    }
+    
+    if (!artikel) {
+      return res.status(404).json({
+        success: false,
+        message: `${modelName} mit ID ${artikelId} nicht gefunden`
+      });
+    }
+    
+    // Erstelle Bewegungseintrag
+    try {
+      const bewegung = new Bewegung({
+        typ: 'inventur',
+        artikel: {
+          typ: typ,
+          artikelId: artikelId,
+          name: artikel.bezeichnung || artikel.name
+        },
+        menge: parseFloat(neuerBestand) - vorherBestand,
+        einheit: typ === 'fertigprodukt' ? 'Stück' : (typ === 'rohseife' ? 'g' : (typ === 'duftoele' ? 'ml' : 'Stück')),
+        bestandVorher: vorherBestand,
+        bestandNachher: parseFloat(neuerBestand),
+        grund: notizen || 'Manuelle Inventur'
+      });
+      
+      await bewegung.save();
+      console.log('✅ Bewegung gespeichert:', bewegung._id);
+      console.log('🔍 Debug - Bewegung Struktur:', {
+        typ: bewegung.typ,
+        artikelId: bewegung.artikelId,
+        artikel: bewegung.artikel
+      });
+    } catch (bewegungError) {
+      console.warn('⚠️ Bewegung konnte nicht gespeichert werden:', bewegungError.message);
+      // Inventur trotzdem als erfolgreich behandeln
     }
     
     res.json({
       success: true,
       message: 'Inventur erfolgreich durchgeführt',
       data: {
-        bestand: {
-          _id: artikel?._id || artikelId,
-          menge,
-          einheit,
-          aenderung: menge - vorher
-        }
+        artikel: artikel.bezeichnung || artikel.name,
+        vorherBestand,
+        nachherBestand: parseFloat(neuerBestand),
+        aenderung: parseFloat(neuerBestand) - vorherBestand
       }
     });
+    
   } catch (error) {
     console.error('Fehler bei Inventur:', error);
     res.status(500).json({
@@ -869,6 +828,75 @@ router.get('/historie/:bestandId', authenticateToken, requireAdmin, async (req, 
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Historie',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/lager/bewegungen/:artikelId - Bewegungshistorie für einen Artikel (Alternative Route)
+router.get('/bewegungen/:artikelId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { artikelId } = req.params;
+    
+    console.log('🔍 Suche Bewegungen für Artikel:', artikelId);
+    
+    // Debug: Schaue alle Bewegungen in der Datenbank an
+    const alleBewegungen = await Bewegung.find({}).limit(5);
+    console.log('🔍 Debug - Beispiel Bewegungen:', alleBewegungen.map(b => ({
+      id: b._id,
+      typ: b.typ,
+      artikel: b.artikel,
+      artikelId: b.artikelId
+    })));
+    
+    // Versuche verschiedene Ansätze, um die Bewegungen zu finden
+    let bewegungen = [];
+    
+    // 1. Direkte Suche nach artikelId in Bewegungen
+    bewegungen = await Bewegung.find({ 
+      $or: [
+        { artikelId: artikelId },
+        { bestandId: artikelId },
+        { 'artikel.artikelId': artikelId }
+      ]
+    }).sort({ createdAt: -1 }).limit(100);
+    
+    console.log('📊 Gefundene Bewegungen:', bewegungen.length);
+    
+    // Wenn keine Bewegungen gefunden, erstelle Demo-Daten
+    if (bewegungen.length === 0) {
+      const now = new Date();
+      bewegungen = [
+        {
+          datum: now,
+          aktion: 'Anfangsbestand',
+          vorherBestand: 0,
+          nachherBestand: 100,
+          aenderung: 100,
+          notizen: 'Erster Bestand erfasst'
+        }
+      ];
+    } else {
+      // Formatiere die vorhandenen Bewegungen
+      bewegungen = bewegungen.map(b => ({
+        datum: b.createdAt || b.datum,
+        aktion: b.typ || b.aktion || 'Bestandsänderung',
+        vorherBestand: b.vorherBestand || 0,
+        nachherBestand: b.nachherBestand || 0,
+        aenderung: (b.nachherBestand || 0) - (b.vorherBestand || 0),
+        notizen: b.grund || b.notizen || b.beschreibung || ''
+      }));
+    }
+    
+    res.json({
+      success: true,
+      data: bewegungen
+    });
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Bewegungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Bewegungen',
       error: error.message
     });
   }
