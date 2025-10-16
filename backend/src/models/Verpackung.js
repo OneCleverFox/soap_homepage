@@ -4,7 +4,7 @@ const verpackungSchema = new mongoose.Schema({
   bezeichnung: {
     type: String,
     required: true,
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
   menge: {
@@ -149,7 +149,7 @@ verpackungSchema.methods.erhoeheVorrat = function(anzahl) {
 };
 
 // Indizes für bessere Performance
-verpackungSchema.index({ bezeichnung: 1 });
+// verpackungSchema.index({ bezeichnung: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
 verpackungSchema.index({ form: 1 });
 verpackungSchema.index({ verfuegbar: 1 });
 verpackungSchema.index({ vorratStatus: 1 });

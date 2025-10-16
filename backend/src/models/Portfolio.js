@@ -4,7 +4,7 @@ const portfolioSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
   seife: {
@@ -148,7 +148,7 @@ const portfolioSchema = new mongoose.Schema({
 });
 
 // Indizes für bessere Performance
-portfolioSchema.index({ name: 1 });
+// portfolioSchema.index({ name: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
 portfolioSchema.index({ seife: 1 });
 portfolioSchema.index({ aroma: 1 });
 portfolioSchema.index({ reihenfolge: 1 });

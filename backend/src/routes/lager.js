@@ -244,24 +244,188 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
               artikelId: artikelId,
               artikelModell: 'Portfolio',
               menge: 0,
-              einheit: 'Stück',
+              einheit: 'stück',
               mindestbestand: 0
             });
+          } else {
+            // Korrigiere Einheit falls sie falsch gesetzt ist
+            if (bestand.einheit === 'Stück') {
+              bestand.einheit = 'stück';
+            }
           }
           
           vorherBestand = bestand.menge || 0;
-          bestand.menge = parseFloat(neuerBestand);
+          const neueAnzahl = parseFloat(neuerBestand);
+          const buchungsAnzahl = neueAnzahl - vorherBestand;
+          
+          bestand.menge = neueAnzahl;
           bestand.letzteAenderung = {
             datum: new Date(),
             grund: 'inventur',
-            menge: parseFloat(neuerBestand) - vorherBestand,
+            menge: buchungsAnzahl,
             vorher: vorherBestand,
-            nachher: parseFloat(neuerBestand)
+            nachher: neueAnzahl
           };
           if (notizen) {
             bestand.notizen = notizen;
           }
           await bestand.save();
+          
+          // 🔄 AUTOMATISCHE ROHSTOFF-SUBTRAKTION bei Fertigprodukt-Inventur
+          if (buchungsAnzahl > 0) {
+            console.log(`🏭 Automatische Rohstoff-Subtraktion für ${buchungsAnzahl}x ${artikel.name}`);
+            
+            const rohstoffBewegungen = [];
+            const rohstoffFehler = [];
+            
+            try {
+              // 1. ROHSEIFE subtrahieren
+              if (artikel.seife && artikel.gramm) {
+                const rohseifeDoc = await Rohseife.findOne({ bezeichnung: artikel.seife });
+                if (rohseifeDoc) {
+                  const benoetigt = artikel.gramm * buchungsAnzahl; // in Gramm
+                  
+                  if (rohseifeDoc.aktuellVorrat >= benoetigt) {
+                    const rohseifeVorher = rohseifeDoc.aktuellVorrat;
+                    rohseifeDoc.aktuellVorrat -= benoetigt;
+                    await rohseifeDoc.save();
+                    
+                    // Bewegung protokollieren
+                    rohstoffBewegungen.push({
+                      typ: 'produktion',
+                      artikel: {
+                        typ: 'rohseife',
+                        artikelId: rohseifeDoc._id,
+                        name: rohseifeDoc.bezeichnung
+                      },
+                      menge: -benoetigt,
+                      einheit: 'g',
+                      bestandVorher: rohseifeVorher,
+                      bestandNachher: rohseifeDoc.aktuellVorrat,
+                      grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                      notizen: `Fertigprodukt-Inventur (ID: ${artikelId})`,
+                      referenz: {
+                        typ: 'fertigprodukt-inventur',
+                        produktId: artikel._id,
+                        produktName: artikel.name,
+                        anzahl: buchungsAnzahl
+                      }
+                    });
+                    
+                    console.log(`  ✅ Rohseife ${rohseifeDoc.bezeichnung}: -${benoetigt}g`);
+                  } else {
+                    rohstoffFehler.push(`Nicht genug ${artikel.seife}: benötigt ${benoetigt}g, verfügbar ${rohseifeDoc.aktuellVorrat}g`);
+                  }
+                } else {
+                  rohstoffFehler.push(`Rohseife "${artikel.seife}" nicht gefunden`);
+                }
+              }
+              
+              // 2. DUFTÖL subtrahieren  
+              if (artikel.aroma && artikel.aroma !== 'Keine' && artikel.aroma !== '-' && artikel.aroma !== 'Neutral') {
+                const duftoel = await Duftoil.findOne({ bezeichnung: artikel.aroma });
+                if (duftoel) {
+                  // 1 ml pro Seife (Standard-Dosierung)
+                  const benoetigt = 1 * buchungsAnzahl; // in ml
+                  
+                  if (duftoel.aktuellVorrat >= benoetigt) {
+                    const duftoelVorher = duftoel.aktuellVorrat;
+                    duftoel.aktuellVorrat -= benoetigt;
+                    await duftoel.save();
+                    
+                    rohstoffBewegungen.push({
+                      typ: 'produktion',
+                      artikel: {
+                        typ: 'duftoil',
+                        artikelId: duftoel._id,
+                        name: duftoel.bezeichnung
+                      },
+                      menge: -benoetigt,
+                      einheit: 'ml',
+                      bestandVorher: duftoelVorher,
+                      bestandNachher: duftoel.aktuellVorrat,
+                      grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                      notizen: `Fertigprodukt-Inventur (ID: ${artikelId})`,
+                      referenz: {
+                        typ: 'fertigprodukt-inventur',
+                        produktId: artikel._id,
+                        produktName: artikel.name,
+                        anzahl: buchungsAnzahl
+                      }
+                    });
+                    
+                    console.log(`  ✅ Duftöl ${duftoel.bezeichnung}: -${benoetigt}ml`);
+                  } else {
+                    rohstoffFehler.push(`Nicht genug ${artikel.aroma}: benötigt ${benoetigt}ml, verfügbar ${duftoel.aktuellVorrat}ml`);
+                  }
+                } else {
+                  rohstoffFehler.push(`Duftöl "${artikel.aroma}" nicht gefunden`);
+                }
+              }
+              
+              // 3. VERPACKUNG subtrahieren
+              if (artikel.verpackung) {
+                const verpackung = await Verpackung.findOne({ bezeichnung: artikel.verpackung });
+                if (verpackung) {
+                  const benoetigt = 1 * buchungsAnzahl; // 1 Verpackung pro Seife
+                  
+                  if (verpackung.aktuellVorrat >= benoetigt) {
+                    const verpackungVorher = verpackung.aktuellVorrat;
+                    verpackung.aktuellVorrat -= benoetigt;
+                    await verpackung.save();
+                    
+                    rohstoffBewegungen.push({
+                      typ: 'produktion',
+                      artikel: {
+                        typ: 'verpackung',
+                        artikelId: verpackung._id,
+                        name: verpackung.bezeichnung
+                      },
+                      menge: -benoetigt,
+                      einheit: 'stück',
+                      bestandVorher: verpackungVorher,
+                      bestandNachher: verpackung.aktuellVorrat,
+                      grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                      notizen: `Fertigprodukt-Inventur (ID: ${artikelId})`,
+                      referenz: {
+                        typ: 'fertigprodukt-inventur',
+                        produktId: artikel._id,
+                        produktName: artikel.name,
+                        anzahl: buchungsAnzahl
+                      }
+                    });
+                    
+                    console.log(`  ✅ Verpackung ${verpackung.bezeichnung}: -${benoetigt} Stück`);
+                  } else {
+                    rohstoffFehler.push(`Nicht genug ${artikel.verpackung}: benötigt ${benoetigt} Stück, verfügbar ${verpackung.aktuellVorrat} Stück`);
+                  }
+                } else {
+                  rohstoffFehler.push(`Verpackung "${artikel.verpackung}" nicht gefunden`);
+                }
+              }
+              
+              // Alle Rohstoff-Bewegungen protokollieren
+              for (const bewegungData of rohstoffBewegungen) {
+                try {
+                  await Bewegung.erstelle({
+                    ...bewegungData,
+                    userId: req.user.id || req.user.userId || req.user._id
+                  });
+                } catch (err) {
+                  console.error('Fehler beim Protokollieren der Rohstoff-Bewegung:', err);
+                }
+              }
+              
+              console.log(`🎯 Rohstoff-Subtraktion abgeschlossen: ${rohstoffBewegungen.length} Bewegungen protokolliert`);
+              
+              if (rohstoffFehler.length > 0) {
+                console.warn('⚠️ Rohstoff-Warnungen:', rohstoffFehler);
+              }
+              
+            } catch (rohstoffError) {
+              console.error('❌ Fehler bei automatischer Rohstoff-Subtraktion:', rohstoffError);
+            }
+          }
         }
         break;
         
@@ -311,15 +475,20 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
     
     // Erstelle Bewegungseintrag
     try {
+      // Korrekte Typ-Zuordnung für Bewegungs-Schema
+      let bewegungsTyp = typ;
+      if (typ === 'verpackungen') bewegungsTyp = 'verpackung';
+      if (typ === 'fertigprodukt') bewegungsTyp = 'produkt';
+      
       const bewegung = new Bewegung({
         typ: 'inventur',
         artikel: {
-          typ: typ,
+          typ: bewegungsTyp,
           artikelId: artikelId,
           name: artikel.bezeichnung || artikel.name
         },
         menge: parseFloat(neuerBestand) - vorherBestand,
-        einheit: typ === 'fertigprodukt' ? 'Stück' : (typ === 'rohseife' ? 'g' : (typ === 'duftoele' ? 'ml' : 'Stück')),
+        einheit: bewegungsTyp === 'produkt' ? 'stück' : (bewegungsTyp === 'rohseife' ? 'g' : (bewegungsTyp === 'duftoil' ? 'ml' : 'stück')),
         bestandVorher: vorherBestand,
         bestandNachher: parseFloat(neuerBestand),
         grund: notizen || 'Manuelle Inventur'
@@ -353,6 +522,137 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
     res.status(500).json({
       success: false,
       message: 'Fehler bei Inventur',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/lager/fertigprodukt-rohstoffe/:produktId - Zeige benötigte Rohstoffe für Fertigprodukt
+router.get('/fertigprodukt-rohstoffe/:produktId', authenticateToken, async (req, res) => {
+  try {
+    const produkt = await Portfolio.findById(req.params.produktId);
+    
+    if (!produkt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Fertigprodukt nicht gefunden'
+      });
+    }
+    
+    const rohstoffe = [];
+    const verfuegbarkeit = { alleVerfuegbar: true, warnungen: [] };
+    
+    // 1. Rohseife
+    if (produkt.seife && produkt.gramm) {
+      const rohseifeDoc = await Rohseife.findOne({ bezeichnung: produkt.seife });
+      if (rohseifeDoc) {
+        const proStueck = produkt.gramm;
+        const verfuegbar = rohseifeDoc.aktuellVorrat;
+        const maxProduktion = Math.floor(verfuegbar / proStueck);
+        
+        rohstoffe.push({
+          typ: 'rohseife',
+          name: rohseifeDoc.bezeichnung,
+          proStueck: proStueck,
+          einheit: 'g',
+          verfuegbar: verfuegbar,
+          maxProduktion: maxProduktion,
+          ausreichend: verfuegbar >= proStueck
+        });
+        
+        if (verfuegbar < proStueck) {
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push(`Rohseife ${rohseifeDoc.bezeichnung}: nur ${verfuegbar}g verfügbar, benötigt ${proStueck}g`);
+        }
+      } else {
+        verfuegbarkeit.alleVerfuegbar = false;
+        verfuegbarkeit.warnungen.push(`Rohseife "${produkt.seife}" nicht in Datenbank gefunden`);
+      }
+    }
+    
+    // 2. Duftöl
+    if (produkt.aroma && produkt.aroma !== 'Keine' && produkt.aroma !== '-' && produkt.aroma !== 'Neutral') {
+      const duftoel = await Duftoil.findOne({ bezeichnung: produkt.aroma });
+      if (duftoel) {
+        const proStueck = 1; // 1ml pro Seife
+        const verfuegbar = duftoel.aktuellVorrat;
+        const maxProduktion = Math.floor(verfuegbar / proStueck);
+        
+        rohstoffe.push({
+          typ: 'duftoil',
+          name: duftoel.bezeichnung,
+          proStueck: proStueck,
+          einheit: 'ml',
+          verfuegbar: verfuegbar,
+          maxProduktion: maxProduktion,
+          ausreichend: verfuegbar >= proStueck
+        });
+        
+        if (verfuegbar < proStueck) {
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push(`Duftöl ${duftoel.bezeichnung}: nur ${verfuegbar}ml verfügbar, benötigt ${proStueck}ml`);
+        }
+      } else {
+        verfuegbarkeit.alleVerfuegbar = false;
+        verfuegbarkeit.warnungen.push(`Duftöl "${produkt.aroma}" nicht in Datenbank gefunden`);
+      }
+    }
+    
+    // 3. Verpackung
+    if (produkt.verpackung) {
+      const verpackung = await Verpackung.findOne({ bezeichnung: produkt.verpackung });
+      if (verpackung) {
+        const proStueck = 1; // 1 Verpackung pro Seife
+        const verfuegbar = verpackung.aktuellVorrat;
+        const maxProduktion = Math.floor(verfuegbar / proStueck);
+        
+        rohstoffe.push({
+          typ: 'verpackung',
+          name: verpackung.bezeichnung,
+          proStueck: proStueck,
+          einheit: 'stück',
+          verfuegbar: verfuegbar,
+          maxProduktion: maxProduktion,
+          ausreichend: verfuegbar >= proStueck
+        });
+        
+        if (verfuegbar < proStueck) {
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push(`Verpackung ${verpackung.bezeichnung}: nur ${verfuegbar} Stück verfügbar, benötigt ${proStueck} Stück`);
+        }
+      } else {
+        verfuegbarkeit.alleVerfuegbar = false;
+        verfuegbarkeit.warnungen.push(`Verpackung "${produkt.verpackung}" nicht in Datenbank gefunden`);
+      }
+    }
+    
+    // Maximale Produktionsmenge berechnen
+    const maxProduktionGesamt = rohstoffe.length > 0 ? Math.min(...rohstoffe.map(r => r.maxProduktion)) : 0;
+    
+    res.json({
+      success: true,
+      data: {
+        produkt: {
+          id: produkt._id,
+          name: produkt.name,
+          seife: produkt.seife,
+          gramm: produkt.gramm,
+          aroma: produkt.aroma,
+          verpackung: produkt.verpackung
+        },
+        rohstoffe: rohstoffe,
+        verfuegbarkeit: verfuegbarkeit,
+        maxProduktionGesamt: maxProduktionGesamt,
+        automatischeSubtraktion: true,
+        hinweis: "Bei Fertigprodukt-Inventur werden die benötigten Rohstoffe automatisch subtrahiert"
+      }
+    });
+    
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Fertigprodukt-Rohstoffe:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Fertigprodukt-Rohstoffe',
       error: error.message
     });
   }
@@ -411,7 +711,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
             einheit: 'g',
             bestandVorher: vorher,
             bestandNachher: rohseifeDoc.aktuellVorrat,
-            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            grund: `Produktion: Verbrauch für ${anzahl}x ${produkt.name}`,
             notizen,
             userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
@@ -455,7 +755,7 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
             einheit: 'tropfen',
             bestandVorher: vorher,
             bestandNachher: duftoel.aktuellVorrat,
-            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            grund: `Produktion: Verbrauch für ${anzahl}x ${produkt.name}`,
             notizen,
             userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
@@ -494,10 +794,10 @@ router.post('/produktion', authenticateToken, requireAdmin, async (req, res) => 
               name: verpackung.bezeichnung
             },
             menge: -benoetigt,
-            einheit: 'Stück',
+            einheit: 'stück',
             bestandVorher: vorher,
             bestandNachher: verpackung.aktuellVorrat,
-            grund: `Produktion: ${anzahl}x ${produkt.name}`,
+            grund: `Produktion: Verbrauch für ${anzahl}x ${produkt.name}`,
             notizen,
             userId: req.user.id || req.user.userId || req.user._id,
             referenz: {
@@ -881,9 +1181,9 @@ router.get('/bewegungen/:artikelId', authenticateToken, requireAdmin, async (req
       bewegungen = bewegungen.map(b => ({
         datum: b.createdAt || b.datum,
         aktion: b.typ || b.aktion || 'Bestandsänderung',
-        vorherBestand: b.vorherBestand || 0,
-        nachherBestand: b.nachherBestand || 0,
-        aenderung: (b.nachherBestand || 0) - (b.vorherBestand || 0),
+        vorherBestand: b.bestandVorher || b.vorherBestand || 0,
+        nachherBestand: b.bestandNachher || b.nachherBestand || 0,
+        aenderung: (b.bestandNachher || b.nachherBestand || 0) - (b.bestandVorher || b.vorherBestand || 0),
         notizen: b.grund || b.notizen || b.beschreibung || ''
       }));
     }

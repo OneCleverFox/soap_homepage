@@ -165,19 +165,32 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
 
   console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
   
-  // Mongoose Verbindungsoptionen für Railway + MongoDB Atlas
+  // Debug: Zeige aktuelle IP-Adresse für Whitelist-Check
+  try {
+    const fetch = require('node-fetch');
+    const response = await fetch('https://api.ipify.org?format=json');
+    const { ip } = await response.json();
+    console.log('🌐 Aktuelle öffentliche IP-Adresse:', ip);
+    console.log('💡 Diese IP muss in MongoDB Atlas Whitelist stehen!');
+  } catch (ipError) {
+    console.warn('⚠️ Konnte aktuelle IP nicht ermitteln:', ipError.message);
+  }
+  
+  // Mongoose Verbindungsoptionen für Railway + MongoDB Atlas - vereinfacht
   const mongooseOptions = {
-    serverSelectionTimeoutMS: 30000, // 30 Sekunden für Server Selection
-    socketTimeoutMS: 45000, // 45 Sekunden für Socket Operations
-    family: 4 // Force IPv4 (Railway hat manchmal IPv6 Probleme)
+    serverSelectionTimeoutMS: 30000,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 30000,
+    maxPoolSize: 10,
+    retryWrites: true
   };
   
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await mongoose.connect(MONGODB_URI, mongooseOptions);
       console.log('✅ MongoDB erfolgreich verbunden');
-      console.log('📊 Database:', mongoose.connection.db.databaseName);
-      console.log('🏢 Host:', mongoose.connection.host);
+      console.log('📊 Database:', mongoose.connection.db ? mongoose.connection.db.databaseName : 'connecting...');
+      console.log('🏢 Host:', mongoose.connection.host || 'connecting...');
       console.log('🎯 Verbindung hergestellt nach', attempt, 'Versuch(en)');
       return; // Erfolg - beende Funktion
     } catch (err) {
@@ -200,21 +213,54 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
 // Starte MongoDB Verbindung
 connectToMongoDB();
 
+// MongoDB Verbindungsevents überwachen
+mongoose.connection.on('connected', () => {
+  console.log('🔗 Mongoose Verbindung hergestellt');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ Mongoose Verbindungsfehler:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.warn('🔌 Mongoose Verbindung getrennt');
+  // Versuche automatisch wieder zu verbinden, aber nur wenn nicht bereits am verbinden
+  if (mongoose.connection.readyState === 0) {
+    console.log('🔄 Versuche Wiederverbindung...');
+    setTimeout(() => {
+      mongoose.connect(MONGODB_URI, mongooseOptions)
+        .then(() => console.log('✅ Wiederverbindung erfolgreich'))
+        .catch(err => console.error('❌ Wiederverbindung fehlgeschlagen:', err.message));
+    }, 5000);
+  }
+});
+
+// Graceful Shutdown
+process.on('SIGINT', async () => {
+  console.log('SIGINT erhalten, schließe Server...');
+  await mongoose.connection.close();
+  console.log('MongoDB Verbindung geschlossen.');
+  process.exit(0);
+});
+connectToMongoDB();
+
 // Routes
+const { checkDatabaseConnection } = require('./middleware/dbConnection');
+
 app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/inventory', inventoryRoutes);
+app.use('/api/products', checkDatabaseConnection, productRoutes);
+app.use('/api/orders', checkDatabaseConnection, orderRoutes);
+app.use('/api/inventory', checkDatabaseConnection, inventoryRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/portfolio', portfolioRoutes);
-app.use('/api/rohseife', rohseifeRoutes);
-app.use('/api/duftoele', duftoeleRoutes);
-app.use('/api/verpackungen', verpackungenRoutes);
-app.use('/api/kunden', kundenRoutes);
-app.use('/api/users', usersRoutes);
-app.use('/api/cart', cartRoutes);
-app.use('/api/warenberechnung', warenberechnungRoutes);
-app.use('/api/lager', lagerRoutes);
+app.use('/api/portfolio', checkDatabaseConnection, portfolioRoutes);
+app.use('/api/rohseife', checkDatabaseConnection, rohseifeRoutes);
+app.use('/api/duftoele', checkDatabaseConnection, duftoeleRoutes);
+app.use('/api/verpackungen', checkDatabaseConnection, verpackungenRoutes);
+app.use('/api/kunden', checkDatabaseConnection, kundenRoutes);
+app.use('/api/users', checkDatabaseConnection, usersRoutes);
+app.use('/api/cart', checkDatabaseConnection, cartRoutes);
+app.use('/api/warenberechnung', checkDatabaseConnection, warenberechnungRoutes);
+app.use('/api/lager', checkDatabaseConnection, lagerRoutes);
 app.use('/api/images', require('./routes/images'));
 
 // Test Route für Datenempfang
@@ -241,17 +287,24 @@ app.get('/api/health', (req, res) => {
     3: 'disconnecting'
   };
   
-  res.status(200).json({
-    status: 'OK',
-    message: 'Gluecksmomente Backend läuft',
+  // Bestimme den HTTP-Status basierend auf der Datenbankverbindung
+  const httpStatus = dbStatus === 1 ? 200 : 503;
+  
+  res.status(httpStatus).json({
+    status: dbStatus === 1 ? 'OK' : 'DEGRADED',
+    message: dbStatus === 1 
+      ? 'Gluecksmomente Backend läuft' 
+      : 'Backend läuft, aber Datenbank ist nicht verfügbar',
     version: APP_VERSION,
-    database: dbStatusMap[dbStatus] || 'unknown',
-    mongodb: {
+    database: {
+      status: dbStatusMap[dbStatus] || 'unknown',
+      readyState: dbStatus,
       host: mongoose.connection.host || 'not connected',
-      name: mongoose.connection.name || 'not connected',
-      readyState: dbStatus
+      name: mongoose.connection.db ? mongoose.connection.db.databaseName : 'not connected',
+      isConnected: dbStatus === 1
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    ipAddress: req.ip || 'unknown'
   });
 });
 

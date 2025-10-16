@@ -7,7 +7,9 @@ import {
   CardContent, 
   CardActions, 
   Button,
-  Box 
+  Box,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { 
   Inventory as InventoryIcon,
@@ -22,6 +24,8 @@ import { useNavigate } from 'react-router-dom';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const adminSections = [
     {
@@ -76,16 +80,30 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <Container maxWidth="lg">
-      <Box py={4}>
-        <Typography variant="h2" component="h1" gutterBottom align="center">
+    <Container maxWidth="lg" sx={{ px: isMobile ? 1 : 3 }}>
+      <Box py={isMobile ? 2 : 4}>
+        <Typography 
+          variant={isMobile ? "h4" : "h2"} 
+          component="h1" 
+          gutterBottom 
+          align="center"
+          sx={{ fontSize: isMobile ? '1.75rem' : '3rem' }}
+        >
           Admin Dashboard
         </Typography>
-        <Typography variant="h6" component="p" gutterBottom align="center" color="textSecondary" mb={4}>
+        <Typography 
+          variant={isMobile ? "body1" : "h6"} 
+          component="p" 
+          gutterBottom 
+          align="center" 
+          color="textSecondary" 
+          mb={isMobile ? 2 : 4}
+          sx={{ px: isMobile ? 1 : 0 }}
+        >
           Willkommen im Verwaltungsbereich - wählen Sie einen Bereich aus:
         </Typography>
 
-        <Grid container spacing={3}>
+        <Grid container spacing={isMobile ? 2 : 3}>
           {adminSections.map((section) => (
             <Grid item xs={12} sm={6} md={4} key={section.title}>
               <Card 
@@ -94,33 +112,62 @@ const AdminDashboard = () => {
                   display: 'flex', 
                   flexDirection: 'column',
                   transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': {
+                  cursor: 'pointer',
+                  '&:hover': isMobile ? {} : {
                     transform: 'translateY(-4px)',
                     boxShadow: 3
-                  }
+                  },
+                  '&:active': isMobile ? {
+                    transform: 'scale(0.98)',
+                    boxShadow: 1
+                  } : {},
+                  minHeight: isMobile ? '140px' : '200px'
                 }}
+                onClick={() => navigate(section.path)}
               >
-                <CardContent sx={{ flexGrow: 1, textAlign: 'center', p: 3 }}>
-                  <Box mb={2}>
-                    {section.icon}
+                <CardContent 
+                  sx={{ 
+                    flexGrow: 1, 
+                    textAlign: 'center', 
+                    p: isMobile ? 2 : 3,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Box mb={isMobile ? 1 : 2}>
+                    {React.cloneElement(section.icon, {
+                      sx: { 
+                        fontSize: isMobile ? 30 : 40, 
+                        color: `${section.color}.main` 
+                      }
+                    })}
                   </Box>
-                  <Typography variant="h5" component="h3" gutterBottom>
+                  <Typography 
+                    variant={isMobile ? "h6" : "h5"} 
+                    component="h3" 
+                    gutterBottom
+                    sx={{ fontSize: isMobile ? '1.1rem' : '1.5rem' }}
+                  >
                     {section.title}
                   </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {section.description}
-                  </Typography>
+                  {!isMobile && (
+                    <Typography variant="body2" color="textSecondary">
+                      {section.description}
+                    </Typography>
+                  )}
                 </CardContent>
-                <CardActions sx={{ justifyContent: 'center', pb: 2 }}>
-                  <Button 
-                    variant="contained" 
-                    color={section.color}
-                    onClick={() => navigate(section.path)}
-                    size="large"
-                  >
-                    Öffnen
-                  </Button>
-                </CardActions>
+                {!isMobile && (
+                  <CardActions sx={{ justifyContent: 'center', pb: 2 }}>
+                    <Button 
+                      variant="contained" 
+                      color={section.color}
+                      size="large"
+                    >
+                      Öffnen
+                    </Button>
+                  </CardActions>
+                )}
               </Card>
             </Grid>
           ))}

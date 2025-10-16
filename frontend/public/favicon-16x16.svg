@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Mini Version für sehr kleine Größen -->
+  <circle cx="8" cy="8" r="7.5" fill="#f8f5f0"/>
+  
+  <!-- Sehr vereinfachte Blume -->
+  <rect x="7.5" y="10" width="1" height="4" fill="#4a7c59"/>
+  
+  <!-- Einfache Blüte -->
+  <circle cx="8" cy="6" r="2" fill="#e8a5c4"/>
+  <circle cx="6" cy="8" r="1.5" fill="#e8a5c4"/>
+  <circle cx="10" cy="8" r="1.5" fill="#e8a5c4"/>
+  <circle cx="7" cy="9.5" r="1.2" fill="#e8a5c4"/>
+  <circle cx="9" cy="9.5" r="1.2" fill="#e8a5c4"/>
+  
+  <!-- Zentrum -->
+  <circle cx="8" cy="8" r="1.5" fill="#f9e79f"/>
+</svg>

@@ -9,16 +9,16 @@ const bewegungSchema = new mongoose.Schema({
   typ: {
     type: String,
     enum: ['eingang', 'ausgang', 'inventur', 'produktion', 'korrektur', 'retoure'],
-    required: true,
-    index: true
+    required: true
+    // index: true entfernt - wird über Compound-Index abgedeckt
   },
   
   // Betroffener Bestand
   bestandId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Bestand',
-    required: false, // Nicht required, da Rohstoffe kein Bestand-Dokument haben
-    index: true
+    required: false // Nicht required, da Rohstoffe kein Bestand-Dokument haben
+    // index: true entfernt - wird über Compound-Index abgedeckt
   },
   
   // Artikel-Info (für schnelleren Zugriff)

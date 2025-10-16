@@ -20,7 +20,7 @@ const kundenSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'E-Mail ist erforderlich'],
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     lowercase: true,
     trim: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Bitte geben Sie eine gültige E-Mail-Adresse ein']
@@ -135,7 +135,7 @@ const kundenSchema = new mongoose.Schema({
   },
   kundennummer: {
     type: String,
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
   
@@ -354,9 +354,8 @@ kundenSchema.pre('save', async function(next) {
   next();
 });
 
-// Indizes
-kundenSchema.index({ email: 1 }, { unique: true });
-kundenSchema.index({ kundennummer: 1 }, { unique: true });
+// Indizes - email index wird automatisch durch unique: true erstellt
+// kundenSchema.index({ kundennummer: 1 }, { unique: true }); // ENTFERNT - wird durch unique: true automatisch erstellt
 kundenSchema.index({ 'adresse.plz': 1 });
 kundenSchema.index({ 'statistiken.gesamtumsatz': -1 });
 kundenSchema.index({ createdAt: -1 });
