@@ -56,7 +56,7 @@ const orderSchema = new mongoose.Schema({
   bestellnummer: {
     type: String,
     required: false, // Wird im pre-save Hook automatisch generiert
-    unique: true
+    unique: true // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
   },
   // Verknüpfung mit unserem Kunden-System
   kunde: {
@@ -400,7 +400,7 @@ const orderSchema = new mongoose.Schema({
 });
 
 // Nur die Indizes erstellen, die wir brauchen
-orderSchema.index({ bestellnummer: 1 }, { unique: true });
+// orderSchema.index({ bestellnummer: 1 }, { unique: true }); // ENTFERNT - wird durch unique: true automatisch erstellt
 orderSchema.index({ 'besteller.email': 1 });
 orderSchema.index({ kunde: 1 });
 orderSchema.index({ status: 1 });

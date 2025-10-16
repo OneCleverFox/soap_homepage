@@ -4,7 +4,7 @@ const rohseifeSchema = new mongoose.Schema({
   bezeichnung: {
     type: String,
     required: true,
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
   gesamtInGramm: {
@@ -83,7 +83,7 @@ rohseifeSchema.virtual('vorratStatus').get(function() {
 });
 
 // Indizes für bessere Performance
-rohseifeSchema.index({ bezeichnung: 1 });
+// rohseifeSchema.index({ bezeichnung: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
 rohseifeSchema.index({ ekPreis: 1 });
 rohseifeSchema.index({ verfuegbar: 1 });
 

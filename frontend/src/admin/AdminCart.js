@@ -19,7 +19,10 @@ import {
   Alert,
   CircularProgress,
   TextField,
-  Divider
+  Divider,
+  useTheme,
+  useMediaQuery,
+  Stack
 } from '@mui/material';
 import {
   ShoppingCart as CartIcon,
@@ -35,6 +38,9 @@ import toast from 'react-hot-toast';
 
 const AdminCart = () => {
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [cartData, setCartData] = useState({ items: [], total: 0, itemCount: 0 });
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -132,51 +138,92 @@ const AdminCart = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="lg" sx={{ 
+      mt: isMobile ? 1 : 4, 
+      mb: isMobile ? 2 : 4,
+      px: isMobile ? 1 : 3 
+    }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <CartIcon sx={{ fontSize: 40, mr: 2, color: 'primary.main' }} />
-        <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
-          Mein Admin-Warenkorb
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={loadAdminCart}
-          disabled={updating}
-          sx={{ mr: 2 }}
-        >
-          Aktualisieren
-        </Button>
-        {cartData.items.length > 0 && (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center', 
+        mb: 3,
+        gap: isMobile ? 2 : 0
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: isMobile ? 0 : 0 }}>
+          <CartIcon sx={{ 
+            fontSize: isMobile ? 30 : 40, 
+            mr: 2, 
+            color: 'primary.main' 
+          }} />
+          <Typography 
+            variant={isMobile ? "h5" : "h4"} 
+            component="h1" 
+            sx={{ 
+              flexGrow: 1,
+              fontSize: isMobile ? '1.5rem' : '2.125rem'
+            }}
+          >
+            Mein Admin-Warenkorb
+          </Typography>
+        </Box>
+        
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: 1,
+          width: isMobile ? '100%' : 'auto'
+        }}>
           <Button
             variant="outlined"
-            color="error"
-            startIcon={<ClearIcon />}
-            onClick={clearCart}
+            startIcon={<RefreshIcon />}
+            onClick={loadAdminCart}
             disabled={updating}
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
           >
-            Leeren
+            Aktualisieren
           </Button>
-        )}
+          {cartData.items.length > 0 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<ClearIcon />}
+              onClick={clearCart}
+              disabled={updating}
+              size={isMobile ? "large" : "medium"}
+              fullWidth={isMobile}
+            >
+              Warenkorb leeren
+            </Button>
+          )}
+        </Box>
       </Box>
 
       {/* Benutzer Info */}
       <Card sx={{ mb: 3 }}>
-        <CardContent>
+        <CardContent sx={{ p: isMobile ? 2 : 3 }}>
           <Typography variant="h6" gutterBottom>
             Administrator: {user?.email || 'Unbekannt'}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: 1, 
+            mt: 1 
+          }}>
             <Chip 
               label={`${cartData.itemCount} Artikel`} 
               color="primary" 
               variant="outlined" 
+              size={isMobile ? "medium" : "small"}
             />
             <Chip 
               label={`Gesamt: €${cartData.total.toFixed(2)}`} 
               color="success" 
               variant="outlined" 
+              size={isMobile ? "medium" : "small"}
             />
           </Box>
         </CardContent>
@@ -185,14 +232,156 @@ const AdminCart = () => {
       {/* Warenkorb Inhalt */}
       {cartData.items.length === 0 ? (
         <Card>
-          <CardContent>
-            <Alert severity="info" sx={{ display: 'flex', alignItems: 'center' }}>
-              <CartIcon sx={{ mr: 2 }} />
-              Ihr Warenkorb ist leer. Fügen Sie Produkte aus dem Portfolio hinzu.
-            </Alert>
+          <CardContent sx={{ textAlign: 'center', py: 4 }}>
+            <CartIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" gutterBottom>
+              Ihr Warenkorb ist leer
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Fügen Sie Produkte aus dem Portfolio hinzu.
+            </Typography>
           </CardContent>
         </Card>
+      ) : isMobile ? (
+        // Mobile Card Layout
+        <Stack spacing={2}>
+          <Typography variant="h6" gutterBottom>
+            Warenkorb-Inhalt ({cartData.itemCount} Artikel)
+          </Typography>
+          {cartData.items.map((item) => (
+            <Card key={item.produktId}>
+              <CardContent sx={{ p: 2 }}>
+                {/* Header mit Bild und Name */}
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
+                  <Avatar
+                    src={item.bild}
+                    sx={{ width: 60, height: 60, mr: 2 }}
+                  />
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="h6" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                      {item.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.seife} • {item.gramm}g
+                    </Typography>
+                    <Typography variant="h6" color="primary" sx={{ mt: 0.5 }}>
+                      €{item.preis.toFixed(2)}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Mengensteuerung */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  bgcolor: 'grey.50',
+                  p: 1.5,
+                  borderRadius: 1,
+                  mb: 2
+                }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Menge:
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => updateQuantity(item.produktId, item.menge - 1)}
+                      disabled={updating || item.menge <= 1}
+                      sx={{ 
+                        bgcolor: 'primary.main', 
+                        color: 'white',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                        '&:disabled': { bgcolor: 'grey.300' },
+                        width: 40,
+                        height: 40
+                      }}
+                    >
+                      <RemoveIcon fontSize="small" />
+                    </IconButton>
+                    
+                    <TextField
+                      value={item.menge}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 1;
+                        if (value > 0) updateQuantity(item.produktId, value);
+                      }}
+                      size="small"
+                      type="number"
+                      inputProps={{ min: 1, style: { textAlign: 'center', fontSize: '1.1rem' } }}
+                      sx={{ 
+                        width: 60,
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 1
+                        }
+                      }}
+                      disabled={updating}
+                    />
+                    
+                    <IconButton
+                      size="small"
+                      onClick={() => updateQuantity(item.produktId, item.menge + 1)}
+                      disabled={updating}
+                      sx={{ 
+                        bgcolor: 'primary.main', 
+                        color: 'white',
+                        '&:hover': { bgcolor: 'primary.dark' },
+                        width: 40,
+                        height: 40
+                      }}
+                    >
+                      <AddIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+
+                {/* Gesamt und Aktionen */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Gesamt:
+                    </Typography>
+                    <Typography variant="h6" color="success.main">
+                      €{(item.preis * item.menge).toFixed(2)}
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    color="error"
+                    onClick={() => removeItem(item.produktId)}
+                    disabled={updating}
+                    sx={{ 
+                      bgcolor: 'error.main', 
+                      color: 'white',
+                      '&:hover': { bgcolor: 'error.dark' },
+                      width: 44,
+                      height: 44
+                    }}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              </CardContent>
+            </Card>
+          ))}
+          
+          {/* Mobile Gesamt */}
+          <Card sx={{ bgcolor: 'primary.50', border: '2px solid', borderColor: 'primary.main' }}>
+            <CardContent sx={{ textAlign: 'center', py: 3 }}>
+              <Typography variant="h5" fontWeight="bold" color="primary.main">
+                Gesamtsumme: €{cartData.total.toFixed(2)}
+              </Typography>
+            </CardContent>
+          </Card>
+          
+          {/* Mobile Info */}
+          <Alert severity="info">
+            <Typography variant="body2">
+              Als Administrator können Sie hier Ihren persönlichen Warenkorb verwalten.
+            </Typography>
+          </Alert>
+        </Stack>
       ) : (
+        // Desktop Table Layout
         <Card>
           <CardContent>
             <Typography variant="h6" gutterBottom>

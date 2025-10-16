@@ -37,7 +37,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Search as SearchIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 
@@ -54,6 +55,7 @@ const AdminRohstoffe = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [currentTab, setCurrentTab] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
   const [rohseife, setRohseife] = useState([]);
   const [duftoele, setDuftoele] = useState([]);
   const [verpackungen, setVerpackungen] = useState([]);
@@ -96,6 +98,96 @@ const AdminRohstoffe = () => {
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
+    setSearchTerm(''); // Suche beim Tab-Wechsel zurücksetzen
+  };
+
+  // Universelle Filterfunktion für alle Rohstoff-Typen
+  const filterItems = (items, searchTerm) => {
+    if (!items || !Array.isArray(items)) {
+      return [];
+    }
+    
+    if (!searchTerm) return items;
+    
+    const search = searchTerm.toLowerCase();
+    
+    // Hilfsfunktion für sichere String-Konvertierung
+    const safeString = (value) => {
+      if (value === null || value === undefined) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number') return value.toString();
+      if (Array.isArray(value)) return value.join(' ');
+      if (typeof value === 'object') return JSON.stringify(value);
+      return String(value);
+    };
+    
+    return items.filter(item => {
+      try {
+        // Grundlegende Felder (für alle Typen)
+        const matchesBasic = 
+          safeString(item.bezeichnung).toLowerCase().includes(search) ||
+          safeString(item.beschreibung).toLowerCase().includes(search) ||
+          safeString(item.ekPreis).includes(search);
+        
+        // Rohseife-spezifische Felder
+        if (currentTab === 0) {
+          const matchesRohseife = 
+            safeString(item.farbe).toLowerCase().includes(search) ||
+            safeString(item.lieferant).toLowerCase().includes(search) ||
+            safeString(item.gesamtInGramm).includes(search) ||
+            safeString(item.preisProGramm).includes(search) ||
+            safeString(item.preisPro10Gramm).includes(search) ||
+            safeString(item.aktuellVorrat).includes(search) ||
+            safeString(item.mindestbestand).includes(search);
+          
+          return matchesBasic || matchesRohseife;
+        }
+        
+        // Duftöl-spezifische Felder
+        if (currentTab === 1) {
+          const matchesDuftoele = 
+            safeString(item.hersteller).toLowerCase().includes(search) ||
+            safeString(item.duftrichtung).toLowerCase().includes(search) ||
+            safeString(item.intensitaet).toLowerCase().includes(search) ||
+            safeString(item.gesamtInMl).includes(search) ||
+            safeString(item.tropfenProMl).includes(search) ||
+            safeString(item.anzahlTropfen).includes(search) ||
+            safeString(item.kostenProTropfen).includes(search) ||
+            safeString(item.empfohlungProSeife).includes(search) ||
+            safeString(item.maximalProSeife).includes(search) ||
+            safeString(item.haltbarkeitMonate).includes(search) ||
+            safeString(item.lagertemperatur).toLowerCase().includes(search) ||
+            safeString(item.aktuellVorrat).includes(search) ||
+            safeString(item.mindestbestand).includes(search);
+          
+          return matchesBasic || matchesDuftoele;
+        }
+        
+        // Verpackung-spezifische Felder
+        if (currentTab === 2) {
+          const matchesVerpackungen = 
+            safeString(item.hersteller).toLowerCase().includes(search) ||
+            safeString(item.form).toLowerCase().includes(search) ||
+            safeString(item.groesse).toLowerCase().includes(search) ||
+            safeString(item.material).toLowerCase().includes(search) ||
+            safeString(item.farbe).toLowerCase().includes(search) ||
+            safeString(item.menge).includes(search) ||
+            safeString(item.kostenInEuro).includes(search) ||
+            safeString(item.kostenProStueck).includes(search) ||
+            safeString(item.maximalGewicht).includes(search) ||
+            safeString(item.aktuellVorrat).includes(search) ||
+            safeString(item.mindestbestand).includes(search) ||
+            safeString(item.notizen).toLowerCase().includes(search);
+          
+          return matchesBasic || matchesVerpackungen;
+        }
+        
+        return matchesBasic;
+      } catch (error) {
+        console.warn('Fehler beim Filtern eines Items:', error, item);
+        return false;
+      }
+    });
   };
 
   const handleOpenDialog = (mode, item = null) => {
@@ -261,10 +353,12 @@ const AdminRohstoffe = () => {
   };
 
   const renderRohseifeTable = () => {
+    const filteredData = filterItems(rohseife, searchTerm);
+    
     if (isMobile) {
       return (
         <Stack spacing={2}>
-          {rohseife.map((item) => (
+          {filteredData.map((item) => (
             <Card key={item._id} variant="outlined">
               <CardContent>
                 <Stack spacing={1.5}>
@@ -339,6 +433,18 @@ const AdminRohstoffe = () => {
               </CardContent>
             </Card>
           ))}
+          {filteredData.length === 0 && (
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="textSecondary" align="center">
+                  {searchTerm ? 
+                    `Keine Rohseifen gefunden, die "${searchTerm}" entsprechen.` :
+                    'Keine Rohseifen verfügbar.'
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
+          )}
         </Stack>
       );
     }
@@ -361,7 +467,7 @@ const AdminRohstoffe = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rohseife.map((item) => (
+            {filteredData.map((item) => (
               <TableRow key={item._id}>
                 <TableCell>{item.bezeichnung}</TableCell>
                 <TableCell>{item.beschreibung}</TableCell>
@@ -395,6 +501,18 @@ const AdminRohstoffe = () => {
                 </TableCell>
               </TableRow>
             ))}
+            {filteredData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                  <Typography variant="body2" color="textSecondary">
+                    {searchTerm ? 
+                      `Keine Rohseifen gefunden, die "${searchTerm}" entsprechen.` :
+                      'Keine Rohseifen verfügbar.'
+                    }
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -402,10 +520,12 @@ const AdminRohstoffe = () => {
   };
 
   const renderDuftoeleTable = () => {
+    const filteredData = filterItems(duftoele, searchTerm);
+    
     if (isMobile) {
       return (
         <Stack spacing={2}>
-          {duftoele.map((item) => (
+          {filteredData.map((item) => (
             <Card key={item._id} variant="outlined">
               <CardContent>
                 <Stack spacing={1.5}>
@@ -507,7 +627,7 @@ const AdminRohstoffe = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {duftoele.map((item) => (
+            {filteredData.map((item) => (
               <TableRow key={item._id}>
                 <TableCell>{item.bezeichnung}</TableCell>
                 <TableCell>{item.beschreibung}</TableCell>
@@ -549,10 +669,12 @@ const AdminRohstoffe = () => {
   };
 
   const renderVerpackungenTable = () => {
+    const filteredData = filterItems(verpackungen, searchTerm);
+    
     if (isMobile) {
       return (
         <Stack spacing={2}>
-          {verpackungen.map((item) => (
+          {filteredData.map((item) => (
             <Card key={item._id} variant="outlined">
               <CardContent>
                 <Stack spacing={1.5}>
@@ -646,7 +768,7 @@ const AdminRohstoffe = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {verpackungen.map((item) => (
+            {filteredData.map((item) => (
               <TableRow key={item._id}>
                 <TableCell>{item.bezeichnung}</TableCell>
                 <TableCell>{item.form}</TableCell>
@@ -759,6 +881,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.gesamtInGramm || 1000}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               required
               inputProps={{ min: 1 }}
               helperText="Gesamtmenge der Packung"
@@ -773,6 +899,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.ekPreis || 0}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               inputProps={{ step: '0.01', min: 0 }}
               required
               helperText="Einkaufspreis gesamt"
@@ -812,6 +942,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.aktuellVorrat || 0}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               required
               inputProps={{ min: 0 }}
               helperText="Aktuell auf Lager"
@@ -826,6 +960,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.mindestbestand || 100}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               inputProps={{ min: 0 }}
               helperText="Warngrenze"
             />
@@ -942,6 +1080,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.gesamtInMl || 15}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               required
               inputProps={{ min: 1, step: 1 }}
               helperText="Gesamtmenge"
@@ -987,6 +1129,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.ekPreis || 0}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               inputProps={{ step: '0.01', min: 0 }}
               required
               helperText="Einkaufspreis"
@@ -1026,6 +1172,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.empfohlungProSeife || 5}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               inputProps={{ min: 1 }}
               helperText="Tropfen (für 100g = 2 Tropfen)"
             />
@@ -1039,6 +1189,10 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.maximalProSeife || 10}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                // Feld beim Klick leeren für einfache Eingabe
+                e.target.select();
+              }}
               inputProps={{ min: 1 }}
               helperText="Maximale Tropfen"
             />
@@ -1346,6 +1500,58 @@ const AdminRohstoffe = () => {
         </Tabs>
       </Box>
 
+      {/* Universelles Suchfeld */}
+      <Box sx={{ 
+        mb: isMobile ? 2 : 3,
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: 2,
+        alignItems: isMobile ? 'stretch' : 'center'
+      }}>
+        <TextField
+          fullWidth={isMobile}
+          sx={{ 
+            minWidth: isMobile ? '100%' : 300,
+            maxWidth: isMobile ? '100%' : 500
+          }}
+          size={isMobile ? "small" : "medium"}
+          placeholder={
+            currentTab === 0 ? "Suche nach Rohseifen (Name, Farbe, Lieferant, Preis...)" :
+            currentTab === 1 ? "Suche nach Duftölen (Name, Hersteller, Duftrichtung...)" :
+            "Suche nach Verpackungen (Name, Material, Form, Größe...)"
+          }
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <SearchIcon color="action" sx={{ mr: 1 }} />
+            ),
+            endAdornment: searchTerm && (
+              <IconButton
+                size="small"
+                onClick={() => setSearchTerm('')}
+                edge="end"
+              >
+                <RefreshIcon />
+              </IconButton>
+            )
+          }}
+        />
+        
+        {searchTerm && (
+          <Chip
+            size="small"
+            label={`Ergebnisse: ${
+              currentTab === 0 ? filterItems(rohseife, searchTerm).length :
+              currentTab === 1 ? filterItems(duftoele, searchTerm).length :
+              filterItems(verpackungen, searchTerm).length
+            }`}
+            color="primary"
+            variant="outlined"
+          />
+        )}
+      </Box>
+
       <Box sx={{ 
         display: 'flex', 
         flexDirection: isMobile ? 'column' : 'row',
@@ -1361,15 +1567,6 @@ const AdminRohstoffe = () => {
           fullWidth={isMobile}
         >
           {isMobile ? "Neu" : "Neuen Rohstoff hinzufügen"}
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={loadData}
-          size={isMobile ? "medium" : "large"}
-          fullWidth={isMobile}
-        >
-          Aktualisieren
         </Button>
       </Box>
 
