@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: [true, 'E-Mail ist erforderlich'],
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true,
     lowercase: true,
     match: [/^\S+@\S+\.\S+$/, 'Bitte geben Sie eine gültige E-Mail-Adresse ein']
@@ -70,8 +70,7 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index für schnellere Suche
-userSchema.index({ email: 1 });
+// Index für schnellere Suche - email index wird automatisch durch unique: true erstellt
 userSchema.index({ username: 1 });
 userSchema.index({ status: 1 });
 

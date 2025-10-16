@@ -9,16 +9,16 @@ const bestandSchema = new mongoose.Schema({
   typ: {
     type: String,
     enum: ['rohseife', 'duftoil', 'verpackung', 'produkt'],
-    required: true,
-    index: true
+    required: true
+    // index: true entfernt - wird über Compound-Index abgedeckt
   },
   
   // Referenz zur Produkt-/Rohstoff-ID
   artikelId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    refPath: 'artikelModell',
-    index: true
+    refPath: 'artikelModell'
+    // index: true entfernt - wird über Compound-Index abgedeckt
   },
   
   // Dynamische Referenz je nach Typ
@@ -40,7 +40,7 @@ const bestandSchema = new mongoose.Schema({
   einheit: {
     type: String,
     required: true,
-    enum: ['kg', 'g', 'ml', 'l', 'stück'],
+    enum: ['kg', 'g', 'ml', 'l', 'stück', 'Stück'],
     default: 'stück'
   },
   

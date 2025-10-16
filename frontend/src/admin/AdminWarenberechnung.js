@@ -153,18 +153,6 @@ const AdminWarenberechnung = () => {
     }
   };
 
-  const handleRecalculate = async () => {
-    if (!calculation) return;
-    
-    try {
-      const response = await api.post(`/warenberechnung/${calculation._id}/recalculate`);
-      setCalculation(response.data);
-    } catch (err) {
-      console.error('Fehler beim Neuberechnen:', err);
-      setError(`Fehler beim Neuberechnen: ${err.message}`);
-    }
-  };
-
   const handlePreisUebernehmen = async () => {
     if (!calculation || !selectedProduct) return;
     
@@ -299,16 +287,6 @@ const AdminWarenberechnung = () => {
                     }}
                   />
                   <Button 
-                    variant="outlined" 
-                    color="secondary"
-                    onClick={handleRecalculate}
-                    size={isMobile ? "medium" : "large"}
-                    fullWidth={isMobile}
-                    startIcon={isMobile ? null : <span>🔄</span>}
-                  >
-                    {isMobile ? '🔄' : '🔄 Neu berechnen'}
-                  </Button>
-                  <Button 
                     variant="contained" 
                     color="primary"
                     onClick={handleEditClick}
@@ -316,7 +294,7 @@ const AdminWarenberechnung = () => {
                     fullWidth={isMobile}
                     startIcon={isMobile ? null : <span>✏️</span>}
                   >
-                    {isMobile ? '✏️ Bearbeiten' : '✏️ Bearbeiten'}
+                    {isMobile ? '✏️ Bearbeiten' : 'Bearbeiten'}
                   </Button>
                 </Stack>
               </Box>
@@ -758,6 +736,10 @@ const AdminWarenberechnung = () => {
                 size={isMobile ? "small" : "medium"}
                 value={editValues.energieKosten || 0}
                 onChange={(e) => handleEditChange('energieKosten', parseFloat(e.target.value) || 0)}
+                onFocus={(e) => {
+                  // Feld beim Klick leeren für einfache Eingabe
+                  e.target.select();
+                }}
                 inputProps={{ step: 0.01, min: 0 }}
               />
             </Grid>
@@ -770,6 +752,10 @@ const AdminWarenberechnung = () => {
                 size={isMobile ? "small" : "medium"}
                 value={editValues.zusatzKosten || 0}
                 onChange={(e) => handleEditChange('zusatzKosten', parseFloat(e.target.value) || 0)}
+                onFocus={(e) => {
+                  // Feld beim Klick leeren für einfache Eingabe
+                  e.target.select();
+                }}
                 inputProps={{ step: 0.01 }}
               />
             </Grid>
@@ -782,6 +768,10 @@ const AdminWarenberechnung = () => {
                 size={isMobile ? "small" : "medium"}
                 value={editValues.pauschaleFaktor || 3}
                 onChange={(e) => handleEditChange('pauschaleFaktor', parseFloat(e.target.value) || 3)}
+                onFocus={(e) => {
+                  // Feld beim Klick leeren für einfache Eingabe
+                  e.target.select();
+                }}
                 inputProps={{ step: 0.1, min: 1 }}
                 helperText="EK wird mit diesem Faktor multipliziert"
               />
@@ -795,6 +785,10 @@ const AdminWarenberechnung = () => {
                 size={isMobile ? "small" : "medium"}
                 value={editValues.gewinnProzent || 0}
                 onChange={(e) => handleEditChange('gewinnProzent', parseFloat(e.target.value) || 0)}
+                onFocus={(e) => {
+                  // Feld beim Klick leeren für einfache Eingabe
+                  e.target.select();
+                }}
                 inputProps={{ step: 1, min: 0, max: 100 }}
               />
             </Grid>
@@ -807,6 +801,10 @@ const AdminWarenberechnung = () => {
                 size={isMobile ? "small" : "medium"}
                 value={editValues.rabattProzent || 0}
                 onChange={(e) => handleEditChange('rabattProzent', parseFloat(e.target.value) || 0)}
+                onFocus={(e) => {
+                  // Feld beim Klick leeren für einfache Eingabe
+                  e.target.select();
+                }}
                 inputProps={{ step: 1, min: 0, max: 100 }}
               />
             </Grid>

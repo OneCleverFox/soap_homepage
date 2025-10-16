@@ -4,7 +4,7 @@ const duftoelSchema = new mongoose.Schema({
   bezeichnung: {
     type: String,
     required: true,
-    unique: true,
+    unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
   gesamtInMl: {
@@ -140,7 +140,7 @@ duftoelSchema.methods.berechneKostenFuerGewicht = function(grammSeife) {
 };
 
 // Indizes für bessere Performance
-duftoelSchema.index({ bezeichnung: 1 });
+// duftoelSchema.index({ bezeichnung: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
 duftoelSchema.index({ duftrichtung: 1 });
 duftoelSchema.index({ verfuegbar: 1 });
 duftoelSchema.index({ intensitaet: 1 });

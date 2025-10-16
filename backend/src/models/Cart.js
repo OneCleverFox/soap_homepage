@@ -39,7 +39,7 @@ const cartSchema = new mongoose.Schema({
   kundeId: {
     type: String, // Geändert von ObjectId zu String für JWT-basierte User-IDs
     required: true,
-    unique: true
+    unique: true // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
   },
   artikel: [cartItemSchema],
   aktualisiertAm: {
@@ -51,7 +51,7 @@ const cartSchema = new mongoose.Schema({
 });
 
 // Index für schnellere Abfragen
-cartSchema.index({ kundeId: 1 });
+// cartSchema.index({ kundeId: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
 
 // Middleware um aktualisiertAm zu aktualisieren
 cartSchema.pre('save', function(next) {

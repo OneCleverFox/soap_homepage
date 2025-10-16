@@ -90,6 +90,15 @@ api.interceptors.response.use(
         case 500:
           toast.error('Serverfehler. Bitte versuchen Sie es später erneut.');
           break;
+        case 503:
+          // Service unavailable - meist Datenbankprobleme
+          const errorData = response.data;
+          if (errorData?.error === 'DATABASE_UNAVAILABLE') {
+            toast.error('Datenbank ist momentan nicht verfügbar. Bitte versuchen Sie es später erneut.');
+          } else {
+            toast.error('Dienst momentan nicht verfügbar. Bitte versuchen Sie es später erneut.');
+          }
+          break;
         default:
           toast.error(response.data?.message || 'Ein Fehler ist aufgetreten.');
       }
