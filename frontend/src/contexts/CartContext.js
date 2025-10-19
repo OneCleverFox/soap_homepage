@@ -224,7 +224,10 @@ export const CartProvider = ({ children }) => {
   };
 
   const getCartTotal = () => {
-    return items.reduce((total, item) => total + (item.price * item.quantity), 0);
+    return items.reduce((total, item) => {
+      const itemPrice = item.price || item.preis || 0;
+      return total + (itemPrice * item.quantity);
+    }, 0);
   };
 
   const getCartItemsCount = () => {

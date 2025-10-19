@@ -3,359 +3,287 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Kunde = require('../models/Kunde');
 const Portfolio = require('../models/Portfolio');
-const Rohseife = require('../models/Rohseife');
-const Duftoil = require('../models/Duftoil');
-const Verpackung = require('../models/Verpackung');
-const Bestand = require('../models/Bestand');
-const Bewegung = require('../models/Bewegung');
+const PayPalService = require('../services/PayPalService');
 
-// 🛒 Alle Bestellungen abrufen (mit Filteroptionen)
-router.get('/', async (req, res) => {
+// 🎯 PayPal-Erfolg: Bestellung finalisieren
+router.post('/paypal-success', async (req, res) => {
   try {
-    const {
-      status,
-      email,
-      kundennummer,
-      von,
-      bis,
-      limit = 50,
-      skip = 0,
-      sortBy = 'bestelldatum',
-      sortOrder = 'desc'
-    } = req.query;
-
-    // Filter-Objekt erstellen
-    const filter = {};
-
-    if (status) {
-      filter.status = status;
-    }
-
-    if (email) {
-      filter['besteller.email'] = { $regex: email, $options: 'i' };
-    }
-
-    if (kundennummer) {
-      filter['besteller.kundennummer'] = kundennummer;
-    }
-
-    if (von || bis) {
-      filter.bestelldatum = {};
-      if (von) filter.bestelldatum.$gte = new Date(von);
-      if (bis) filter.bestelldatum.$lte = new Date(bis);
-    }
-
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    const orders = await Order.find(filter)
-      .populate('kunde', 'kundennummer vorname nachname email')
-      .sort(sortOptions)
-      .limit(parseInt(limit))
-      .skip(parseInt(skip));
-
-    const total = await Order.countDocuments(filter);
-
-    // Statistiken hinzufügen
-    const stats = await Order.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: null,
-          gesamtBestellungen: { $sum: 1 },
-          gesamtUmsatz: { $sum: '$preise.gesamtsumme' },
-          durchschnittBestellwert: { $avg: '$preise.gesamtsumme' },
-          statusVerteilung: {
-            $push: '$status'
-          }
-        }
-      }
-    ]);
-
-    res.json({
-      success: true,
-      data: {
-        orders,
-        pagination: {
-          total,
-          limit: parseInt(limit),
-          skip: parseInt(skip),
-          hasMore: (parseInt(skip) + orders.length) < total
-        },
-        statistics: stats[0] || {}
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Abrufen der Bestellungen:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Abrufen der Bestellungen',
-      error: error.message
-    });
-  }
-});
-
-// 🆔 Einzelne Bestellung abrufen
-router.get('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
+    const { paypalOrderId, bestellungData } = req.body;
     
-    // Suche nach ID oder Bestellnummer
-    const query = id.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: id }
-      : { bestellnummer: id };
-
-    const order = await Order.findOne(query)
-      .populate('kunde', 'kundennummer vorname nachname email telefon')
-      .populate({
-        path: 'artikel.produktId',
-        select: 'name beschreibung preis bild'
-      });
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bestellung nicht gefunden'
+    // Prüfe, ob Bestellung bereits existiert (wegen React StrictMode doppelte Aufrufe)
+    const existierendeBestellung = await Order.findOne({ 
+      bestellnummer: bestellungData.bestellnummer 
+    });
+    
+    if (existierendeBestellung) {
+      console.log('ℹ️ Bestellung bereits vorhanden:', bestellungData.bestellnummer);
+      return res.json({
+        success: true,
+        message: 'Bestellung bereits abgeschlossen',
+        data: {
+          orderId: existierendeBestellung._id,
+          bestellnummer: existierendeBestellung.bestellnummer
+        }
       });
     }
-
-    res.json({
-      success: true,
-      data: order
-    });
-
+    
+    // PayPal-Zahlung erfassen
+    console.log('💰 PayPal-Zahlung erfasst:', paypalOrderId);
+    const captureResult = await PayPalService.capturePayment(paypalOrderId);
+    
+    if (captureResult.status === 'COMPLETED') {
+      // Jetzt erst die Bestellung in der DB speichern mit Duplicate-Protection
+      try {
+        const neueBestellung = new Order({
+          ...bestellungData,
+          zahlung: {
+            ...bestellungData.zahlung,
+            status: 'bezahlt',
+            paypalOrderId: paypalOrderId,
+            transactionId: captureResult.id
+          }
+        });
+        
+        await neueBestellung.save();
+        console.log('✅ Bestellung nach PayPal-Erfolg gespeichert:', bestellungData.bestellnummer);
+        
+        res.json({
+          success: true,
+          message: 'Bestellung erfolgreich abgeschlossen',
+          data: neueBestellung
+        });
+      } catch (dbError) {
+        // Duplicate-Key-Error behandeln (React StrictMode führt zu mehrfachen Aufrufen)
+        if (dbError.code === 11000 && dbError.keyValue?.orderNumber) {
+          console.log('🔄 Duplicate-Key-Error abgefangen, Bestellung bereits vorhanden:', bestellungData.bestellnummer);
+          
+          // Existierende Bestellung finden und zurückgeben
+          const existierendeBestellung = await Order.findOne({ 
+            bestellnummer: bestellungData.bestellnummer 
+          });
+          
+          return res.json({
+            success: true,
+            message: 'Bestellung bereits erfolgreich abgeschlossen',
+            data: existierendeBestellung
+          });
+        }
+        // Andere DB-Fehler weiterwerfen
+        throw dbError;
+      }
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'PayPal-Zahlung wurde nicht erfolgreich abgeschlossen'
+      });
+    }
+    
   } catch (error) {
-    console.error('Fehler beim Abrufen der Bestellung:', error);
+    console.error('❌ Fehler beim Abschließen der Bestellung:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Abrufen der Bestellung',
-      error: error.message
+      message: 'Fehler beim Abschließen der Bestellung: ' + error.message
     });
   }
 });
 
-// ➕ Neue Bestellung erstellen
-router.post('/', async (req, res) => {
+// 🛒 Neue Bestellung erstellen
+router.post('/create', async (req, res) => {
   try {
+    console.log('🛒 Neue Bestellung wird erstellt');
+    console.log('📦 Request Body:', JSON.stringify(req.body, null, 2));
+    
     const {
+      artikel,
       besteller,
       rechnungsadresse,
       lieferadresse,
-      artikel,
+      preise,
       zahlung,
-      versand,
       notizen,
-      istGeschenk,
-      geschenkNachricht,
+      status,
       quelle
     } = req.body;
 
-    // Validierung der Artikel und Preisberechnung
-    const validierteArtikel = [];
-    let zwischensumme = 0;
-
-    for (const artikel_item of artikel) {
-      let produkt = null;
-      let produktSnapshot = {};
-
-      // Produkt je nach Typ laden
-      switch (artikel_item.produktType) {
-        case 'portfolio':
-          produkt = await Portfolio.findById(artikel_item.produktId);
-          if (produkt) {
-            produktSnapshot = {
-              name: produkt.name,
-              beschreibung: produkt.beschreibung,
-              kategorie: produkt.kategorie,
-              bild: produkt.bild,
-              gewicht: produkt.gewicht,
-              inhaltsstoffe: produkt.inhaltsstoffe
-            };
-          }
-          break;
-
-        case 'rohseife':
-          produkt = await Rohseife.findById(artikel_item.produktId);
-          if (produkt) {
-            produktSnapshot = {
-              name: produkt.name,
-              beschreibung: produkt.beschreibung,
-              kategorie: 'Rohseife',
-              gewicht: produkt.gewichtProStueck
-            };
-          }
-          break;
-
-        case 'duftoele':
-          produkt = await Duftoil.findById(artikel_item.produktId);
-          if (produkt) {
-            produktSnapshot = {
-              name: produkt.name,
-              beschreibung: produkt.beschreibung,
-              kategorie: 'Duftöl',
-              duftrichtung: produkt.duftrichtung
-            };
-          }
-          break;
-
-        case 'verpackung':
-          produkt = await Verpackung.findById(artikel_item.produktId);
-          if (produkt) {
-            produktSnapshot = {
-              name: produkt.form,
-              beschreibung: `Verpackung ${produkt.form}`,
-              kategorie: 'Verpackung',
-              form: produkt.form
-            };
-          }
-          break;
-
-        case 'custom':
-          // Für custom-Produkte Snapshot direkt verwenden
-          produktSnapshot = artikel_item.produktSnapshot;
-          break;
-
-        default:
-          throw new Error(`Unbekannter Produkttyp: ${artikel_item.produktType}`);
-      }
-
-      // Preis validieren (außer bei custom-Produkten)
-      let einzelpreis = artikel_item.einzelpreis;
-      if (artikel_item.produktType !== 'custom' && produkt) {
-        const originalPreis = produkt.preis || produkt.kostenProStueck || produkt.kostenProTropfen || 0;
-        // Preisabweichung von mehr als 10% warnen
-        if (Math.abs(einzelpreis - originalPreis) > originalPreis * 0.1) {
-          console.warn(`Preisabweichung bei ${produktSnapshot.name}: ${einzelpreis} vs ${originalPreis}`);
-        }
-      }
-
-      const gesamtpreis = einzelpreis * artikel_item.menge;
-      zwischensumme += gesamtpreis;
-
-      validierteArtikel.push({
-        produktType: artikel_item.produktType,
-        produktId: artikel_item.produktId,
-        produktSnapshot,
-        menge: artikel_item.menge,
-        einzelpreis,
-        gesamtpreis,
-        konfiguration: artikel_item.konfiguration || {}
+    // Validierung
+    if (!artikel || artikel.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Artikel in der Bestellung'
       });
     }
 
-    // Kunde suchen falls E-Mail bekannt
-    let kunde = null;
-    if (besteller.email) {
-      kunde = await Kunde.findOne({ email: besteller.email.toLowerCase() });
-      if (kunde) {
-        besteller.kundennummer = kunde.kundennummer;
+    if (!besteller || !besteller.vorname || !besteller.nachname) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bestellerdaten unvollständig'
+      });
+    }
+
+    if (!rechnungsadresse || !rechnungsadresse.strasse || !rechnungsadresse.plz) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rechnungsadresse unvollständig'
+      });
+    }
+
+    // Artikel validieren
+    const validierteArtikel = [];
+
+    for (const artikelItem of artikel) {
+      // Artikel aus Datenbank laden
+      const dbArtikel = await Portfolio.findById(artikelItem.produktId);
+      
+      if (!dbArtikel) {
+        return res.status(400).json({
+          success: false,
+          message: `Artikel ${artikelItem.produktSnapshot?.name || 'Unbekannt'} nicht gefunden`
+        });
       }
-    }
 
-    // Versandkosten berechnen (vereinfacht)
-    let versandkosten = 0;
-    if (zwischensumme < 50) {
-      versandkosten = 4.99; // Standardversand
-    }
-    if (versand && versand.methode === 'express') {
-      versandkosten += 5.00;
-    }
-
-    // MwSt berechnen
-    const mwstSatz = 19; // 19%
-    const nettoBetrag = zwischensumme + versandkosten;
-    const mwstBetrag = nettoBetrag * (mwstSatz / 100);
-    const gesamtsumme = nettoBetrag + mwstBetrag;
-
-    // Neue Bestellung erstellen
-    const neueBestellung = new Order({
-      kunde: kunde ? kunde._id : null,
-      besteller,
-      rechnungsadresse,
-      lieferadresse: lieferadresse || { verwendeRechnungsadresse: true },
-      artikel: validierteArtikel,
-      preise: {
-        zwischensumme,
-        versandkosten,
-        mwst: {
-          satz: mwstSatz,
-          betrag: mwstBetrag
+      // Validierter Artikel für Order-Schema
+      validierteArtikel.push({
+        produktType: artikelItem.produktType || 'portfolio',
+        produktId: dbArtikel._id,
+        produktSnapshot: {
+          name: dbArtikel.name,
+          beschreibung: dbArtikel.beschreibung || '',
+          kategorie: dbArtikel.kategorie || '',
+          bild: dbArtikel.bild || '',
+          gewicht: dbArtikel.gewicht,
+          inhaltsstoffe: dbArtikel.inhaltsstoffe || []
         },
-        gesamtsumme
-      },
-      zahlung: zahlung || { methode: 'ueberweisung' },
-      versand: versand || {},
-      notizen: notizen || {},
-      istGeschenk: istGeschenk || false,
-      geschenkNachricht: geschenkNachricht || '',
-      quelle: quelle || 'website'
-    });
-
-    await neueBestellung.save();
-
-    // 📦 Lagerbestand aktualisieren für Portfolio-Produkte
-    try {
-      for (const artikel_item of validierteArtikel) {
-        if (artikel_item.produktType === 'portfolio') {
-          const bestand = await Bestand.findOne({
-            typ: 'produkt',
-            artikelId: artikel_item.produktId
-          });
-          
-          if (bestand) {
-            const vorher = bestand.menge;
-            await bestand.verringereBestand(artikel_item.menge, 'bestellung');
-            
-            // Erstelle Bewegungs-Log
-            await Bewegung.erstelle({
-              typ: 'ausgang',
-              bestandId: bestand._id,
-              artikel: {
-                typ: 'produkt',
-                artikelId: artikel_item.produktId,
-                name: artikel_item.produktSnapshot.name
-              },
-              menge: -artikel_item.menge,
-              einheit: 'stück',
-              bestandVorher: vorher,
-              bestandNachher: bestand.menge,
-              grund: `Bestellung ${neueBestellung.bestellnummer}`,
-              referenz: {
-                typ: 'bestellung',
-                id: neueBestellung._id
-              },
-              notizen: `Kunde: ${besteller.email}`
-            });
-            
-            console.log(`📦 Lagerbestand aktualisiert: ${artikel_item.produktSnapshot.name} -${artikel_item.menge} (Neuer Bestand: ${bestand.menge})`);
-          } else {
-            console.warn(`⚠️ Kein Lagerbestand für Produkt ${artikel_item.produktId} gefunden`);
-          }
-        }
-      }
-    } catch (lagerError) {
-      console.error('Fehler bei Lageraktualisierung:', lagerError);
-      // Bestellung ist trotzdem erfolgreich, nur Warnung loggen
+        menge: artikelItem.menge,
+        einzelpreis: dbArtikel.preis,
+        gesamtpreis: dbArtikel.preis * artikelItem.menge
+      });
     }
 
-    // Bestätigung-E-Mail (hier nur Logging)
-    console.log(`📧 Bestellbestätigung für ${besteller.email} - Bestellung ${neueBestellung.bestellnummer}`);
+    // Bestellnummer generieren (eindeutig mit Zeitstempel + Random)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    const bestellnummer = `BE${timestamp}${random}`;
+    
+    console.log('🔢 Generierte Bestellnummer:', bestellnummer);
 
-    res.status(201).json({
+    // ⚠️ NEUER FLOW: Bestellung NICHT sofort in DB speichern!
+    // Erst PayPal erstellen, dann nach Erfolg speichern
+    
+    // Bestellungsdaten für später vorbereiten
+    const bestellungData = {
+      orderNumber: bestellnummer,
+      bestellnummer,
+      bestelldatum: new Date(),
+      artikel: validierteArtikel,
+      besteller: {
+        email: besteller.email,
+        vorname: besteller.vorname,
+        nachname: besteller.nachname,
+        telefon: besteller.telefon || '',
+        kundennummer: besteller.kundennummer || ''
+      },
+      rechnungsadresse: {
+        strasse: rechnungsadresse.strasse,
+        hausnummer: rechnungsadresse.hausnummer,
+        zusatz: rechnungsadresse.zusatz || '',
+        plz: rechnungsadresse.plz,
+        stadt: rechnungsadresse.stadt,
+        land: rechnungsadresse.land || 'Deutschland'
+      },
+      lieferadresse: lieferadresse.verwendeRechnungsadresse ? {
+        verwendeRechnungsadresse: true
+      } : {
+        verwendeRechnungsadresse: false,
+        strasse: lieferadresse.strasse || '',
+        hausnummer: lieferadresse.hausnummer || '',
+        zusatz: lieferadresse.zusatz || '',
+        plz: lieferadresse.plz || '',
+        stadt: lieferadresse.stadt || '',
+        land: lieferadresse.land || 'Deutschland'
+      },
+      preise: {
+        zwischensumme: preise.zwischensumme,
+        versandkosten: preise.versandkosten,
+        mwst: {
+          satz: preise.mwst.satz,
+          betrag: preise.mwst.betrag
+        },
+        gesamtsumme: preise.gesamtsumme
+      },
+      zahlung: {
+        methode: zahlung.methode,
+        status: 'ausstehend'
+      },
+      notizen: {
+        kunde: notizen?.kunde || ''
+      },
+      quelle: quelle || 'website'
+    };
+
+    console.log('� Erstelle PayPal-Payment (ohne DB-Speicherung)...');
+    
+    // Formatiere Artikel für PayPal Service
+    const paypalArtikel = validierteArtikel.map(artikel => ({
+      name: artikel.produktSnapshot.name,
+      beschreibung: artikel.produktSnapshot.beschreibung || '',
+      preis: artikel.einzelpreis,
+      menge: artikel.menge
+    }));
+
+    console.log('🔍 PayPal Artikel vor Übertragung:', JSON.stringify(paypalArtikel, null, 2));
+
+    // Bestimme Lieferadresse (bei "verwendeRechnungsadresse" nutze Rechnungsadresse)
+    const lieferadresseData = lieferadresse.verwendeRechnungsadresse ? {
+      vorname: besteller.vorname,
+      nachname: besteller.nachname,
+      strasse: rechnungsadresse.strasse,
+      hausnummer: rechnungsadresse.hausnummer,
+      zusatz: rechnungsadresse.zusatz || '',
+      plz: rechnungsadresse.plz,
+      stadt: rechnungsadresse.stadt,
+      land: rechnungsadresse.land || 'Deutschland'
+    } : {
+      vorname: besteller.vorname, // Fallback zu Besteller-Namen wenn Lieferadresse keine Namen hat
+      nachname: besteller.nachname,
+      strasse: lieferadresse.strasse,
+      hausnummer: lieferadresse.hausnummer,
+      zusatz: lieferadresse.zusatz || '',
+      plz: lieferadresse.plz,
+      stadt: lieferadresse.stadt,
+      land: lieferadresse.land || 'Deutschland'
+    };
+
+    const paypalOrderData = {
+      bestellnummer: bestellnummer,
+      artikel: paypalArtikel,
+      versandkosten: preise.versandkosten,
+      gesamt: {
+        netto: preise.zwischensumme,
+        mwst: preise.mwst.betrag,
+        brutto: preise.gesamtsumme
+      },
+      lieferadresse: lieferadresseData,
+      bestellnummer: bestellnummer // Wichtig für PayPal-Referenz
+    };
+
+    const paypalResult = await PayPalService.createPayment(paypalOrderData);
+
+    console.log('🔗 PayPal Result erstellt:', paypalResult);
+
+    res.json({
       success: true,
-      message: 'Bestellung erfolgreich erstellt',
+      message: 'PayPal-Zahlung vorbereitet - Bestellung wird nach Erfolg gespeichert',
       data: {
-        bestellnummer: neueBestellung.bestellnummer,
-        gesamtsumme: neueBestellung.preise.gesamtsumme,
-        status: neueBestellung.status,
-        order: neueBestellung
+        bestellnummer: bestellnummer,
+        paypalUrl: paypalResult.approvalUrl,
+        paypalOrderId: paypalResult.paypalOrderId,
+        bestellungData: bestellungData // Für später
       }
     });
 
   } catch (error) {
-    console.error('Fehler beim Erstellen der Bestellung:', error);
-    res.status(400).json({
+    console.error('❌ Fehler beim Erstellen der Bestellung:', error);
+    res.status(500).json({
       success: false,
       message: 'Fehler beim Erstellen der Bestellung',
       error: error.message
@@ -363,352 +291,161 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 🔄 Bestellstatus aktualisieren
-router.patch('/:id/status', async (req, res) => {
+// 📋 Meine Bestellungen für authentifizierten Kunden (Frontend-API)
+router.get('/meine-bestellungen', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status, notiz, bearbeiter } = req.body;
-
-    // Suche nach ID oder Bestellnummer
-    const query = id.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: id }
-      : { bestellnummer: id };
-
-    const order = await Order.findOne(query);
-
-    if (!order) {
-      return res.status(404).json({
+    // Authentifizierung prüfen (Token aus Header)
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
         success: false,
-        message: 'Bestellung nicht gefunden'
+        message: 'Authentifizierung erforderlich'
       });
     }
 
-    // Status aktualisieren
-    const alterStatus = order.status;
-    await order.aktualisiereStatus(status, notiz, bearbeiter);
+    // Token dekodieren um Kundennummer zu erhalten
+    const token = authHeader.split(' ')[1];
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const kundennummer = decoded.kundennummer;
 
-    // 📦 Bei Stornierung oder Retoure: Lagerbestand wieder erhöhen
-    if ((status === 'storniert' || status === 'retourniert') && alterStatus !== status) {
-      try {
-        for (const artikel_item of order.artikel) {
-          if (artikel_item.produktType === 'portfolio') {
-            const bestand = await Bestand.findOne({
-              typ: 'produkt',
-              artikelId: artikel_item.produktId
-            });
-            
-            if (bestand) {
-              const vorher = bestand.menge;
-              await bestand.erhoeheBestand(artikel_item.menge, 'retoure');
-              
-              // Erstelle Bewegungs-Log
-              await Bewegung.erstelle({
-                typ: 'eingang',
-                bestandId: bestand._id,
-                artikel: {
-                  typ: 'produkt',
-                  artikelId: artikel_item.produktId,
-                  name: artikel_item.produktSnapshot.name
-                },
-                menge: artikel_item.menge,
-                einheit: 'stück',
-                bestandVorher: vorher,
-                bestandNachher: bestand.menge,
-                grund: `${status === 'storniert' ? 'Stornierung' : 'Retoure'} ${order.bestellnummer}`,
-                referenz: {
-                  typ: status === 'storniert' ? 'stornierung' : 'retoure',
-                  id: order._id
-                },
-                notizen: notiz || ''
-              });
-              
-              console.log(`📦 Lagerbestand erhöht (${status}): ${artikel_item.produktSnapshot.name} +${artikel_item.menge} (Neuer Bestand: ${bestand.menge})`);
-            }
-          }
-        }
-      } catch (lagerError) {
-        console.error('Fehler bei Lageraktualisierung (Retoure):', lagerError);
-      }
-    }
-
-    res.json({
-      success: true,
-      message: `Status erfolgreich zu "${status}" geändert`,
-      data: {
-        bestellnummer: order.bestellnummer,
-        alterStatus,
-        neuerStatus: status,
-        statusVerlauf: order.statusVerlauf
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Aktualisieren des Status:', error);
-    res.status(400).json({
-      success: false,
-      message: 'Fehler beim Aktualisieren des Status',
-      error: error.message
-    });
-  }
-});
-
-// 💰 Zahlung aktualisieren
-router.patch('/:id/payment', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, transaktionsId, methode } = req.body;
-
-    const query = id.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: id }
-      : { bestellnummer: id };
-
-    const order = await Order.findOne(query);
-
-    if (!order) {
-      return res.status(404).json({
+    if (!kundennummer) {
+      return res.status(400).json({
         success: false,
-        message: 'Bestellung nicht gefunden'
+        message: 'Kundennummer nicht gefunden'
       });
     }
 
-    // Zahlungsinformationen aktualisieren
-    if (status) order.zahlung.status = status;
-    if (transaktionsId) order.zahlung.transaktionsId = transaktionsId;
-    if (methode) order.zahlung.methode = methode;
+    console.log('📋 Lade Bestellungen für Kunde:', kundennummer);
 
-    if (status === 'bezahlt' && !order.zahlung.bezahltAm) {
-      order.zahlung.bezahltAm = new Date();
-      // Bestellstatus automatisch auf "bezahlt" setzen
-      await order.aktualisiereStatus('bezahlt', 'Zahlung eingegangen', 'System');
-    }
-
-    await order.save();
-
-    res.json({
-      success: true,
-      message: 'Zahlungsinformationen erfolgreich aktualisiert',
-      data: {
-        bestellnummer: order.bestellnummer,
-        zahlung: order.zahlung
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Aktualisieren der Zahlung:', error);
-    res.status(400).json({
-      success: false,
-      message: 'Fehler beim Aktualisieren der Zahlung',
-      error: error.message
-    });
-  }
-});
-
-// 📦 Versand aktualisieren
-router.patch('/:id/shipping', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { 
-      methode, 
-      anbieter, 
-      sendungsnummer, 
-      voraussichtlicheLieferung,
-      notiz 
-    } = req.body;
-
-    const query = id.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: id }
-      : { bestellnummer: id };
-
-    const order = await Order.findOne(query);
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bestellung nicht gefunden'
-      });
-    }
-
-    // Versandinformationen aktualisieren
-    if (methode) order.versand.methode = methode;
-    if (anbieter) order.versand.anbieter = anbieter;
-    if (sendungsnummer) {
-      order.versand.sendungsnummer = sendungsnummer;
-      // Automatisch als verschickt markieren
-      if (!order.versand.verschickt) {
-        await order.aktualisiereStatus('verschickt', notiz || 'Sendungsnummer hinzugefügt', 'System');
-      }
-    }
-    if (voraussichtlicheLieferung) {
-      order.versand.voraussichtlicheLieferung = new Date(voraussichtlicheLieferung);
-    }
-
-    await order.save();
-
-    res.json({
-      success: true,
-      message: 'Versandinformationen erfolgreich aktualisiert',
-      data: {
-        bestellnummer: order.bestellnummer,
-        versand: order.versand
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Aktualisieren des Versands:', error);
-    res.status(400).json({
-      success: false,
-      message: 'Fehler beim Aktualisieren des Versands',
-      error: error.message
-    });
-  }
-});
-
-// 💬 Kommunikation hinzufügen
-router.post('/:id/communication', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { typ, richtung, betreff, inhalt, bearbeiter } = req.body;
-
-    const query = id.match(/^[0-9a-fA-F]{24}$/) 
-      ? { _id: id }
-      : { bestellnummer: id };
-
-    const order = await Order.findOne(query);
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bestellung nicht gefunden'
-      });
-    }
-
-    await order.hinzufuegenKommunikation(typ, richtung, betreff, inhalt, bearbeiter);
-
-    res.json({
-      success: true,
-      message: 'Kommunikation erfolgreich hinzugefügt',
-      data: {
-        bestellnummer: order.bestellnummer,
-        letzteKommunikation: order.kommunikation[order.kommunikation.length - 1]
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Hinzufügen der Kommunikation:', error);
-    res.status(400).json({
-      success: false,
-      message: 'Fehler beim Hinzufügen der Kommunikation',
-      error: error.message
-    });
-  }
-});
-
-// 📊 Dashboard-Statistiken
-router.get('/stats/dashboard', async (req, res) => {
-  try {
-    const { zeitraum = '30' } = req.query; // Letzte 30 Tage
-    const vonDatum = new Date();
-    vonDatum.setDate(vonDatum.getDate() - parseInt(zeitraum));
-
-    const stats = await Order.aggregate([
-      {
-        $match: {
-          bestelldatum: { $gte: vonDatum }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          gesamtBestellungen: { $sum: 1 },
-          gesamtUmsatz: { $sum: '$preise.gesamtsumme' },
-          durchschnittBestellwert: { $avg: '$preise.gesamtsumme' },
-          bestellungenProTag: {
-            $push: {
-              tag: { $dateToString: { format: "%Y-%m-%d", date: "$bestelldatum" } },
-              betrag: '$preise.gesamtsumme'
-            }
-          },
-          statusVerteilung: { $push: '$status' },
-          beliebteProdukte: { $push: '$artikel' }
-        }
-      }
-    ]);
-
-    // Status-Verteilung berechnen
-    const statusCount = {};
-    if (stats[0]) {
-      stats[0].statusVerteilung.forEach(status => {
-        statusCount[status] = (statusCount[status] || 0) + 1;
-      });
-    }
-
-    // Umsatz pro Tag
-    const umsatzProTag = {};
-    if (stats[0]) {
-      stats[0].bestellungenProTag.forEach(item => {
-        if (!umsatzProTag[item.tag]) {
-          umsatzProTag[item.tag] = { bestellungen: 0, umsatz: 0 };
-        }
-        umsatzProTag[item.tag].bestellungen += 1;
-        umsatzProTag[item.tag].umsatz += item.betrag;
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        zeitraum: `Letzte ${zeitraum} Tage`,
-        übersicht: {
-          gesamtBestellungen: stats[0]?.gesamtBestellungen || 0,
-          gesamtUmsatz: stats[0]?.gesamtUmsatz || 0,
-          durchschnittBestellwert: stats[0]?.durchschnittBestellwert || 0
-        },
-        statusVerteilung: statusCount,
-        umsatzProTag,
-        generiert: new Date()
-      }
-    });
-
-  } catch (error) {
-    console.error('Fehler beim Abrufen der Dashboard-Statistiken:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Abrufen der Dashboard-Statistiken',
-      error: error.message
-    });
-  }
-});
-
-// 🔍 Bestellung suchen
-router.get('/search/:suchbegriff', async (req, res) => {
-  try {
-    const { suchbegriff } = req.params;
+    const bestellungen = await Order.find({ 
+      'besteller.kundennummer': kundennummer 
+    }).sort({ createdAt: -1 }); // Neueste zuerst
     
-    const orders = await Order.find({
-      $or: [
-        { bestellnummer: { $regex: suchbegriff, $options: 'i' } },
-        { 'besteller.email': { $regex: suchbegriff, $options: 'i' } },
-        { 'besteller.vorname': { $regex: suchbegriff, $options: 'i' } },
-        { 'besteller.nachname': { $regex: suchbegriff, $options: 'i' } },
-        { 'besteller.kundennummer': { $regex: suchbegriff, $options: 'i' } },
-        { 'versand.sendungsnummer': { $regex: suchbegriff, $options: 'i' } }
-      ]
-    })
-    .populate('kunde', 'kundennummer vorname nachname')
-    .limit(20)
-    .sort({ bestelldatum: -1 });
+    console.log('✅ Bestellungen gefunden:', bestellungen.length);
+    console.log('🔍 Erste Bestellung:', bestellungen[0] ? {
+      bestellnummer: bestellungen[0].bestellnummer,
+      kundennummer: bestellungen[0].besteller?.kundennummer,
+      bestelldatum: bestellungen[0].bestelldatum
+    } : 'Keine Bestellungen');
 
     res.json({
       success: true,
-      data: orders,
-      anzahl: orders.length
+      data: {
+        bestellungen: bestellungen
+      }
     });
-
+    
   } catch (error) {
-    console.error('Fehler bei der Suche:', error);
+    console.error('❌ Fehler beim Laden der Bestellungen:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler bei der Suche',
+      message: 'Fehler beim Laden der Bestellungen',
+      error: error.message
+    });
+  }
+});
+
+// 📋 Einzelne Bestellung für authentifizierten Kunden abrufen
+router.get('/meine-bestellungen/:id', async (req, res) => {
+  try {
+    // Authentifizierung prüfen
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentifizierung erforderlich'
+      });
+    }
+
+    // Token dekodieren um Kundennummer zu erhalten
+    const token = authHeader.split(' ')[1];
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const kundennummer = decoded.kundennummer;
+
+    const { id } = req.params;
+    console.log('📋 Lade Bestellung:', id, 'für Kunde:', kundennummer);
+
+    const bestellung = await Order.findOne({ 
+      _id: id,
+      'besteller.kundennummer': kundennummer 
+    });
+    
+    if (!bestellung) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bestellung nicht gefunden'
+      });
+    }
+
+    console.log('✅ Bestellung gefunden:', bestellung.bestellnummer);
+
+    res.json({
+      success: true,
+      data: bestellung
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Bestellung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellung',
+      error: error.message
+    });
+  }
+});
+
+// 📋 Alle Bestellungen für einen Kunden abrufen
+router.get('/customer/:kundennummer', async (req, res) => {
+  try {
+    const { kundennummer } = req.params;
+    
+    const bestellungen = await Order.find({ 
+      'besteller.kundennummer': kundennummer 
+    }).sort({ erstelltAm: -1 }); // Neueste zuerst
+    
+    res.json({
+      success: true,
+      data: bestellungen
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Kundenbestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen',
+      error: error.message
+    });
+  }
+});
+
+// 📋 Bestelldetails abrufen
+router.get('/:bestellnummer', async (req, res) => {
+  try {
+    const { bestellnummer } = req.params;
+    
+    const bestellung = await Order.findOne({ 
+      bestellnummer: bestellnummer 
+    });
+    
+    if (!bestellung) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bestellung nicht gefunden'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: bestellung
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Bestellung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellung',
       error: error.message
     });
   }

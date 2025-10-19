@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -10,14 +10,16 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  IconButton
+  IconButton,
+  Divider
 } from '@mui/material';
 import {
   EmailOutlined,
   LockOutlined,
   VisibilityOutlined,
   VisibilityOffOutlined,
-  LoginOutlined
+  LoginOutlined,
+  PersonAddOutlined
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -184,7 +186,55 @@ const LoginPage = () => {
           </Button>
         </Box>
 
-        <Box textAlign="center" mt={2}>
+        {/* Passwort vergessen Link */}
+        <Box textAlign="center" sx={{ mt: 2, mb: 2 }}>
+          <Link
+            to="/forgot-password"
+            style={{ 
+              textDecoration: 'none',
+              color: 'inherit'
+            }}
+          >
+            <Typography 
+              variant="body2" 
+              color="primary" 
+              sx={{ 
+                '&:hover': {
+                  textDecoration: 'underline'
+                }
+              }}
+            >
+              Passwort vergessen?
+            </Typography>
+          </Link>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box textAlign="center">
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Noch kein Konto? Registrieren Sie sich jetzt und erhalten Sie Zugang zu:
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            • Bestellungsverfolgung • Exklusive Angebote • Schnellere Bestellabwicklung
+          </Typography>
+          <Button
+            component={Link}
+            to="/register"
+            variant="outlined"
+            size="large"
+            startIcon={<PersonAddOutlined />}
+            sx={{ 
+              px: 4,
+              py: 1.5,
+              fontSize: '1rem'
+            }}
+          >
+            Jetzt registrieren
+          </Button>
+        </Box>
+
+        <Box textAlign="center" mt={3}>
           <Typography variant="body2" color="text.secondary">
             Verwalten Sie Ihre Bestellungen und erhalten Sie exklusive Angebote.
           </Typography>

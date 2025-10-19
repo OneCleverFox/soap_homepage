@@ -1125,8 +1125,9 @@ const AdminLager = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Alert severity="info">
-            Hier sehen Sie alle Ihre Produkte aus der MongoDB. Fertigprodukte mit "Aktiv" (grün) 
-            sind für Kunden im Frontend sichtbar. "Inaktiv" (rot) bedeutet nicht sichtbar für Kunden.
+            Fertigprodukte mit "Aktiv" (grün) 
+            sind für Kunden im Frontend sichtbar. 
+            "Inaktiv" (rot) bedeutet nicht sichtbar für Kunden.
           </Alert>
         </CardContent>
       </Card>

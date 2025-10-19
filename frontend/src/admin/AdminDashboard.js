@@ -18,7 +18,8 @@ import {
   Analytics as AnalyticsIcon,
   Photo as PortfolioIcon,
   Dashboard as DashboardIcon,
-  ShoppingBag as CartIcon
+  ShoppingBag as CartIcon,
+  Receipt as CheckoutIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -48,6 +49,13 @@ const AdminDashboard = () => {
       icon: <OrdersIcon sx={{ fontSize: 40, color: 'success.main' }} />,
       path: '/admin/bestellungen',
       color: 'success'
+    },
+    {
+      title: 'Admin-Checkout',
+      description: 'Erstellen Sie Bestellungen für Kunden als Administrator.',
+      icon: <CheckoutIcon sx={{ fontSize: 40, color: 'primary.main' }} />,
+      path: '/admin/checkout',
+      color: 'primary'
     },
     {
       title: 'Lager',

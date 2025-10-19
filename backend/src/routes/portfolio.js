@@ -42,6 +42,83 @@ const upload = multer({
 
 const router = express.Router();
 
+// DEBUG Route - alle Bestände anzeigen
+router.get('/debug/bestaende', async (req, res) => {
+  try {
+    const alleBestaende = await Bestand.find({}).populate('artikelId');
+    console.log('🔍 Alle Bestände in der DB:', alleBestaende.length);
+    
+    const produktBestaende = alleBestaende.filter(b => b.typ === 'produkt');
+    console.log('📦 Produkt-Bestände:', produktBestaende.length);
+    
+    res.json({
+      success: true,
+      alleBestaende: alleBestaende.length,
+      produktBestaende: produktBestaende.length,
+      data: produktBestaende.map(b => ({
+        id: b._id,
+        typ: b.typ,
+        artikelId: b.artikelId,
+        artikelModell: b.artikelModell,
+        menge: b.menge,
+        einheit: b.einheit,
+        produktName: b.artikelId?.name || 'UNBEKANNT'
+      }))
+    });
+  } catch (error) {
+    console.error('Debug Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DEBUG Route - Bestand für ein Produkt erstellen
+router.post('/debug/create-bestand/:id', async (req, res) => {
+  try {
+    const portfolioId = req.params.id;
+    const portfolioItem = await Portfolio.findById(portfolioId);
+    
+    if (!portfolioItem) {
+      return res.status(404).json({ error: 'Portfolio-Item nicht gefunden' });
+    }
+
+    // Prüfen ob bereits Bestand existiert
+    let bestand = await Bestand.findOne({
+      artikelId: portfolioId,
+      typ: 'produkt'
+    });
+
+    if (bestand) {
+      return res.json({
+        success: true,
+        message: 'Bestand existiert bereits',
+        bestand
+      });
+    }
+
+    // Neuen Bestand erstellen
+    bestand = new Bestand({
+      typ: 'produkt',
+      artikelId: portfolioId,
+      artikelModell: 'Portfolio',
+      menge: req.body.menge || 10, // Standard 10 Stück
+      einheit: 'Stück',
+      mindestbestand: 2
+    });
+
+    await bestand.save();
+
+    res.json({
+      success: true,
+      message: 'Bestand erstellt',
+      bestand,
+      portfolio: portfolioItem.name
+    });
+  } catch (error) {
+    console.error('Bestand Create Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Hilfsfunktion für Preisberechnung
 async function calculatePortfolioPrice(portfolioItem) {
   const details = {
@@ -129,14 +206,29 @@ router.get('/', async (req, res) => {
     const portfolioWithBestand = await Promise.all(
       portfolioItems.map(async (item) => {
         const bestand = await Bestand.findOne({ 
-          typ: 'produkt', 
-          artikelId: item._id 
+          artikelId: item._id,
+          typ: 'produkt'
         });
         
         const itemObj = item.toObject();
         
-        // Füge Bestand-Informationen hinzu
-        itemObj.verfuegbareMenge = bestand ? bestand.menge : 0;
+        // Füge Bestand-Informationen im erwarteten Format hinzu
+        if (bestand) {
+          itemObj.bestand = {
+            menge: bestand.menge || 0,
+            einheit: bestand.einheit || 'Stück',
+            verfuegbar: (bestand.menge || 0) > 0
+          };
+        } else {
+          itemObj.bestand = {
+            menge: 0,
+            einheit: 'Stück',
+            verfuegbar: false
+          };
+        }
+        
+        // Legacy-Felder für Kompatibilität
+        itemObj.verfuegbareMenge = itemObj.bestand.menge;
         itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
         itemObj.bestandId = bestand ? bestand._id : null;
         
@@ -277,20 +369,75 @@ router.get('/with-prices', async (req, res) => {
 // @route   GET /api/portfolio/:id
 // @desc    Einzelnen Portfolio-Eintrag abrufen
 // @access  Public
+// @route   GET /api/portfolio/:id
+// @desc    Einzelnen Portfolio-Eintrag mit Bestandsinformationen abrufen
+// @access  Public
 router.get('/:id', async (req, res) => {
   try {
+    console.log('🔍 Portfolio-Einzelabruf für ID:', req.params.id);
+    
     const portfolioItem = await Portfolio.findById(req.params.id);
 
     if (!portfolioItem) {
+      console.log('❌ Portfolio-Item nicht gefunden:', req.params.id);
       return res.status(404).json({
         success: false,
         message: 'Portfolio-Eintrag nicht gefunden'
       });
     }
 
+    console.log('✅ Portfolio-Item gefunden:', portfolioItem.name);
+
+    // Bestandsinformationen für dieses Portfolio-Item laden
+    let bestand = null;
+    try {
+      console.log('🔍 Suche Bestand für Portfolio-ID:', portfolioItem._id);
+      
+      const bestandEntry = await Bestand.findOne({ 
+        artikelId: portfolioItem._id,
+        typ: 'produkt'
+      });
+      
+      console.log('📊 Bestand-Eintrag gefunden:', bestandEntry ? {
+        menge: bestandEntry.menge,
+        einheit: bestandEntry.einheit,
+        artikelId: bestandEntry.artikelId
+      } : 'NICHT GEFUNDEN');
+      
+      if (bestandEntry) {
+        bestand = {
+          menge: bestandEntry.menge || 0,
+          einheit: bestandEntry.einheit || 'Stück',
+          verfuegbar: (bestandEntry.menge || 0) > 0
+        };
+      } else {
+        // Fallback: Wenn kein Bestand-Eintrag gefunden wird
+        bestand = {
+          menge: 0,
+          einheit: 'Stück',
+          verfuegbar: false
+        };
+      }
+    } catch (bestandError) {
+      console.error('❌ Error loading bestand for portfolio item:', bestandError);
+      bestand = {
+        menge: 0,
+        einheit: 'Stück',
+        verfuegbar: false
+      };
+    }
+
+    console.log('📦 Finaler Bestand:', bestand);
+
+    // Portfolio-Item mit Bestandsinformationen zurückgeben
+    const responseData = {
+      ...portfolioItem.toObject(),
+      bestand
+    };
+
     res.status(200).json({
       success: true,
-      data: portfolioItem
+      data: responseData
     });
   } catch (error) {
     console.error('Portfolio Item Fetch Error:', error);

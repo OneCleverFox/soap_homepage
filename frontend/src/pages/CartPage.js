@@ -47,21 +47,16 @@ const CartPage = () => {
 
   // Helper-Funktion um Bild-URLs zu korrigieren
   const getImageUrl = (url) => {
-    console.log('🖼️ CartPage getImageUrl Input:', url);
-    
     if (!url) {
-      console.log('🖼️ URL is null/undefined');
       return null;
     }
     
     // Base64-Bilder direkt zurückgeben
     if (url.startsWith('data:image/')) {
-      console.log('🖼️ Base64 image detected');
       return url;
     }
     
     if (url.startsWith('http')) {
-      console.log('🖼️ URL already absolute:', url);
       return url;
     }
     
@@ -95,11 +90,13 @@ const CartPage = () => {
   };
 
   const handleCheckout = () => {
+    console.log('🛒 Checkout clicked, user:', user);
     if (!user) {
+      console.log('🛒 No user, navigating to login');
       navigate('/login');
     } else {
-      // TODO: Zur Checkout-Seite navigieren
-      alert('Checkout-Funktion wird noch implementiert');
+      console.log('🛒 User exists, navigating to checkout');
+      navigate('/checkout');
     }
   };
 
