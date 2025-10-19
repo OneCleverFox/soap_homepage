@@ -34,7 +34,7 @@ if (process.env.NODE_ENV !== 'production') {
 // Route Imports
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
-const orderRoutes = require('./routes/orders');
+const orderRoutes = require('./routes/order');
 const inventoryRoutes = require('./routes/inventory');
 const adminRoutes = require('./routes/admin');
 const portfolioRoutes = require('./routes/portfolio');
@@ -46,6 +46,7 @@ const usersRoutes = require('./routes/users');
 const cartRoutes = require('./routes/cart');
 const warenberechnungRoutes = require('./routes/warenberechnung');
 const lagerRoutes = require('./routes/lager');
+const emailLogsRoutes = require('./routes/emailLogs');
 
 const app = express();
 
@@ -261,6 +262,7 @@ app.use('/api/users', checkDatabaseConnection, usersRoutes);
 app.use('/api/cart', checkDatabaseConnection, cartRoutes);
 app.use('/api/warenberechnung', checkDatabaseConnection, warenberechnungRoutes);
 app.use('/api/lager', checkDatabaseConnection, lagerRoutes);
+app.use('/api/email-logs', checkDatabaseConnection, emailLogsRoutes);
 app.use('/api/images', require('./routes/images'));
 
 // Test Route für Datenempfang

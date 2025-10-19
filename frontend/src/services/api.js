@@ -118,6 +118,8 @@ api.interceptors.response.use(
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
   register: (userData) => api.post('/auth/register', userData),
+  verifyEmail: (token) => api.get(`/auth/verify-email/${token}`),
+  resendVerification: (email) => api.post('/auth/resend-verification', { email }),
   getProfile: () => api.get('/auth/me'),
   updateProfile: (profileData) => api.put('/auth/profile', profileData),
   changePassword: (passwordData) => api.put('/auth/password', passwordData),
@@ -176,6 +178,10 @@ export const kundenAPI = {
   getKunde: (id) => api.get(`/kunden/${id}`),
   updateKunde: (id, kundeData) => api.put(`/kunden/${id}`, kundeData),
   getStats: () => api.get('/kunden/stats/overview'),
+  
+  // Profil-Management für angemeldete Kunden
+  getProfile: () => api.get('/kunden/profil'),
+  updateProfile: (profileData) => api.put('/kunden/profil', profileData),
 };
 
 // Analytics API
