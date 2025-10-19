@@ -20,7 +20,14 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: [true, 'Passwort ist erforderlich'],
-    minlength: [6, 'Passwort muss mindestens 6 Zeichen lang sein'],
+    minlength: [8, 'Passwort muss mindestens 8 Zeichen lang sein'],
+    validate: {
+      validator: function(password) {
+        // Passwort-Sicherheitsvalidierung nach BSI/NIST Standards
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+      },
+      message: 'Passwort muss mindestens 8 Zeichen enthalten: Großbuchstabe, Kleinbuchstabe, Zahl und Sonderzeichen (@$!%*?&)'
+    },
     alias: 'passwort'
   },
   role: {
@@ -30,8 +37,31 @@ const userSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'blocked', 'pending'],
-    default: 'active'
+    enum: ['active', 'blocked', 'pending', 'unverified'],
+    default: 'unverified'
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationToken: {
+    type: String,
+    select: false // Standardmäßig nicht in Abfragen einschließen
+  },
+  emailVerificationExpires: {
+    type: Date,
+    select: false
+  },
+  // Password Reset Token für "Passwort vergessen" Funktion
+  passwordResetToken: {
+    type: String,
+    select: false,
+    index: true // Index für schnelle Token-Suche
+  },
+  passwordResetExpires: {
+    type: Date,
+    select: false,
+    index: true // Index für Expiry-Cleanup
   },
   firstName: {
     type: String,
@@ -47,6 +77,94 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     alias: 'telefon'
+  },
+  // Adressdaten
+  address: {
+    street: {
+      type: String,
+      trim: true,
+      alias: 'strasse'
+    },
+    houseNumber: {
+      type: String,
+      trim: true,
+      alias: 'hausnummer'
+    },
+    zipCode: {
+      type: String,
+      trim: true,
+      alias: 'plz'
+    },
+    city: {
+      type: String,
+      trim: true,
+      alias: 'stadt'
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: 'Deutschland',
+      alias: 'land'
+    }
+  },
+  // Geburtsdatum (optional)
+  dateOfBirth: {
+    type: Date,
+    alias: 'geburtsdatum'
+  },
+  // Geschlecht (optional)
+  geschlecht: {
+    type: String,
+    enum: ['männlich', 'weiblich', 'divers', ''],
+    default: ''
+  },
+  // Lieferadresse (optional, falls abweichend)
+  lieferadresse: {
+    abweichend: {
+      type: Boolean,
+      default: false
+    },
+    street: {
+      type: String,
+      trim: true
+    },
+    houseNumber: {
+      type: String,
+      trim: true
+    },
+    zipCode: {
+      type: String,
+      trim: true
+    },
+    city: {
+      type: String,
+      trim: true
+    },
+    country: {
+      type: String,
+      trim: true,
+      default: 'Deutschland'
+    }
+  },
+  // Kommunikationspräferenzen
+  kommunikation: {
+    newsletter: {
+      type: Boolean,
+      default: true
+    },
+    produktupdates: {
+      type: Boolean,
+      default: true
+    },
+    angebote: {
+      type: Boolean,
+      default: true
+    },
+    emailFrequenz: {
+      type: String,
+      enum: ['täglich', 'wöchentlich', 'monatlich', 'nur-wichtiges'],
+      default: 'wöchentlich'
+    }
   },
   lastLogin: {
     type: Date

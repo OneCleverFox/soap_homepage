@@ -17,7 +17,7 @@ const orderItemSchema = new mongoose.Schema({
       type: String,
       required: true
     },
-    beschreibung: String,
+    beschreibung: mongoose.Schema.Types.Mixed, // Unterstützt sowohl String als auch Object
     kategorie: String,
     bild: String,
     // Spezifische Felder je nach Produkttyp
@@ -57,6 +57,11 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: false, // Wird im pre-save Hook automatisch generiert
     unique: true // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
+  },
+  // Alias für bestehenden MongoDB Index - kein extra Index da bereits in DB vorhanden
+  orderNumber: {
+    type: String,
+    required: false
   },
   // Verknüpfung mit unserem Kunden-System
   kunde: {
@@ -374,7 +379,12 @@ const orderSchema = new mongoose.Schema({
   // Zusätzliche Felder
   bestelldatum: {
     type: Date,
-    default: Date.now
+    default: () => {
+      // CET/CEST Timezone für Deutschland
+      const now = new Date();
+      const cet = new Date(now.toLocaleString("en-US", {timeZone: "Europe/Berlin"}));
+      return cet;
+    }
   },
   gewuenschterLiefertermin: {
     type: Date
@@ -401,6 +411,7 @@ const orderSchema = new mongoose.Schema({
 
 // Nur die Indizes erstellen, die wir brauchen
 // orderSchema.index({ bestellnummer: 1 }, { unique: true }); // ENTFERNT - wird durch unique: true automatisch erstellt
+// orderNumber Index bereits in MongoDB vorhanden - nicht erneut erstellen
 orderSchema.index({ 'besteller.email': 1 });
 orderSchema.index({ kunde: 1 });
 orderSchema.index({ status: 1 });
@@ -512,23 +523,40 @@ orderSchema.methods.hinzufuegenKommunikation = function(typ, richtung, betreff, 
 // Pre-save Hooks
 orderSchema.pre('save', async function(next) {
   // Bestellnummer generieren falls nicht vorhanden
-  if (this.isNew && !this.bestellnummer) {
+  if (this.isNew && !this.bestellnummer && !this.orderNumber) {
     let eindeutig = false;
     let versuche = 0;
     
     while (!eindeutig && versuche < 10) {
       const neueBestellnummer = this.generiereBestellnummer();
-      const existierende = await mongoose.model('Order').findOne({ bestellnummer: neueBestellnummer });
+      const existierende = await mongoose.model('Order').findOne({ 
+        $or: [
+          { bestellnummer: neueBestellnummer },
+          { orderNumber: neueBestellnummer }
+        ]
+      });
       
       if (!existierende) {
         this.bestellnummer = neueBestellnummer;
+        this.orderNumber = neueBestellnummer; // Setze beide Felder
         eindeutig = true;
       }
       versuche++;
     }
     
     if (!eindeutig) {
-      this.bestellnummer = `GM${Date.now()}`;
+      const fallbackNumber = `GM${Date.now()}`;
+      this.bestellnummer = fallbackNumber;
+      this.orderNumber = fallbackNumber; // Setze beide Felder
+    }
+  }
+  
+  // Synchronisiere beide Felder falls nur eins gesetzt ist
+  if (this.isNew) {
+    if (this.bestellnummer && !this.orderNumber) {
+      this.orderNumber = this.bestellnummer;
+    } else if (this.orderNumber && !this.bestellnummer) {
+      this.bestellnummer = this.orderNumber;
     }
   }
   
