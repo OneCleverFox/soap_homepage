@@ -13,17 +13,27 @@ console.log('━━━━━━━━━━━━━━━━━━━━━━�
 
 // Dotenv Configuration - nur für lokale Entwicklung
 if (process.env.NODE_ENV !== 'production') {
-  // Lokal: Lade .env.development
-  const envFile = '.env.development';
+  // Lokal: Lade .env (Fallback zu .env.development)
+  const fs = require('fs');
+  const envPath = path.resolve(__dirname, '..');
+  
+  let envFile = '.env';
+  if (!fs.existsSync(path.join(envPath, '.env')) && fs.existsSync(path.join(envPath, '.env.development'))) {
+    envFile = '.env.development';
+  }
   
   require('dotenv').config({
-    path: path.resolve(__dirname, '..', envFile)
+    path: path.resolve(envPath, envFile)
   });
   
   console.log(`🔧 Loaded environment from: ${envFile}`);
   console.log(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
   console.log(`🔌 PORT: ${process.env.PORT}`);
   console.log(`🗄️  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
+  
+  // PayPal Debug Info
+  console.log(`💳 PAYPAL_SANDBOX_CLIENT_ID: ${process.env.PAYPAL_SANDBOX_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+  console.log(`💳 PAYPAL_LIVE_CLIENT_ID: ${process.env.PAYPAL_LIVE_CLIENT_ID ? 'SET' : 'NOT SET'}`);
 } else {
   // Production (Railway): Nutzt Environment Variables direkt
   console.log('🔧 Production Mode: Using Railway Environment Variables');
@@ -37,6 +47,7 @@ const productRoutes = require('./routes/products');
 const orderRoutes = require('./routes/order');
 const inventoryRoutes = require('./routes/inventory');
 const adminRoutes = require('./routes/admin');
+const adminSettingsRoutes = require('./routes/adminSettings');
 const portfolioRoutes = require('./routes/portfolio');
 const rohseifeRoutes = require('./routes/rohseife');
 const duftoeleRoutes = require('./routes/duftoele');
@@ -47,8 +58,17 @@ const cartRoutes = require('./routes/cart');
 const warenberechnungRoutes = require('./routes/warenberechnung');
 const lagerRoutes = require('./routes/lager');
 const emailLogsRoutes = require('./routes/emailLogs');
+const invoiceRoutes = require('./routes/invoice');
+const inquiriesRoutes = require('./routes/inquiries');
 
 const app = express();
+
+// Trust proxy für Railway/Production - aber nur wenn explizit gesetzt
+if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+} else {
+  app.set('trust proxy', false);
+}
 
 // CORS-Konfiguration
 const envOrigins = process.env.FRONTEND_URL
@@ -57,16 +77,20 @@ const envOrigins = process.env.FRONTEND_URL
 
 const allowedOrigins = [
   ...envOrigins,
+  // Production domains
   'https://gluecksmomente-manufaktur.vercel.app',
   'https://www.gluecksmomente-manufaktur.vercel.app',
   'https://soap-homepage-frontend.vercel.app',
   new RegExp('^https://gluecksmomente-manufaktur(?:-[a-z0-9-]+)?\\.vercel\\.app$'),
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5000',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3001',
-  'http://127.0.0.1:5000'
+  // Development - nur wenn NODE_ENV !== production
+  ...(process.env.NODE_ENV !== 'production' ? [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5000',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:5000'
+  ] : [])
 ];
 
 const normalizeOrigin = (origin) => {
@@ -88,8 +112,8 @@ app.use((req, res, next) => {
 
   const requestPath = `${req.method} ${req.originalUrl}`;
 
-  // Debug-Logging für CORS-Verhalten
-  if (process.env.NODE_ENV !== 'test') {
+  // CORS-Logging nur in Development
+  if (process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test') {
     console.log(`[CORS] Anfrage von ${requestOrigin} -> ${requestPath}`);
   }
 
@@ -127,16 +151,65 @@ app.use((req, res, next) => {
 app.use(helmet({
   crossOriginResourcePolicy: false, // CORS nicht blockieren
   crossOriginOpenerPolicy: false,
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
 }));
 
-// Rate Limiting
+// Rate Limiting - vereinfacht für Development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: 100, // Limit auf 100 Requests pro windowMs
-  message: 'Zu viele Anfragen von dieser IP, bitte versuchen Sie es später erneut.'
+  max: process.env.NODE_ENV === 'production' ? 50 : 1000, // Development: Sehr hoch
+  message: 'Zu viele Anfragen von dieser IP, bitte versuchen Sie es später erneut.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: false, // Explizit auf false setzen für localhost
+  skip: (req) => {
+    // Skip rate limiting für localhost in development
+    if (process.env.NODE_ENV !== 'production') {
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      return isLocalhost;
+    }
+    return false;
+  }
 });
+
+// Verschärftes Rate Limiting für Auth-Endpunkte  
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 Minuten
+  max: process.env.NODE_ENV === 'production' ? 5 : 100, // Development: Sehr hoch
+  message: 'Zu viele Login-Versuche. Bitte warten Sie 15 Minuten.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: false, // Explizit auf false setzen für localhost
+  skip: (req) => {
+    // Skip auth rate limiting für localhost in development
+    if (process.env.NODE_ENV !== 'production') {
+      const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+      return isLocalhost;
+    }
+    return false;
+  }
+});
+
 app.use('/api/', limiter);
+app.use('/api/auth/', authLimiter);
 
 // Body Parser Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -145,13 +218,47 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static Files (für Produktbilder etc.)
 app.use('/uploads', express.static('uploads'));
 
-// Database Connection
-const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
-const MONGODB_URI = process.env.MONGODB_URI_PROD || process.env.MONGODB_URI;
+// Kritische Environment Variables prüfen
+function validateCriticalEnvVars() {
+  const critical = [
+    'JWT_SECRET',
+    'MONGODB_URI',
+    'RESEND_API_KEY'
+  ];
+  
+  const missing = critical.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error('🚨 KRITISCHE SICHERHEITSLÜCKE:');
+    console.error('❌ Fehlende Environment Variables:', missing);
+    console.error('🛑 SERVER WIRD NICHT GESTARTET');
+    process.exit(1);
+  }
+  
+  // Warnung bei schwachen JWT Secrets
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
+    console.warn('⚠️ JWT_SECRET ist zu kurz (< 32 Zeichen)');
+  }
+  
+  console.log('✅ Kritische Environment Variables validiert');
+}
 
-console.log('� DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
+validateCriticalEnvVars();
+const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
+
+// IMMER MongoDB Atlas URI aus Environment Variables verwenden - NIEMALS Hardcoded!
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URI_PROD;
+
+if (!MONGODB_URI) {
+  console.error('🚨 KRITISCHER FEHLER: MONGODB_URI nicht in Environment Variables gefunden!');
+  console.error('💡 Prüfen Sie Ihre .env Datei');
+  process.exit(1);
+}
+
+console.log('🔧 DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
 console.log('📊 Database Mode:', DATABASE_MODE.toUpperCase());
-console.log('🌍 Umgebung: PRODUKTIVE DATENBANK');
+console.log('🌍 Umgebung: IMMER PRODUKTIVE MONGODB ATLAS DATENBANK');
+console.log('🔗 MongoDB URI verwendet:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
 
 // MongoDB Connection mit Retry-Logik für Railway
 async function connectToMongoDB(retries = 5, delay = 5000) {
@@ -225,14 +332,17 @@ mongoose.connection.on('error', (err) => {
 
 mongoose.connection.on('disconnected', () => {
   console.warn('🔌 Mongoose Verbindung getrennt');
-  // Versuche automatisch wieder zu verbinden, aber nur wenn nicht bereits am verbinden
-  if (mongoose.connection.readyState === 0) {
-    console.log('🔄 Versuche Wiederverbindung...');
-    setTimeout(() => {
-      mongoose.connect(MONGODB_URI, mongooseOptions)
-        .then(() => console.log('✅ Wiederverbindung erfolgreich'))
-        .catch(err => console.error('❌ Wiederverbindung fehlgeschlagen:', err.message));
-    }, 5000);
+  // In Development: Weniger aggressive Wiederverbindung
+  if (mongoose.connection.readyState === 0 && process.env.NODE_ENV === 'development') {
+    console.log('🔄 Versuche Wiederverbindung in 10 Sekunden...');
+    setTimeout(async () => {
+      try {
+        await connectToMongoDB();
+        console.log('✅ Wiederverbindung erfolgreich');
+      } catch (err) {
+        console.error('❌ Wiederverbindung fehlgeschlagen:', err.message);
+      }
+    }, 10000); // 10 Sekunden warten
   }
 });
 
@@ -253,6 +363,8 @@ app.use('/api/products', checkDatabaseConnection, productRoutes);
 app.use('/api/orders', checkDatabaseConnection, orderRoutes);
 app.use('/api/inventory', checkDatabaseConnection, inventoryRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin-settings', adminSettingsRoutes);
+app.use('/api/inquiries', checkDatabaseConnection, inquiriesRoutes);
 app.use('/api/portfolio', checkDatabaseConnection, portfolioRoutes);
 app.use('/api/rohseife', checkDatabaseConnection, rohseifeRoutes);
 app.use('/api/duftoele', checkDatabaseConnection, duftoeleRoutes);
@@ -263,21 +375,8 @@ app.use('/api/cart', checkDatabaseConnection, cartRoutes);
 app.use('/api/warenberechnung', checkDatabaseConnection, warenberechnungRoutes);
 app.use('/api/lager', checkDatabaseConnection, lagerRoutes);
 app.use('/api/email-logs', checkDatabaseConnection, emailLogsRoutes);
+app.use('/api/invoice', checkDatabaseConnection, invoiceRoutes);
 app.use('/api/images', require('./routes/images'));
-
-// Test Route für Datenempfang
-app.post('/api/test', (req, res) => {
-  console.log('📨 Daten empfangen:', req.body);
-  console.log('📨 Headers:', req.headers);
-  console.log('📨 Timestamp:', new Date().toISOString());
-  
-  res.status(200).json({
-    success: true,
-    message: 'Daten erfolgreich empfangen!',
-    receivedData: req.body,
-    timestamp: new Date().toISOString()
-  });
-});
 
 // Health Check Route
 app.get('/api/health', (req, res) => {

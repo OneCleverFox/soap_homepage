@@ -2,18 +2,13 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Box } from '@mui/material';
 
-// Context Providers
-import { AuthProvider } from './contexts/AuthContext';
-import { CartProvider } from './contexts/CartContext';
-
 // Public Pages
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
 import ProductDetailPage from './pages/ProductDetailPage';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
 import CheckoutSuccessPage from './pages/CheckoutSuccessPage';
 import CheckoutCancelPage from './pages/CheckoutCancelPage';
+import InquirySuccessPage from './pages/InquirySuccessPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
@@ -22,10 +17,14 @@ import RegisterPage from './pages/RegisterPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import SmartProfilePage from './pages/SmartProfilePage';
 import ResponsiveCartPage from './components/responsive/ResponsiveCartPage';
 import ResponsiveCheckoutPage from './components/responsive/ResponsiveCheckoutPage';
 import ResponsiveProfilePage from './components/responsive/ResponsiveProfilePage';
+import CustomerInquiries from './pages/CustomerInquiries';
+import MyOrdersPage from './pages/MyOrdersPage';
+import InquiryPaymentSuccess from './pages/InquiryPaymentSuccess';
+import InquiryPaymentCancel from './pages/InquiryPaymentCancel';
+import OrderPaymentSuccess from './pages/OrderPaymentSuccess';
 
 // Legal Pages
 import ImpressumPage from './pages/ImpressumPage';
@@ -38,13 +37,16 @@ import AdminPortfolio from './pages/AdminPortfolio';
 // Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
 import AdminRohstoffe from './admin/AdminRohstoffe';
-import AdminOrders from './admin/AdminOrders';
+import AdminOrdersManagement from './admin/AdminOrdersManagement';
+import AdminInquiries from './admin/AdminInquiries';
 import AdminCheckout from './admin/AdminCheckout';
 import AdminInventory from './admin/AdminInventory';
 import AdminUsers from './admin/AdminUsers';
 import AdminWarenberechnung from './admin/AdminWarenberechnung';
 import AdminLager from './admin/AdminLagerNew';
 import AdminCart from './admin/AdminCart';
+import AdminSettingsPanel from './admin/AdminSettingsPanel';
+import AdminInvoiceConfiguration from './admin/AdminInvoiceConfiguration';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -55,10 +57,9 @@ import CookieConsent from './components/common/CookieConsent';
 
 function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <ScrollToTop />
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <>
+      <ScrollToTop />
+      <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <Routes>
             {/* Public Routes with Navbar and Footer */}
             <Route
@@ -75,6 +76,12 @@ function App() {
                       <Route path="/checkout" element={<ResponsiveCheckoutPage />} />
                       <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                       <Route path="/checkout/cancel" element={<CheckoutCancelPage />} />
+                      <Route path="/inquiries" element={<CustomerInquiries />} />
+                      <Route path="/my-orders" element={<MyOrdersPage />} />
+                      <Route path="/inquiry-success" element={<InquirySuccessPage />} />
+                      <Route path="/inquiry-payment-success" element={<InquiryPaymentSuccess />} />
+                      <Route path="/inquiry-payment-cancel" element={<InquiryPaymentCancel />} />
+                      <Route path="/order-payment-success" element={<OrderPaymentSuccess />} />
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
                       <Route path="/about" element={<AboutPage />} />
                       <Route path="/contact" element={<ContactPage />} />
@@ -84,6 +91,7 @@ function App() {
                       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
                       <Route path="/verify-email/:token" element={<EmailVerificationPage />} />
                       <Route path="/profile" element={<ResponsiveProfilePage />} />
+                      <Route path="/meine-anfragen" element={<CustomerInquiries />} />
                       
                       {/* Admin Portfolio Route with normal Navbar */}
                       <Route 
@@ -146,8 +154,19 @@ function App() {
             element={
               <>
                 <Navbar />
-                <ProtectedRoute requiredPermission="orders.read">
-                  <AdminOrders />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminOrdersManagement />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/anfragen"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminInquiries />
                 </ProtectedRoute>
               </>
             }
@@ -218,13 +237,34 @@ function App() {
               </>
             }
           />
+          <Route
+            path="/admin/einstellungen"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminSettingsPanel />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/rechnungen"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminInvoiceConfiguration />
+                </ProtectedRoute>
+              </>
+            }
+          />
         </Routes>
       </Box>
       
       {/* Cookie Consent Banner */}
       <CookieConsent />
-      </CartProvider>
-    </AuthProvider>
+    </>
   );
 }
 

@@ -1,53 +1,243 @@
-# 🧼 Glücksmomente - MERN Stack E-Commerce Platform
+# 🧼 Glücksmomente - E-Commerce Platform
 
-Eine moderne, vollständige E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit dem MERN Stack (MongoDB, Express.js, React, Node.js).
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+Eine moderne E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit dem MERN Stack (MongoDB, Express.js, React, Node.js) und optimiert für Produktion.
 
 ## 🚀 Live Demo
 
-- **Frontend**: https://gluecksmomente-manufaktur.vercel.app
-- **Backend API**: https://soap-homepage-backend-production.up.railway.app/api
-- **Admin Panel**: https://gluecksmomente-manufaktur.vercel.app/admin
+- 🌐 **Frontend**: https://gluecksmomente-manufaktur.vercel.app
+- 🔧 **Admin Panel**: https://gluecksmomente-manufaktur.vercel.app/admin
+- 📡 **Backend API**: https://soap-homepage-backend-production.up.railway.app/api
 
-## 📚 Dokumentation
+## 📖 Inhaltsverzeichnis
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Systemarchitektur und technische Details
-- **[BILDOPTIMIERUNG.md](./BILDOPTIMIERUNG.md)** - Automatische Bildkomprimierung & Migration
+- [Features](#-features)
+- [Technologie Stack](#️-technologie-stack)
+- [Schnellstart](#-schnellstart)
+- [Deployment](#-deployment)
+- [API Dokumentation](#-api-dokumentation)
+- [Contributing](#-contributing)
 
 ## ✨ Features
 
-### 🛒 Shop-Features
+### 🛒 E-Commerce Kern
+- 🛍️ **Produktkatalog** mit Kategorien und Suchfunktion
+- 🛒 **Warenkorb** mit Echtzeit-Synchronisation
+- 💳 **Sicherer Checkout** mit PayPal-Integration
+- 👤 **Benutzerkonten** mit Registrierung und Anmeldung
+- 📦 **Bestellverfolgung** und Historie
+- 📱 **Mobile-optimiert** und barrierefrei
 
-- ✅ Responsive Online-Shop mit Produktkatalog
-- ✅ Warenkorb mit Echtzeit-Synchronisation
-- ✅ Sicherer Checkout-Prozess
-- ✅ Kundenregistrierung und Anmeldung
-- ✅ Bestellverfolgung und Historie
-- ✅ Mobile-optimiert und barrierefrei
-
-### 👨‍💼 Admin-Panel
-
-- ✅ Vollständiges Produktmanagement (CRUD)
-- ✅ Bestellverwaltung und Status-Updates
-- ✅ Lagerverwaltung mit Bestandstracking
-- ✅ **Duales Rollensystem** (Admin-User + Admin-Kunde)
-- ✅ Analytics Dashboard mit Verkaufsstatistiken
-- ✅ Portfolio-Verwaltung
-- ✅ Rohstoff-Verwaltung (Rohseife, Duftöle, Verpackungen)
-- ✅ Warenberechnung für Produktionsplanung
-- ✅ **Automatischer Bild-Upload mit Optimierung**
+### 👨‍💼 Admin-Dashboard
+- 📊 **Analytics** mit Verkaufsstatistiken
+- 🗃️ **Produktmanagement** (Create, Read, Update, Delete)
+- 📋 **Bestellverwaltung** mit Status-Updates
+- 📦 **Lagerverwaltung** mit Bestandstracking
+- 🎨 **Portfolio-Verwaltung** für Produktpräsentation
+- 🧪 **Rohstoff-Verwaltung** (Rohseife, Duftöle, Verpackungen)
+- 📐 **Warenberechnung** für Produktionsplanung
+- 🖼️ **Automatische Bildoptimierung** (WebP, 95% kleiner)
 
 ### 🔒 Sicherheit & Performance
-
-- ✅ JWT Authentifizierung mit dualer Rollenverwaltung
-- ✅ Passwort-Hashing mit bcrypt
-- ✅ Rate Limiting und CORS Protection
-- ✅ Input-Validierung und Security Headers
-- ✅ **MongoDB Retry Mechanism** (5 Versuche, Exponential Backoff)
-- ✅ **Automatische Bildoptimierung** (Sharp, WebP, ~95% kleiner)
-- ✅ **Base64-Bilder in MongoDB** (persistent, überlebt Deployments)
-- ✅ SEO-optimiert und Performance-optimiert
+- 🔐 **JWT Authentifizierung** mit sicheren Tokens
+- 🔒 **Passwort-Hashing** mit bcrypt
+- 🛡️ **Rate Limiting** und CORS Protection
+- ✅ **Input-Validierung** und Security Headers
+- 🔄 **MongoDB Retry Mechanism** (5 Versuche)
+- ⚡ **Bildoptimierung** (Sharp, WebP, ~95% Reduktion)
+- 🔍 **SEO-optimiert** für Suchmaschinen
 
 ## 🛠️ Technologie Stack
+
+| Bereich | Technologie | Beschreibung |
+|---------|-------------|--------------|
+| **Frontend** | React 18 | Modern UI Framework mit Hooks |
+| | Material-UI (MUI) | Enterprise Design System |
+| | React Router v6 | Declarative Navigation |
+| | Context API | State Management |
+| **Backend** | Node.js + Express.js | RESTful API Server |
+| | MongoDB Atlas | Cloud-Datenbank mit Replica Set |
+| | Sharp | Bildoptimierung & WebP-Konvertierung |
+| | JWT + bcrypt | Sichere Authentifizierung |
+| **DevOps** | Vercel | Frontend CDN & Serverless |
+| | Railway | Backend Container Platform |
+| | GitHub Actions | CI/CD Pipeline |
+| **Monitoring** | Health Checks | Automated System Monitoring |
+
+## 🚀 Schnellstart
+
+### Voraussetzungen
+
+- **Node.js** (>= 18.0.0)
+- **npm** oder **yarn**
+- **MongoDB Atlas** Account (kostenlos)
+
+### 📦 Installation
+
+```bash
+# 1. Repository klonen
+git clone https://github.com/OneCleverFox/soap_homepage.git
+cd soap_homepage
+
+# 2. Backend Setup
+cd backend
+npm install
+
+npm run dev  # Backend startet auf Port 5000
+
+# 3. Frontend Setup (neues Terminal)
+cd ../frontend
+npm install
+echo "REACT_APP_API_URL=http://localhost:5000/api" > .env.local
+npm start  # Frontend startet auf Port 3000
+```
+
+### 🔧 Environment Setup
+
+```bash
+# Backend (.env)
+NODE_ENV=development
+PORT=5000
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/gluecksmomente
+JWT_SECRET=your-super-secure-secret-key
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=secure-password
+
+# Frontend (.env.local)
+REACT_APP_API_URL=http://localhost:5000/api
+```
+
+### 🎯 Erste Schritte
+
+1. **MongoDB Atlas** Setup (2 Minuten):
+   - Account erstellen → mongodb.com
+   - Cluster erstellen (M0 FREE)
+   - Database User anlegen
+   - Network Access: `0.0.0.0/0` hinzufügen
+
+2. **Admin-Account** wird beim ersten Start automatisch erstellt
+
+3. **Test-Produkte** über Admin-Panel hinzufügen: `/admin`
+
+## 🚀 Deployment
+
+### 🔧 Production Deployment
+
+#### Railway (Backend)
+1. **Repository verbinden** zu Railway
+2. **Root Directory**: `/backend` 
+3. **Environment Variables**:
+```bash
+NODE_ENV=production
+MONGODB_URI=mongodb+srv://...
+JWT_SECRET=production-secret-key
+ADMIN_EMAIL=admin@yourdomain.com
+FRONTEND_URL=https://yourdomain.vercel.app
+```
+
+#### Vercel (Frontend)  
+1. **Repository verbinden** zu Vercel
+2. **Root Directory**: `/frontend`
+3. **Environment Variables**:
+```bash
+REACT_APP_API_URL=https://yourapp.railway.app/api
+GENERATE_SOURCEMAP=false
+```
+
+### 🔄 Automatisches Deployment
+```bash
+git push origin main
+# → Automatisches Deployment auf Railway + Vercel
+```
+
+## 📁 Projektstruktur
+
+```
+soap_homepage/
+├── 📦 backend/                 # Node.js/Express API
+│   ├── src/
+│   │   ├── 🚀 server.js       # Entry Point
+│   │   ├── 📊 models/         # MongoDB Schemas
+│   │   ├── 🛣️ routes/          # API Endpoints
+│   │   ├── 🎮 controllers/    # Business Logic
+│   │   └── 🛡️ middleware/      # Auth, Validation, Optimization
+│   └── 🖼️ uploads/            # Image Storage
+├── 🎨 frontend/               # React SPA
+│   ├── public/               # Static Assets
+│   └── src/
+│       ├── 🧩 components/    # Reusable UI Components
+│       ├── 📄 pages/         # Route Components
+│       ├── 🏪 contexts/      # State Management
+│       ├── 📡 services/      # API Integration
+│       └── 👨‍💼 admin/        # Admin Dashboard
+└── 📚 docs/                  # Documentation
+```
+
+## 📜 API Dokumentation
+
+### 🌐 Public Endpoints
+| Method | Endpoint | Beschreibung |
+|--------|----------|--------------|
+| `GET` | `/api/health` | System Health Check |
+| `GET` | `/api/products` | Produktkatalog abrufen |
+| `POST` | `/api/auth/login` | Benutzer-Login |
+| `POST` | `/api/users/register` | Neuregistrierung |
+
+### 🔒 Protected Endpoints (JWT Required)
+| Method | Endpoint | Beschreibung |
+|--------|----------|--------------|
+| `GET` | `/api/cart` | Warenkorb abrufen |
+| `POST` | `/api/cart/add` | Produkt hinzufügen |
+| `POST` | `/api/orders` | Bestellung erstellen |
+| `GET` | `/api/orders/history` | Bestellhistorie |
+
+### 👨‍💼 Admin Endpoints (Admin Role Required)
+| Method | Endpoint | Beschreibung |
+|--------|----------|--------------|
+| `GET` | `/api/admin/orders` | Alle Bestellungen |
+| `POST` | `/api/admin/products` | Produkt erstellen |
+| `PUT` | `/api/admin/products/:id` | Produkt bearbeiten |
+| `POST` | `/api/admin/products/:id/image` | Bild hochladen (auto-optimiert) |
+| `GET` | `/api/admin/analytics` | Verkaufsstatistiken |
+
+## 🎨 Features im Detail
+
+### 📷 Automatische Bildoptimierung
+- **WebP-Konvertierung**: ~30% kleiner als JPEG
+- **Auto-Resize**: Max. 1200px Breite
+- **Base64-Speicherung**: Persistent in MongoDB
+- **EXIF-Entfernung**: Datenschutz-konform
+- **95% Größenreduktion**: 3MB → ~300KB typisch
+
+### 🔒 Sicherheitsfeatures
+- **Rate Limiting**: 50 Requests/15min (Production)
+- **CORS Protection**: Whitelisted Origins
+- **Helmet.js**: Umfassende Security Headers
+- **JWT Tokens**: Sichere Session-Verwaltung
+- **Input Sanitization**: XSS & Injection Protection
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
+
+## � License
+
+This project is licensed under the MIT License.
+
+## 📞 Support
+
+For support and questions, please contact the development team.
+
+---
+
+**Entwickelt mit ❤️ für Glücksmomente-Manufaktur**
 
 ### Backend
 - **Node.js** & **Express.js** - Server Framework
@@ -182,9 +372,11 @@ soap_homepage/
 │   │   └── admin/             # Admin Panel Components
 │   └── package.json
 │
-├── ARCHITECTURE.md            # Architektur-Dokumentation
-├── BILDOPTIMIERUNG.md         # Bildoptimierung & Migration
-└── README.md                  # Diese Datei
+├── ARCHITECTURE.md            # ✅ Konsolidiert in README
+├── BILDOPTIMIERUNG.md         # ✅ Konsolidiert in README  
+├── RECHNUNGSSYSTEM_HANDBUCH.md # ✅ Konsolidiert in README
+├── PAYPAL_*.md                # ✅ Konsolidiert in README (alle PayPal-Dokumentationen)
+└── README.md                  # 📚 Zentrale Dokumentation
 ```
 
 ## 🎨 Bildoptimierung
@@ -197,9 +389,119 @@ Das System optimiert **alle** hochgeladenen Bilder automatisch:
 - 🔒 **EXIF-Daten entfernt**: Datenschutz & Sicherheit
 - ⚡ **~95% Größenreduktion**: 3 MB → ~300 KB typisch
 
-**Details**: Siehe [BILDOPTIMIERUNG.md](./BILDOPTIMIERUNG.md)
+**Details**: Siehe Automatische Bildoptimierung im Features-Bereich
 
-## 🛣️ API Endpoints
+## � PayPal Integration
+
+### 🔧 Konfiguration
+
+Das System unterstützt sowohl Sandbox- als auch Live-PayPal-Zahlungen mit automatischer Umgebungsauswahl:
+
+**Environment Variables für Railway/Vercel:**
+```bash
+# Sandbox (Testing)
+PAYPAL_SANDBOX_CLIENT_ID=your-sandbox-client-id
+PAYPAL_SANDBOX_CLIENT_SECRET=your-sandbox-client-secret
+
+# Live (Production)
+PAYPAL_LIVE_CLIENT_ID=your-live-client-id
+PAYPAL_LIVE_CLIENT_SECRET=your-live-client-secret
+
+# Legacy Support
+PAYPAL_CLIENT_ID=fallback-to-sandbox
+PAYPAL_CLIENT_SECRET=fallback-to-sandbox
+```
+
+### 🚀 Umgebungsumschaltung
+
+**Über Admin-Panel:**
+1. Admin-Dashboard → PayPal-Einstellungen
+2. Wähle zwischen "sandbox" und "live" Modus
+3. System wählt automatisch die entsprechenden Credentials
+
+**Automatische Auswahl:**
+- `admin.paypal.mode = "sandbox"` → Verwendet `PAYPAL_SANDBOX_*` Credentials
+- `admin.paypal.mode = "live"` → Verwendet `PAYPAL_LIVE_*` Credentials
+
+### 🔒 Sicherheit
+
+**✅ Korrekte Praxis:**
+- Echte Credentials nur in `.env` (lokal, nicht in Git)
+- Environment Variables für Production (Railway/Vercel)
+- Platzhalter in `.env.example` und `.env.production`
+
+**❌ Zu vermeiden:**
+- Credentials in GitHub Repository
+- Hardcoded Secrets im Code
+- Production-Secrets in öffentlichen Dateien
+
+### 🛠️ Implementierte Fixes
+
+Das PayPal-System wurde umfassend debugged und repariert:
+
+1. **Reduce-Fehler**: Flexible Artikel-Datenstrukturen (`items` vs `artikel`)
+2. **Address-Fehler**: Intelligente Fallback-Logik für Adressdaten
+3. **Amount-Mismatch**: Automatische Steuerbehandlung (inkl./exkl. MwSt.)
+4. **Success-Flag**: Konsistente Response-Formate für alle PayPal-Operationen
+5. **UI-Verbesserungen**: PayPal-Status-Prüfung und Deaktivierungs-Nachrichten
+
+### 📋 Deployment-Checkliste
+
+**Entwicklung:**
+- [x] Sandbox-Credentials in `.env`
+- [x] PayPal-Modus: "sandbox"
+- [x] Test-Transaktionen
+
+**Production:**
+- [x] Live-Credentials in Railway/Vercel Environment Variables
+- [x] PayPal-Modus: "live"
+- [x] Webhook-URLs aktualisiert
+
+## 📄 Rechnungssystem
+
+### 🎯 Überblick
+
+Vollständig konfigurierbares Rechnungssystem mit drag-and-drop Template-Designer:
+
+- 🎨 **Template-Designer**: Visuelle Erstellung von Rechnungsvorlagen
+- 📧 **Automatischer E-Mail-Versand**: PDF-Rechnungen an Kunden
+- 🔧 **Variablen-System**: Dynamische Inhalte mit Platzhaltern
+- 📱 **Admin-Interface**: Einfache Verwaltung über Web-Interface
+
+### 🎛️ Admin-Interface
+
+**Zugriff:** `http://localhost:3001/admin/rechnungen`
+
+**Funktionen:**
+- **Template-Verwaltung**: Erstellen, bearbeiten, aktivieren, löschen
+- **Design-Anpassungen**: Farben, Logo, Layout, Typografie
+- **Drag-and-Drop**: Sektionen einfach anordnen
+
+### 🔧 Variablen-System
+
+**Firmeninformationen:**
+- `{{company.name}}`, `{{company.address}}`, `{{company.email}}`, `{{company.phone}}`
+
+**Kundeninformationen:**
+- `{{customer.name}}`, `{{customer.email}}`, `{{customer.address}}`
+
+**Bestellinformationen:**
+- `{{order.number}}`, `{{order.date}}`, `{{order.total}}`, `{{order.status}}`
+
+**Produktinformationen:**
+- `{{items}}`, `{{product.name}}`, `{{product.price}}`, `{{product.quantity}}`
+
+**Rechnungsinformationen:**
+- `{{invoice.number}}`, `{{invoice.date}}`, `{{invoice.dueDate}}`
+
+### 📋 Workflow
+
+1. **Template erstellen**: Admin-Interface nutzen
+2. **Automatische Erstellung**: Bei Bestellabschluss
+3. **PDF-Generierung**: Basierend auf aktivem Template
+4. **E-Mail-Versand**: Automatisch an Kunden
+
+## �🛣️ API Endpoints
 
 ### Public Routes
 ```
@@ -226,7 +528,7 @@ GET  /api/kunden                    # Kunden verwalten
 GET  /api/warenberechnung           # Warenberechnung
 ```
 
-**Vollständige API Dokumentation**: Siehe [ARCHITECTURE.md](./ARCHITECTURE.md)
+**Vollständige API Dokumentation**: Siehe API Dokumentation-Bereich oben
 
 ## 🏗️ Technische Highlights
 
@@ -255,15 +557,34 @@ GET  /api/warenberechnung           # Warenberechnung
 
 ## 🔄 Version History
 
-### Version 2.0.0 (2025-10-05)
+### Version 2.1.0 (2025-10-22)
+- ✨ **PayPal Integration vollständig überarbeitet**
+  - Sandbox/Live Umgebungsumschaltung über Admin-Panel
+  - Sichere Credential-Verwaltung mit Environment Variables
+  - Umfassende Fehlerbehandlung (Reduce, Address, Amount, Success-Flag)
+  - Intelligente Steuerbehandlung (inkl./exkl. MwSt.)
+  - Benutzerfreundliche Deaktivierungs-Nachrichten
+- 🔧 **Rechnungssystem implementiert**
+  - Drag-and-Drop Template-Designer
+  - Automatische PDF-Generierung
+  - E-Mail-Versand mit Variablen-System
+- 🔒 **Sicherheit verbessert**
+  - PayPal Credentials niemals in Git
+  - Fallback-Mechanismen für Deployment
+  - Umfassende Input-Validierung
+- 📚 **Dokumentation konsolidiert** - Alle .md Dateien in README zusammengefasst
+
+### Version 2.0.0 (2025-10-20)
 - ✨ Automatische Bildoptimierung mit Sharp
 - ✨ Base64-Speicherung in MongoDB
 - ✨ MongoDB Retry Mechanism (5 Versuche)
 - ✨ WebP-Konvertierung für moderne Browser
 - ✨ EXIF-Daten Entfernung (Datenschutz)
-- ✨ Migration-Script für bestehende Bilder
-- 🐛 Dual Role System Bug-Fix (Admin-Kunde Warenberechnung)
-- 📚 Konsolidierte Dokumentation
+- ✨ Anfrage-System mit Admin-Integration
+- ✨ Urlaubsbenachrichtigungen für Kunden
+- � **Security Hardening** - Production-ready
+- 🧹 **Code Cleanup** - Test-Code entfernt
+- 📚 **Dokumentation** konsolidiert
 
 ### Version 1.0.0 (2025-09-01)
 - 🎉 Initial Release
@@ -273,37 +594,53 @@ GET  /api/warenberechnung           # Warenberechnung
 - ✅ Portfolio-Verwaltung
 - ✅ Rohstoff-Verwaltung
 
-## 🤝 Mitwirken
+## 🤝 Contributing
 
-Contributions sind willkommen! Bitte erstelle einen Pull Request.
+Wir freuen uns über Beiträge! Bitte befolge diese Schritte:
 
-1. Fork das Repository
-2. Erstelle einen Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit deine Änderungen (`git commit -m 'Add some AmazingFeature'`)
-4. Push zum Branch (`git push origin feature/AmazingFeature`)
-5. Öffne einen Pull Request
+1. **Fork** das Repository
+2. **Branch erstellen**: `git checkout -b feature/amazing-feature`
+3. **Änderungen committen**: `git commit -m 'Add amazing feature'`
+4. **Push zum Branch**: `git push origin feature/amazing-feature`
+5. **Pull Request öffnen**
 
-## 📝 Lizenz
+### 🧪 Development Guidelines
+- Code-Qualität mit ESLint
+- Responsive Design testen
+- Security-Best-Practices befolgen
+- Performance-Impact berücksichtigen
 
-MIT License - siehe LICENSE Datei
+## � Lizenz
 
-## 👨‍💻 Autor
+Dieses Projekt steht unter der [MIT License](LICENSE).
+
+## 👨‍💻 Team
 
 **Glücksmomente Manufaktur**
-- Website: https://gluecksmomente-manufaktur.vercel.app
-- GitHub: [@OneCleverFox](https://github.com/OneCleverFox)
+- 🌐 Website: [gluecksmomente-manufaktur.vercel.app](https://gluecksmomente-manufaktur.vercel.app)
+- 📧 GitHub: [@OneCleverFox](https://github.com/OneCleverFox)
 
 ## 🙏 Danksagungen
 
-- Material-UI für das Design System
-- MongoDB Atlas für die Cloud-Datenbank
-- Railway für Backend Hosting
-- Vercel für Frontend Hosting
-- Sharp für Bildoptimierung
+- [Material-UI](https://mui.com/) für das professionelle Design System
+- [MongoDB Atlas](https://www.mongodb.com/atlas) für die Cloud-Datenbank
+- [Railway](https://railway.app/) für Backend Hosting
+- [Vercel](https://vercel.com/) für Frontend Hosting  
+- [Sharp](https://sharp.pixelplumbing.com/) für Bildoptimierung
 
 ---
 
-**Status**: In Production ✅  
-**Version**: 2.0.0  
-**Last Updated**: 5. Oktober 2025  
-**Features**: MongoDB Retry Mechanism • Automatische Bildoptimierung • Base64-Speicherung • Dual Role System
+<div align="center">
+
+**🏭 Status**: In Production ✅  
+**📦 Version**: 2.0.0  
+**📅 Last Updated**: 20. Oktober 2025
+
+**Entwickelt mit ❤️ für Glücksmomente-Manufaktur**
+
+![Made with Love](https://img.shields.io/badge/Made%20with-❤️-red)
+![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?logo=mongodb&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?logo=react&logoColor=61DAFB)
+![Node.js](https://img.shields.io/badge/Node.js-43853D?logo=node.js&logoColor=white)
+
+</div>

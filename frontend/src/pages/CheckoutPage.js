@@ -5,8 +5,6 @@ import {
   Box,
   Paper,
   Grid,
-  Card,
-  CardContent,
   Divider,
   Button,
   List,
@@ -36,14 +34,16 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import api from '../services/api';
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const { items, getCartTotal, clearCart } = useCart();
+  const { items, getCartTotal } = useCart();
   
   const [loading, setLoading] = useState(false);
   const [customerData, setCustomerData] = useState(null);
+  const [shopSettings, setShopSettings] = useState(null);
   const [orderData, setOrderData] = useState({
     rechnungsadresse: {
       vorname: '',
@@ -76,6 +76,38 @@ const CheckoutPage = () => {
       navigate('/cart');
     }
   }, [items, navigate]);
+
+  // Shop-Einstellungen laden
+  const loadShopSettings = useCallback(async () => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${apiUrl}/admin-settings/shop-status`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🛒 Shop settings loaded:', data.status);
+        setShopSettings(data.status);
+      } else {
+        console.error('❌ Failed to load shop settings');
+        // Fallback zu normaler Bestellung wenn Einstellungen nicht ladbar
+        setShopSettings({
+          shop: 'active',
+          checkout: true,
+          checkoutMode: 'full',
+          paypal: { available: true, mode: 'sandbox' }
+        });
+      }
+    } catch (error) {
+      console.error('❌ Error loading shop settings:', error);
+      // Fallback zu normaler Bestellung
+      setShopSettings({
+        shop: 'active',
+        checkout: true,
+        checkoutMode: 'full',
+        paypal: { available: true, mode: 'sandbox' }
+      });
+    }
+  }, []);
 
   // Kundendaten laden falls angemeldet
   const loadCustomerData = useCallback(async (retryCount = 0) => {
@@ -154,6 +186,11 @@ const CheckoutPage = () => {
       console.log('❌ No valid user ID found for loading customer data');
     }
   }, [user, loadCustomerData]);
+
+  // Shop-Einstellungen beim Laden abrufen
+  useEffect(() => {
+    loadShopSettings();
+  }, [loadShopSettings]);
 
   // Debug useEffect für Rechnungsadresse
   useEffect(() => {
@@ -241,12 +278,85 @@ const CheckoutPage = () => {
     setError('');
     
     try {
-      // Bestellung erstellen
+      // Prüfen ob Anfrage-Modus aktiviert ist
+      const isInquiryMode = shopSettings?.checkoutMode === 'inquiry';
+      
+      if (isInquiryMode) {
+        // Anfrage erstellen
+        await handleCreateInquiry();
+      } else {
+        // Normale Bestellung erstellen
+        await handleCreateOrder();
+      }
+    } catch (error) {
+      console.error('❌ Fehler bei Bestellung/Anfrage:', error);
+      setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateInquiry = async () => {
+    const inquiryData = {
+      items: items.map(item => ({
+        productId: item.id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        image: item.image || ''
+      })),
+      total: getCartTotal(),
+      rechnungsadresse: {
+        vorname: orderData.rechnungsadresse.vorname,
+        nachname: orderData.rechnungsadresse.nachname,
+        strasse: orderData.rechnungsadresse.strasse,
+        hausnummer: orderData.rechnungsadresse.hausnummer,
+        zusatz: orderData.rechnungsadresse.zusatz || '',
+        plz: orderData.rechnungsadresse.plz,
+        stadt: orderData.rechnungsadresse.stadt,
+        land: orderData.rechnungsadresse.land || 'Deutschland'
+      },
+      lieferadresse: orderData.lieferadresse.verwendeRechnungsadresse ? null : {
+        anders: true,
+        vorname: orderData.lieferadresse.vorname,
+        nachname: orderData.lieferadresse.nachname,
+        strasse: orderData.lieferadresse.strasse,
+        hausnummer: orderData.lieferadresse.hausnummer,
+        zusatz: orderData.lieferadresse.zusatz || '',
+        plz: orderData.lieferadresse.plz,
+        stadt: orderData.lieferadresse.stadt,
+        land: orderData.lieferadresse.land || 'Deutschland'
+      },
+      customerNote: orderData.notizen || ''
+    };
+
+    const response = await api.post('/inquiries/create', inquiryData);
+    const result = response.data;
+
+    if (result.success) {
+      // Zur Erfolgsseite navigieren - Warenkorb wird dort geleert
+      navigate('/inquiry-success', { 
+        state: { 
+          inquiryId: result.inquiry.inquiryId,
+          total: result.inquiry.total 
+        } 
+      });
+    } else {
+      throw new Error(result.message || 'Anfrage konnte nicht erstellt werden');
+    }
+  };
+
+  const handleCreateOrder = async () => {
+      // Bestellung erstellen (KORREKTE Steuerberechnung)
       const gesamtsumme = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const versandkosten = gesamtsumme >= 50 ? 0 : 4.99;
-      const zwischensumme = gesamtsumme + versandkosten;
-      const mwstBetrag = zwischensumme * 0.19;
-      const endpreis = zwischensumme + mwstBetrag;
+      
+      // In Deutschland sind Preise INKLUSIVE MwSt.
+      // Endpreis = Artikelsumme (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
+      const endpreis = gesamtsumme + versandkosten;
+      
+      // MwSt.-Betrag aus dem Gesamtbetrag herausrechnen (nicht hinzufügen!)
+      const mwstBetrag = endpreis - (endpreis / 1.19);
 
       const bestellungData = {
         artikel: items.map(item => ({
@@ -323,6 +433,9 @@ const CheckoutPage = () => {
           localStorage.setItem('pendingOrder', JSON.stringify(result.data.bestellungData));
         }
         
+        // WICHTIG: Warenkorb NICHT hier leeren! 
+        // Er wird erst nach erfolgreicher PayPal-Zahlung in CheckoutSuccessPage geleert
+        
         // Zur PayPal-Zahlung weiterleiten
         if (result.data?.paypalUrl) {
           console.log('🔗 Weiterleitung zu PayPal:', result.data.paypalUrl);
@@ -333,13 +446,6 @@ const CheckoutPage = () => {
       } else {
         setError(result.message || 'Fehler beim Erstellen der Bestellung');
       }
-      
-    } catch (error) {
-      console.error('Fehler beim Bestellen:', error);
-      setError('Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
-    } finally {
-      setLoading(false);
-    }
   };
 
   const formatPrice = (price) => {
@@ -355,8 +461,13 @@ const CheckoutPage = () => {
 
   const subtotal = getCartTotal();
   const versandkosten = subtotal >= 50 ? 0 : 4.99;
-  const mwst = (subtotal + versandkosten) * 0.19;
-  const total = subtotal + versandkosten + mwst;
+  
+  // KORREKTE Steuerberechnung: In Deutschland sind Preise INKLUSIVE MwSt.
+  // Gesamtsumme = Subtotal (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
+  const total = subtotal + versandkosten;
+  
+  // MwSt.-Betrag aus dem Gesamtbetrag herausrechnen (nicht hinzufügen!)
+  const mwst = total - (total / 1.19);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -364,6 +475,65 @@ const CheckoutPage = () => {
         <ShoppingCart sx={{ mr: 2, verticalAlign: 'middle' }} />
         Kasse
       </Typography>
+      
+      {/* Urlaubs-/Wartungsmodus Benachrichtigung */}
+      {shopSettings?.shop === 'vacation' && (
+        <Alert 
+          severity="info" 
+          sx={{ 
+            mb: 3, 
+            backgroundColor: '#e3f2fd',
+            '& .MuiAlert-icon': { color: '#1976d2' },
+            '& .MuiAlert-message': { fontWeight: 'medium' }
+          }}
+          icon={<LocalShipping />}
+        >
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            🏖️ Wir sind derzeit im Urlaub
+          </Typography>
+          <Typography variant="body2" sx={{ mb: shopSettings?.vacation?.startDate ? 1 : 0 }}>
+            Ihre Anfrage wird nach unserer Rückkehr bearbeitet. Vielen Dank für Ihr Verständnis!
+            {shopSettings?.checkoutMode === 'inquiry' && 
+              ' Sie können trotzdem eine Anfrage stellen.'
+            }
+          </Typography>
+          {shopSettings?.vacation?.startDate && shopSettings?.vacation?.endDate && (
+            <Typography variant="body2" sx={{ 
+              fontWeight: 'bold', 
+              color: '#1976d2',
+              fontSize: '0.95rem' 
+            }}>
+              📅 Urlaubszeit: {new Date(shopSettings.vacation.startDate).toLocaleDateString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric'
+              })} - {new Date(shopSettings.vacation.endDate).toLocaleDateString('de-DE', {
+                day: '2-digit', month: '2-digit', year: 'numeric'
+              })}
+            </Typography>
+          )}
+        </Alert>
+      )}
+      
+      {shopSettings?.shop === 'maintenance' && (
+        <Alert 
+          severity="warning" 
+          sx={{ 
+            mb: 3,
+            backgroundColor: '#fff3e0',
+            '& .MuiAlert-icon': { color: '#f57c00' },
+            '& .MuiAlert-message': { fontWeight: 'medium' }
+          }}
+        >
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            🔧 Wartungsarbeiten
+          </Typography>
+          <Typography variant="body2">
+            Wir führen derzeit Wartungsarbeiten durch. Der Service kann eingeschränkt sein.
+            {shopSettings?.checkoutMode === 'inquiry' && 
+              ' Sie können trotzdem eine Anfrage stellen.'
+            }
+          </Typography>
+        </Alert>
+      )}
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -634,11 +804,14 @@ const CheckoutPage = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <Payment color="primary" sx={{ mr: 1 }} />
                 <Typography variant="subtitle2" color="primary">
-                  Zahlung via PayPal
+                  {shopSettings?.checkoutMode === 'inquiry' ? 'Anfrage senden' : 'Zahlung via PayPal'}
                 </Typography>
               </Box>
               <Typography variant="body2" color="text.secondary">
-                Sie werden nach dem Bestellen zu PayPal weitergeleitet, um die Zahlung sicher abzuschließen.
+                {shopSettings?.checkoutMode === 'inquiry' 
+                  ? 'Ihre Anfrage wird an uns gesendet. Wir melden uns schnellstmöglich bei Ihnen.'
+                  : 'Sie werden nach dem Bestellen zu PayPal weitergeleitet, um die Zahlung sicher abzuschließen.'
+                }
               </Typography>
             </Box>
 
@@ -705,7 +878,7 @@ const CheckoutPage = () => {
               />
             </Box>
 
-            {/* Bestellen Button */}
+            {/* Bestellen/Anfrage Button */}
             <Button
               fullWidth
               variant="contained"
@@ -715,11 +888,20 @@ const CheckoutPage = () => {
               startIcon={loading ? <CircularProgress size={20} /> : <CheckCircle />}
               sx={{ py: 2 }}
             >
-              {loading ? 'Bestellung wird erstellt...' : `Jetzt bestellen (${formatPrice(total)})`}
+              {loading 
+                ? (shopSettings?.checkoutMode === 'inquiry' ? 'Anfrage wird gesendet...' : 'Bestellung wird erstellt...') 
+                : (shopSettings?.checkoutMode === 'inquiry' 
+                    ? `Anfrage senden (${formatPrice(total)})` 
+                    : `Jetzt bestellen (${formatPrice(total)})`
+                  )
+              }
             </Button>
             
             <Typography variant="caption" display="block" sx={{ mt: 2, textAlign: 'center' }}>
-              Nach dem Klick werden Sie zu PayPal weitergeleitet
+              {shopSettings?.checkoutMode === 'inquiry' 
+                ? 'Ihre Anfrage wird an unser Team gesendet'
+                : 'Nach dem Klick werden Sie zu PayPal weitergeleitet'
+              }
             </Typography>
           </Paper>
         </Grid>

@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 // Middleware um zu prüfen ob MongoDB verfügbar ist
 const checkDatabaseConnection = (req, res, next) => {
+  // TEMPORÄR: Überspringe Datenbankprüfung in Development wegen IP-Whitelist-Problemen
+  if (process.env.NODE_ENV === 'development') {
+    return next();
+  }
+
   // Prüfe ob mongoose verbunden ist
   if (mongoose.connection.readyState !== 1) {
     return res.status(503).json({

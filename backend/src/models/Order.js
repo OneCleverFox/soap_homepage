@@ -237,10 +237,70 @@ const orderSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: {
-      values: ['neu', 'bestaetigt', 'bezahlt', 'verpackt', 'verschickt', 'zugestellt', 'storniert', 'rueckerstattung'],
+      values: ['neu', 'bestaetigt', 'bezahlt', 'verpackt', 'verschickt', 'zugestellt', 'storniert', 'abgelehnt', 'rueckerstattung'],
       message: 'Ungültiger Bestellstatus'
     },
     default: 'neu'
+  },
+  
+  // Rückerstattungsstatus für abgelehnte Bestellungen
+  rueckerstattungErledigt: {
+    type: Boolean,
+    default: false,
+    index: true // Für effiziente Filterung
+  },
+  rueckerstattungDatum: {
+    type: Date // Wann die Rückerstattung erledigt wurde
+  },
+  rueckerstattungNotiz: {
+    type: String,
+    trim: true,
+    default: '' // Notiz zur Rückerstattung
+  },
+  
+  // Detaillierte Rückerstattungsinformationen
+  rueckerstattung: {
+    refundId: {
+      type: String,
+      trim: true // PayPal Refund ID oder andere Referenz
+    },
+    status: {
+      type: String,
+      enum: ['erfolgreich', 'ausstehend', 'fehlgeschlagen', 'fehler'],
+      default: 'ausstehend'
+    },
+    betrag: {
+      currency_code: {
+        type: String,
+        default: 'EUR'
+      },
+      value: {
+        type: String // PayPal verwendet Strings für Beträge
+      }
+    },
+    zeitpunkt: {
+      type: Date,
+      default: Date.now
+    },
+    methode: {
+      type: String,
+      enum: ['paypal_automatisch', 'paypal_manuell', 'ueberweisung', 'sonstige'],
+      default: 'paypal_automatisch'
+    },
+    notiz: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    bearbeiter: {
+      type: String,
+      trim: true,
+      default: 'System'
+    },
+    fehler: {
+      type: String,
+      trim: true // Bei fehlgeschlagenen Rückerstattungen
+    }
   },
   
   // Zahlungsinformationen
@@ -277,18 +337,25 @@ const orderSchema = new mongoose.Schema({
     },
     anbieter: {
       type: String,
-      enum: ['dhl', 'hermes', 'ups', 'dpd', 'selbstabholung'],
+      enum: ['dhl', 'hermes', 'ups', 'dpd', 'gls', 'selbstabholung'],
       default: 'dhl'
     },
     sendungsnummer: {
       type: String,
       trim: true,
-      default: ''
+      default: '',
+      index: true // Für schnelle Suche nach Sendungsnummer
     },
-    voraussichtlicheLieferung: {
-      type: Date
+    trackingUrl: {
+      type: String,
+      trim: true,
+      default: '' // Vollständige DHL-Tracking-URL
     },
     versendetAm: {
+      type: Date,
+      index: true // Für Sortierung nach Versanddatum
+    },
+    voraussichtlicheLieferung: {
       type: Date
     },
     zugestelltAm: {
@@ -296,11 +363,100 @@ const orderSchema = new mongoose.Schema({
     },
     verschickt: {
       type: Boolean,
-      default: false
+      default: false,
+      index: true // Für Filterung nach Versandstatus
     },
     zugestellt: {
       type: Boolean,
-      default: false
+      default: false,
+      index: true // Für Filterung nach Zustellstatus
+    },
+    // DHL-spezifische Tracking-Informationen
+    tracking: {
+      letzterStatus: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      letzteAktualisierung: {
+        type: Date
+      },
+      statusDetails: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      standort: {
+        type: String,
+        trim: true,
+        default: ''
+      },
+      // Tracking-Verlauf für detaillierte Nachverfolgung
+      verlauf: [{
+        zeitpunkt: {
+          type: Date,
+          required: true
+        },
+        status: {
+          type: String,
+          required: true,
+          trim: true
+        },
+        beschreibung: {
+          type: String,
+          trim: true,
+          default: ''
+        },
+        ort: {
+          type: String,
+          trim: true,
+          default: ''
+        }
+      }]
+    },
+    // Versandkosten und Details
+    kosten: {
+      betrag: {
+        type: Number,
+        default: 0,
+        min: [0, 'Versandkosten müssen positiv sein']
+      },
+      kostenlos: {
+        type: Boolean,
+        default: false
+      },
+      grund: {
+        type: String,
+        trim: true,
+        default: '' // Grund für kostenlosen Versand
+      }
+    },
+    // Paket-Informationen
+    paket: {
+      gewicht: {
+        type: Number,
+        min: [0, 'Paketgewicht muss positiv sein'],
+        default: 0
+      },
+      abmessungen: {
+        laenge: Number,
+        breite: Number,
+        hoehe: Number
+      },
+      inhalt: {
+        type: String,
+        trim: true,
+        default: '' // Kurzbeschreibung des Paketinhalts
+      },
+      versichert: {
+        type: Boolean,
+        default: false
+      },
+      versicherungswert: {
+        type: Number,
+        default: 0,
+        min: [0, 'Versicherungswert muss positiv sein']
+      }
     }
   },
   
@@ -349,12 +505,12 @@ const orderSchema = new mongoose.Schema({
   kommunikation: [{
     typ: {
       type: String,
-      enum: ['email', 'telefon', 'sms', 'notiz'],
+      enum: ['email', 'telefon', 'sms', 'notiz', 'system'],
       required: true
     },
     richtung: {
       type: String,
-      enum: ['eingehend', 'ausgehend'],
+      enum: ['eingehend', 'ausgehend', 'intern'],
       required: true
     },
     betreff: {
@@ -373,6 +529,20 @@ const orderSchema = new mongoose.Schema({
       type: String,
       trim: true,
       default: 'System'
+    },
+    // E-Mail spezifische Felder
+    emailData: {
+      messageId: String,
+      empfaenger: String,
+      status: {
+        type: String,
+        enum: ['gesendet', 'zugestellt', 'geoeffnet', 'geklickt', 'fehlgeschlagen'],
+        default: 'gesendet'
+      },
+      emailType: {
+        type: String,
+        enum: ['order_confirmation', 'order_rejection', 'shipping_notification', 'general']
+      }
     }
   }],
   
@@ -402,6 +572,55 @@ const orderSchema = new mongoose.Schema({
     type: String,
     enum: ['website', 'telefon', 'email', 'markt', 'empfehlung'],
     default: 'website'
+  },
+  
+  // 📄 RECHNUNGS-INFORMATIONEN
+  rechnung: {
+    nummer: {
+      type: String,
+      unique: true,
+      sparse: true // Erlaubt null/undefined Werte
+    },
+    datum: {
+      type: Date
+    },
+    faelligkeitsdatum: {
+      type: Date
+    },
+    status: {
+      type: String,
+      enum: ['erstellt', 'versendet', 'bezahlt', 'ueberfaellig', 'storniert'],
+      default: 'erstellt'
+    },
+    emailVersendet: {
+      type: Boolean,
+      default: false
+    },
+    emailVersendetAm: {
+      type: Date
+    },
+    vorlage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'InvoiceTemplate'
+    },
+    dateipfad: {
+      type: String // Pfad zur gespeicherten PDF-Datei (optional)
+    }
+  },
+  
+  // Kompatibilität mit alten Feldern (falls bereits verwendet)
+  invoiceNumber: {
+    type: String
+  },
+  invoiceDate: {
+    type: Date
+  },
+  invoiceEmailSent: {
+    type: Boolean,
+    default: false
+  },
+  invoiceEmailSentAt: {
+    type: Date
   }
 }, {
   collection: 'orders',

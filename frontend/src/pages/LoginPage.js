@@ -58,12 +58,15 @@ const LoginPage = () => {
       if (result.success) {
         console.log('✅ Login erfolgreich:', result.user);
         
+        // Unterstütze sowohl 'role' als auch 'rolle' für Benutzerrolle
+        const userRole = result.user.role || result.user.rolle;
+        
         // Unterschiedliche Weiterleitung basierend auf Benutzerrolle
-        if (result.user.role === 'admin') {
+        if (userRole === 'admin') {
           console.log('👑 Admin-Login erkannt - Weiterleitung zum Dashboard');
           navigate('/admin/dashboard');
         } else {
-          console.log('� Kunden-Login - Weiterleitung zur Startseite');
+          console.log('👤 Kunden-Login - Weiterleitung zur Startseite');
           navigate('/');
         }
         

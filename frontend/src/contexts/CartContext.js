@@ -72,15 +72,22 @@ export const CartProvider = ({ children }) => {
 
   // Load cart on component mount if user is logged in
   useEffect(() => {
+    let isMounted = true;
+    
     const token = localStorage.getItem('token');
     console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
     
-    if (token) {
+    if (token && isMounted) {
       console.log('📦 Lade Warenkorb beim Mount...');
       loadCart();
     } else {
       console.log('⚠️ Kein Token - Warenkorb wird nicht geladen');
     }
+
+    // Cleanup function für StrictMode
+    return () => {
+      isMounted = false;
+    };
   }, []); // Nur einmal beim Mount laden
 
   // Listen for custom login event (wird gefeuert wenn User sich einloggt)
