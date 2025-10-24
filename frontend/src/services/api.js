@@ -73,6 +73,17 @@ api.interceptors.response.use(
     if (response) {
       switch (response.status) {
         case 401:
+          // Bei bestimmten nicht-kritischen Endpunkten nicht automatisch ausloggen
+          const url = error.config.url;
+          const nonCriticalEndpoints = ['/inquiries', '/orders'];
+          const isNonCritical = nonCriticalEndpoints.some(endpoint => url.includes(endpoint));
+          
+          if (isNonCritical) {
+            console.warn(`401 bei nicht-kritischem Endpoint: ${url}`);
+            // Fehler weiterwerfen, aber nicht ausloggen
+            break;
+          }
+          
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           window.location.href = '/login';
@@ -82,7 +93,9 @@ api.interceptors.response.use(
           toast.error('Keine Berechtigung für diese Aktion.');
           break;
         case 404:
-          toast.error('Ressource nicht gefunden.');
+          // 404-Fehler nur loggen, aber keinen Toast zeigen
+          // Wird oft für nicht-kritische Endpunkte verwendet
+          console.warn(`404: ${error.config.url} nicht gefunden`);
           break;
         case 429:
           toast.error('Zu viele Anfragen. Bitte versuchen Sie es später erneut.');

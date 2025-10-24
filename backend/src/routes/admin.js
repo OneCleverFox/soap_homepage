@@ -571,4 +571,57 @@ router.get('/cart', async (req, res) => {
   }
 });
 
+// ===== INVOICE MANAGEMENT =====
+const invoiceController = require('../controllers/invoiceController');
+
+// @route   GET /api/admin/invoice/templates
+// @desc    Get all invoice templates
+// @access  Private (Admin)
+router.get('/invoice/templates', invoiceController.getAllTemplates);
+
+// @route   POST /api/admin/invoice/templates
+// @desc    Create new invoice template
+// @access  Private (Admin)
+router.post('/invoice/templates', invoiceController.createTemplate);
+
+// @route   PUT /api/admin/invoice/templates/:id
+// @desc    Update invoice template
+// @access  Private (Admin)
+router.put('/invoice/templates/:id', invoiceController.updateTemplate);
+
+// @route   DELETE /api/admin/invoice/templates/:id
+// @desc    Delete invoice template
+// @access  Private (Admin)
+router.delete('/invoice/templates/:id', invoiceController.deleteTemplate);
+
+// @route   POST /api/admin/invoice/templates/:id/activate
+// @desc    Activate invoice template
+// @access  Private (Admin)
+router.post('/invoice/templates/:id/activate', invoiceController.setDefaultTemplate);
+
+// @route   POST /api/admin/invoice/preview
+// @desc    Preview invoice template
+// @access  Private (Admin)
+router.post('/invoice/preview', invoiceController.generatePreview);
+
+// @route   GET /api/admin/invoice/variables
+// @desc    Get available variables for invoice
+// @access  Private (Admin)
+router.get('/invoice/variables', invoiceController.getAvailableVariables);
+
+// @route   POST /api/admin/invoice/generate/:orderId
+// @desc    Generate invoice for order
+// @access  Private (Admin)
+router.post('/invoice/generate/:orderId', invoiceController.generateInvoiceForOrder);
+
+// @route   POST /api/admin/invoice/send/:orderId
+// @desc    Send invoice email for order
+// @access  Private (Admin)
+router.post('/invoice/send/:orderId', invoiceController.sendInvoiceForOrder);
+
+// @route   GET /api/admin/invoice/download/:orderId
+// @desc    Download invoice PDF for order
+// @access  Private (Admin)
+router.get('/invoice/download/:orderId', invoiceController.downloadInvoiceForOrder);
+
 module.exports = router;

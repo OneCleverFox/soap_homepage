@@ -149,11 +149,12 @@ const LazyImage = ({
         <img
           src={src}
           alt={alt}
+          title={alt} // Für bessere Barrierefreiheit
           onLoad={handleLoad}
           onError={handleError}
           loading={priority ? 'eager' : 'lazy'} // Priority: eager, sonst lazy
           decoding="async" // Async Dekodierung für bessere Performance
-          fetchpriority={priority ? 'high' : 'auto'} // HTML-Attribut für Priorität
+          fetchpriority={priority ? 'high' : 'auto'} // HTML-Attribut für Priorität (Chrome/Edge)
           style={{
             width: '100%',
             height: '100%',

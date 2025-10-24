@@ -35,7 +35,12 @@ root.render(
       <QueryClientProvider client={queryClient}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
-          <BrowserRouter>
+          <BrowserRouter
+            future={{
+              v7_startTransition: true,
+              v7_relativeSplatPath: true
+            }}
+          >
             <AuthProvider>
               <CartProvider>
                 <App />
@@ -95,3 +100,16 @@ root.render(
     </HelmetProvider>
   </React.StrictMode>
 );
+
+// Service Worker Registration für besseres Caching
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('✅ SW registered: ', registration);
+      })
+      .catch((registrationError) => {
+        console.log('❌ SW registration failed: ', registrationError);
+      });
+  });
+}

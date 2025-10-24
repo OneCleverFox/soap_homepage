@@ -16,7 +16,7 @@ class EmailService {
     // Production/Development E-Mail-Konfiguration
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
-    this.adminEmail = 'ralle.jacob84@googlemail.com';
+    this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     
     // Domain-Konfiguration basierend auf Environment
     if (this.isProduction) {
@@ -927,6 +927,263 @@ class EmailService {
       return { success: true, messageId: result.id };
     } catch (error) {
       console.error('❌ Admin order notification failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 📧 Bestellung bestätigt E-Mail
+  async sendOrderConfirmationEmail(bestellung) {
+    if (this.isDisabled) {
+      console.warn('E-Mail-Service deaktiviert - Bestätigungs-E-Mail wird nicht gesendet');
+      return { success: false, error: 'E-Mail-Service deaktiviert' };
+    }
+
+    try {
+      const formatPrice = (price) => {
+        return new Intl.NumberFormat('de-DE', {
+          style: 'currency',
+          currency: 'EUR'
+        }).format(price);
+      };
+
+      const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: bold;">✅ Bestellung bestätigt!</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
+              Ihre Bestellung wurde erfolgreich angenommen
+            </p>
+          </div>
+          
+          <div style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="color: #333; margin: 0 0 20px 0; font-size: 24px;">
+              Liebe/r ${bestellung.besteller.vorname} ${bestellung.besteller.nachname},
+            </h2>
+            
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              <strong>fantastische Neuigkeiten!</strong> 🎉 Wir haben Ihre Bestellung <strong>#${bestellung.bestellnummer}</strong> 
+              erhalten und freuen uns sehr, diese für Sie bearbeiten zu dürfen.
+            </p>
+            
+            <div style="background-color: #f0f8ff; border-left: 4px solid #9b4dca; padding: 20px; margin: 20px 0; border-radius: 8px;">
+              <h3 style="color: #9b4dca; margin: 0 0 15px 0; font-size: 18px;">📦 Bestellübersicht</h3>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Gesamtbetrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
+            </div>
+            
+            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">🎯 Wie geht es weiter?</h3>
+            <ul style="color: #555; font-size: 16px; line-height: 1.8; padding-left: 20px;">
+              <li><strong>Sofort:</strong> Wir beginnen mit der sorgfältigen Zusammenstellung Ihrer Artikel</li>
+              <li><strong>24-48h:</strong> Ihre Bestellung wird liebevoll verpackt und versandfertig gemacht</li>
+              <li><strong>Versand:</strong> Sie erhalten automatisch eine E-Mail mit der Sendungsverfolgung</li>
+              <li><strong>Ankunft:</strong> In 2-3 Werktagen erreichen Sie Ihre Glücksmomente</li>
+            </ul>
+            
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; margin: 25px 0; border-radius: 8px;">
+              <h4 style="color: #856404; margin: 0 0 10px 0; font-size: 16px;">💡 Wichtiger Hinweis</h4>
+              <p style="color: #856404; margin: 0; font-size: 14px; line-height: 1.5;">
+                Alle weiteren Statusmeldungen zu Ihrer Bestellung können Sie jederzeit in Ihrem 
+                <strong>persönlichen Kundenkonto</strong> auf unserer Website einsehen. Dort finden Sie auch 
+                alle Details zu Versand und Tracking-Informationen.
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://gluecksmomente-manufaktur.vercel.app/kundenkonto" 
+                 style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 15px rgba(155, 77, 202, 0.3);">
+                🔍 Zum Kundenkonto
+              </a>
+            </div>
+            
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 25px 0 0 0;">
+              Vielen Dank für Ihr Vertrauen in die Glücksmomente Manufaktur! ✨<br>
+              Bei Fragen stehen wir Ihnen gerne zur Verfügung.
+            </p>
+            
+            <p style="color: #999; font-size: 14px; text-align: center; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #eee;">
+              Automatische Benachrichtigung vom Bestellsystem<br>
+              <strong style="color: #9b4dca;">Glücksmomente Manufaktur</strong>
+            </p>
+          </div>
+        </div>
+      `;
+
+      const emailData = {
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: bestellung.besteller.email,
+        subject: `✅ Bestellung bestätigt #${bestellung.bestellnummer} - Wir bearbeiten Ihre Bestellung`,
+        html: htmlContent
+      };
+
+      const result = await this.resend.emails.send(emailData);
+
+      // E-Mail-Versand in MongoDB loggen
+      await this.logEmail({
+        type: 'order_confirmation',
+        to: bestellung.besteller.email,
+        recipientName: `${bestellung.besteller.vorname} ${bestellung.besteller.nachname}`,
+        userId: bestellung.userId,
+        kundeId: bestellung.kundeId,
+        orderId: bestellung._id,
+        subject: emailData.subject,
+        content: htmlContent,
+        messageId: result.id
+      });
+
+      console.log('✅ Order confirmation email sent:', result);
+      return { success: true, messageId: result.id };
+    } catch (error) {
+      console.error('❌ Order confirmation email failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 📧 Bestellung abgelehnt E-Mail
+  async sendOrderRejectionEmail(bestellung, reason = null) {
+    if (this.isDisabled) {
+      console.warn('E-Mail-Service deaktiviert - Ablehnungs-E-Mail wird nicht gesendet');
+      return { success: false, error: 'E-Mail-Service deaktiviert' };
+    }
+
+    try {
+      const formatPrice = (price) => {
+        return new Intl.NumberFormat('de-DE', {
+          style: 'currency',
+          currency: 'EUR'
+        }).format(price);
+      };
+
+      const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('de-DE', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
+      const defaultReason = `
+        Leider müssen wir Ihnen mitteilen, dass es derzeit zu unvorhergesehenen Lieferschwierigkeiten 
+        bei einigen Komponenten Ihrer Bestellung kommt. Unsere Lieferanten haben uns kurzfristig über 
+        Verzögerungen informiert, die eine rechtzeitige Erfüllung Ihrer Bestellung verhindern würden.
+        
+        Als Manufaktur, die höchste Qualitätsstandards verfolgt, möchten wir Ihnen nur perfekte Produkte 
+        liefern. Da wir zum jetzigen Zeitpunkt nicht garantieren können, wann alle Artikel wieder 
+        vollständig verfügbar sind, haben wir uns schweren Herzens dazu entschieden, Ihre Bestellung 
+        zu stornieren.
+      `;
+
+      const actualReason = reason || defaultReason;
+
+      const htmlContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+          <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: bold;">😔 Bestellung storniert</h1>
+            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
+              Leider müssen wir Ihre Bestellung absagen
+            </p>
+          </div>
+          
+          <div style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h2 style="color: #333; margin: 0 0 20px 0; font-size: 24px;">
+              Liebe/r ${bestellung.besteller.vorname} ${bestellung.besteller.nachname},
+            </h2>
+            
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              es tut uns außerordentlich leid, Ihnen mitteilen zu müssen, dass wir Ihre Bestellung 
+              <strong>#${bestellung.bestellnummer}</strong> leider nicht wie geplant bearbeiten können.
+            </p>
+            
+            <div style="background-color: #fff5f5; border-left: 4px solid #dc3545; padding: 20px; margin: 20px 0; border-radius: 8px;">
+              <h3 style="color: #dc3545; margin: 0 0 15px 0; font-size: 18px;">📦 Bestelldetails</h3>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
+              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Betrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
+            </div>
+            
+            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">🔍 Grund der Stornierung</h3>
+            <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 15px 0; border-radius: 8px;">
+              <p style="color: #495057; margin: 0; font-size: 15px; line-height: 1.6;">
+                ${actualReason.trim()}
+              </p>
+            </div>
+            
+            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">💰 Rückerstattung</h3>
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+              <strong>Gute Nachricht:</strong> Der Betrag von <strong>${formatPrice(bestellung.preise?.gesamtsumme || 0)}</strong> 
+              wird Ihnen in den nächsten <strong>3-5 Werktagen</strong> vollständig auf Ihr Zahlungsmittel zurückerstattet. 
+              Bei PayPal-Zahlungen erfolgt die Rückerstattung meist sofort.
+            </p>
+            
+            <div style="background-color: #d1ecf1; border: 1px solid #b7d7e8; padding: 20px; margin: 25px 0; border-radius: 8px;">
+              <h4 style="color: #0c5460; margin: 0 0 10px 0; font-size: 16px;">🎁 Besonderes Angebot für Sie</h4>
+              <p style="color: #0c5460; margin: 0; font-size: 14px; line-height: 1.5;">
+                Als Entschuldigung für die Unannehmlichkeiten erhalten Sie bei Ihrer nächsten Bestellung 
+                einen <strong>10% Rabatt-Code: SORRY10</strong>. Dieser ist 60 Tage gültig und kann 
+                ohne Mindestbestellwert eingelöst werden.
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://gluecksmomente-manufaktur.vercel.app/products" 
+                 style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 15px rgba(155, 77, 202, 0.3);">
+                🛍️ Neue Bestellung aufgeben
+              </a>
+            </div>
+            
+            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 25px 0 0 0;">
+              Wir entschuldigen uns nochmals für die Unannehmlichkeiten und hoffen, Sie bald wieder als Kunde 
+              begrüßen zu dürfen. Sollten Sie Fragen haben, zögern Sie nicht, uns zu kontaktieren. 💙
+            </p>
+            
+            <p style="color: #999; font-size: 14px; text-align: center; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #eee;">
+              Automatische Benachrichtigung vom Bestellsystem<br>
+              <strong style="color: #9b4dca;">Glücksmomente Manufaktur</strong>
+            </p>
+          </div>
+        </div>
+      `;
+
+      const emailData = {
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: bestellung.besteller.email,
+        subject: `😔 Bestellung #${bestellung.bestellnummer} storniert - Rückerstattung wird eingeleitet`,
+        html: htmlContent
+      };
+
+      const result = await this.resend.emails.send(emailData);
+
+      // E-Mail-Versand in MongoDB loggen
+      await this.logEmail({
+        type: 'order_rejection',
+        to: bestellung.besteller.email,
+        recipientName: `${bestellung.besteller.vorname} ${bestellung.besteller.nachname}`,
+        userId: bestellung.userId,
+        kundeId: bestellung.kundeId,
+        orderId: bestellung._id,
+        subject: emailData.subject,
+        content: htmlContent,
+        messageId: result.id
+      });
+
+      console.log('✅ Order rejection email sent:', result);
+      return { success: true, messageId: result.id };
+    } catch (error) {
+      console.error('❌ Order rejection email failed:', error);
       return { success: false, error: error.message };
     }
   }

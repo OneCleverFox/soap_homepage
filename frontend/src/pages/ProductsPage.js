@@ -143,6 +143,8 @@ const ProductsPage = () => {
   };
 
   useEffect(() => {
+    let isMounted = true;
+    
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
@@ -152,14 +154,18 @@ const ProductsPage = () => {
           // Verwende Cache wenn er weniger als 5 Minuten alt ist
           if (Date.now() - timestamp < 5 * 60 * 1000) {
             console.log('⚡ Loading cached products immediately');
-            setProducts(data);
-            setInitialLoading(false); // Zeige Content statt Skeleton
-            setLoading(false);
+            if (isMounted) {
+              setProducts(data);
+              setInitialLoading(false); // Zeige Content statt Skeleton
+              setLoading(false);
+            }
             
             // Lade frische Daten im Hintergrund
             setTimeout(() => {
-              console.log('🔄 Refreshing products in background');
-              fetchProducts(true); // true = background update
+              if (isMounted) {
+                console.log('🔄 Refreshing products in background');
+                fetchProducts(true); // true = background update
+              }
             }, 100);
             return true;
           }
@@ -171,9 +177,14 @@ const ProductsPage = () => {
     };
     
     // Wenn kein Cache geladen wurde, normale Ladung
-    if (!loadCachedProducts()) {
+    if (!loadCachedProducts() && isMounted) {
       fetchProducts(false);
     }
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const fetchProducts = async (isBackgroundUpdate = false) => {
@@ -183,10 +194,12 @@ const ProductsPage = () => {
       }
       setError('');
       
-      console.time('⏱️ Products API Call');
+      // Performance Tracking
+      const startTime = performance.now();
       const response = await portfolioAPI.getWithPrices();
-      console.timeEnd('⏱️ Products API Call');
+      const duration = performance.now() - startTime;
       
+      console.log(`⏱️ Products API Call ${isBackgroundUpdate ? '(Background)' : '(Initial)'}: ${duration.toFixed(2)}ms`);
       console.log('📦 API Response:', response);
       console.log('📊 Products count:', response.data?.data?.length || response.data?.length || 0);
       
@@ -247,10 +260,10 @@ const ProductsPage = () => {
             sx={{ 
               fontWeight: 'bold',
               background: 'linear-gradient(45deg, #2E7D32, #4CAF50)',
-              backgroundClip: 'text',
-              textFillColor: 'transparent',
               WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              textFillColor: 'transparent'
             }}
           >
             Unsere handgemachten Naturseifen
@@ -316,7 +329,9 @@ const ProductsPage = () => {
           sx={{ 
             fontWeight: 'bold',
             background: 'linear-gradient(45deg, #2E7D32, #4CAF50)',
+            WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
             textFillColor: 'transparent'
           }}
         >
@@ -357,7 +372,7 @@ const ProductsPage = () => {
                 >
                   <LazyImage
                     src={getImageUrl(product.bilder?.hauptbild)}
-                    alt={product.name}
+                    alt={`${product.name} - Handgemachte Naturseife (${product.gramm}g)`}
                     height={isMobile ? 200 : 300}
                     objectFit="cover"
                     priority={index < 3} // Erste 3 Bilder haben Priorität
@@ -509,6 +524,8 @@ const ProductsPage = () => {
                           }}
                           disabled={!product.bestand?.verfuegbar || quantities[product._id] <= 1}
                           sx={{ borderRadius: 0 }}
+                          aria-label={`Menge von ${product.name} verringern`}
+                          title={`Menge von ${product.name} verringern`}
                         >
                           <RemoveIcon fontSize="small" />
                         </IconButton>
@@ -533,6 +550,8 @@ const ProductsPage = () => {
                           }}
                           disabled={!product.bestand?.verfuegbar || (quantities[product._id] || 1) >= (product.bestand?.menge || 0)}
                           sx={{ borderRadius: 0 }}
+                          aria-label={`Menge von ${product.name} erhöhen`}
+                          title={`Menge von ${product.name} erhöhen`}
                         >
                           <AddIcon fontSize="small" />
                         </IconButton>

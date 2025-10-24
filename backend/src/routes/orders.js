@@ -112,13 +112,18 @@ router.post("/create-admin", async (req, res) => {
       }
     }
 
-    // Preise berechnen
+    // Preise berechnen (Deutsche Steuerbehandlung: Preise inkl. MwSt.)
     const zwischensumme = artikelMitBestand.reduce((sum, item) => sum + item.gesamtpreis, 0);
     const versandkosten = zwischensumme < 50 ? 4.99 : 0;
     const mwstSatz = 19;
-    const nettoBetrag = zwischensumme + versandkosten;
-    const mwstBetrag = nettoBetrag * (mwstSatz / 100);
-    const gesamtsumme = nettoBetrag + mwstBetrag;
+    
+    // In Deutschland sind Preise normalerweise INKLUSIVE MwSt.
+    // Gesamtsumme = Zwischensumme (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
+    const gesamtsumme = zwischensumme + versandkosten;
+    
+    // MwSt.-Betrag aus dem Gesamtbetrag herausrechnen (nicht hinzufügen!)
+    const nettoBetrag = gesamtsumme / (1 + mwstSatz / 100);
+    const mwstBetrag = gesamtsumme - nettoBetrag;
 
     // Bestellung erstellen
     const neueBestellung = new Order({

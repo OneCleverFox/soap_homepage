@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -22,12 +22,18 @@ import {
 } from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
+import api from '../../services/api';
+import BestellungenAPI from '../../services/bestellungenAPI';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountMenu, setAccountMenu] = useState(null);
   const [infoMenu, setInfoMenu] = useState(null);
   const [adminMenu, setAdminMenu] = useState(null);
+  
+  // Badge-Zähler für Handlungsbedarf
+  const [pendingInquiries, setPendingInquiries] = useState(0);
+  const [pendingOrders, setPendingOrders] = useState(0);
   
   const { user, logout } = useAuth();
   const { getCartItemsCount } = useCart();
@@ -37,6 +43,111 @@ const Navbar = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const cartItemsCount = getCartItemsCount();
+
+  // Handlungsbedarf für Anfragen laden
+  const loadPendingInquiries = async () => {
+    if (!user) return;
+    
+    try {
+      const response = await api.get('/inquiries');
+      if (response.data.success) {
+        const inquiries = response.data.data;
+        
+        // Letzte Ansicht der Anfragen-Seite abrufen
+        const lastViewedKey = `inquiries_last_viewed_${user.id || user.userId}`;
+        const lastViewed = localStorage.getItem(lastViewedKey);
+        const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
+        
+        // Ungesehene Benachrichtigungen zählen
+        const unseenNotifications = inquiries.filter(inquiry => {
+          const status = inquiry.status?.toLowerCase();
+          const updatedAt = new Date(inquiry.updatedAt || inquiry.createdAt);
+          
+          // Nur abgelehnte oder als Bestellung umgewandelte Anfragen zählen
+          // UND nur wenn sie nach dem letzten Besuch aktualisiert wurden
+          return (
+            (status === 'abgelehnt' || status === 'rejected' || 
+             status === 'converted_to_order' || status === 'payment_pending') &&
+            updatedAt > lastViewedDate
+          );
+        });
+        
+        setPendingInquiries(unseenNotifications.length);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`📋 Ungesehene Anfragen-Benachrichtigungen: ${unseenNotifications.length}`);
+          console.log(`📅 Letzter Besuch: ${lastViewedDate}`);
+        }
+      }
+    } catch (error) {
+      // Fehler beim Laden der Badges - setze auf 0 und logge nur in Development
+      setPendingInquiries(0);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Fehler beim Laden der Anfragen-Badges:', error.response?.status, error.response?.statusText);
+      }
+    }
+  };
+
+  // Handlungsbedarf für Bestellungen laden
+  const loadPendingOrders = async () => {
+    if (!user) return;
+    
+    try {
+      const result = await BestellungenAPI.getBestellungen({ limit: 100 });
+      if (result.success) {
+        // Zähle Bestellungen die Zahlung benötigen
+        const paymentNeeded = result.data.bestellungen.filter(order => {
+          const paymentStatus = order.zahlung?.status?.toLowerCase();
+          const orderStatus = order.status?.toLowerCase();
+          
+          const isValidForPayment = 
+            orderStatus === 'bestätigt' || 
+            orderStatus === 'bestaetigt' || 
+            orderStatus === 'neu' ||
+            orderStatus === 'confirmed' ||
+            order.source === 'inquiry';
+          
+          const isNotPaid = 
+            !paymentStatus || 
+            paymentStatus === 'ausstehend' || 
+            paymentStatus === 'pending' ||
+            (paymentStatus !== 'bezahlt' && 
+             paymentStatus !== 'paid' && 
+             paymentStatus !== 'completed');
+          
+          return isValidForPayment && isNotPaid;
+        });
+        setPendingOrders(paymentNeeded.length);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Bestellungen-Badges:', error);
+    }
+  };
+
+  // Badges laden wenn User eingeloggt ist
+  useEffect(() => {
+    if (user) {
+      loadPendingInquiries();
+      loadPendingOrders();
+    } else {
+      setPendingInquiries(0);
+      setPendingOrders(0);
+    }
+    
+    // Event-Listener für Anfragen-Seite besucht
+    const handleInquiriesViewed = () => {
+      if (user) {
+        loadPendingInquiries(); // Badges neu laden wenn Anfragen angesehen wurden
+      }
+    };
+    
+    window.addEventListener('inquiriesViewed', handleInquiriesViewed);
+    
+    return () => {
+      window.removeEventListener('inquiriesViewed', handleInquiriesViewed);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // Nur von user abhängig - Funktionen werden bewusst nicht als Dependency hinzugefügt
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -92,10 +203,12 @@ const Navbar = () => {
     { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
     { label: 'Mein Warenkorb', path: '/admin/warenkorb', icon: '🛒' },
     { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
-    { label: 'Bestellungen', path: '/admin/bestellungen', icon: '�' },
+    { label: 'Bestellverwaltung', path: '/admin/bestellungen', icon: '📋' },
+    { label: 'Anfragen-Verwaltung', path: '/admin/anfragen', icon: '📨' },
     { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
-    { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' }
+    { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
+    { label: 'System-Einstellungen', path: '/admin/einstellungen', icon: '⚙️' }
   ];
 
   const drawer = (
@@ -162,7 +275,20 @@ const Navbar = () => {
           <>
             <ListItemButton onClick={() => { setMobileOpen(false); navigate('/profile'); }}>
               <ListItemIcon>
-                👤
+                <Badge 
+                  badgeContent={pendingInquiries + pendingOrders} 
+                  color="warning"
+                  invisible={pendingInquiries + pendingOrders === 0}
+                  sx={{
+                    '& .MuiBadge-badge': {
+                      fontSize: '0.6rem',
+                      minWidth: '16px',
+                      height: '16px'
+                    }
+                  }}
+                >
+                  👤
+                </Badge>
               </ListItemIcon>
               <ListItemText primary={`Hallo, ${user.name}`} />
             </ListItemButton>
@@ -366,7 +492,20 @@ const Navbar = () => {
                   color="inherit"
                   onClick={handleAccountMenu}
                 >
-                  👤
+                  <Badge 
+                    badgeContent={pendingInquiries + pendingOrders} 
+                    color="warning"
+                    invisible={pendingInquiries + pendingOrders === 0}
+                    sx={{
+                      '& .MuiBadge-badge': {
+                        fontSize: '0.65rem',
+                        minWidth: '18px',
+                        height: '18px'
+                      }
+                    }}
+                  >
+                    👤
+                  </Badge>
                 </IconButton>
                 <Menu
                   anchorEl={accountMenu}
@@ -387,14 +526,55 @@ const Navbar = () => {
                     </ListItemIcon>
                     Mein Profil
                   </MenuItem>
-                  {(user.rolle === 'admin' || user.role === 'admin') && (
-                    <MenuItem component={Link} to="/admin" onClick={handleCloseAccountMenu}>
-                      <ListItemIcon>
-                        ⚙️
-                      </ListItemIcon>
-                      Admin Panel
-                    </MenuItem>
-                  )}
+                  
+                  <MenuItem component={Link} to="/inquiries" onClick={handleCloseAccountMenu}>
+                    <ListItemIcon>
+                      📋
+                    </ListItemIcon>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      Meine Anfragen
+                      {pendingInquiries > 0 && (
+                        <Badge 
+                          badgeContent={pendingInquiries} 
+                          color="warning"
+                          sx={{
+                            '& .MuiBadge-badge': {
+                              fontSize: '0.6rem',
+                              minWidth: '16px',
+                              height: '16px'
+                            }
+                          }}
+                        >
+                          <Box sx={{ width: 8 }} />
+                        </Badge>
+                      )}
+                    </Box>
+                  </MenuItem>
+
+                  <MenuItem component={Link} to="/my-orders" onClick={handleCloseAccountMenu}>
+                    <ListItemIcon>
+                      🧾
+                    </ListItemIcon>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      Meine Bestellungen
+                      {pendingOrders > 0 && (
+                        <Badge 
+                          badgeContent={pendingOrders} 
+                          color="warning"
+                          sx={{
+                            '& .MuiBadge-badge': {
+                              fontSize: '0.6rem',
+                              minWidth: '16px',
+                              height: '16px'
+                            }
+                          }}
+                        >
+                          <Box sx={{ width: 8 }} />
+                        </Badge>
+                      )}
+                    </Box>
+                  </MenuItem>
+
                   <Divider />
                   <MenuItem onClick={handleLogout}>
                     <ListItemIcon>

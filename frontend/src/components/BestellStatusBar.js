@@ -196,7 +196,7 @@ const BestellStatusBar = ({ status, compact = false, showDescription = true }) =
     );
   }
 
-  // Mobile horizontaler Scrollable Stepper
+  // Mobile vertikale Timeline (Best Practice)
   if (isMobile) {
     const activeStep = currentStatus.step;
     
@@ -207,107 +207,157 @@ const BestellStatusBar = ({ status, compact = false, showDescription = true }) =
         borderRadius: 2,
         backgroundColor: '#fafafa'
       }}>
-        <Typography variant="body2" gutterBottom sx={{ 
-          color: 'text.primary',
-          fontWeight: 'bold',
-          mb: 2
-        }}>
-          Status: <span style={{ color: currentStatus.chipColor }}>
-            {currentStatus.label}
-          </span>
-        </Typography>
-        
-        {showDescription && (
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-            {currentStatus.description}
-          </Typography>
-        )}
-
-        {/* Mobile optimierter horizontaler Stepper */}
+        {/* Current Status Header */}
         <Box sx={{ 
           display: 'flex', 
-          overflowX: 'auto',
-          pb: 1,
-          '&::-webkit-scrollbar': {
-            height: 4,
-          },
-          '&::-webkit-scrollbar-track': {
-            backgroundColor: '#f1f1f1',
-            borderRadius: 4,
-          },
-          '&::-webkit-scrollbar-thumb': {
-            backgroundColor: theme.palette.primary.main,
-            borderRadius: 4,
-          }
+          alignItems: 'center', 
+          mb: 2,
+          p: 1.5,
+          bgcolor: currentStatus.chipColor,
+          borderRadius: 1,
+          color: 'white'
         }}>
-          {normalSteps.map((stepStatus, index) => {
-            const stepConfig = statusConfig[stepStatus];
-            const isCompleted = index < activeStep;
-            const isActive = index === activeStep;
-            
-            return (
-              <Box 
-                key={stepStatus}
-                sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  minWidth: 80,
-                  mx: 0.5
-                }}
-              >
-                <CustomStepIconRoot ownerState={{ 
-                  completed: isCompleted, 
-                  active: isActive, 
-                  mobile: true 
-                }}>
-                  {React.createElement(
-                    [FiberNew, CheckCircle, Payment, Inventory, LocalShipping, Home][index],
-                    { fontSize: "small" }
-                  )}
-                </CustomStepIconRoot>
-                
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    mt: 1,
-                    textAlign: 'center',
-                    fontSize: '0.7rem',
-                    color: isActive || isCompleted ? 'text.primary' : 'text.secondary',
-                    fontWeight: isActive ? 'bold' : 'normal'
-                  }}
-                >
-                  {stepConfig.label}
-                </Typography>
-                
-                {/* Verbindungslinie für Mobile */}
-                {index < normalSteps.length - 1 && (
-                  <Box sx={{
-                    position: 'absolute',
-                    top: 16,
-                    left: '60%',
-                    width: 40,
-                    height: 2,
-                    bgcolor: isCompleted ? 'success.main' : 'grey.300',
-                    zIndex: 0
-                  }} />
-                )}
-              </Box>
-            );
-          })}
+          <CustomStepIconRoot ownerState={{ 
+            completed: true, 
+            active: false, 
+            mobile: true 
+          }} sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>
+            {React.createElement(
+              [FiberNew, CheckCircle, Payment, Inventory, LocalShipping, Home][activeStep],
+              { fontSize: "small" }
+            )}
+          </CustomStepIconRoot>
+          <Box sx={{ ml: 2 }}>
+            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+              {currentStatus.label}
+            </Typography>
+            {showDescription && (
+              <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                {currentStatus.description}
+              </Typography>
+            )}
+          </Box>
         </Box>
 
-        {/* Progress Info für Mobile */}
-        <Box sx={{ 
-          mt: 2, 
-          textAlign: 'center',
-          bgcolor: 'background.default',
-          p: 1,
-          borderRadius: 1
-        }}>
-          <Typography variant="caption" color="text.secondary">
-            Schritt {activeStep + 1} von {normalSteps.length}
+        {/* Compact Progress Indicator */}
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 1
+          }}>
+            <Typography variant="caption" color="text.secondary">
+              Fortschritt
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {activeStep + 1} / {normalSteps.length}
+            </Typography>
+          </Box>
+          
+          {/* Progress Bar */}
+          <Box sx={{ 
+            width: '100%', 
+            height: 8, 
+            bgcolor: 'grey.200', 
+            borderRadius: 4,
+            overflow: 'hidden'
+          }}>
+            <Box sx={{ 
+              width: `${((activeStep + 1) / normalSteps.length) * 100}%`,
+              height: '100%',
+              bgcolor: currentStatus.chipColor,
+              borderRadius: 4,
+              transition: 'width 0.3s ease'
+            }} />
+          </Box>
+        </Box>
+
+        {/* Vertical Timeline - Only Next Steps */}
+        <Box>
+          <Typography variant="body2" sx={{ 
+            fontWeight: 'bold', 
+            mb: 1.5,
+            color: 'text.primary'
+          }}>
+            Nächste Schritte
           </Typography>
+          
+          <Box sx={{ position: 'relative' }}>
+            {normalSteps.slice(activeStep + 1, activeStep + 3).map((stepStatus, index) => {
+              const stepConfig = statusConfig[stepStatus];
+              
+              return (
+                <Box 
+                  key={stepStatus}
+                  sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    mb: index === 1 ? 0 : 1.5,
+                    position: 'relative',
+                    pl: 1
+                  }}
+                >
+                  {/* Timeline Dot */}
+                  <Box sx={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: '50%',
+                    bgcolor: index === 0 ? 'primary.main' : 'grey.300',
+                    mr: 2,
+                    position: 'relative',
+                    zIndex: 1
+                  }} />
+                  
+                  {/* Timeline Line */}
+                  {index === 0 && (
+                    <Box sx={{
+                      position: 'absolute',
+                      left: 11,
+                      top: 12,
+                      width: 2,
+                      height: 20,
+                      bgcolor: 'grey.300'
+                    }} />
+                  )}
+                  
+                  <Box sx={{ flex: 1 }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: index === 0 ? 'bold' : 'normal',
+                        color: index === 0 ? 'text.primary' : 'text.secondary'
+                      }}
+                    >
+                      {stepConfig.label}
+                    </Typography>
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ fontSize: '0.7rem' }}
+                    >
+                      {stepConfig.description}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+            
+            {/* Show completion message if at final step */}
+            {activeStep === normalSteps.length - 1 && (
+              <Box sx={{ 
+                textAlign: 'center', 
+                p: 2, 
+                bgcolor: 'success.light',
+                borderRadius: 1,
+                mt: 1
+              }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.dark' }}>
+                  🎉 Bestellung erfolgreich abgeschlossen!
+                </Typography>
+              </Box>
+            )}
+          </Box>
         </Box>
       </Paper>
     );

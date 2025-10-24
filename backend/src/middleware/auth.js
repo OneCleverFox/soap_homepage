@@ -12,8 +12,19 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
-    console.log('🔐 Decoded JWT Token:', decoded);
+    if (!process.env.JWT_SECRET) {
+      console.error('🚨 CRITICAL: JWT_SECRET not set!');
+      return res.status(500).json({
+        success: false,
+        message: 'Server-Konfigurationsfehler'
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Logging nur in Development
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔐 Decoded JWT Token:', { userId: decoded.id, role: decoded.rolle || decoded.role });
+    }
     req.user = decoded;
     next();
 
@@ -38,7 +49,15 @@ const auth = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+    if (!process.env.JWT_SECRET) {
+      console.error('🚨 CRITICAL: JWT_SECRET not set!');
+      return res.status(500).json({
+        success: false,
+        message: 'Server-Konfigurationsfehler'
+      });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Unterstütze sowohl 'role' (Admin-User) als auch 'rolle' (Kunde)
     const userRole = decoded.rolle || decoded.role;
