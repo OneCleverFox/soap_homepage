@@ -19,6 +19,7 @@ const emailOutSchema = new mongoose.Schema({
       'profile_update_notification',
       'account_deletion_confirmation',
       'order_confirmation',
+      'order_rejection',
       'order_status_update',
       'newsletter',
       'promotional',

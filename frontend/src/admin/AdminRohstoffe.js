@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -53,6 +54,7 @@ const getAuthHeaders = () => {
 const AdminRohstoffe = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [searchParams] = useSearchParams();
   
   const [currentTab, setCurrentTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,6 +97,33 @@ const AdminRohstoffe = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // URL-Parameter verarbeiten für automatisches Öffnen des Dialogs
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const action = searchParams.get('action');
+    const autoOpen = searchParams.get('autoOpen');
+
+    // Tab setzen basierend auf URL-Parameter
+    if (tab) {
+      let tabIndex = 0;
+      if (tab === 'duftoele') tabIndex = 1;
+      else if (tab === 'verpackungen') tabIndex = 2;
+      else if (tab === 'rohseifen') tabIndex = 0;
+      
+      setCurrentTab(tabIndex);
+    }
+
+    // Dialog automatisch öffnen wenn autoOpen=true
+    if (action === 'create' && autoOpen === 'true') {
+      setTimeout(() => {
+        setDialogMode('create');
+        setSelectedItem(null);
+        setFormData({});
+        setOpenDialog(true);
+      }, 500); // Kurze Verzögerung für Tab-Switch
+    }
+  }, [searchParams]);
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);

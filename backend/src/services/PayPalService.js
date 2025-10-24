@@ -1,38 +1,115 @@
 const paypal = require('@paypal/checkout-server-sdk');
+const AdminSettings = require('../models/AdminSettings');
 
 class PayPalService {
   constructor() {
     console.log('💳 PayPal Service initialisiert');
     console.log('💳 NODE_ENV:', process.env.NODE_ENV);
-    console.log('💳 PAYPAL_CLIENT_ID:', process.env.PAYPAL_CLIENT_ID ? 'Gesetzt' : 'NICHT GESETZT');
-    console.log('💳 PAYPAL_CLIENT_SECRET:', process.env.PAYPAL_CLIENT_SECRET ? 'Gesetzt' : 'NICHT GESETZT');
-    
-    // PayPal API Client mit bewährter alter SDK
-    const environment = process.env.NODE_ENV === 'production' 
-      ? new paypal.core.LiveEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET)
-      : new paypal.core.SandboxEnvironment(process.env.PAYPAL_CLIENT_ID, process.env.PAYPAL_CLIENT_SECRET);
-      
-    this.client = new paypal.core.PayPalHttpClient(environment);
+    this.currentConfig = null;
+    this.client = null;
   }
 
-  // 💳 PayPal-Zahlung erstellen
+  // � PayPal Client mit Admin-Einstellungen und Umgebungsvariablen aktualisieren
+  async updateClientFromSettings() {
+    try {
+      const settings = await AdminSettings.getInstance();
+      const dbConfig = settings.getPayPalConfig();
+      
+      // Prüfe ob PayPal in Admin-Einstellungen deaktiviert ist
+      if (!dbConfig.enabled) {
+        console.log('💳 PayPal ist in den Admin-Einstellungen deaktiviert');
+        this.currentConfig = { enabled: false };
+        return false;
+      }
+      
+      console.log(`💳 PayPal Client wird aktualisiert - DB-Modus: ${dbConfig.mode}`);
+      
+      // Bestimme Credentials aus Umgebungsvariablen basierend auf dem Modus
+      let clientId, clientSecret, isLive;
+      
+      if (dbConfig.mode === 'live') {
+        // Live-Umgebung: Verwende explizite Live-Credentials
+        clientId = process.env.PAYPAL_LIVE_CLIENT_ID;
+        clientSecret = process.env.PAYPAL_LIVE_CLIENT_SECRET;
+        isLive = true;
+        console.log('🚀 PayPal Live-Modus aktiviert');
+      } else {
+        // Sandbox-Umgebung: Verwende explizite Sandbox-Credentials mit Fallback
+        clientId = process.env.PAYPAL_SANDBOX_CLIENT_ID || process.env.PAYPAL_CLIENT_ID;
+        clientSecret = process.env.PAYPAL_SANDBOX_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET;
+        isLive = false;
+        console.log('🧪 PayPal Sandbox-Modus aktiviert');
+      }
+      
+      // Prüfe ob Credentials in Umgebungsvariablen vorhanden sind
+      if (!clientId || !clientSecret) {
+        console.log('❌ PayPal Credentials nicht in Umgebungsvariablen gefunden:');
+        console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_ID:`, clientId ? 'Gesetzt' : 'NICHT GESETZT');
+        console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_SECRET:`, clientSecret ? 'Gesetzt' : 'NICHT GESETZT');
+        this.currentConfig = { enabled: false };
+        return false;
+      }
+      
+      console.log('💳 PayPal Credentials gefunden:');
+      console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_ID: Gesetzt`);
+      console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_SECRET: Gesetzt`);
+      
+      const environment = isLive 
+        ? new paypal.core.LiveEnvironment(clientId, clientSecret)
+        : new paypal.core.SandboxEnvironment(clientId, clientSecret);
+        
+      this.client = new paypal.core.PayPalHttpClient(environment);
+      this.currentConfig = {
+        enabled: true,
+        mode: dbConfig.mode,
+        isLive: isLive
+      };
+      
+      console.log(`✅ PayPal Client erfolgreich konfiguriert - Modus: ${dbConfig.mode}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Fehler beim Aktualisieren des PayPal Clients:', error);
+      this.currentConfig = { enabled: false };
+      return false;
+    }
+  }
+
+  // 🔍 PayPal-Status prüfen
+  async isEnabled() {
+    await this.updateClientFromSettings();
+    return this.currentConfig?.enabled || false;
+  }
+
+  // 💳 PayPal-Zahlung erstellen (mit dynamischer Konfiguration)
   async createPayment(orderData) {
     try {
+      // Client mit aktuellen Admin-Einstellungen aktualisieren
+      const isConfigured = await this.updateClientFromSettings();
+      
+      if (!isConfigured) {
+        throw new Error('PayPal ist nicht konfiguriert oder deaktiviert');
+      }
+      
       console.log('💳 Erstelle PayPal-Zahlung für Bestellung:', orderData.bestellnummer);
-      console.log('📦 PayPal Artikel-Daten:', JSON.stringify(orderData.artikel, null, 2));
+      console.log(`💳 PayPal Modus: ${this.currentConfig.mode}`);
+      console.log('📦 PayPal Artikel-Daten:', JSON.stringify(orderData.items || orderData.artikel, null, 2));
+
+      // Flexibler Zugriff auf Artikel-Daten
+      const artikel = orderData.items || orderData.artikel;
 
       // Validierung der Input-Daten
-      if (!orderData.artikel || !Array.isArray(orderData.artikel) || orderData.artikel.length === 0) {
+      if (!artikel || !Array.isArray(artikel) || artikel.length === 0) {
         throw new Error('Keine Artikel in der Bestellung gefunden');
       }
 
       // Artikel für PayPal formatieren
-      const items = orderData.artikel.map((artikel, index) => {
+      const items = artikel.map((artikel, index) => {
         console.log(`🔍 Verarbeite Artikel ${index}:`, JSON.stringify(artikel, null, 2));
         
-        // Validierung der Pflichtfelder
-        const name = artikel.name || artikel.titel || artikel.produktname;
-        const preis = artikel.preis || artikel.price || 0;
+        // Flexiblere Validierung der Pflichtfelder
+        const name = artikel.name || artikel.titel || artikel.produktname || 
+                    artikel.produktSnapshot?.name || 'Unbekanntes Produkt';
+        const preis = artikel.preis || artikel.price || artikel.einzelpreis || 0;
         const menge = artikel.menge || artikel.quantity || 1;
         
         if (!name || name.trim() === '') {
@@ -65,11 +142,69 @@ class PayPalService {
       
       console.log('🏷️ PayPal Items:', JSON.stringify(items, null, 2));
 
-      // Berechnung
-      const itemTotal = orderData.artikel.reduce((sum, artikel) => sum + (artikel.preis * artikel.menge), 0);
-      const versandkosten = orderData.versandkosten || 0;
-      const steuer = orderData.gesamt.mwst || 0;
-      const gesamtbetrag = orderData.gesamt.brutto;
+      // Berechnung mit flexibler Artikel-Zugriff
+      const artikelItems = orderData.items || orderData.artikel;
+      
+      console.log('🔍 Debug artikelItems:', {
+        itemsVorhanden: !!orderData.items,
+        artikelVorhanden: !!orderData.artikel,
+        artikelItemsVorhanden: !!artikelItems,
+        artikelItemsType: typeof artikelItems,
+        artikelItemsIsArray: Array.isArray(artikelItems)
+      });
+
+      if (!artikelItems || !Array.isArray(artikelItems)) {
+        throw new Error(`Keine gültigen Artikel-Daten gefunden. Items: ${!!orderData.items}, Artikel: ${!!orderData.artikel}`);
+      }
+
+      const itemTotal = artikelItems.reduce((sum, artikel) => {
+        const preis = artikel.preis || artikel.price || artikel.einzelpreis || 0;
+        const menge = artikel.menge || artikel.quantity || 1;
+        return sum + (preis * menge);
+      }, 0);
+      
+      const versandkosten = orderData.versandkosten || orderData.shipping || 0;
+      const originalSteuer = orderData.gesamt?.mwst || orderData.tax || 0;
+      const gesamtbetrag = orderData.gesamt?.brutto || orderData.total || orderData.gesamtsumme;
+
+      // Intelligente Steuerbehandlung: 
+      // Wenn gesamtbetrag ≈ itemTotal, dann sind Preise inkl. Steuer
+      // Wenn gesamtbetrag ≈ itemTotal + steuer, dann sind Preise exkl. Steuer
+      const istInklusivSteuer = Math.abs(gesamtbetrag - itemTotal) < Math.abs(gesamtbetrag - (itemTotal + originalSteuer));
+      
+      const steuer = istInklusivSteuer ? 0 : originalSteuer;
+      const berechneteGesamtsumme = itemTotal + versandkosten + steuer;
+
+      console.log('💰 PayPal Berechnungen:', {
+        itemTotal: itemTotal,
+        versandkosten: versandkosten,
+        originalSteuer: originalSteuer,
+        steuerBehandlung: istInklusivSteuer ? 'INKLUSIVE (bereits in Preisen enthalten)' : 'EXKLUSIVE (wird hinzugefügt)',
+        verwendeteSteuer: steuer,
+        originalGesamtbetrag: gesamtbetrag,
+        berechneteGesamtsumme: berechneteGesamtsumme,
+        differenz: Math.abs(gesamtbetrag - berechneteGesamtsumme),
+        orderDataStructure: {
+          hasItems: !!orderData.items,
+          hasArtikel: !!orderData.artikel,
+          itemsLength: orderData.items?.length || 0,
+          artikelLength: orderData.artikel?.length || 0
+        }
+      });
+
+      // Verwende die berechnete Gesamtsumme wenn sie mit der originalen übereinstimmt
+      const finalGesamtbetrag = Math.abs(gesamtbetrag - berechneteGesamtsumme) < 0.01 ? 
+        gesamtbetrag : berechneteGesamtsumme;
+
+      console.log('📍 PayPal Adressdaten:', {
+        hasLieferadresse: !!orderData.lieferadresse,
+        vorname: orderData.lieferadresse?.vorname,
+        nachname: orderData.lieferadresse?.nachname,
+        strasse: orderData.lieferadresse?.strasse,
+        hausnummer: orderData.lieferadresse?.hausnummer,
+        stadt: orderData.lieferadresse?.stadt,
+        plz: orderData.lieferadresse?.plz
+      });
 
       const orderRequest = {
         intent: 'CAPTURE',
@@ -79,8 +214,8 @@ class PayPalService {
           landing_page: 'BILLING',
           shipping_preference: 'SET_PROVIDED_ADDRESS',
           user_action: 'PAY_NOW',
-          return_url: `${process.env.FRONTEND_URL}/checkout/success?bestellnummer=${orderData.bestellnummer}`,
-          cancel_url: `${process.env.FRONTEND_URL}/checkout/cancel?bestellnummer=${orderData.bestellnummer}`
+          return_url: orderData.returnUrl || `${process.env.FRONTEND_URL}/checkout/success?bestellnummer=${orderData.bestellnummer}`,
+          cancel_url: orderData.cancelUrl || `${process.env.FRONTEND_URL}/checkout/cancel?bestellnummer=${orderData.bestellnummer}`
         },
         purchase_units: [{
           reference_id: orderData.bestellnummer,
@@ -88,7 +223,7 @@ class PayPalService {
           custom_id: orderData.bestellnummer,
           amount: {
             currency_code: 'EUR',
-            value: gesamtbetrag.toFixed(2),
+            value: finalGesamtbetrag.toFixed(2),
             breakdown: {
               item_total: {
                 currency_code: 'EUR',
@@ -107,13 +242,13 @@ class PayPalService {
           items: items,
           shipping: {
             name: {
-              full_name: `${orderData.lieferadresse.vorname} ${orderData.lieferadresse.nachname}`
+              full_name: `${orderData.lieferadresse?.vorname || 'Kunde'} ${orderData.lieferadresse?.nachname || ''}`.trim()
             },
             address: {
-              address_line_1: `${orderData.lieferadresse.strasse} ${orderData.lieferadresse.hausnummer}`,
-              address_line_2: orderData.lieferadresse.zusatz || '',
-              admin_area_2: orderData.lieferadresse.stadt,
-              postal_code: orderData.lieferadresse.plz,
+              address_line_1: `${orderData.lieferadresse?.strasse || ''} ${orderData.lieferadresse?.hausnummer || ''}`.trim() || 'Nicht angegeben',
+              address_line_2: orderData.lieferadresse?.zusatz || '',
+              admin_area_2: orderData.lieferadresse?.stadt || 'Nicht angegeben',
+              postal_code: orderData.lieferadresse?.plz || '00000',
               country_code: 'DE'
             }
           }
@@ -132,6 +267,7 @@ class PayPalService {
       const approvalLink = result.links.find(link => link.rel === 'approve');
       
       return {
+        success: true,
         paypalOrderId: result.id,
         approvalUrl: approvalLink ? approvalLink.href : null,
         status: result.status
@@ -139,7 +275,12 @@ class PayPalService {
 
     } catch (error) {
       console.error('❌ Fehler beim Erstellen der PayPal-Zahlung:', error);
-      throw new Error('PayPal-Zahlung konnte nicht erstellt werden: ' + error.message);
+      return {
+        success: false,
+        error: error.message || 'Unbekannter PayPal-Fehler',
+        paypalOrderId: null,
+        approvalUrl: null
+      };
     }
   }
 
@@ -157,16 +298,94 @@ class PayPalService {
       console.log('💰 PayPal-Zahlung erfasst:', result.id);
       
       return {
+        success: true,
         paypalOrderId: result.id,
         status: result.status,
         captureId: result.purchase_units?.[0]?.payments?.captures?.[0]?.id,
         amount: result.purchase_units?.[0]?.payments?.captures?.[0]?.amount,
-        transactionId: result.purchase_units?.[0]?.payments?.captures?.[0]?.id
+        transactionId: result.purchase_units?.[0]?.payments?.captures?.[0]?.id,
+        id: result.purchase_units?.[0]?.payments?.captures?.[0]?.id // Für Rückwärtskompatibilität
       };
 
     } catch (error) {
       console.error('❌ Fehler beim Erfassen der PayPal-Zahlung:', error);
-      throw new Error('PayPal-Zahlung konnte nicht erfasst werden: ' + error.message);
+      return {
+        success: false,
+        error: error.message || 'Unbekannter PayPal-Capture-Fehler',
+        paypalOrderId: null,
+        status: 'FAILED'
+      };
+    }
+  }
+
+  // 💰 PayPal-Rückerstattung erstellen
+  async refundPayment(paypalOrderId, amount = null, reason = 'Bestellung storniert') {
+    try {
+      console.log('💰 Erstelle PayPal-Rückerstattung für Order:', paypalOrderId);
+      
+      // Client mit aktuellen Admin-Einstellungen aktualisieren
+      const isConfigured = await this.updateClientFromSettings();
+      
+      if (!isConfigured) {
+        throw new Error('PayPal ist nicht konfiguriert oder deaktiviert');
+      }
+      
+      // Erst die Bestellung abrufen um die Capture-ID zu finden
+      const orderDetails = await this.getPaymentDetails(paypalOrderId);
+      console.log('🔍 PayPal Order Details:', JSON.stringify(orderDetails, null, 2));
+      
+      const captures = orderDetails.purchase_units?.[0]?.payments?.captures;
+      if (!captures || captures.length === 0) {
+        throw new Error('Keine Capture-Transaktion für diese Bestellung gefunden');
+      }
+      
+      const captureId = captures[0].id;
+      const capturedAmount = captures[0].amount;
+      
+      console.log('💳 Gefundene Capture:', {
+        captureId,
+        capturedAmount
+      });
+      
+      // Rückerstattungsbetrag bestimmen (Vollrückerstattung wenn nicht angegeben)
+      const refundAmount = amount || capturedAmount;
+      
+      // Rückerstattung erstellen
+      const request = new paypal.payments.CapturesRefundRequest(captureId);
+      request.requestBody({
+        amount: {
+          currency_code: refundAmount.currency_code || 'EUR',
+          value: typeof refundAmount === 'object' ? refundAmount.value : refundAmount.toString()
+        },
+        note_to_payer: reason
+      });
+
+      const response = await this.client.execute(request);
+      const result = response.result;
+      
+      console.log('✅ PayPal-Rückerstattung erstellt:', {
+        refundId: result.id,
+        status: result.status,
+        amount: result.amount
+      });
+      
+      return {
+        success: true,
+        refundId: result.id,
+        status: result.status,
+        amount: result.amount,
+        captureId: captureId,
+        paypalOrderId: paypalOrderId
+      };
+
+    } catch (error) {
+      console.error('❌ Fehler beim Erstellen der PayPal-Rückerstattung:', error);
+      return {
+        success: false,
+        error: error.message || 'Unbekannter PayPal-Rückerstattungsfehler',
+        refundId: null,
+        paypalOrderId: paypalOrderId
+      };
     }
   }
 

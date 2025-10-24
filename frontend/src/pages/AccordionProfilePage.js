@@ -47,14 +47,12 @@ import {
   AccountCircle,
   ExpandMore,
   ContactMail,
-  Receipt,
   LocationOn,
   ArrowBack
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { API_URL } from '../services/api';
-import OrderHistory from '../components/OrderHistory';
 import BestellungenAPI from '../services/bestellungenAPI';
 
 const AccordionProfilePage = () => {
@@ -975,29 +973,6 @@ const AccordionProfilePage = () => {
             {renderMobileCommunicationSection()}
           </Accordion>
 
-          {/* Meine Bestellungen */}
-          <Accordion sx={{ mb: 1 }}>
-            <AccordionSummary 
-              expandIcon={<ExpandMore />}
-              sx={{ minHeight: 64 }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                <Receipt sx={{ mr: 2, color: 'primary.main' }} />
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="body1" fontWeight="bold">
-                    Meine Bestellungen
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Bestellhistorie und Status
-                  </Typography>
-                </Box>
-              </Box>
-            </AccordionSummary>
-            <AccordionDetails sx={{ p: 1 }}>
-              <OrderHistory />
-            </AccordionDetails>
-          </Accordion>
-
           {/* Account-Verwaltung */}
           <Accordion sx={{ mb: 1 }}>
             <AccordionSummary 
@@ -1144,24 +1119,6 @@ const AccordionProfilePage = () => {
           </Box>
         </AccordionSummary>
         {renderCommunicationSection()}
-      </Accordion>
-
-      {/* Meine Bestellungen */}
-      <Accordion sx={{ mb: 2 }}>
-        <AccordionSummary expandIcon={<ExpandMore />}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Receipt sx={{ mr: 2, color: 'primary.main' }} />
-            <Box>
-              <Typography variant="h6">Meine Bestellungen</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Bestellhistorie und Status
-              </Typography>
-            </Box>
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails>
-          <OrderHistory />
-        </AccordionDetails>
       </Accordion>
 
       {/* Account-Verwaltung */}

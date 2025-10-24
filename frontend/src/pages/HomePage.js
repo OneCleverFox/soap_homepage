@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
+import ShopStatusAlert from '../components/common/ShopStatusAlert';
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -45,6 +46,9 @@ const HomePage = () => {
       </Helmet>
       
       <Container maxWidth="lg">
+        {/* Shop Status Benachrichtigung */}
+        <ShopStatusAlert />
+        
         {/* Hero Section */}
         <Box 
           py={{ xs: 4, md: 8 }}

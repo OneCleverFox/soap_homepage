@@ -42,6 +42,38 @@ const upload = multer({
 
 const router = express.Router();
 
+// DEBUG Route - Portfolio-Status prüfen
+router.get('/debug/portfolio-status', async (req, res) => {
+  try {
+    const totalPortfolio = await Portfolio.countDocuments({});
+    const activePortfolio = await Portfolio.countDocuments({ aktiv: true });
+    const inactivePortfolio = await Portfolio.countDocuments({ aktiv: false });
+    const undefinedActive = await Portfolio.countDocuments({ aktiv: { $exists: false } });
+    
+    const sampleItems = await Portfolio.find({}).limit(5).lean();
+    
+    console.log('🔍 Portfolio Debug Info:');
+    console.log(`📊 Total Portfolio Items: ${totalPortfolio}`);
+    console.log(`✅ Active Portfolio Items: ${activePortfolio}`);
+    console.log(`❌ Inactive Portfolio Items: ${inactivePortfolio}`);
+    console.log(`❔ Undefined Active Status: ${undefinedActive}`);
+    
+    res.json({
+      success: true,
+      data: {
+        total: totalPortfolio,
+        active: activePortfolio,
+        inactive: inactivePortfolio,
+        undefinedActive: undefinedActive,
+        sampleItems: sampleItems
+      }
+    });
+  } catch (error) {
+    console.error('❌ Portfolio Debug Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // DEBUG Route - alle Bestände anzeigen
 router.get('/debug/bestaende', async (req, res) => {
   try {
@@ -254,22 +286,48 @@ router.get('/', async (req, res) => {
 // @desc    Alle Portfolio-Einträge mit berechneten Preisen und Bestandsinformationen abrufen
 // @access  Public
 router.get('/with-prices', async (req, res) => {
+  const startTime = Date.now();
+  console.log('🚀 Portfolio with-prices request started');
+  
   try {
-    const portfolioItems = await Portfolio.find({ aktiv: true })
-      .sort({ reihenfolge: 1, name: 1 });
+    // 1. Portfolio Items laden (Alle Items - auch ohne aktiv-Status)
+    const portfolioStart = Date.now();
+    const portfolioItems = await Portfolio.find({})
+      .sort({ reihenfolge: 1, name: 1 })
+      .lean(); // lean() für bessere Performance
+    
+    console.log(`📋 Portfolio items loaded (${portfolioItems.length}): ${Date.now() - portfolioStart}ms`);
+    
+    // Debug: Status der ersten 5 Items anzeigen
+    if (portfolioItems.length > 0) {
+      console.log(`🔍 DEBUG: Erste 5 Portfolio items:`, 
+        portfolioItems.slice(0, 5).map(item => ({ 
+          _id: item._id,
+          name: item.name, 
+          aktiv: item.aktiv,
+          hasAktivProperty: item.hasOwnProperty('aktiv')
+        }))
+      );
+    } else {
+      console.log(`⚠️ WARNUNG: Keine Portfolio-Items in der Datenbank gefunden!`);
+    }
 
-    // Importiere Bestand-Model dynamisch
+    // 2. Importiere Bestand-Model dynamisch
     const Bestand = require('../models/Bestand');
     
-    // Hole alle Produktbestände in einem Batch
+    // 3. Hole alle Produktbestände in einem Batch
+    const bestandStart = Date.now();
     const alleBestaende = await Bestand.find({ typ: 'produkt' }).lean();
     const bestandMap = new Map(
       alleBestaende.map(b => [b.artikelId.toString(), b])
     );
+    console.log(`📦 Bestand loaded: ${Date.now() - bestandStart}ms`);
 
-    // Preise für jedes Portfolio-Element berechnen
+    // 4. Preise für jedes Portfolio-Element berechnen (parallel)
+    const priceStart = Date.now();
     const portfolioWithPrices = await Promise.all(
       portfolioItems.map(async (item) => {
+        const itemStart = Date.now();
         try {
           const priceData = await calculatePortfolioPrice(item);
           
@@ -278,14 +336,11 @@ router.get('/with-prices', async (req, res) => {
           const verfuegbareMenge = bestand ? bestand.menge : 0;
           const istVerfuegbar = verfuegbareMenge > 0;
           
-          // Bilder-URLs hinzufügen
-          const imageData = {
-            hauptbild: null,
-            galerie: []
-          };
+          // Bilder-URLs hinzufügen (optimiert)
+          let imageData = { hauptbild: null, galerie: [] };
           
           if (item.bilder?.hauptbild) {
-            imageData.hauptbild = item.bilder.hauptbild; // URL bereits komplett
+            imageData.hauptbild = item.bilder.hauptbild;
           }
           
           if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
@@ -294,8 +349,8 @@ router.get('/with-prices', async (req, res) => {
             );
           }
           
-          return {
-            ...item.toObject(),
+          const result = {
+            ...item,
             berechneterPreis: priceData.gesamtpreis,
             preisDetails: priceData.details,
             verkaufspreis: Math.ceil(priceData.gesamtpreis * 1.5), // 50% Marge
@@ -305,19 +360,20 @@ router.get('/with-prices', async (req, res) => {
               einheit: 'Stück'
             },
             bilder: {
-              ...item.bilder?.toObject(),
+              ...item.bilder,
               ...imageData
             }
           };
+          
+          console.log(`✅ ${item.name}: ${Date.now() - itemStart}ms`);
+          return result;
         } catch (priceError) {
-          console.warn(`Preisberechnung für ${item.name} fehlgeschlagen:`, priceError.message);
+          console.warn(`⚠️ Preisberechnung für ${item.name} fehlgeschlagen (${Date.now() - itemStart}ms):`, priceError.message);
           
           // Bestandsinformationen auch bei Preisfehler hinzufügen
           const bestand = bestandMap.get(item._id.toString());
           const verfuegbareMenge = bestand ? bestand.menge : 0;
           const istVerfuegbar = verfuegbareMenge > 0;
-          
-          // Bilder auch bei Preisfehler hinzufügen
           const imageData = {
             hauptbild: null,
             galerie: []
@@ -334,7 +390,7 @@ router.get('/with-prices', async (req, res) => {
           }
           
           return {
-            ...item.toObject(),
+            ...item,
             berechneterPreis: 0,
             preisDetails: { error: 'Preisberechnung nicht möglich' },
             verkaufspreis: 0,
@@ -344,13 +400,16 @@ router.get('/with-prices', async (req, res) => {
               einheit: 'Stück'
             },
             bilder: {
-              ...item.bilder?.toObject(),
+              ...item.bilder,
               ...imageData
             }
           };
         }
       })
     );
+    
+    console.log(`🎯 Price calculation completed: ${Date.now() - priceStart}ms`);
+    console.log(`🏁 Total portfolio with-prices time: ${Date.now() - startTime}ms`);
 
     res.status(200).json({
       success: true,

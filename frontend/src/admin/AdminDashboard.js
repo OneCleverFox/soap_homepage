@@ -19,7 +19,8 @@ import {
   Photo as PortfolioIcon,
   Dashboard as DashboardIcon,
   ShoppingBag as CartIcon,
-  Receipt as CheckoutIcon
+  Receipt as CheckoutIcon,
+  Description as InvoiceIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -77,6 +78,13 @@ const AdminDashboard = () => {
       icon: <AnalyticsIcon sx={{ fontSize: 40, color: 'error.main' }} />,
       path: '/admin/warenberechnung',
       color: 'error'
+    },
+    {
+      title: 'Rechnungskonfiguration',
+      description: 'Anpassung der Rechnungsvorlagen und PDF-Design.',
+      icon: <InvoiceIcon sx={{ fontSize: 40, color: 'info.main' }} />,
+      path: '/admin/rechnungen',
+      color: 'info'
     },
     {
       title: 'Mein Warenkorb',

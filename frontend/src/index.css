@@ -13,6 +13,8 @@ body {
   font-family: 'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%; /* Webkit-Fallback */
+  text-size-adjust: 100%; /* Standard-Property */
   background-color: #FEFDFB;
   color: #2C2C2C;
   line-height: 1.6;

@@ -341,7 +341,12 @@ const AdminLager = () => {
     switch (typ) {
       case 'fertigprodukte':
         einheit = 'Stück';
-        aktuellerBestand = item.verfuegbareMenge || 0;
+        // Bestand kann ein Objekt oder Zahl sein
+        if (typeof item.bestand === 'object') {
+          aktuellerBestand = item.bestand?.menge || item.verfuegbareMenge || 0;
+        } else {
+          aktuellerBestand = item.verfuegbareMenge || item.bestand || 0;
+        }
         break;
       case 'rohseifen':
         einheit = 'g (Gramm)';
@@ -941,7 +946,13 @@ const AdminLager = () => {
       case 'bestand':
         // Je nach Produkttyp verschiedene Bestandsfelder und Einheiten anzeigen
         if (currentTab.key === 'fertigprodukte') {
-          const bestand = item.verfuegbareMenge || 0;
+          // Bestand kann ein Objekt oder Zahl sein
+          let bestand = 0;
+          if (typeof item.bestand === 'object') {
+            bestand = item.bestand?.menge || item.verfuegbareMenge || 0;
+          } else {
+            bestand = item.verfuegbareMenge || item.bestand || 0;
+          }
           return (
             <Box sx={{ 
               display: 'flex', 
@@ -1367,10 +1378,10 @@ const AdminLager = () => {
                         </Typography>
                       )}
                       <Typography variant="h6" color="primary" sx={{ fontSize: '1.1rem' }}>
-                        {item.bestand || 0}
+                        {typeof item.bestand === 'object' ? (item.bestand?.menge || 0) : (item.bestand || 0)}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {item.einheit}
+                        {typeof item.bestand === 'object' ? (item.bestand?.einheit || item.einheit) : item.einheit}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
