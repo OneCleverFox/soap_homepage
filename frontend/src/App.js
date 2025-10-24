@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Box } from '@mui/material';
 
 // Public Pages
@@ -54,6 +54,26 @@ import Footer from './components/layout/Footer';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ScrollToTop from './components/common/ScrollToTop';
 import CookieConsent from './components/common/CookieConsent';
+
+// Hook um zu prüfen ob Footer angezeigt werden soll
+const useShowFooter = () => {
+  const location = useLocation();
+  const routesWithoutFooter = [
+    '/cart',
+    '/checkout', 
+    '/admin/portfolio',
+    '/inquiries',
+    '/my-orders'
+  ];
+  
+  return !routesWithoutFooter.some(route => location.pathname.startsWith(route));
+};
+
+// Komponente für Footer mit bedingter Anzeige
+const ConditionalFooter = () => {
+  const showFooter = useShowFooter();
+  return showFooter ? <Footer /> : null;
+};
 
 function App() {
   return (
@@ -120,7 +140,7 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Box>
-                <Footer />
+                <ConditionalFooter />
               </>
             }
           />

@@ -23,7 +23,7 @@ import { useCart } from '../contexts/CartContext';
 const CheckoutSuccessPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { clearCart } = useCart();
+  const { clearAvailableItems } = useCart(); // Nur verfügbare Artikel entfernen
   const [loading, setLoading] = useState(true);
   const [orderDetails, setOrderDetails] = useState(null);
   const [error, setError] = useState('');
@@ -63,7 +63,7 @@ const CheckoutSuccessPage = () => {
             const orderResult = await orderResponse.json();
             if (orderResult.success) {
               setOrderDetails(orderResult.data);
-              clearCart();
+              clearAvailableItems(); // Nur verfügbare Artikel entfernen
               localStorage.removeItem('pendingOrder');
               console.log('✅ Bestellung erfolgreich geladen');
               setLoading(false);
@@ -93,8 +93,8 @@ const CheckoutSuccessPage = () => {
 
         if (response.ok && result.success) {
           setOrderDetails(result.data);
-          // Warenkorb leeren nach erfolgreicher Bestellung
-          clearCart();
+          // Nur verfügbare Artikel aus Warenkorb entfernen nach erfolgreicher Bestellung
+          clearAvailableItems();
           // Entferne Bestelldaten aus localStorage
           localStorage.removeItem('pendingOrder');
           console.log('✅ Zahlung erfolgreich abgeschlossen');
@@ -106,7 +106,7 @@ const CheckoutSuccessPage = () => {
             const orderResult = await orderResponse.json();
             if (orderResult.success) {
               setOrderDetails(orderResult.data);
-              clearCart();
+              clearAvailableItems(); // Nur verfügbare Artikel entfernen
               localStorage.removeItem('pendingOrder');
               console.log('✅ Bestellung erfolgreich geladen als Fallback');
             } else {
@@ -125,7 +125,7 @@ const CheckoutSuccessPage = () => {
     };
 
     capturePayment();
-  }, [bestellnummer, paypalOrderId, clearCart]);
+  }, [bestellnummer, paypalOrderId, clearAvailableItems]);
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('de-DE', {

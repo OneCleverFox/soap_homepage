@@ -307,19 +307,27 @@ router.delete('/portfolio/:id', async (req, res) => {
 // @desc    Bild für Portfolio-Produkt hochladen (Base64) mit automatischer Optimierung
 // @access  Private (Admin only)
 router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainImage, async (req, res) => {
+  console.log('🔄 Admin Image Upload started for product:', req.params.id);
+  console.log('📄 Request body keys:', Object.keys(req.body));
+  console.log('📁 File present:', !!req.file);
+  console.log('👤 User from auth middleware:', req.user ? 'Present' : 'Missing');
+  
   try {
     const { id } = req.params;
     const { alt_text, isHauptbild } = req.body;
 
     if (!req.file) {
+      console.log('❌ No file uploaded');
       return res.status(400).json({
         success: false,
         message: 'Keine Bilddatei hochgeladen'
       });
     }
 
+    console.log('🔍 Looking for product with ID:', id);
     const product = await Portfolio.findById(id);
     if (!product) {
+      console.log('❌ Product not found:', id);
       // Datei löschen wenn Produkt nicht gefunden
       fs.unlinkSync(req.file.path);
       return res.status(404).json({
@@ -328,13 +336,27 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainI
       });
     }
 
+    console.log('✅ Product found:', product.name);
+
     // Bild als Base64 einlesen
     const imageBuffer = fs.readFileSync(req.file.path);
     const base64Image = imageBuffer.toString('base64');
     const contentType = req.file.mimetype;
 
-    // Temporäre Datei löschen (nicht mehr benötigt)
-    fs.unlinkSync(req.file.path);
+    console.log('📸 Image processed, size:', base64Image.length, 'chars');
+
+    // Temporäre Datei sicher löschen (mit Retry für Windows)
+    try {
+      // Kurz warten bevor Löschen (Windows file locking)
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+        console.log('🗑️ Temporary file deleted successfully');
+      }
+    } catch (unlinkError) {
+      console.warn('⚠️ Could not delete temporary file (will be cleaned up later):', unlinkError.message);
+      // Nicht kritisch - Datei wird später bereinigt
+    }
 
     // Bilder-Objekt initialisieren falls nicht vorhanden
     if (!product.bilder) {
@@ -347,6 +369,7 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainI
     }
 
     if (isHauptbild === 'true') {
+      console.log('📷 Setting as main image');
       // Hauptbild als Base64 speichern
       product.bilder.hauptbild = `data:${contentType};base64,${base64Image}`;
       product.bilder.hauptbildData = {
@@ -355,6 +378,7 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainI
       };
       product.bilder.alt_text = alt_text || '';
     } else {
+      console.log('🖼️ Adding to gallery');
       // Zur Galerie hinzufügen
       product.bilder.galerie.push({
         url: `data:${contentType};base64,${base64Image}`,
@@ -364,7 +388,9 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainI
       });
     }
 
+    console.log('💾 Saving product...');
     await product.save();
+    console.log('✅ Product saved successfully');
 
     res.json({
       success: true,
@@ -377,14 +403,26 @@ router.post('/portfolio/:id/upload-image', upload.single('image'), optimizeMainI
     });
 
   } catch (error) {
-    console.error('Admin Image Upload Error:', error);
-    // Datei löschen bei Fehler
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    console.error('❌ Admin Image Upload Error:', error);
+    console.error('❌ Stack trace:', error.stack);
+    
+    // Datei sicher löschen bei Fehler (mit Retry)
+    if (req.file && req.file.path) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+          console.log('🗑️ Temporary file cleaned up after error');
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Could not clean up temporary file:', cleanupError.message);
+      }
     }
+    
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Hochladen des Bildes'
+      message: 'Fehler beim Hochladen des Bildes',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -530,27 +568,74 @@ router.get('/cart', async (req, res) => {
       await cart.save();
     }
 
-    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
+    // Aktualisiere Bild-URLs und Verfügbarkeitsinformationen aus Portfolio für alle Artikel
     const Portfolio = require('../models/Portfolio');
+    const Bestand = require('../models/Bestand');
+    
     const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
       try {
         // Hole aktuelles Produkt aus Portfolio
         const product = await Portfolio.findById(item.produktId);
+        let bestandInfo = null;
+        
+        // Lade Bestandsinformationen
+        if (product) {
+          bestandInfo = await Bestand.findOne({ 
+            artikelId: item.produktId,
+            typ: 'produkt'
+          });
+          console.log('🔍 Admin Cart - Checking bestand for:', {
+            produktId: item.produktId,
+            productName: product.name,
+            bestandFound: !!bestandInfo,
+            bestandMenge: bestandInfo?.menge,
+            bestandVerfuegbar: bestandInfo?.verfuegbar
+          });
+        }
         
         if (product && product.bilder && product.bilder.hauptbild) {
-          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          // Aktualisiere mit Portfolio-Daten und Verfügbarkeitsstatus
           return {
             ...item.toObject(),
-            bild: product.bilder.hauptbild
+            bild: product.bilder.hauptbild,
+            bestand: bestandInfo ? {
+              verfuegbar: (bestandInfo.menge || 0) > 0,
+              menge: bestandInfo.menge || 0,
+              einheit: bestandInfo.einheit || 'Stück'
+            } : {
+              // Fallback: Wenn kein Bestand-Eintrag, aber Produkt aktiv
+              verfuegbar: product.aktiv !== false, // Standard: verfügbar außer explizit deaktiviert
+              menge: 5, // Standard-Menge
+              einheit: 'Stück'
+            }
           };
         }
         
-        // Fallback: behalte vorhandene Bild-URL
-        return item.toObject();
+        // Fallback: behalte vorhandene Daten aber füge Bestandsinfo hinzu
+        return {
+          ...item.toObject(),
+          bestand: bestandInfo ? {
+            verfuegbar: (bestandInfo.menge || 0) > 0,
+            menge: bestandInfo.menge || 0,
+            einheit: bestandInfo.einheit || 'Stück'
+          } : {
+            // Fallback: Wenn kein Bestand-Eintrag und kein Produkt gefunden
+            verfuegbar: false,
+            menge: 0,
+            einheit: 'Stück'
+          }
+        };
       } catch (err) {
         console.error('Fehler beim Laden des Produkts:', item.produktId, err);
-        // Bei Fehler: behalte Artikel wie er ist
-        return item.toObject();
+        // Bei Fehler: behalte Artikel mit "nicht verfügbar" Status
+        return {
+          ...item.toObject(),
+          bestand: {
+            verfuegbar: false,
+            menge: 0,
+            einheit: 'Stück'
+          }
+        };
       }
     }));
 

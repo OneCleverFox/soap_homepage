@@ -1,76 +1,98 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Container,
-  Typography,
   Box,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Typography,
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Alert,
-  CircularProgress,
-  IconButton,
+  Grid,
+  Card,
+  CardContent,
   TextField,
-  Select,
-  MenuItem,
   FormControl,
   InputLabel,
-  Snackbar,
-  Badge,
+  Select,
+  MenuItem,
+  Divider,
+  Tooltip,
+  CircularProgress,
+  IconButton,
   Tabs,
   Tab,
-  Fab,
+  Badge,
+  InputAdornment,
+  Collapse,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  ListItemSecondaryAction,
+  AccordionSummary,
+  AccordionDetails,
+  Accordion,
+  useTheme,
   useMediaQuery,
-  useTheme
+  Snackbar,
+  SnackbarContent,
+  Fab,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon
 } from '@mui/material';
 import {
-  FilterList,
-  Search,
-  LocalShipping,
-  Timeline,
-  Cancel,
-  Sort,
-  ViewList,
-  Receipt as InvoiceIcon,
-  Email as EmailIcon,
-  Download as DownloadIcon,
-  Send as SendIcon,
-  Dashboard,
-  Refresh,
-  Euro,
-  Warning,
-  Email,
-  ContentCopy,
+  Visibility as VisibilityIcon,
   Edit as EditIcon,
-  HelpOutline
+  Check as CheckIcon,
+  Close as CloseIcon,
+  Refresh as RefreshIcon,
+  Search,
+  FilterList,
+  ViewList,
+  Sort,
+  Dashboard,
+  LocalShipping,
+  Payment,
+  Info,
+  Warning,
+  Error as ErrorIcon,
+  CheckCircle,
+  Schedule,
+  ExpandMore,
+  Add,
+  Print,
+  Email,
+  Phone,
+  Home,
+  Person,
+  ShoppingCart,
+  Receipt,
+  Settings,
+  Help,
+  Inventory,
+  Assessment,
+  TrendingUp,
+  MonetizationOn,
+  AccountBalance
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../services/api';
-import BestellverwaltungHilfe from './BestellverwaltungHilfe';
 
 const AdminOrdersManagement = () => {
-  // Theme und Responsive
   const theme = useTheme();
-  
-  // State Management
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Core state
   const [orders, setOrders] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -78,107 +100,101 @@ const AdminOrdersManagement = () => {
   const [success, setSuccess] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [inquiryDialogOpen, setInquiryDialogOpen] = useState(false);
   const [trackingDialog, setTrackingDialog] = useState(false);
   const [hilfeOpen, setHilfeOpen] = useState(false);
-  
-  // Filter & Sortierung
+
+  // Filter and view state
   const [filters, setFilters] = useState({
-    status: 'pending', // pending = alle offenen
+    status: 'pending',
     sortBy: 'oldest',
     searchTerm: '',
-    dateRange: 'all'
+    showInquiries: true
   });
   const [stats, setStats] = useState({});
   const [tabValue, setTabValue] = useState(0);
-  
-  // Tracking-Daten
+
+  // Tracking state
   const [trackingData, setTrackingData] = useState({
     sendungsnummer: '',
     anbieter: 'dhl',
-    notiz: ''
+    hinweis: ''
   });
 
-  // Status-Konfiguration entsprechend dem Workflow
+  // Status configuration with enhanced features
   const statusConfig = {
-    anfrage: {
-      label: 'Anfrage',
+    neu: {
+      label: '⏳ Neu',
+      color: 'warning',
+      priority: 1,
+      description: 'Neue Bestellung eingegangen',
+      actions: ['confirm', 'reject', 'note']
+    },
+    bezahlt: {
+      label: '💰 Bezahlt',
       color: 'info',
+      priority: 2,
+      description: 'Zahlung eingegangen',
+      actions: ['confirm', 'reject', 'note']
+    },
+    bestaetigt: {
+      label: '✅ Bestätigt',
+      color: 'success',
+      priority: 3,
+      description: 'Bestellung bestätigt',
+      actions: ['pack', 'note']
+    },
+    verpackt: {
+      label: '📦 Verpackt',
+      color: 'primary',
+      priority: 4,
+      description: 'Bestellung verpackt',
+      actions: ['ship', 'note']
+    },
+    verschickt: {
+      label: '🚚 Verschickt',
+      color: 'secondary',
+      priority: 5,
+      description: 'Bestellung verschickt',
+      actions: ['deliver', 'track', 'note']
+    },
+    zugestellt: {
+      label: '🏠 Zugestellt',
+      color: 'success',
+      priority: 6,
+      description: 'Bestellung zugestellt',
+      actions: ['archive']
+    },
+    abgelehnt: {
+      label: '❌ Abgelehnt',
+      color: 'error',
       priority: 0,
-      action: 'Anfrage bearbeiten',
-      description: 'Kundenanfrage - Warten auf Admin-Entscheidung'
+      description: 'Bestellung abgelehnt',
+      actions: ['refund', 'note']
     },
-    neu: { 
-      label: 'Neu', 
-      color: 'warning', 
-      priority: 1, 
-      action: 'Zahlung prüfen / Bestätigen',
-      description: 'Bestellung eingegangen, Zahlung noch ausstehend'
-    },
-    bezahlt: { 
-      label: 'Bezahlt', 
-      color: 'success', 
-      priority: 2, 
-      action: 'Jetzt bestätigen',
-      description: 'PayPal-Zahlung erfolgreich, bereit zur Bestätigung'
-    },
-    bestaetigt: { 
-      label: 'Bestätigt', 
-      color: 'primary', 
-      priority: 3, 
-      action: 'Verpacken',
-      description: 'Bestellung bestätigt, bereit zur Verpackung'
-    },
-    abgelehnt: { 
-      label: 'Abgelehnt - Rückerstattung', 
-      color: 'error', 
-      priority: 10, 
-      action: 'Rückerstattung bearbeiten',
-      description: 'Bestellung abgelehnt, Rückerstattung muss bearbeitet werden'
-    },
-    verpackt: { 
-      label: 'Verpackt', 
-      color: 'info', 
-      priority: 4, 
-      action: 'Tracking-Nummer eingeben',
-      description: 'Paket verpackt, bereit zum Versand'
-    },
-    verschickt: { 
-      label: 'Verschickt', 
-      color: 'secondary', 
-      priority: 5, 
-      action: 'DHL-Updates überwachen',
-      description: 'Paket versendet, Tracking aktiv'
-    },
-    zugestellt: { 
-      label: 'Zugestellt', 
-      color: 'success', 
-      priority: 6, 
-      action: 'Abgeschlossen',
-      description: 'Paket erfolgreich zugestellt'
-    },
-    storniert: { 
-      label: 'Storniert', 
-      color: 'error', 
-      priority: 0, 
-      action: 'Abgeschlossen',
-      description: 'Bestellung storniert'
+    storniert: {
+      label: '🔄 Storniert',
+      color: 'error',
+      priority: 0,
+      description: 'Bestellung storniert',
+      actions: ['refund', 'note']
     }
   };
 
+  // Carrier options for tracking
   const carrierOptions = [
-    { value: 'dhl', label: 'DHL', icon: '📦' },
-    { value: 'hermes', label: 'Hermes', icon: '🚚' },
-    { value: 'ups', label: 'UPS', icon: '📮' },
-    { value: 'dpd', label: 'DPD', icon: '🚛' },
-    { value: 'gls', label: 'GLS', icon: '📫' },
-    { value: 'tnt', label: 'TNT', icon: '🚐' }
+    { value: 'dhl', label: 'DHL', trackingUrl: 'https://www.dhl.de/de/privatkunden/pakete-verfolgen.html?lang=de&idc=' },
+    { value: 'dpd', label: 'DPD', trackingUrl: 'https://tracking.dpd.de/parcelstatus?query=' },
+    { value: 'ups', label: 'UPS', trackingUrl: 'https://www.ups.com/track?loc=de_DE&tracknum=' },
+    { value: 'fedex', label: 'FedEx', trackingUrl: 'https://www.fedex.com/apps/fedextrack/?tracknumbers=' },
+    { value: 'hermes', label: 'Hermes', trackingUrl: 'https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#' },
+    { value: 'gls', label: 'GLS', trackingUrl: 'https://gls-group.eu/DE/de/paketverfolgung?match=' }
   ];
 
-  // Data Loading mit Pull-to-Refresh Support
   const [refreshing, setRefreshing] = useState(false);
-  
+
+  // Load orders with enhanced filtering
   const loadOrders = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) {
@@ -186,282 +202,208 @@ const AdminOrdersManagement = () => {
       } else {
         setLoading(true);
       }
-      console.log('🔄 Lade Bestellungen mit Filtern:', filters);
-      
+      setError('');
+
       const queryParams = new URLSearchParams();
+      
       if (filters.status !== 'all') {
         if (filters.status === 'pending') {
-          // Alle zu bearbeitenden Bestellungen (inkl. abgelehnt für Rückerstattung)
-          queryParams.append('status', 'neu,bezahlt,bestaetigt,verpackt,abgelehnt');
+          queryParams.append('status', 'neu,bezahlt,bestaetigt,verpackt');
         } else {
           queryParams.append('status', filters.status);
         }
       }
-      queryParams.append('sortBy', filters.sortBy);
-      queryParams.append('limit', '200'); // Mehr Bestellungen für "alle"
-
-      // Verschiedene Endpunkte je nach Filter
-      const endpoint = filters.status === 'all' 
-        ? `/orders/admin/all?${queryParams}`
-        : `/orders/admin/pending?${queryParams}`;
       
-      console.log('📡 API-Aufruf:', endpoint);
+      if (filters.sortBy) {
+        queryParams.append('sort', filters.sortBy);
+      }
+      
+      queryParams.append('limit', '100');
 
+      const endpoint = `/orders/admin?${queryParams.toString()}`;
       const response = await api.get(endpoint);
-      console.log('📊 Response Status:', response.status);
-      
-      const data = response.data;
-      console.log('📦 Response Data:', data);
-      
-      if (data.success) {
-        // Verschiedene API-Routen haben unterschiedliche Datenstrukturen
-        let ordersData, statsData;
+
+      if (response.data && response.data.success) {
+        let ordersData = response.data.orders || [];
         
-        if (filters.status === 'all') {
-          // /api/orders/admin/all Route
-          ordersData = data.data?.orders || data.orders || [];
-          statsData = data.data?.stats || data.stats || {};
-        } else {
-          // /api/orders/admin/pending Route
-          ordersData = data.data?.orders || data.orders || [];
-          statsData = data.data?.stats || data.stats || {};
-        }
-        
-        console.log(`✅ ${ordersData.length} Bestellungen geladen`);
+        // Calculate stats
+        const statusStats = {};
+        let totalRevenue = 0;
+        ordersData.forEach(order => {
+          const status = order.status || 'neu';
+          statusStats[status] = (statusStats[status] || 0) + 1;
+          if (['bezahlt', 'bestaetigt', 'verschickt', 'zugestellt'].includes(status)) {
+            totalRevenue += order.preise?.gesamtsumme || 0;
+          }
+        });
+
+        setStats({
+          ...statusStats,
+          totalRevenue,
+          totalOrders: ordersData.length
+        });
+
         setOrders(ordersData);
-        setStats(statsData);
-        setError(''); // Clear any previous errors
-        if (isRefresh) {
-          setSuccess('🔄 Bestellungen erfolgreich aktualisiert');
-        }
       } else {
-        console.error('❌ API Fehler:', data.message);
-        setError(data.message);
+        throw new Error(response.data?.message || 'Fehler beim Laden der Bestellungen');
       }
     } catch (err) {
-      console.error('❌ API Fehler:', err);
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Laden der Bestellungen';
-      setError(errorMessage);
+      console.error('Fehler beim Laden der Bestellungen:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Laden der Bestellungen');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [filters]);
 
-  // Anfragen laden
+  // Load inquiries
   const loadInquiries = useCallback(async () => {
     try {
-      console.log('🔄 Lade Anfragen...');
-      
       const response = await api.get('/inquiries/admin/all?status=pending&limit=50');
-      console.log('📊 Inquiries Response:', response);
       
-      if (response.data.success) {
+      if (response.data && response.data.success) {
         const inquiriesData = response.data.inquiries || [];
-        console.log(`✅ ${inquiriesData.length} Anfragen geladen`);
         setInquiries(inquiriesData);
       }
     } catch (err) {
-      console.error('❌ Fehler beim Laden der Anfragen:', err);
-      // Nicht kritisch, wenn Anfragen nicht geladen werden können
+      console.error('Fehler beim Laden der Anfragen:', err);
     }
   }, []);
 
-  // Pull-to-refresh Handler für Mobile
+  // Pull to refresh handler
   const handlePullToRefresh = useCallback(() => {
     loadOrders(true);
-  }, [loadOrders]);
-
-  useEffect(() => {
-    loadOrders();
     loadInquiries();
   }, [loadOrders, loadInquiries]);
 
-  // Actions
+  useEffect(() => {
+    loadOrders();
+    if (filters.showInquiries) {
+      loadInquiries();
+    }
+  }, [loadOrders, loadInquiries, filters.showInquiries]);
+
+  // Status update handler
   const handleStatusUpdate = async (orderId, newStatus, note = '', versandData = null) => {
     try {
-      const updatePayload = { 
+      setLoading(true);
+      
+      const updatePayload = {
         status: newStatus,
-        notiz: note,
-        bearbeiter: 'Admin'
+        adminNote: note
       };
 
-      // Versanddaten hinzufügen wenn vorhanden (für "verschickt" Status)
       if (versandData) {
         updatePayload.versand = versandData;
       }
 
       const response = await api.put(`/orders/${orderId}/status`, updatePayload);
-
-      const data = response.data;
-      if (data.success) {
-        const successMsg = versandData 
-          ? `Status auf "Verschickt" aktualisiert - Sendungsnummer: ${versandData.sendungsnummer}`
-          : `Status erfolgreich auf "${statusConfig[newStatus].label}" aktualisiert`;
-        setSuccess(successMsg);
-        loadOrders();
-        setDialogOpen(false);
+      
+      if (response.data && response.data.success) {
+        setSuccess(`Status erfolgreich auf "${statusConfig[newStatus]?.label || newStatus}" aktualisiert`);
+        await loadOrders();
+        setOrderDialogOpen(false);
+        setSelectedOrder(null);
       } else {
-        setError(data.message);
+        throw new Error(response.data?.message || 'Fehler beim Aktualisieren des Status');
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Aktualisieren';
-      setError(errorMessage);
+      console.error('Fehler beim Aktualisieren des Status:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Aktualisieren des Status');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 📧 Bestellung bestätigen mit E-Mail
+  // Order confirmation handler
   const handleConfirmOrder = async (orderId, note = '') => {
     try {
-      setLoading(true);
       const response = await api.post(`/orders/${orderId}/confirm`, {
-        notiz: note || `Bestellung bestätigt am ${new Date().toLocaleString('de-DE')}`,
-        bearbeiter: 'Admin'
+        adminNote: note
       });
-
-      const data = response.data;
-      if (data.success) {
-        setSuccess('✅ Bestellung bestätigt - Bestätigungs-E-Mail wurde versendet');
-        loadOrders();
-        setDialogOpen(false);
+      
+      if (response.data && response.data.success) {
+        setSuccess('Bestellung erfolgreich bestätigt');
+        await loadOrders();
+        setOrderDialogOpen(false);
+        setSelectedOrder(null);
       } else {
-        setError(data.message);
+        throw new Error(response.data?.message || 'Fehler beim Bestätigen der Bestellung');
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Bestätigen';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+      console.error('Fehler beim Bestätigen der Bestellung:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Bestätigen der Bestellung');
     }
   };
 
-
-
-  // 📧 Bestellung ablehnen mit E-Mail
+  // Order rejection handler
   const handleRejectOrder = async (orderId, note = '', reason = null) => {
     try {
-      setLoading(true);
       const response = await api.post(`/orders/${orderId}/reject`, {
-        notiz: note || `Bestellung abgelehnt am ${new Date().toLocaleString('de-DE')}`,
-        bearbeiter: 'Admin',
+        adminNote: note,
         reason: reason
       });
-
-      const data = response.data;
-      if (data.success) {
-        setSuccess('❌ Bestellung abgelehnt - Ablehnungs-E-Mail wurde versendet');
-        loadOrders();
-        setDialogOpen(false);
+      
+      if (response.data && response.data.success) {
+        setSuccess('Bestellung erfolgreich abgelehnt');
+        await loadOrders();
+        setOrderDialogOpen(false);
+        setSelectedOrder(null);
       } else {
-        setError(data.message);
+        throw new Error(response.data?.message || 'Fehler beim Ablehnen der Bestellung');
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Ablehnen';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+      console.error('Fehler beim Ablehnen der Bestellung:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Ablehnen der Bestellung');
     }
   };
 
-  // Validierung für Tracking-Nummern verschiedener Lieferdienste
+  // Tracking validation
   const validateTrackingNumber = (trackingNumber, carrier) => {
-    if (!trackingNumber || !carrier) return { isValid: false, message: 'Sendungsnummer und Anbieter sind erforderlich' };
-    
-    const trimmedNumber = trackingNumber.trim().toUpperCase();
-    
-    switch (carrier.toLowerCase()) {
-      case 'dhl':
-        // DHL: 10 Ziffern oder 3 Buchstaben + 12 Ziffern (z.B. JD123456789012)
-        if (/^\d{10}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige DHL-Sendungsnummer' };
-        } else if (/^[A-Z]{2,3}\d{12}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige DHL-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'DHL-Sendungsnummer muss 10 Ziffern (z.B. 1234567890) oder 2-3 Buchstaben + 12 Ziffern (z.B. JD123456789012) enthalten' 
-          };
-        }
-        
-      case 'gls':
-        // GLS: 8 Zeichen (Buchstaben+Ziffern) oder 11 Ziffern
-        if (/^[A-Z0-9]{8}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige GLS-Sendungsnummer' };
-        } else if (/^\d{11}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige GLS-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'GLS-Sendungsnummer muss 8 Zeichen (Buchstaben+Ziffern, z.B. 56T89AS2) oder 11 Ziffern (z.B. 54478966532) enthalten' 
-          };
-        }
-        
-      case 'tnt':
-        // TNT: 8 oder 9 Ziffern
-        if (/^\d{8,9}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige TNT-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'TNT-Sendungsnummer muss 8 oder 9 Ziffern enthalten (z.B. 598846521 oder 569984532)' 
-          };
-        }
-        
-      case 'dpd':
-        // DPD: 10-14 Ziffern, optional ein Buchstabe am Ende
-        if (/^\d{10,14}[A-Z]?$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige DPD-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'DPD-Sendungsnummer muss 10-14 Ziffern enthalten, optional mit einem Buchstaben am Ende (z.B. 1154565645 oder 12222335412365A)' 
-          };
-        }
-        
-      case 'ups':
-        // UPS: 1Z + 6 Zeichen + 8 Ziffern oder andere Formate
-        if (/^1Z[A-Z0-9]{6}\d{8}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige UPS-Sendungsnummer' };
-        } else if (/^[A-Z0-9]{9,18}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige UPS-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'UPS-Sendungsnummer: 1Z + 6 Zeichen + 8 Ziffern (z.B. 1Z12345E1234567890) oder 9-18 Zeichen' 
-          };
-        }
-        
-      case 'hermes':
-        // Hermes: Flexibles Format, meist 8-16 Zeichen
-        if (/^[A-Z0-9]{8,16}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Gültige Hermes-Sendungsnummer' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'Hermes-Sendungsnummer muss 8-16 Zeichen (Buchstaben und Ziffern) enthalten' 
-          };
-        }
-        
-      default:
-        // Für andere Anbieter: Grundvalidierung
-        if (/^[A-Z0-9]{6,20}$/.test(trimmedNumber)) {
-          return { isValid: true, message: 'Sendungsnummer akzeptiert' };
-        } else {
-          return { 
-            isValid: false, 
-            message: 'Sendungsnummer muss 6-20 Zeichen (Buchstaben und Ziffern) enthalten' 
-          };
-        }
+    if (!trackingNumber || trackingNumber.trim().length === 0) {
+      return { isValid: false, message: 'Sendungsnummer ist erforderlich' };
     }
+
+    const trimmedNumber = trackingNumber.trim().toUpperCase();
+
+    const patterns = {
+      dhl: /^[0-9]{10,12}$|^[A-Z]{2}[0-9]{9}[A-Z]{2}$/,
+      dpd: /^[0-9]{14}$/,
+      ups: /^1Z[A-Z0-9]{16}$/,
+      fedex: /^[0-9]{12,14}$/,
+      hermes: /^[0-9]{10,16}$/,
+      gls: /^[0-9]{11}$/
+    };
+
+    const pattern = patterns[carrier];
+    if (pattern && !pattern.test(trimmedNumber)) {
+      const examples = {
+        dhl: '1234567890 oder AB123456789DE',
+        dpd: '12345678901234',
+        ups: '1Z999AA1234567890',
+        fedex: '123456789012',
+        hermes: '1234567890123456',
+        gls: '12345678901'
+      };
+      
+      return {
+        isValid: false,
+        message: `Ungültige ${carrier.toUpperCase()} Sendungsnummer. Beispiel: ${examples[carrier]}`
+      };
+    }
+
+    return { isValid: true, message: 'Gültige Sendungsnummer' };
   };
 
+  // Add tracking handler
   const handleAddTracking = async () => {
-    if (!trackingData.sendungsnummer) {
-      setError('Sendungsnummer ist erforderlich');
+    if (!selectedOrder) return;
+
+    if (!trackingData.sendungsnummer || !trackingData.anbieter) {
+      setError('Bitte Sendungsnummer und Anbieter angeben');
       return;
     }
 
-    // Validierung der Tracking-Nummer
     const validation = validateTrackingNumber(trackingData.sendungsnummer, trackingData.anbieter);
     if (!validation.isValid) {
       setError(validation.message);
@@ -469,71 +411,106 @@ const AdminOrdersManagement = () => {
     }
 
     try {
-      const isEditing = selectedOrder.versand?.sendungsnummer;
-      console.log('📦 Tracking bearbeiten für Bestellung:', selectedOrder._id);
-      console.log('✅ Validierung erfolgreich:', validation.message);
+      setLoading(true);
       
       const response = await api.put(`/orders/${selectedOrder._id}/tracking`, {
-        ...trackingData,
-        bearbeiter: 'Admin'
+        sendungsnummer: trackingData.sendungsnummer.trim(),
+        anbieter: trackingData.anbieter,
+        hinweis: trackingData.hinweis
       });
-
-      const data = response.data;
-      if (data.success) {
-        const successMsg = isEditing 
-          ? `Tracking-Informationen aktualisiert - Sendungsnummer: ${trackingData.sendungsnummer}`
-          : 'Tracking-Informationen hinzugefügt - Status auf "verschickt" gesetzt';
-        setSuccess(successMsg);
-        setTrackingDialog(false);
-        setTrackingData({ sendungsnummer: '', anbieter: 'dhl', notiz: '' });
-        loadOrders(); // Reload to show updated status
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Aktualisieren der Tracking-Daten';
-      setError(errorMessage);
-    }
-  };
-
-  // Anfrage-Handler
-  const handleInquiryAction = async (inquiry, action) => {
-    try {
-      setLoading(true);
-      const endpoint = action === 'accept' ? 'accept' : action === 'reject' ? 'reject' : 'archive';
       
-      const response = await api.put(`/inquiries/${inquiry._id}/${endpoint}`, {
-        bearbeiter: 'Admin',
-        notiz: `Anfrage ${action === 'accept' ? 'angenommen' : action === 'reject' ? 'abgelehnt' : 'archiviert'} am ${new Date().toLocaleString('de-DE')}`
-      });
-
-      const data = response.data;
-      if (data.success) {
-        const actionText = action === 'accept' ? 'angenommen' : action === 'reject' ? 'abgelehnt' : 'archiviert';
-        setSuccess(`✅ Anfrage erfolgreich ${actionText}`);
-        loadInquiries();
-        setInquiryDialogOpen(false);
+      if (response.data && response.data.success) {
+        setSuccess('Sendungsverfolgung erfolgreich hinzugefügt');
+        await loadOrders();
+        setTrackingDialog(false);
+        setTrackingData({ sendungsnummer: '', anbieter: 'dhl', hinweis: '' });
       } else {
-        setError(data.message);
+        throw new Error(response.data?.message || 'Fehler beim Hinzufügen der Sendungsverfolgung');
       }
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Bearbeiten der Anfrage';
-      setError(errorMessage);
+      console.error('Fehler beim Hinzufügen der Sendungsverfolgung:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Hinzufügen der Sendungsverfolgung');
     } finally {
       setLoading(false);
     }
   };
 
+  // Inquiry action handler
+  const handleInquiryAction = async (inquiry, action) => {
+    try {
+      const endpoint = action === 'approve' ? 'approve' : 'reject';
+      
+      const response = await api.put(`/inquiries/${inquiry._id}/${endpoint}`, {
+        adminNote: `${action === 'approve' ? 'Genehmigt' : 'Abgelehnt'} durch Admin`
+      });
+      
+      if (response.data && response.data.success) {
+        setSuccess(`Anfrage erfolgreich ${action === 'approve' ? 'genehmigt' : 'abgelehnt'}`);
+        await loadInquiries();
+        setInquiryDialogOpen(false);
+        setSelectedInquiry(null);
+      } else {
+        throw new Error(response.data?.message || `Fehler beim ${action === 'approve' ? 'Genehmigen' : 'Ablehnen'} der Anfrage`);
+      }
+    } catch (err) {
+      console.error('Fehler bei Anfrage-Aktion:', err);
+      setError(err.response?.data?.message || err.message || `Fehler beim ${action === 'approve' ? 'Genehmigen' : 'Ablehnen'} der Anfrage`);
+    }
+  };
 
+  // PayPal refund handler
+  const handlePayPalRefund = async (order) => {
+    if (!order.zahlungsDetails?.paypal?.paymentId) {
+      setError('Keine PayPal-Zahlungsdetails gefunden');
+      return;
+    }
 
-  // UI Helpers
+    try {
+      setLoading(true);
+      
+      const refundAmount = order.preise?.gesamtsumme || 0;
+      const customerEmail = order.besteller?.email || '';
+      const customerName = `${order.besteller?.vorname || ''} ${order.besteller?.nachname || ''}`.trim();
+      
+      // Create PayPal Send Money URL
+      const paypalUrl = new URL('https://www.paypal.com/myaccount/transfer/send');
+      paypalUrl.searchParams.append('recipient', customerEmail);
+      paypalUrl.searchParams.append('amount', refundAmount.toFixed(2));
+      paypalUrl.searchParams.append('currencyCode', 'EUR');
+      paypalUrl.searchParams.append('note', `Rückerstattung für Bestellung #${order.bestellnummer}`);
+
+      // Open PayPal in new window
+      window.open(paypalUrl.toString(), '_blank');
+
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        `PayPal Send Money wurde geöffnet.\n\n` +
+        `Empfänger: ${customerEmail}\n` +
+        `Betrag: ${refundAmount.toFixed(2)} EUR\n` +
+        `Nachricht: Rückerstattung für Bestellung #${order.bestellnummer}\n\n` +
+        `Wurde die Rückerstattung erfolgreich gesendet?`
+      );
+
+      if (confirmed) {
+        await handleStatusUpdate(order._id, 'storniert', 'PayPal Rückerstattung gesendet');
+        setSuccess(`Rückerstattung für Bestellung #${order.bestellnummer} erfolgreich verarbeitet`);
+      }
+    } catch (err) {
+      console.error('Fehler bei PayPal-Rückerstattung:', err);
+      setError(err.message || 'Fehler bei der PayPal-Rückerstattung');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Utility functions
   const getStatusChip = (status) => {
     const config = statusConfig[status] || statusConfig.neu;
     return (
-      <Chip
-        label={config.label}
-        color={config.color}
-        size="small"
+      <Chip 
+        label={config.label} 
+        color={config.color} 
+        size="small" 
         variant="filled"
       />
     );
@@ -541,862 +518,291 @@ const AdminOrdersManagement = () => {
 
   const getNextAction = (order) => {
     const config = statusConfig[order.status] || statusConfig.neu;
-    return config.action;
+    return config.description;
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Unbekannt';
+    try {
+      return format(new Date(dateString), 'dd.MM.yyyy HH:mm', { locale: de });
+    } catch (error) {
+      return 'Ungültiges Datum';
+    }
   };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('de-DE', {
       style: 'currency',
       currency: 'EUR'
-    }).format(amount);
+    }).format(amount || 0);
   };
 
-  const formatDate = (date) => {
-    if (!date) return 'Nicht gesetzt';
-    try {
-      const dateObj = new Date(date);
-      if (isNaN(dateObj.getTime())) return 'Ungültiges Datum';
-      return format(dateObj, 'dd.MM.yyyy HH:mm', { locale: de });
-    } catch (error) {
-      console.error('Fehler beim Formatieren des Datums:', date, error);
-      return 'Formatfehler';
+  // Combined data for display
+  const combinedItems = React.useMemo(() => {
+    let items = [...orders];
+    
+    if (filters.showInquiries) {
+      const inquiryItems = inquiries.map(inquiry => ({
+        ...inquiry,
+        isInquiry: true,
+        bestellnummer: `INQ-${inquiry._id.slice(-6)}`,
+        besteller: {
+          vorname: inquiry.vorname,
+          nachname: inquiry.nachname,
+          email: inquiry.email
+        },
+        bestelltAm: inquiry.createdAt,
+        status: inquiry.status || 'neu',
+        preise: { gesamtsumme: 0 }
+      }));
+      items = [...items, ...inquiryItems];
     }
-  };
 
-  const getOrderPriority = (order) => {
-    if (!order.erstelltAm) return 'low';
-    try {
-      const orderDate = new Date(order.erstelltAm);
-      if (isNaN(orderDate.getTime())) return 'low';
-      
-      const daysSinceOrder = Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (daysSinceOrder > 3) return 'high';
-      if (daysSinceOrder > 1) return 'medium';
-      return 'low';
-    } catch (error) {
-      console.error('Fehler beim Berechnen der Bestellpriorität:', order.erstelltAm, error);
-      return 'low';
-    }
-  };
-
-  // Berechnet die Tage seit der letzten Statusänderung
-  const getDaysSinceLastStatusChange = (order) => {
-    try {
-      // Prüfe zunächst das statusVerlauf Array
-      if (order.statusVerlauf && Array.isArray(order.statusVerlauf) && order.statusVerlauf.length > 0) {
-        // Finde die neueste Statusänderung
-        const latestStatusChange = order.statusVerlauf
-          .filter(entry => entry.zeitpunkt) // Nur Einträge mit gültigem Zeitpunkt
-          .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))[0];
-        
-        if (latestStatusChange) {
-          const statusDate = new Date(latestStatusChange.zeitpunkt);
-          if (!isNaN(statusDate.getTime())) {
-            return Math.floor((Date.now() - statusDate.getTime()) / (1000 * 60 * 60 * 24));
-          }
-        }
-      }
-      
-      // Fallback: verwende erstelltAm wenn kein statusVerlauf vorhanden ist
-      if (order.erstelltAm) {
-        const orderDate = new Date(order.erstelltAm);
-        if (!isNaN(orderDate.getTime())) {
-          return Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
-        }
-      }
-      
-      // Zusätzlicher Fallback: bestelldatum
-      if (order.bestelldatum) {
-        const orderDate = new Date(order.bestelldatum);
-        if (!isNaN(orderDate.getTime())) {
-          return Math.floor((Date.now() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
-        }
-      }
-      
-      return 0;
-    } catch (error) {
-      console.error('Fehler beim Berechnen der Tage seit letzter Statusänderung:', error);
-      return 0;
-    }
-  };
-
-  const filteredOrders = orders.filter(order => {
+    // Apply search filter
     if (filters.searchTerm) {
-      const searchLower = filters.searchTerm.toLowerCase();
-      
-      // Erweiterte Suche über alle relevanten Felder
-      const searchableFields = [
-        // Bestelldaten
-        order.bestellnummer,
-        order.kundennummer || '',
-        
-        // Kundendaten  
-        order.besteller.vorname,
-        order.besteller.nachname,
-        order.besteller.email,
-        order.besteller.telefon || '',
-        
-        // Adressdaten
-        order.lieferadresse?.strasse || '',
-        order.lieferadresse?.stadt || '',
-        order.lieferadresse?.plz || '',
-        order.rechnungsadresse?.strasse || '',
-        order.rechnungsadresse?.stadt || '',
-        order.rechnungsadresse?.plz || '',
-        
-        // Versanddaten
-        order.versand?.sendungsnummer || '',
-        order.versand?.anbieter || '',
-        
-        // Artikeldaten
-        ...(order.artikel || []).map(artikel => 
-          `${artikel.name || ''} ${artikel.kategorie || ''} ${artikel.beschreibung || ''}`
-        ),
-        
-        // Status und Notizen
-        order.status || '',
-        order.notizen || ''
-      ];
-      
-      return searchableFields.some(field => 
-        field.toString().toLowerCase().includes(searchLower)
+      const searchTerm = filters.searchTerm.toLowerCase();
+      items = items.filter(item => 
+        (item.bestellnummer && item.bestellnummer.toLowerCase().includes(searchTerm)) ||
+        (item.besteller?.vorname && item.besteller.vorname.toLowerCase().includes(searchTerm)) ||
+        (item.besteller?.nachname && item.besteller.nachname.toLowerCase().includes(searchTerm)) ||
+        (item.besteller?.email && item.besteller.email.toLowerCase().includes(searchTerm)) ||
+        (item.lieferadresse?.strasse && item.lieferadresse.strasse.toLowerCase().includes(searchTerm)) ||
+        (item.warenkorb && item.warenkorb.some(item => 
+          item.name && item.name.toLowerCase().includes(searchTerm)
+        ))
       );
     }
-    return true;
-  });
 
-  // Anfragen als "Orders" für einheitliche Darstellung umwandeln
-  const inquiriesAsOrders = inquiries.map(inquiry => ({
-    _id: inquiry._id,
-    bestellnummer: inquiry.inquiryId,
-    status: 'anfrage',
-    besteller: {
-      vorname: inquiry.customer.name.split(' ')[0] || '',
-      nachname: inquiry.customer.name.split(' ').slice(1).join(' ') || '',
-      email: inquiry.customer.email
-    },
-    artikel: inquiry.items.map(item => ({
-      name: item.name,
-      menge: item.quantity,
-      preis: item.price
-    })),
-    preise: {
-      gesamtsumme: inquiry.total
-    },
-    erstelltAm: inquiry.createdAt,
-    kundennummer: inquiry.customer.id,
-    rechnungsadresse: inquiry.rechnungsadresse,
-    lieferadresse: inquiry.lieferadresse,
-    notizen: inquiry.customerNote || '',
-    inquiryData: inquiry // Original-Anfrage-Daten für Details
-  }));
+    // Apply status filter
+    if (filters.status !== 'all') {
+      if (filters.status === 'pending') {
+        items = items.filter(item => 
+          ['neu', 'bezahlt', 'bestaetigt', 'verpackt'].includes(item.status)
+        );
+      } else {
+        items = items.filter(item => item.status === filters.status);
+      }
+    }
 
-  // Kombinierte Liste: Bestellungen + Anfragen
-  const combinedItems = [...filteredOrders, ...inquiriesAsOrders];
+    // Apply sorting
+    items.sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'newest':
+          return new Date(b.bestelltAm) - new Date(a.bestelltAm);
+        case 'oldest':
+          return new Date(a.bestelltAm) - new Date(b.bestelltAm);
+        case 'value':
+          return (b.preise?.gesamtsumme || 0) - (a.preise?.gesamtsumme || 0);
+        case 'status':
+          const aConfig = statusConfig[a.status] || statusConfig.neu;
+          const bConfig = statusConfig[b.status] || statusConfig.neu;
+          return aConfig.priority - bConfig.priority;
+        default:
+          return 0;
+      }
+    });
 
-  // Tab-Content
+    return items;
+  }, [orders, inquiries, filters]);
+
+  // Tab content renderer
   const getTabContent = () => {
     switch (tabValue) {
-      case 0:
-        return <OrdersGrid />;
-      case 1:
-        return <OrdersTable />;
-      case 2:
-        return <OrdersDashboard />;
-      default:
-        return <OrdersGrid />;
-    }
-  };
-
-  // Orders Grid View
-  const OrdersGrid = () => (
-    <Grid container spacing={2}>
-      {combinedItems.map((order) => {
-        const priority = getOrderPriority(order);
-        const daysSince = getDaysSinceLastStatusChange(order);
-        const shouldHighlight = daysSince > 3 && 
-          !['rückerstattung', 'rueckerstattung', 'erledigt', 'zugestellt', 'abgelehnt'].includes(order.status?.toLowerCase());
-        
-        const badgeColor = shouldHighlight && daysSince > 3 ? 'error' : daysSince > 1 ? 'warning' : 'success';
-
+      case 0: // Karten-Ansicht
         return (
-          <Grid item xs={12} md={6} lg={4} key={order._id}>
-            <Card
-              elevation={priority === 'high' || order.status === 'abgelehnt' ? 4 : 1}
-              sx={{
-                border: order.status === 'abgelehnt' ? '3px solid #d32f2f' : 
-                       priority === 'high' ? '2px solid #f44336' : 'none',
-                backgroundColor: order.status === 'abgelehnt' ? '#ffebee' : 'inherit',
-                cursor: 'pointer',
-                '&:hover': { elevation: 3 }
-              }}
-              onClick={() => {
-                if (order.type === 'inquiry') {
-                  setSelectedInquiry(order);
-                  setInquiryDialogOpen(true);
-                } else {
-                  setSelectedOrder(order);
-                  setDialogOpen(true);
-                }
-              }}
-            >
-              <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="start" mb={2}>
-                  <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
-                    {order.bestellnummer}
-                  </Typography>
-                  <Badge
-                    badgeContent={getDaysSinceLastStatusChange(order)}
-                    color={badgeColor}
-                    sx={{ '& .MuiBadge-badge': { fontSize: '0.75rem' } }}
-                  >
-                    <Chip size="small" label="Tage" />
-                  </Badge>
-                </Box>
-
-                <Box display="flex" alignItems="center" gap={1} mb={1}>
-                  {getStatusChip(order.status)}
-                  <Typography variant="body2" color="text.secondary">
-                    {getNextAction(order)}
-                  </Typography>
-                </Box>
-
-                <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
-                  {order.besteller.vorname} {order.besteller.nachname}
-                </Typography>
-
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {order.besteller.email}
-                </Typography>
-
-                <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
-                  <Typography variant="h6" color="primary">
-                    {formatCurrency(order.preise?.gesamtsumme || 0)}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {formatDate(order.erstelltAm)}
-                  </Typography>
-                </Box>
-
-                {order.versand?.sendungsnummer && (
-                  <Chip
-                    label={`📦 ${order.versand.sendungsnummer}`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ mt: 1 }}
-                  />
-                )}
-
-                {/* Spezielle Anzeige für abgelehnte Bestellungen */}
-                {order.status === 'abgelehnt' && (
-                  <Alert severity="error" sx={{ mt: 1, mb: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      💰 Rückerstattung erforderlich
-                    </Typography>
-                    <Typography variant="caption" display="block">
-                      <strong>Betrag:</strong> {formatCurrency(order.preise?.gesamtsumme || 0)}
-                    </Typography>
-                    <Typography variant="caption" display="block">
-                      <strong>An:</strong> {order.besteller.email}
-                    </Typography>
-                    <Typography variant="caption" display="block">
-                      <strong>Via:</strong> {order.zahlung?.methode?.toUpperCase() || 'UNBEKANNT'}
-                      {order.zahlung?.methode === 'paypal' && (
-                        <Chip 
-                          label="PayPal" 
-                          size="small" 
-                          sx={{ ml: 1, bgcolor: '#0070ba', color: 'white', fontSize: '0.65rem', height: '16px' }} 
-                        />
-                      )}
-                    </Typography>
-                  </Alert>
-                )}
-
-                <Box display="flex" gap={1} mt={2}>
-                  {/* Rückerstattungs-Button für abgelehnte Bestellungen */}
-                  {order.status === 'abgelehnt' && (
-                    <Box display="flex" gap={1} flexWrap="wrap">
-                      {/* Status der Rückerstattung - nur bei erfolgreicher PayPal-Rückerstattung */}
-                      {order.rueckerstattung?.status === 'erfolgreich' ? (
-                        <Chip
-                          label={`✅ PayPal-Rückerstattung erledigt`}
-                          color="success"
-                          size="small"
-                        />
-                      ) : (
-                        <>
-                          {/* PayPal Rückerstattung - nur wenn PayPal-Zahlung vorhanden */}
-                          {order.zahlung?.methode === 'paypal' && order.zahlung?.paypalOrderId && (
-                            <Button
-                              size="small"
-                              variant="contained"
-                              sx={{ bgcolor: '#ff9800', '&:hover': { bgcolor: '#f57c00' } }}
-                              startIcon={<Euro />}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                
-                                const reason = prompt('Grund für PayPal-Rückerstattung eingeben:') || 'Bestellung storniert';
-                                
-                                if (window.confirm(`PayPal-Rückerstattung für ${order.bestellnummer} durchführen?\n\nBetrag: ${order.preise?.gesamtsumme}€\nGrund: ${reason}`)) {
-                                  try {
-                                    const response = await api.post(`/orders/${order._id}/paypal-refund`, {
-                                      reason: reason,
-                                      bearbeiter: 'Admin'
-                                    });
-                                    
-                                    if (response.data.success) {
-                                      setSuccess(`✅ PayPal-Rückerstattung erfolgreich: ${response.data.refund.refundId}`);
-                                      loadOrders();
-                                    } else {
-                                      setError(`❌ PayPal-Rückerstattung fehlgeschlagen: ${response.data.message}`);
-                                    }
-                                  } catch (err) {
-                                    console.error('PayPal-Rückerstattung Fehler:', err);
-                                    setError('❌ Fehler bei PayPal-Rückerstattung: ' + (err.response?.data?.message || err.message));
-                                  }
-                                }
-                              }}
-                            >
-                              💳 PayPal Rückerstattung
-                            </Button>
-                          )}
-                          
-                          {/* PayPal Send Money - einfach und direkt */}
-                          <Button
-                            size="small"
-                            variant="contained"
-                            sx={{ bgcolor: '#0070ba', '&:hover': { bgcolor: '#005ea6' } }}
-                            startIcon={<Euro />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              
-                              // Kundendaten für Rückerstattung
-                              const amount = (order.preise?.gesamtsumme || 0).toFixed(2);
-                              const email = order.besteller?.email || '';
-                              const name = `${order.besteller?.vorname || ''} ${order.besteller?.nachname || ''}`.trim();
-                              const orderNumber = order.bestellnummer || '';
-                              
-                              // Einfacher PayPal Send Money Link
-                              const paypalUrl = `https://www.paypal.com/myaccount/transfer/send?recipient=${encodeURIComponent(email)}&amount=${amount}&currency=EUR&note=${encodeURIComponent(`Rückerstattung Glücksmomente.manufaktur - ${orderNumber}`)}`;
-                              
-                              // Anzeige für Admin mit allen notwendigen Daten
-                              const confirmMessage = `PayPal-Rückerstattung:\n\n` +
-                                `Empfänger: ${email}\n` +
-                                `Name: ${name}\n` +
-                                `Betrag: ${amount} EUR\n` +
-                                `Bestellung: ${orderNumber}\n` +
-                                `Verwendungszweck: Rückerstattung Glücksmomente.manufaktur - ${orderNumber}\n\n` +
-                                `PayPal wird geöffnet. Nach erfolgreichem Versand bitte "Rückerstattung bestätigen" klicken.`;
-                              
-                              alert(confirmMessage);
-                              window.open(paypalUrl, '_blank');
-                            }}
-                          >
-                            💰 PayPal Rückerstattung
-                          </Button>
-                          
-                          {/* Bestätigung nach PayPal-Versand */}
-                          <Button
-                            size="small"
-                            variant="outlined"
-                            color="success"
-                            startIcon={<Euro />}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              
-                              const confirmSent = window.confirm(
-                                `Haben Sie die PayPal-Rückerstattung erfolgreich versendet?\n\n` +
-                                `Empfänger: ${order.besteller?.email}\n` +
-                                `Betrag: ${(order.preise?.gesamtsumme || 0).toFixed(2)} EUR\n` +
-                                `Bestellung: ${order.bestellnummer}\n\n` +
-                                `Die Bestellung wird als erledigt markiert.`
-                              );
-                              
-                              if (!confirmSent) return;
-                              
-                              try {
-                                const transactionId = prompt('Optional: PayPal Transaction ID eingeben:') || 'Manuell bestätigt';
-                                
-                                // PayPal-Rückerstattung über API bestätigen
-                                const response = await api.post(`/orders/${order._id}/paypal-refund-confirm`, {
-                                  amount: order.preise?.gesamtsumme,
-                                  transactionId: transactionId,
-                                  bearbeiter: 'Admin'
-                                });
-                                
-                                if (response.data.success) {
-                                  setSuccess('✅ PayPal-Rückerstattung erfolgreich bestätigt');
-                                  loadOrders();
-                                } else {
-                                  setError(`❌ Fehler: ${response.data.message}`);
-                                }
-                              } catch (err) {
-                                console.error('Rückerstattung-Bestätigung Fehler:', err);
-                                setError('❌ Fehler bei der Bestätigung: ' + (err.response?.data?.message || err.message));
-                              }
-                            }}
-                          >
-                            ✓ Rückerstattung bestätigen
-                          </Button>
-                          
-                          {/* Hinweis für manuellen Prozess */}
-                          <Typography variant="caption" sx={{ 
-                            display: 'block', 
-                            mt: 1, 
-                            p: 1, 
-                            bgcolor: '#fff3e0', 
-                            borderRadius: 1,
-                            textAlign: 'center',
-                            fontSize: '0.75rem'
-                          }}>
-                            💡 Nach erfolgreicher PayPal-Rückerstattung wird die Bestellung automatisch als erledigt markiert
-                          </Typography>
-                        </>
-                      )}
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="error"
-                        startIcon={<Euro />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedOrder(order);
-                          setDialogOpen(true);
-                        }}
-                      >
-                        Details anzeigen
-                      </Button>
-                    </Box>
-                  )}
-                  
-                  {/* Tracking-Button nur für verpackte Bestellungen */}
-                  {order.status === 'verpackt' && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="primary"
-                      startIcon={<LocalShipping />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOrder(order);
-                        setTrackingDialog(true);
-                      }}
-                    >
-                      Tracking eingeben
-                    </Button>
-                  )}
-                  
-                  {/* Status-Aktions-Button für normale Bestellungen (nicht abgelehnt) */}
-                  {order.status !== 'verschickt' && 
-                   order.status !== 'zugestellt' && 
-                   order.status !== 'storniert' && 
-                   order.status !== 'abgelehnt' && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color={order.status === 'bezahlt' ? 'success' : 'primary'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const nextStatusMap = {
-                          'neu': 'bestaetigt',
-                          'bezahlt': 'bestaetigt', 
-                          'bestaetigt': 'verpackt'
-                        };
-                        const nextStatus = nextStatusMap[order.status];
-                        if (nextStatus) {
-                          const actionText = {
-                            'neu': 'Bestätigen',
-                            'bezahlt': 'Bestätigen',
-                            'bestaetigt': 'Als verpackt markieren'
-                          };
-                          handleStatusUpdate(order._id, nextStatus, `${actionText[order.status]} - ${new Date().toLocaleString('de-DE')}`);
-                        }
-                      }}
-                    >
-                      {order.status === 'bezahlt' ? '✅ Bestätigen' : 
-                       order.status === 'bestaetigt' ? '📦 Verpackt' : 
-                       order.status === 'neu' ? '✅ Bestätigen' : 'Weiter'}
-                    </Button>
-                  )}
-
-                  {/* Tracking anzeigen für verschickte Bestellungen */}
-                  {order.versand?.sendungsnummer && (
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (order.versand.trackingUrl) {
-                          window.open(order.versand.trackingUrl, '_blank');
-                        }
-                      }}
-                      disabled={!order.versand.trackingUrl}
-                    >
-                      📦 Tracking
-                    </Button>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        );
-      })}
-    </Grid>
-  );
-
-  // Mobile-optimierte Compact Card View
-  const MobileOrderCard = ({ order }) => {
-    const daysSince = getDaysSinceLastStatusChange(order);
-    
-    // Keine rote Hervorhebung für rückerstattete oder abgeschlossene Bestellungen
-    const shouldHighlight = daysSince > 3 && 
-      !['rückerstattung', 'rueckerstattung', 'erledigt', 'zugestellt', 'abgelehnt'].includes(order.status?.toLowerCase());
-
-    return (
-      <Card 
-        sx={{ 
-          mb: 1, 
-          cursor: 'pointer',
-          backgroundColor: shouldHighlight ? 'rgba(244, 67, 54, 0.05)' : 'inherit',
-          '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.04)' }
-        }}
-        onClick={() => {
-          if (order.type === 'inquiry') {
-            setSelectedInquiry(order);
-            setInquiryDialogOpen(true);
-          } else {
-            setSelectedOrder(order);
-            setDialogOpen(true);
-          }
-        }}
-      >
-        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-            <Box>
-              <Typography variant="subtitle2" fontWeight="bold" color="primary">
-                #{order.bestellnummer}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {order.besteller.vorname} {order.besteller.nachname}
-              </Typography>
-            </Box>
-            <Box textAlign="right">
-              <Typography variant="subtitle2" fontWeight="bold">
-                {formatCurrency(order.preise?.gesamtsumme || 0)}
-              </Typography>
-              <Chip
-                label={`${daysSince}d`}
-                size="small"
-                color={shouldHighlight && daysSince > 3 ? 'error' : daysSince > 1 ? 'warning' : 'success'}
-              />
-            </Box>
-          </Box>
-          
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            {getStatusChip(order.status)}
-            <Box display="flex" gap={1} alignItems="center">
-              <Typography variant="caption" color="text.secondary">
-                {getNextAction(order)}
-              </Typography>
-              <IconButton
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedOrder(order);
-                  setTrackingDialog(true);
-                }}
-                disabled={order.status === 'verschickt' || order.status === 'zugestellt'}
-                sx={{ ml: 1 }}
-              >
-                <LocalShipping fontSize="small" />
-              </IconButton>
-            </Box>
-          </Box>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  // Orders Table View (kompakt für viele Bestellungen)
-  const OrdersTable = () => {
-    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    
-    // Mobile Ansicht: Compact Cards mit Pull-to-Refresh
-    if (isMobile) {
-      return (
-        <Box
-          sx={{
-            overscrollBehavior: 'contain',
-            touchAction: 'pan-y',
-            position: 'relative'
-          }}
-          onTouchStart={(e) => {
-            // Touch-Start Position für Pull-to-refresh
-            if (window.scrollY <= 0) {
-              e.currentTarget.dataset.touchStartY = e.touches[0].clientY;
-            }
-          }}
-          onTouchMove={(e) => {
-            // Pull-to-refresh Gesture
-            if (window.scrollY <= 0 && e.currentTarget.dataset.touchStartY) {
-              const touchStartY = parseFloat(e.currentTarget.dataset.touchStartY);
-              const touchCurrentY = e.touches[0].clientY;
-              const pullDistance = touchCurrentY - touchStartY;
-              
-              if (pullDistance > 100 && !refreshing) {
-                e.currentTarget.style.transform = `translateY(${Math.min(pullDistance - 100, 50)}px)`;
-                e.currentTarget.style.opacity = '0.8';
-              }
-            }
-          }}
-          onTouchEnd={(e) => {
-            // Trigger refresh wenn genug gezogen wurde
-            if (window.scrollY <= 0 && e.currentTarget.dataset.touchStartY) {
-              const touchStartY = parseFloat(e.currentTarget.dataset.touchStartY);
-              const touchEndY = e.changedTouches[0].clientY;
-              const pullDistance = touchEndY - touchStartY;
-              
-              if (pullDistance > 120 && !refreshing) {
-                handlePullToRefresh();
-              }
-              
-              // Reset transform
-              e.currentTarget.style.transform = '';
-              e.currentTarget.style.opacity = '';
-              delete e.currentTarget.dataset.touchStartY;
-            }
-          }}
-        >
-          {refreshing && (
-            <Box display="flex" justifyContent="center" py={2}>
-              <CircularProgress size={24} />
-              <Typography variant="body2" sx={{ ml: 1 }}>
-                Aktualisiere...
-              </Typography>
-            </Box>
-          )}
-          {combinedItems.map((order) => (
-            <MobileOrderCard key={order._id} order={order} />
-          ))}
-        </Box>
-      );
-    }
-
-    // Desktop Ansicht: Vollständige Tabelle
-    return (
-      <TableContainer component={Paper}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Bestellnummer</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Kunde</TableCell>
-              <TableCell>Betrag</TableCell>
-              <TableCell>Letzte Änderung</TableCell>
-              <TableCell>Nächste Aktion</TableCell>
-              <TableCell align="center">Aktionen</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {combinedItems.map((order) => {
-              const daysSince = getDaysSinceLastStatusChange(order);
-              
-              // Keine rote Hervorhebung für rückerstattete oder abgeschlossene Bestellungen
-              const shouldHighlight = daysSince > 3 && 
-                !['rückerstattung', 'rueckerstattung', 'erledigt', 'zugestellt', 'abgelehnt'].includes(order.status?.toLowerCase());
-              
-              return (
-                <TableRow
-                  key={order._id}
-                  hover
-                  onClick={() => {
-                    if (order.type === 'inquiry') {
-                      setSelectedInquiry(order);
-                      setInquiryDialogOpen(true);
-                    } else {
-                      setSelectedOrder(order);
-                      setDialogOpen(true);
-                    }
-                  }}
-                  sx={{
-                    cursor: 'pointer',
-                    backgroundColor: shouldHighlight ? 'rgba(244, 67, 54, 0.05)' : 'inherit'
+          <Grid container spacing={2}>
+            {combinedItems.map((item) => (
+              <Grid item xs={12} sm={6} md={4} key={item._id}>
+                <Card 
+                  sx={{ 
+                    height: '100%',
+                    border: item.isInquiry ? '2px solid #ff9800' : 'none',
+                    '&:hover': { boxShadow: 6 }
                   }}
                 >
-                  <TableCell sx={{ fontWeight: 'bold' }}>
-                    {order.bestellnummer}
-                  </TableCell>
-                  <TableCell>{getStatusChip(order.status)}</TableCell>
-                  <TableCell>
-                    {order.besteller.vorname} {order.besteller.nachname}
-                    <br />
-                    <Typography variant="caption" color="text.secondary">
-                      {order.besteller.email}
+                  <CardContent>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                      <Typography variant="h6" noWrap>
+                        {item.isInquiry ? '💬' : '📦'} {item.bestellnummer}
+                      </Typography>
+                      {getStatusChip(item.status)}
+                    </Box>
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      👤 {item.besteller?.vorname} {item.besteller?.nachname}
                     </Typography>
-                  </TableCell>
-                  <TableCell sx={{ fontWeight: 'bold' }}>
-                    {formatCurrency(order.preise?.gesamtsumme || 0)}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={`${daysSince}d`}
-                      size="small"
-                      color={shouldHighlight && daysSince > 3 ? 'error' : daysSince > 1 ? 'warning' : 'success'}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {getNextAction(order)}
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      📧 {item.besteller?.email}
                     </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedOrder(order);
-                        setTrackingDialog(true);
-                      }}
-                      disabled={order.status === 'verschickt' || order.status === 'zugestellt'}
-                    >
-                      <LocalShipping />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    );
-  };
+                    
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      📅 {formatDate(item.bestelltAm)}
+                    </Typography>
+                    
+                    {!item.isInquiry && (
+                      <Typography variant="h6" color="primary" gutterBottom>
+                        💰 {formatCurrency(item.preise?.gesamtsumme || 0)}
+                      </Typography>
+                    )}
+                    
+                    <Box mt={2}>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<VisibilityIcon />}
+                        onClick={() => {
+                          if (item.isInquiry) {
+                            setSelectedInquiry(item);
+                            setInquiryDialogOpen(true);
+                          } else {
+                            setSelectedOrder(item);
+                            setOrderDialogOpen(true);
+                          }
+                        }}
+                      >
+                        Details
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        );
 
-  // Dashboard View (Statistiken & Übersicht)
-  const OrdersDashboard = () => (
-    <Grid container spacing={3}>
-      {/* Statistik-Karten */}
-      <Grid item xs={12}>
-        <Grid container spacing={2}>
-          {Object.entries(stats).map(([status, data]) => (
-            <Grid item xs={12} sm={6} md={3} key={status}>
+      case 1: // Tabellen-Ansicht
+        return (
+          <Paper>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Typ</TableCell>
+                    <TableCell>Nummer</TableCell>
+                    <TableCell>Kunde</TableCell>
+                    <TableCell>Datum</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Summe</TableCell>
+                    <TableCell>Aktionen</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {combinedItems.map((item) => (
+                    <TableRow key={item._id}>
+                      <TableCell>
+                        {item.isInquiry ? '💬 Anfrage' : '📦 Bestellung'}
+                      </TableCell>
+                      <TableCell>{item.bestellnummer}</TableCell>
+                      <TableCell>
+                        {item.besteller?.vorname} {item.besteller?.nachname}
+                      </TableCell>
+                      <TableCell>{formatDate(item.bestelltAm)}</TableCell>
+                      <TableCell>{getStatusChip(item.status)}</TableCell>
+                      <TableCell>{formatCurrency(item.preise?.gesamtsumme || 0)}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          startIcon={<VisibilityIcon />}
+                          onClick={() => {
+                            if (item.isInquiry) {
+                              setSelectedInquiry(item);
+                              setInquiryDialogOpen(true);
+                            } else {
+                              setSelectedOrder(item);
+                              setOrderDialogOpen(true);
+                            }
+                          }}
+                        >
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        );
+
+      case 2: // Dashboard
+        return (
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
               <Card>
                 <CardContent>
-                  <Box display="flex" alignItems="center" justifyContent="space-between">
-                    <Box>
-                      <Typography variant="h4" color="primary">
-                        {data.count}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {statusConfig[status]?.label || status}
-                      </Typography>
-                    </Box>
-                    <Typography variant="h6">
-                      {formatCurrency(data.totalValue)}
-                    </Typography>
-                  </Box>
+                  <Typography variant="h5" gutterBottom>
+                    📊 Übersichts-Dashboard
+                  </Typography>
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="h6" gutterBottom color="primary">
+                            📈 Schnelle Statistiken
+                          </Typography>
+                          <Box display="flex" justifyContent="space-between" py={1}>
+                            <Typography>Gesamte Bestellungen:</Typography>
+                            <Typography fontWeight="bold">{stats.totalOrders || 0}</Typography>
+                          </Box>
+                          <Box display="flex" justifyContent="space-between" py={1}>
+                            <Typography>Offene Anfragen:</Typography>
+                            <Typography fontWeight="bold">{inquiries.length}</Typography>
+                          </Box>
+                          <Box display="flex" justifyContent="space-between" py={1}>
+                            <Typography>Gesamtumsatz:</Typography>
+                            <Typography fontWeight="bold" color="primary">
+                              {formatCurrency(stats.totalRevenue || 0)}
+                            </Typography>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                    
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined">
+                        <CardContent>
+                          <Typography variant="h6" gutterBottom color="secondary">
+                            🎯 Status Übersicht
+                          </Typography>
+                          {Object.entries(statusConfig).map(([status, config]) => {
+                            const count = orders.filter(order => order.status === status).length;
+                            return (
+                              <Box key={status} display="flex" justifyContent="space-between" alignItems="center" py={1}>
+                                <Box display="flex" alignItems="center" gap={1}>
+                                  <Chip 
+                                    label={config.label} 
+                                    color={config.color} 
+                                    size="small" 
+                                  />
+                                </Box>
+                                <Typography variant="h6">{count}</Typography>
+                              </Box>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
                 </CardContent>
               </Card>
             </Grid>
-          ))}
-        </Grid>
-      </Grid>
+          </Grid>
+        );
 
-      {/* Prioritäts-Listen */}
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom color="error">
-              🚨 Dringende Bestellungen (&gt;3 Tage seit Bestellung)
-            </Typography>
-            <List dense>
-              {combinedItems
-                .filter(order => getOrderPriority(order) === 'high')
-                .slice(0, 5)
-                .map(order => (
-                  <ListItem
-                    key={order._id}
-                    button
-                    onClick={() => {
-                      setSelectedOrder(order);
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Warning color="error" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={order.bestellnummer}
-                      secondary={`${order.besteller.vorname} ${order.besteller.nachname} - ${formatCurrency(order.preise?.gesamtsumme || 0)}`}
-                    />
-                    <ListItemSecondaryAction>
-                      {getStatusChip(order.status)}
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))
-              }
-            </List>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Card>
-          <CardContent>
-            <Typography variant="h6" gutterBottom color="primary">
-            💰 Höchste Bestellwerte
-            </Typography>
-            <List dense>
-              {combinedItems
-                .sort((a, b) => (b.preise?.gesamtsumme || 0) - (a.preise?.gesamtsumme || 0))
-                .slice(0, 5)
-                .map(order => (
-                  <ListItem
-                    key={order._id}
-                    button
-                    onClick={() => {
-                      setSelectedOrder(order);
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Euro color="primary" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={order.bestellnummer}
-                      secondary={`${order.besteller.vorname} ${order.besteller.nachname}`}
-                    />
-                    <ListItemSecondaryAction>
-                      <Typography variant="h6" color="primary">
-                        {formatCurrency(order.preise?.gesamtsumme || 0)}
-                      </Typography>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))
-              }
-            </List>
-          </CardContent>
-        </Card>
-      </Grid>
-    </Grid>
-  );
+      default:
+        return null;
+    }
+  };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 4 }, mb: 4, px: { xs: 1, sm: 3 } }}>
-      {/* Header */}
-      <Box 
-        display="flex" 
-        justifyContent="space-between" 
-        alignItems="center" 
-        mb={3}
-        flexDirection={{ xs: 'column', sm: 'row' }}
-        gap={{ xs: 2, sm: 0 }}
-      >
-        <Typography 
-          variant={useMediaQuery(theme.breakpoints.down('sm')) ? 'h5' : 'h4'} 
-          component="h1" 
-          sx={{ fontWeight: 'bold' }}
-        >
-          📦 Bestellverwaltung
+    <Box p={3}>
+      {/* Header mit Stats */}
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+        <Typography variant="h4" gutterBottom>
+          📦 Bestellungen verwalten
         </Typography>
         <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
           <Badge badgeContent={combinedItems.length} color="primary">
@@ -1405,19 +811,20 @@ const AdminOrdersManagement = () => {
               color="primary" 
               variant="outlined"
               sx={{ fontWeight: 'bold' }}
-              size={useMediaQuery(theme.breakpoints.down('sm')) ? 'small' : 'medium'}
+              size={isMobile ? 'small' : 'medium'}
             />
           </Badge>
-          <IconButton 
-            onClick={() => setHilfeOpen(true)}
-            color="info"
-            title="Hilfe zur Bestellverwaltung"
-          >
-            <HelpOutline />
-          </IconButton>
           {loading && (
             <CircularProgress size={20} />
           )}
+          <IconButton 
+            color="primary" 
+            onClick={handlePullToRefresh}
+            disabled={loading || refreshing}
+            title="Aktualisieren"
+          >
+            <RefreshIcon />
+          </IconButton>
         </Box>
       </Box>
 
@@ -1471,7 +878,11 @@ const AdminOrdersManagement = () => {
                 value={filters.searchTerm}
                 onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
                 InputProps={{
-                  startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search />
+                    </InputAdornment>
+                  )
                 }}
                 helperText={filters.searchTerm ? `${combinedItems.length} Treffer` : 'Suche in allen Feldern'}
               />
@@ -1493,33 +904,46 @@ const AdminOrdersManagement = () => {
         <Tabs 
           value={tabValue} 
           onChange={(e, newValue) => setTabValue(newValue)}
-          variant={useMediaQuery(theme.breakpoints.down('sm')) ? 'fullWidth' : 'standard'}
+          variant={isMobile ? 'fullWidth' : 'standard'}
           scrollButtons="auto"
         >
           <Tab 
-            label={useMediaQuery(theme.breakpoints.down('sm')) ? "Karten" : "📱 Karten-Ansicht"} 
+            label={isMobile ? "Karten" : "📱 Karten-Ansicht"} 
             icon={<ViewList />} 
-            iconPosition={useMediaQuery(theme.breakpoints.down('sm')) ? 'top' : 'start'}
+            iconPosition={isMobile ? 'top' : 'start'}
           />
           <Tab 
-            label={useMediaQuery(theme.breakpoints.down('sm')) ? "Tabelle" : "📊 Tabellen-Ansicht"} 
+            label={isMobile ? "Tabelle" : "📊 Tabellen-Ansicht"} 
             icon={<Sort />} 
-            iconPosition={useMediaQuery(theme.breakpoints.down('sm')) ? 'top' : 'start'}
+            iconPosition={isMobile ? 'top' : 'start'}
           />
           <Tab 
-            label={useMediaQuery(theme.breakpoints.down('sm')) ? "Dashboard" : "📈 Dashboard"} 
+            label={isMobile ? "Dashboard" : "📈 Dashboard"} 
             icon={<Dashboard />} 
-            iconPosition={useMediaQuery(theme.breakpoints.down('sm')) ? 'top' : 'start'}
+            iconPosition={isMobile ? 'top' : 'start'}
           />
         </Tabs>
       </Box>
+
+      {/* Alerts */}
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
+          {success}
+        </Alert>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
       {/* Content */}
       {loading ? (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
           <CircularProgress />
         </Box>
-      ) : error ? (
+      ) : error && !success ? (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
@@ -1527,1461 +951,288 @@ const AdminOrdersManagement = () => {
         getTabContent()
       )}
 
-      {/* Bestelldetails Dialog */}
-      {selectedOrder && (
-        <OrderDetailsDialog
-          order={selectedOrder}
-          open={dialogOpen}
-          onClose={() => setDialogOpen(false)}
-          onStatusUpdate={handleStatusUpdate}
-          onConfirmOrder={handleConfirmOrder}
-          onRejectOrder={handleRejectOrder}
-          statusConfig={statusConfig}
-          formatCurrency={formatCurrency}
-          formatDate={formatDate}
-          loading={loading}
-          setSuccess={setSuccess}
-          setError={setError}
-          loadOrders={loadOrders}
-          onEditTracking={(trackingData) => {
-            setTrackingData(trackingData);
-            setTrackingDialog(true);
-          }}
-        />
-      )}
-
-      {/* Anfrage Details Dialog */}
-      {selectedInquiry && (
-        <InquiryDetailsDialog
-          inquiry={selectedInquiry}
-          open={inquiryDialogOpen}
-          onClose={() => setInquiryDialogOpen(false)}
-          onApprove={(inquiry) => handleInquiryAction(inquiry, 'accept')}
-          onReject={(inquiry) => handleInquiryAction(inquiry, 'reject')}
-          onArchive={(inquiry) => handleInquiryAction(inquiry, 'archive')}
-          formatDate={formatDate}
-          loading={loading}
-          setSuccess={setSuccess}
-          setError={setError}
-          loadOrders={loadInquiries}
-        />
-      )}
-
-      {/* Tracking Dialog */}
-      {selectedOrder && (
-        <TrackingDialog
-          open={trackingDialog}
-          onClose={() => setTrackingDialog(false)}
-          onSave={handleAddTracking}
-          trackingData={trackingData}
-          setTrackingData={setTrackingData}
-          carrierOptions={carrierOptions}
-          order={selectedOrder}
-          validateTrackingNumber={validateTrackingNumber}
-        />
-      )}
-
-      {/* Mobile FAB für schnelle Aktionen */}
-      {useMediaQuery(theme.breakpoints.down('md')) && (
-        <Box sx={{ position: 'fixed', bottom: 16, right: 16, zIndex: 1000 }}>
-          <Fab
-            color="primary"
-            sx={{ mb: 1 }}
-            onClick={handlePullToRefresh}
-            size="small"
-            disabled={refreshing}
-          >
-            {refreshing ? <CircularProgress size={20} color="inherit" /> : <Refresh />}
-          </Fab>
-          <br />
-          <Fab
-            color="secondary"
-            onClick={() => {
-              // Scroll to top für bessere Filter-Erreichbarkeit
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            size="small"
-          >
-            <FilterList />
-          </Fab>
-        </Box>
-      )}
-
-      {/* Snackbar für Benachrichtigungen */}
-      <Snackbar
-        open={!!success}
-        autoHideDuration={6000}
-        onClose={() => setSuccess('')}
-      >
-        <Alert onClose={() => setSuccess('')} severity="success">
-          {success}
-        </Alert>
-      </Snackbar>
-
-      <Snackbar
-        open={!!error}
-        autoHideDuration={6000}
-        onClose={() => setError('')}
-      >
-        <Alert onClose={() => setError('')} severity="error">
-          {error}
-        </Alert>
-      </Snackbar>
-
-      {/* Hilfe-Dialog */}
-      <BestellverwaltungHilfe 
-        open={hilfeOpen}
-        onClose={() => setHilfeOpen(false)}
-      />
-    </Container>
-  );
-};
-
-// Separate Komponenten für bessere Übersicht
-const OrderDetailsDialog = ({ order, open, onClose, onStatusUpdate, onConfirmOrder, onRejectOrder, statusConfig, formatCurrency, formatDate, loading, onMarkRefundCompleted, setSuccess, setError, loadOrders, onEditTracking }) => {
-  const theme = useTheme();
-  const [noteDialog, setNoteDialog] = useState(false);
-  const [statusNote, setStatusNote] = useState('');
-  const [newStatus, setNewStatus] = useState('');
-  const [trackingNumber, setTrackingNumber] = useState('');
-  const [trackingProvider, setTrackingProvider] = useState('dhl');
-  
-  // Rechnungs-State
-  const [invoiceLoading, setInvoiceLoading] = useState(false);
-  const [invoiceSending, setInvoiceSending] = useState(false);
-
-  const handleStatusChange = (status) => {
-    setNewStatus(status);
-    if (status === 'verschickt') {
-      setTrackingNumber('');
-      setTrackingProvider('dhl');
-    }
-    setNoteDialog(true);
-  };
-
-  const confirmStatusUpdate = () => {
-    let updateData = {
-      status: newStatus,
-      notiz: statusNote
-    };
-
-    // Für "verschickt" Status: Tracking-Daten hinzufügen
-    if (newStatus === 'verschickt' && trackingNumber.trim()) {
-      updateData.versand = {
-        sendungsnummer: trackingNumber.trim(),
-        anbieter: trackingProvider,
-        versendetAm: new Date().toISOString(),
-        trackingUrl: trackingProvider === 'dhl' 
-          ? `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?lang=de&idc=${trackingNumber.trim()}`
-          : `https://www.google.com/search?q=${trackingNumber.trim()}+tracking`
-      };
-    }
-
-    onStatusUpdate(order._id, newStatus, statusNote, updateData.versand);
-    setNoteDialog(false);
-    setStatusNote('');
-    setNewStatus('');
-    setTrackingNumber('');
-    setTrackingProvider('dhl');
-  };
-
-  // 📄 RECHNUNGS-FUNKTIONEN
-  const handleGenerateInvoice = async () => {
-    setInvoiceLoading(true);
-    try {
-      const response = await fetch(`/api/orders/${order._id}/generate-invoice`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setSuccess(`Rechnung ${data.data.invoiceNumber} erfolgreich generiert`);
-        // Bestellung neu laden um Rechnungsdaten zu aktualisieren
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        setError('Fehler bei der Rechnungsgenerierung: ' + data.message);
-      }
-    } catch (error) {
-      console.error('Fehler bei der Rechnungsgenerierung:', error);
-      setError('Fehler bei der Rechnungsgenerierung');
-    } finally {
-      setInvoiceLoading(false);
-    }
-  };
-
-  const handleSendInvoice = async () => {
-    setInvoiceSending(true);
-    try {
-      const response = await fetch(`/api/orders/${order._id}/send-invoice`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setSuccess('Rechnung erfolgreich per E-Mail versendet');
-        // Bestellung neu laden um E-Mail-Status zu aktualisieren
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      } else {
-        setError('Fehler beim E-Mail-Versand: ' + data.message);
-      }
-    } catch (error) {
-      console.error('Fehler beim E-Mail-Versand:', error);
-      setError('Fehler beim E-Mail-Versand');
-    } finally {
-      setInvoiceSending(false);
-    }
-  };
-
-  const handleDownloadInvoice = async () => {
-    try {
-      const response = await fetch(`/api/orders/${order._id}/invoice/download`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Rechnung-${order.invoiceNumber || order.bestellnummer}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        setSuccess('Rechnung-PDF heruntergeladen');
-      } else {
-        setError('Fehler beim PDF-Download');
-      }
-    } catch (error) {
-      console.error('Fehler beim PDF-Download:', error);
-      setError('Fehler beim PDF-Download');
-    }
-  };
-
-  return (
-    <>
+      {/* Order Details Dialog */}
       <Dialog 
-        open={open} 
-        onClose={onClose} 
+        open={orderDialogOpen} 
+        onClose={() => {
+          setOrderDialogOpen(false);
+          setSelectedOrder(null);
+        }} 
         maxWidth="lg" 
         fullWidth
-        fullScreen={useMediaQuery(theme.breakpoints.down('md'))}
-        sx={{
-          '& .MuiDialog-paper': {
-            margin: { xs: 0, md: 2 },
-            maxHeight: { xs: '100%', md: '90vh' }
-          }
-        }}
       >
-        <DialogTitle>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">
-              📋 Bestellung {order.bestellnummer}
-            </Typography>
-            <Box display="flex" gap={1} alignItems="center">
-              <Chip
-                label={statusConfig[order.status]?.label || order.status}
-                color={statusConfig[order.status]?.color || 'default'}
-              />
-              {useMediaQuery(theme.breakpoints.down('md')) && (
-                <IconButton onClick={onClose} size="small">
-                  <Cancel />
-                </IconButton>
-              )}
-            </Box>
-          </Box>
-        </DialogTitle>
-        
-        <DialogContent dividers>
-          <Grid container spacing={3}>
-            {/* Kundendaten */}
-            <Grid item xs={12} md={6}>
-              <Card variant="outlined">
-                <CardContent>
+        {selectedOrder && (
+          <>
+            <DialogTitle>
+              Bestellung #{selectedOrder.bestellnummer}
+              <Box component="span" ml={2}>
+                {getStatusChip(selectedOrder.status)}
+              </Box>
+            </DialogTitle>
+            <DialogContent>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
                   <Typography variant="h6" gutterBottom>
-                    👤 Kundendaten
+                    👤 Kundeninformationen
                   </Typography>
-                  <Typography><strong>Name:</strong> {order.besteller.vorname} {order.besteller.nachname}</Typography>
-                  <Typography><strong>E-Mail:</strong> {order.besteller.email}</Typography>
-                  {order.besteller.telefon && (
-                    <Typography><strong>Telefon:</strong> {order.besteller.telefon}</Typography>
-                  )}
-                  <Typography><strong>Erstellt:</strong> {formatDate(order.erstelltAm)}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Bestellwert */}
-            <Grid item xs={12} md={6}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    💰 Bestellwert
+                  <Typography>
+                    <strong>Name:</strong> {selectedOrder.besteller?.vorname} {selectedOrder.besteller?.nachname}
                   </Typography>
-                  <Typography variant="h4" color="primary">
-                    {formatCurrency(order.preise?.gesamtsumme || 0)}
+                  <Typography>
+                    <strong>E-Mail:</strong> {selectedOrder.besteller?.email}
                   </Typography>
-                  {order.preise?.versand?.betrag > 0 && (
-                    <Typography variant="body2">
-                      (inkl. {formatCurrency(order.preise.versand.betrag)} Versand)
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Artikel */}
-            <Grid item xs={12}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    🛍️ Bestellte Artikel ({order.artikel?.length || 0})
+                  <Typography>
+                    <strong>Telefon:</strong> {selectedOrder.besteller?.telefon || 'Nicht angegeben'}
                   </Typography>
-                  
-                  {/* Mobile optimierte Artikel-Liste */}
-                  {useMediaQuery(theme.breakpoints.down('md')) ? (
-                    // Mobile: Card-Layout ohne Tabelle
-                    <Box>
-                      {order.artikel?.map((item, index) => (
-                        <Card key={index} variant="outlined" sx={{ mb: 2, p: 2 }}>
-                          <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
-                            <Box flex={1}>
-                              <Typography variant="subtitle2" fontWeight="bold">
-                                {item.produktSnapshot?.name || 'Unbekanntes Produkt'}
-                              </Typography>
-                              {item.produktSnapshot?.beschreibung && (
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                  {typeof item.produktSnapshot.beschreibung === 'string' 
-                                    ? item.produktSnapshot.beschreibung.substring(0, 100) + '...'
-                                    : 'Produktbeschreibung'}
-                                </Typography>
-                              )}
-                            </Box>
-                          </Box>
-                          <Box display="flex" justifyContent="space-between" alignItems="center">
-                            <Typography variant="body2">
-                              <strong>{item.menge}x</strong> à {formatCurrency(item.einzelpreis)}
-                            </Typography>
-                            <Typography variant="h6" color="primary" fontWeight="bold">
-                              {formatCurrency(item.gesamtpreis)}
-                            </Typography>
-                          </Box>
-                        </Card>
-                      ))}
-                    </Box>
-                  ) : (
-                    // Desktop: Tabellen-Layout
-                    <TableContainer>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Artikel</TableCell>
-                            <TableCell align="center">Menge</TableCell>
-                            <TableCell align="right">Einzelpreis</TableCell>
-                            <TableCell align="right">Gesamtpreis</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {order.artikel?.map((item, index) => (
-                            <TableRow key={index}>
-                              <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                                  {item.produktSnapshot?.name || 'Unbekanntes Produkt'}
-                                </Typography>
-                                {item.produktSnapshot?.beschreibung && (
-                                  <Typography variant="caption" color="text.secondary">
-                                    {typeof item.produktSnapshot.beschreibung === 'string' 
-                                      ? item.produktSnapshot.beschreibung 
-                                      : 'Produktbeschreibung'}
-                                  </Typography>
-                                )}
-                              </TableCell>
-                              <TableCell align="center">{item.menge}</TableCell>
-                              <TableCell align="right">{formatCurrency(item.einzelpreis)}</TableCell>
-                              <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                                {formatCurrency(item.gesamtpreis)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Versandinformationen */}
-            <Grid item xs={12}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    🚚 Versandinformationen
-                  </Typography>
-                  
-                  {/* PayPal Rückerstattungs-Button für abgelehnte Bestellungen */}
-                  {order.status === 'abgelehnt' && (
-                    <Box mb={2} p={2} sx={{ bgcolor: '#e3f2fd', border: '1px solid #0070ba', borderRadius: 2 }}>
-                      <Typography variant="body2" gutterBottom sx={{ fontWeight: 'bold', color: '#0070ba' }}>
-                        💳 Rückerstattung erforderlich
-                      </Typography>
-                      <Typography variant="body2" sx={{ mb: 1 }}>
-                        Betrag: <strong>{formatCurrency(order.preise?.gesamtsumme || 0)}</strong> an {order.besteller.email}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mb: 2, fontSize: '0.85rem', color: '#666' }}>
-                        Zahlungsmethode: {order.zahlung?.methode || 'Unbekannt'}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Button
-                          variant="contained"
-                          sx={{ bgcolor: '#0070ba', '&:hover': { bgcolor: '#005ea6' } }}
-                          onClick={() => window.open('https://www.paypal.com/businessmanage/activities', '_blank')}
-                          startIcon={<Euro />}
-                          size="small"
-                        >
-                          PayPal Business öffnen
-                        </Button>
-                        {!order.rueckerstattungErledigt && (
-                          <Button
-                            variant="outlined"
-                            color="success"
-                            onClick={async () => {
-                              try {
-                                const notiz = prompt('Optional: Notiz zur Rückerstattung eingeben:') || '';
-                                const response = await api.post(`/orders/${order._id}/refund-completed`, {
-                                  notiz: notiz,
-                                  bearbeiter: 'Admin'
-                                });
-                                if (response.data.success) {
-                                  setSuccess('✅ Rückerstattung als erledigt markiert');
-                                  loadOrders();
-                                  onClose(); // Dialog schließen
-                                } else {
-                                  setError(response.data.message);
-                                }
-                              } catch (err) {
-                                setError('Fehler beim Markieren der Rückerstattung');
-                              }
-                            }}
-                            size="small"
-                            sx={{ minWidth: 'auto' }}
-                          >
-                            ✓ Erledigt
-                          </Button>
-                        )}
-                      </Box>
-                    </Box>
-                  )}
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Typography><strong>Anbieter:</strong> {order.versand?.anbieter || 'Nicht gesetzt'}</Typography>
-                      <Typography><strong>Methode:</strong> {order.versand?.methode || 'Standard'}</Typography>
-                      {order.versand?.sendungsnummer && (
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Typography><strong>Sendungsnummer:</strong> {order.versand.sendungsnummer}</Typography>
-                          <IconButton 
-                            size="small" 
-                            onClick={() => {
-                              onEditTracking({
-                                sendungsnummer: order.versand?.sendungsnummer || '',
-                                anbieter: order.versand?.anbieter || 'dhl',
-                                notiz: ''
-                              });
-                            }}
-                            title="Tracking-Nummer bearbeiten"
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      )}
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      {order.versand?.versendetAm && (
-                        <Typography><strong>Versendet am:</strong> {formatDate(order.versand.versendetAm)}</Typography>
-                      )}
-                      {order.versand?.zugestelltAm && (
-                        <Typography><strong>Zugestellt am:</strong> {formatDate(order.versand.zugestelltAm)}</Typography>
-                      )}
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* E-Mail-Kommunikation und Rückerstattung */}
-            {(order.kommunikation?.length > 0 || order.status === 'abgelehnt') && (
-              <Grid item xs={12}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      📧 E-Mail-Kommunikation & Rückerstattung
-                    </Typography>
-                    
-                    {/* Rückerstattungs-Info bei abgelehnten Bestellungen */}
-                    {order.status === 'abgelehnt' && (
-                      <Box mb={3} p={3} sx={{ bgcolor: '#ffebee', border: '2px solid #d32f2f', borderRadius: 2 }}>
-                        <Typography variant="h6" gutterBottom sx={{ color: '#d32f2f', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 1 }}>
-                          💰 RÜCKERSTATTUNG ERFORDERLICH
-                        </Typography>
-                        
-                        <Grid container spacing={3}>
-                          {/* Kundendaten */}
-                          <Grid item xs={12} md={6}>
-                            <Box p={2} sx={{ bgcolor: 'white', borderRadius: 1, border: '1px solid #ddd' }}>
-                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#d32f2f' }}>
-                                👤 Kundendaten
-                              </Typography>
-                              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                <strong>Name:</strong> {order.besteller.vorname} {order.besteller.nachname}
-                              </Typography>
-                              <Typography variant="body2" sx={{ mb: 0.5, wordBreak: 'break-all' }}>
-                                <strong>E-Mail:</strong> {order.besteller.email}
-                              </Typography>
-                              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                <strong>Telefon:</strong> {order.besteller.telefon || 'Nicht angegeben'}
-                              </Typography>
-                              {order.besteller.adresse && (
-                                <Typography variant="body2" sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>
-                                  {order.besteller.adresse.strasse}, {order.besteller.adresse.plz} {order.besteller.adresse.stadt}
-                                </Typography>
-                              )}
-                            </Box>
-                          </Grid>
-
-                          {/* Rückerstattungsdetails */}
-                          <Grid item xs={12} md={6}>
-                            <Box p={2} sx={{ bgcolor: 'white', borderRadius: 1, border: '1px solid #ddd' }}>
-                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1, color: '#d32f2f' }}>
-                                💳 Rückerstattungsdetails
-                              </Typography>
-                              <Typography variant="body1" sx={{ mb: 1, fontSize: '1.1rem', fontWeight: 'bold', color: '#d32f2f' }}>
-                                <strong>Betrag:</strong> {formatCurrency(order.preise?.gesamtsumme || 0)}
-                              </Typography>
-                              <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                <strong>Zahlungsmethode:</strong> {order.zahlung?.methode?.toUpperCase() || 'UNBEKANNT'}
-                              </Typography>
-                              
-                              {/* PayPal spezifische Infos */}
-                              {order.zahlung?.methode === 'paypal' && (
-                                <>
-                                  <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', color: '#0070ba' }}>
-                                    📧 PayPal E-Mail: {order.besteller.email}
-                                  </Typography>
-                                  {order.zahlung?.transactionId && (
-                                    <Typography variant="body2" sx={{ mb: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                      <strong>Transaction ID:</strong> {order.zahlung.transactionId}
-                                    </Typography>
-                                  )}
-                                  {order.zahlung?.paypalOrderId && (
-                                    <Typography variant="body2" sx={{ mb: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                      <strong>PayPal Order ID:</strong> {order.zahlung.paypalOrderId}
-                                    </Typography>
-                                  )}
-                                  
-                                  {/* PayPal-Rückerstattungsinformationen anzeigen */}
-                                  {order.rueckerstattung && (
-                                    <Box sx={{ mt: 2, p: 2, bgcolor: order.rueckerstattung.status === 'erfolgreich' ? '#e8f5e8' : '#ffe8e8', borderRadius: 1, border: '1px solid', borderColor: order.rueckerstattung.status === 'erfolgreich' ? 'success.main' : 'error.main' }}>
-                                      <Typography variant="h6" sx={{ mb: 1, color: order.rueckerstattung.status === 'erfolgreich' ? 'success.main' : 'error.main' }}>
-                                        💰 PayPal-Rückerstattung
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                        <strong>Status:</strong> {order.rueckerstattung.status}
-                                      </Typography>
-                                      {order.rueckerstattung.refundId && (
-                                        <Typography variant="body2" sx={{ mb: 0.5, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                          <strong>Refund ID:</strong> {order.rueckerstattung.refundId}
-                                        </Typography>
-                                      )}
-                                      {order.rueckerstattung.betrag && (
-                                        <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                          <strong>Betrag:</strong> {order.rueckerstattung.betrag.value} {order.rueckerstattung.betrag.currency_code || 'EUR'}
-                                        </Typography>
-                                      )}
-                                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                        <strong>Zeitpunkt:</strong> {new Date(order.rueckerstattung.zeitpunkt).toLocaleString('de-DE')}
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                        <strong>Methode:</strong> {order.rueckerstattung.methode}
-                                      </Typography>
-                                      <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                        <strong>Bearbeiter:</strong> {order.rueckerstattung.bearbeiter}
-                                      </Typography>
-                                      {order.rueckerstattung.notiz && (
-                                        <Typography variant="body2" sx={{ mb: 0.5 }}>
-                                          <strong>Notiz:</strong> {order.rueckerstattung.notiz}
-                                        </Typography>
-                                      )}
-                                      {order.rueckerstattung.fehler && (
-                                        <Typography variant="body2" sx={{ mb: 0.5, color: 'error.main' }}>
-                                          <strong>Fehler:</strong> {order.rueckerstattung.fehler}
-                                        </Typography>
-                                      )}
-                                    </Box>
-                                  )}
-                                  
-                                  <Typography variant="caption" sx={{ display: 'block', mt: 1, p: 1, bgcolor: '#e3f2fd', borderRadius: 1 }}>
-                                    💡 <strong>PayPal-Rückerstattung:</strong> Gehe zu PayPal Business → Aktivitäten → Transaction ID suchen → "Rückerstattung" klicken
-                                  </Typography>
-                                </>
-                              )}
-
-                              {/* Überweisung spezifische Infos */}
-                              {order.zahlung?.methode === 'ueberweisung' && (
-                                <>
-                                  <Typography variant="caption" sx={{ display: 'block', mt: 1, p: 1, bgcolor: '#fff3e0', borderRadius: 1 }}>
-                                    💡 <strong>Überweisung-Rückerstattung:</strong> Banküberweisung an Kunde mit Referenz: {order.bestellnummer}
-                                  </Typography>
-                                </>
-                              )}
-                            </Box>
-                          </Grid>
-                          
-                          {/* PayPal Send Money - vereinfacht */}
-                          <Grid item xs={12}>
-                            <Box display="flex" gap={2} justifyContent="center" mt={2} flexWrap="wrap">
-                              <Button
-                                variant="contained"
-                                color="primary"
-                                sx={{ bgcolor: '#0070ba', '&:hover': { bgcolor: '#005ea6' } }}
-                                onClick={() => {
-                                  const amount = (order.preise?.gesamtsumme || 0).toFixed(2);
-                                  const email = order.besteller?.email || '';
-                                  const name = `${order.besteller?.vorname || ''} ${order.besteller?.nachname || ''}`.trim();
-                                  const orderNumber = order.bestellnummer || '';
-                                  
-                                  // Einfacher PayPal Send Money Link
-                                  const paypalUrl = `https://www.paypal.com/myaccount/transfer/send?recipient=${encodeURIComponent(email)}&amount=${amount}&currency=EUR&note=${encodeURIComponent(`Rückerstattung Glücksmomente.manufaktur - ${orderNumber}`)}`;
-                                  
-                                  // Anzeige für Admin
-                                  const confirmMessage = `PayPal-Rückerstattung:\n\n` +
-                                    `Empfänger: ${email}\n` +
-                                    `Name: ${name}\n` +
-                                    `Betrag: ${amount} EUR\n` +
-                                    `Bestellung: ${orderNumber}\n\n` +
-                                    `PayPal wird geöffnet. Nach erfolgreichem Versand bitte bestätigen.`;
-                                  
-                                  alert(confirmMessage);
-                                  window.open(paypalUrl, '_blank');
-                                }}
-                                startIcon={<Euro />}
-                              >
-                                💰 PayPal Rückerstattung
-                              </Button>
-                              
-                              {/* Bestätigung nach PayPal-Versand */}
-                              {order.rueckerstattung?.status !== 'erfolgreich' && (
-                                <Button
-                                  variant="outlined"
-                                  color="success"
-                                  startIcon={<Euro />}
-                                  onClick={async () => {
-                                    const confirmSent = window.confirm(
-                                      `Haben Sie die PayPal-Rückerstattung erfolgreich versendet?\n\n` +
-                                      `Empfänger: ${order.besteller?.email}\n` +
-                                      `Betrag: ${(order.preise?.gesamtsumme || 0).toFixed(2)} EUR\n` +
-                                      `Bestellung: ${order.bestellnummer}\n\n` +
-                                      `Die Bestellung wird als erledigt markiert.`
-                                    );
-                                    
-                                    if (!confirmSent) return;
-                                    
-                                    try {
-                                      const transactionId = prompt('Optional: PayPal Transaction ID eingeben:') || 'Manuell bestätigt';
-                                      
-                                      const response = await api.post(`/orders/${order._id}/paypal-refund-confirm`, {
-                                        amount: order.preise?.gesamtsumme,
-                                        transactionId: transactionId,
-                                        bearbeiter: 'Admin'
-                                      });
-                                      
-                                      if (response.data.success) {
-                                        setSuccess('✅ PayPal-Rückerstattung erfolgreich bestätigt');
-                                        loadOrders();
-                                        onClose(); // Dialog schließen
-                                      } else {
-                                        setError(`❌ Fehler: ${response.data.message}`);
-                                      }
-                                    } catch (err) {
-                                      setError('❌ Fehler bei der Bestätigung: ' + (err.response?.data?.message || err.message));
-                                    }
-                                  }}
-                                >
-                                  ✓ Rückerstattung bestätigen
-                                </Button>
-                              )}
-
-                              <Button
-                                variant="outlined"
-                                color="error"
-                                onClick={() => {
-                                  const text = `Rückerstattung für Bestellung ${order.bestellnummer}\nKunde: ${order.besteller.vorname} ${order.besteller.nachname}\nE-Mail: ${order.besteller.email}\nBetrag: ${formatCurrency(order.preise?.gesamtsumme || 0)}\nMethode: ${order.zahlung?.methode || 'Unbekannt'}${order.zahlung?.transactionId ? '\nTransaction ID: ' + order.zahlung.transactionId : ''}`;
-                                  navigator.clipboard.writeText(text);
-                                  // Kurze Bestätigung anzeigen
-                                  const button = document.activeElement;
-                                  const originalText = button.textContent;
-                                  button.textContent = '✅ Kopiert!';
-                                  setTimeout(() => {
-                                    button.textContent = originalText;
-                                  }, 2000);
-                                }}
-                                startIcon={<ContentCopy />}
-                              >
-                                Details kopieren
-                              </Button>
-                            </Box>
-                          </Grid>
-                        </Grid>
-                      </Box>
-                    )}
-                    
-                    {/* E-Mail-Historie */}
-                    {order.kommunikation && order.kommunikation.length > 0 && (
-                      <Box mt={3}>
-                        <Typography variant="h6" gutterBottom>
-                          📧 E-Mail-Historie
-                        </Typography>
-                        <List dense>
-                              {order.kommunikation
-                                .filter(comm => comm.typ === 'email')
-                                .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))
-                                .map((email, index) => (
-                                  <ListItem key={index} divider>
-                                    <ListItemIcon>
-                                      <Email color={email.emailData?.status === 'gesendet' ? 'success' : 'default'} />
-                                    </ListItemIcon>
-                                    <ListItemText
-                                      primary={
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                            {email.betreff}
-                                          </Typography>
-                                          <Chip
-                                            label={email.emailData?.status || 'unbekannt'}
-                                            size="small"
-                                            color={email.emailData?.status === 'gesendet' ? 'success' : 'default'}
-                                          />
-                                        </Box>
-                                      }
-                                      secondary={
-                                        <>
-                                          <span style={{ display: 'block', color: theme.palette.text.secondary }}>
-                                            {email.inhalt}
-                                          </span>
-                                          <span style={{ 
-                                            display: 'block', 
-                                            fontSize: '0.75rem',
-                                            color: theme.palette.text.secondary 
-                                          }}>
-                                            An: {email.emailData?.empfaenger} | {formatDate(email.zeitpunkt)} | von {email.bearbeiter}
-                                          </span>
-                                          {email.emailData?.messageId && (
-                                            <span style={{ 
-                                              display: 'block', 
-                                              fontSize: '0.75rem',
-                                              color: theme.palette.text.secondary 
-                                            }}>
-                                              Message ID: {email.emailData.messageId}
-                                            </span>
-                                          )}
-                                        </>
-                                      }
-                                    />
-                                  </ListItem>
-                                ))
-                              }
-                            </List>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            )}
-
-            {/* 📄 RECHNUNGSINFORMATIONEN */}
-                    {(order.invoiceNumber || order.rechnung?.nummer) && (
-                      <Grid item xs={12} md={6}>
-                        <Card variant="outlined">
-                          <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                              📄 Rechnung
-                            </Typography>
-                            <Typography>
-                              <strong>Rechnungsnummer:</strong> {order.invoiceNumber || order.rechnung?.nummer}
-                            </Typography>
-                            {(order.invoiceDate || order.rechnung?.datum) && (
-                              <Typography>
-                                <strong>Rechnungsdatum:</strong> {
-                                  order.invoiceDate 
-                                    ? formatDate(order.invoiceDate)
-                                    : formatDate(order.rechnung.datum)
-                                }
-                              </Typography>
-                            )}
-                            <Typography>
-                              <strong>E-Mail Status:</strong> {
-                                (order.invoiceEmailSent || order.rechnung?.emailVersendet) 
-                                  ? '✅ Versendet' 
-                                  : '❌ Nicht versendet'
-                              }
-                            </Typography>
-                            {(order.invoiceEmailSentAt || order.rechnung?.emailVersendetAm) && (
-                              <Typography variant="body2" color="text.secondary">
-                                Versendet am: {
-                                  order.invoiceEmailSentAt 
-                                    ? formatDate(order.invoiceEmailSentAt)
-                                    : formatDate(order.rechnung.emailVersendetAm)
-                                }
-                              </Typography>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    )}
-
-                    {/* Status-Verlauf */}
-                    {order.statusVerlauf && order.statusVerlauf.length > 0 && (
-                      <Grid item xs={12}>
-                        <Card variant="outlined">
-                          <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                              📈 Status-Verlauf
-                            </Typography>
-                            <List dense>
-                              {order.statusVerlauf
-                                .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))
-                                .map((entry, index) => (
-                                  <ListItem key={index}>
-                                    <ListItemIcon>
-                                      <Timeline />
-                                    </ListItemIcon>
-                                    <ListItemText
-                                      primary={
-                                        <Box display="flex" alignItems="center" gap={1}>
-                                          <Chip
-                                            label={statusConfig[entry.status]?.label || entry.status}
-                                            size="small"
-                                            color={statusConfig[entry.status]?.color || 'default'}
-                                          />
-                                          <Typography variant="body2">
-                                            {formatDate(entry.zeitpunkt)}
-                                          </Typography>
-                                        </Box>
-                                      }
-                                      secondary={
-                                        <>
-                                          {entry.notiz && (
-                                            <span style={{ display: 'block' }}>{entry.notiz}</span>
-                                          )}
-                                          <span style={{ 
-                                            fontSize: '0.75rem', 
-                                            color: theme.palette.text.secondary 
-                                          }}>
-                                            von {entry.bearbeiter || 'System'}
-                                          </span>
-                                        </>
-                                      }
-                                    />
-                                  </ListItem>
-                                ))
-                              }
-                            </List>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    )}
-                  </Grid>
-                )}
-                
-                {/* E-Mail-Historie */}
-                {order.kommunikation && order.kommunikation.length > 0 && (
-                  <Box mt={3}>
-                    <Typography variant="h6" gutterBottom>
-                      📧 E-Mail-Historie
-                    </Typography>
-                    <List dense>
-                          {order.kommunikation
-                            .filter(comm => comm.typ === 'email')
-                            .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))
-                            .map((email, index) => (
-                              <ListItem key={index} divider>
-                                <ListItemIcon>
-                                  <Email color={email.emailData?.status === 'gesendet' ? 'success' : 'default'} />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                        {email.betreff}
-                                      </Typography>
-                                      <Chip
-                                        label={email.emailData?.status || 'unbekannt'}
-                                        size="small"
-                                        color={email.emailData?.status === 'gesendet' ? 'success' : 'default'}
-                                      />
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <>
-                                      <span style={{ display: 'block', color: theme.palette.text.secondary }}>
-                                        {email.inhalt}
-                                      </span>
-                                      <span style={{ 
-                                        display: 'block', 
-                                        fontSize: '0.75rem',
-                                        color: theme.palette.text.secondary 
-                                      }}>
-                                        An: {email.emailData?.empfaenger} | {formatDate(email.zeitpunkt)} | von {email.bearbeiter}
-                                      </span>
-                                      {email.emailData?.messageId && (
-                                        <span style={{ 
-                                          display: 'block', 
-                                          fontSize: '0.75rem',
-                                          color: theme.palette.text.secondary 
-                                        }}>
-                                          Message ID: {email.emailData.messageId}
-                                        </span>
-                                      )}
-                                    </>
-                                  }
-                                />
-                              </ListItem>
-                            ))
-                          }
-                        </List>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-
-            {/* 📄 RECHNUNGSINFORMATIONEN */}
-            <Grid container spacing={2}>
-                {(order.invoiceNumber || order.rechnung?.nummer) && (
-                  <Grid item xs={12} md={6}>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          📄 Rechnung
-                        </Typography>
-                        <Typography>
-                          <strong>Rechnungsnummer:</strong> {order.invoiceNumber || order.rechnung?.nummer}
-                        </Typography>
-                        {(order.invoiceDate || order.rechnung?.datum) && (
-                          <Typography>
-                            <strong>Rechnungsdatum:</strong> {
-                              order.invoiceDate 
-                                ? formatDate(order.invoiceDate)
-                                : formatDate(order.rechnung.datum)
-                            }
-                          </Typography>
-                        )}
-                        <Typography>
-                          <strong>E-Mail Status:</strong> {
-                            (order.invoiceEmailSent || order.rechnung?.emailVersendet) 
-                              ? '✅ Versendet' 
-                              : '❌ Nicht versendet'
-                          }
-                        </Typography>
-                        {(order.invoiceEmailSentAt || order.rechnung?.emailVersendetAm) && (
-                          <Typography variant="body2" color="text.secondary">
-                            Versendet am: {
-                              order.invoiceEmailSentAt 
-                                ? formatDate(order.invoiceEmailSentAt)
-                                : formatDate(order.rechnung.emailVersendetAm)
-                            }
-                          </Typography>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )}
-            </Grid>
-
-            {/* Status-Verlauf */}
-            {order.statusVerlauf && order.statusVerlauf.length > 0 && (
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom>
-                          📈 Status-Verlauf
-                        </Typography>
-                        <List dense>
-                          {order.statusVerlauf
-                            .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))
-                            .map((entry, index) => (
-                              <ListItem key={index}>
-                                <ListItemIcon>
-                                  <Timeline />
-                                </ListItemIcon>
-                                <ListItemText
-                                  primary={
-                                    <Box display="flex" alignItems="center" gap={1}>
-                                      <Chip
-                                        label={statusConfig[entry.status]?.label || entry.status}
-                                        size="small"
-                                        color={statusConfig[entry.status]?.color || 'default'}
-                                      />
-                                      <Typography variant="body2">
-                                        {formatDate(entry.zeitpunkt)}
-                                      </Typography>
-                                    </Box>
-                                  }
-                                  secondary={
-                                    <>
-                                      {entry.notiz && (
-                                        <span style={{ display: 'block' }}>{entry.notiz}</span>
-                                      )}
-                                      <span style={{ 
-                                        fontSize: '0.75rem', 
-                                        color: theme.palette.text.secondary 
-                                      }}>
-                                        von {entry.bearbeiter || 'System'}
-                                      </span>
-                                    </>
-                                  }
-                                />
-                              </ListItem>
-                            ))
-                          }
-                        </List>
-                      </CardContent>
-                    </Card>
-                  </Grid>
                 </Grid>
-              )}
-            </DialogContent>
-
-            <DialogActions>
-                  <Box display="flex" justifyContent="space-between" width="100%" p={1}>
-                    <Box display="flex" gap={1}>
-                      {/* Status-Aktionen */}
-                      {order.status === 'neu' && (
-                        <>
-                          <Button
-                            variant="contained"
-                            color="success"
-                            onClick={() => onConfirmOrder(order._id)}
-                            disabled={loading}
-                          >
-                            ✅ Bestätigen & E-Mail
-                          </Button>
-                          <Button
-                            variant="contained"
-                            color="error"
-                            onClick={() => onRejectOrder(order._id)}
-                            disabled={loading}
-                          >
-                            ❌ Ablehnen & E-Mail
-                          </Button>
-                        </>
-                      )}
-                      {order.status === 'bezahlt' && (
-                        <>
-                          <Button
-                            variant="contained"
-                            color="success"
-                            onClick={() => onConfirmOrder(order._id)}
-                            disabled={loading}
-                          >
-                            ✅ Bestätigen & E-Mail
-                          </Button>
-                          <Button
-                            variant="contained"
-                            color="error"
-                            onClick={() => onRejectOrder(order._id)}
-                            disabled={loading}
-                          >
-                            ❌ Ablehnen & E-Mail
-                          </Button>
-                        </>
-                      )}
-                      {order.status === 'bestaetigt' && (
-                        <Button
-                          variant="contained"
-                          color="warning"
-                          onClick={() => handleStatusChange('verpackt')}
-                        >
-                          📦 Als verpackt markieren
-                        </Button>
-                      )}
-                      {order.status === 'verpackt' && (
-                        <Button
-                          variant="contained"
-                          color="secondary"
-                          onClick={() => handleStatusChange('verschickt')}
-                        >
-                          🚚 Als verschickt markieren
-                        </Button>
-                      )}
-
-                      {/* 📄 RECHNUNGS-AKTIONEN */}
-                      {(order.status === 'bezahlt' || order.status === 'bestaetigt' || order.status === 'verpackt' || order.status === 'verschickt' || order.status === 'zugestellt') && (
-                        <>
-                          {!order.invoiceNumber && !order.rechnung?.nummer && (
-                            <Button
-                              variant="outlined"
-                              color="primary"
-                              startIcon={<InvoiceIcon />}
-                              onClick={handleGenerateInvoice}
-                              disabled={invoiceLoading}
-                              size="small"
-                            >
-                              {invoiceLoading ? 'Generiere...' : 'Rechnung erstellen'}
-                            </Button>
-                          )}
-                          
-                          {(order.invoiceNumber || order.rechnung?.nummer) && (
-                            <>
-                              <Button
-                                variant="outlined"
-                                color="secondary"
-                                startIcon={<DownloadIcon />}
-                                onClick={handleDownloadInvoice}
-                                size="small"
-                              >
-                                Rechnung-PDF
-                              </Button>
-                              
-                              {(!order.invoiceEmailSent && !order.rechnung?.emailVersendet) && (
-                                <Button
-                                  variant="outlined"
-                                  color="success"
-                                  startIcon={<SendIcon />}
-                                  onClick={handleSendInvoice}
-                                  disabled={invoiceSending}
-                                  size="small"
-                                >
-                                  {invoiceSending ? 'Sende...' : 'Per E-Mail'}
-                                </Button>
-                              )}
-                              
-                              {(order.invoiceEmailSent || order.rechnung?.emailVersendet) && (
-                                <Chip
-                                  icon={<EmailIcon />}
-                                  label="Rechnung versendet"
-                                  color="success"
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </Box>
-
-                    <Button onClick={onClose}>
-                      Schließen
-                    </Button>
-                  </Box>
-                </DialogActions>
-              </Dialog>
-
-              {/* Status-Notiz Dialog */}
-              <Dialog open={noteDialog} onClose={() => setNoteDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Status-Änderung bestätigen</DialogTitle>
-                <DialogContent>
-                  <Typography gutterBottom>
-                    Status ändern zu: <strong>{statusConfig[newStatus]?.label}</strong>
+                
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>
+                    📍 Lieferadresse
                   </Typography>
-
-                  {/* Spezielle Felder für "verschickt" Status */}
-                  {newStatus === 'verschickt' && (
-                    <Box sx={{ mt: 3, mb: 2 }}>
-                      <Typography variant="h6" gutterBottom color="primary">
-                        📦 Versandinformationen (Pflichtangaben)
+                  {selectedOrder.lieferadresse && (
+                    <>
+                      <Typography>{selectedOrder.lieferadresse.strasse}</Typography>
+                      <Typography>
+                        {selectedOrder.lieferadresse.plz} {selectedOrder.lieferadresse.ort}
                       </Typography>
-                      
-                      <FormControl fullWidth sx={{ mb: 2 }}>
-                        <InputLabel>Versanddienstleister</InputLabel>
-                        <Select
-                          value={trackingProvider}
-                          label="Versanddienstleister"
-                          onChange={(e) => setTrackingProvider(e.target.value)}
-                        >
-                          <MenuItem value="dhl">📦 DHL</MenuItem>
-                          <MenuItem value="dpd">🚚 DPD</MenuItem>
-                          <MenuItem value="hermes">📮 Hermes</MenuItem>
-                          <MenuItem value="gls">🚛 GLS</MenuItem>
-                          <MenuItem value="ups">📦 UPS</MenuItem>
-                          <MenuItem value="other">🏪 Sonstige</MenuItem>
-                        </Select>
-                      </FormControl>
-
-                      <TextField
-                        fullWidth
-                        required
-                        label="Sendungsnummer / Paketnummer"
-                        value={trackingNumber}
-                        onChange={(e) => setTrackingNumber(e.target.value)}
-                        placeholder="z.B. 00340434161234567890"
-                        helperText="Die Paketnummer ist für die Nachverfolgung erforderlich"
-                        error={newStatus === 'verschickt' && trackingNumber.trim().length === 0}
-                        sx={{ mb: 2 }}
-                      />
-
-                      <Alert severity="info" sx={{ mb: 2 }}>
-                        <Typography variant="body2">
-                          💡 <strong>Automatisch:</strong> Tracking-URL wird automatisch generiert und 
-                          das Versanddatum auf heute gesetzt.
-                        </Typography>
-                      </Alert>
-                    </Box>
+                      <Typography>{selectedOrder.lieferadresse.land}</Typography>
+                    </>
                   )}
-
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    label={newStatus === 'verschickt' ? "Zusätzliche Notizen (optional)" : "Notiz (optional)"}
-                    value={statusNote}
-                    onChange={(e) => setStatusNote(e.target.value)}
-                    placeholder="Zusätzliche Informationen zur Status-Änderung..."
-                    sx={{ mt: 2 }}
-                  />
-                </DialogContent>
-                <DialogActions>
-                  <Button onClick={() => setNoteDialog(false)}>Abbrechen</Button>
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    🛒 Bestellte Artikel
+                  </Typography>
+                  {selectedOrder.warenkorb && selectedOrder.warenkorb.map((item, index) => (
+                    <Box key={index} p={2} border={1} borderColor="grey.300" borderRadius={1} mb={1}>
+                      <Typography><strong>{item.name}</strong></Typography>
+                      <Typography>Menge: {item.menge}</Typography>
+                      <Typography>Preis: {formatCurrency(item.preis || 0)}</Typography>
+                    </Box>
+                  ))}
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    💰 Preisdetails
+                  </Typography>
+                  <Typography>
+                    <strong>Gesamtsumme:</strong> {formatCurrency(selectedOrder.preise?.gesamtsumme || 0)}
+                  </Typography>
+                  {selectedOrder.preise?.versandkosten > 0 && (
+                    <Typography>
+                      Versandkosten: {formatCurrency(selectedOrder.preise.versandkosten)}
+                    </Typography>
+                  )}
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setOrderDialogOpen(false)}>
+                Schließen
+              </Button>
+              
+              {selectedOrder.status === 'neu' && (
+                <>
                   <Button 
-                    onClick={confirmStatusUpdate} 
+                    color="success" 
                     variant="contained"
-                    disabled={newStatus === 'verschickt' && trackingNumber.trim().length === 0}
+                    onClick={() => handleConfirmOrder(selectedOrder._id)}
                   >
-                    {newStatus === 'verschickt' ? '🚚 Als verschickt markieren' : 'Status ändern'}
+                    ✅ Bestätigen
                   </Button>
-                </DialogActions>
-              </Dialog>
-            </>
-          );
-        };
+                  <Button 
+                    color="error" 
+                    variant="outlined"
+                    onClick={() => handleRejectOrder(selectedOrder._id)}
+                  >
+                    ❌ Ablehnen
+                  </Button>
+                </>
+              )}
+              
+              {selectedOrder.status === 'bestaetigt' && (
+                <Button 
+                  color="primary" 
+                  variant="contained"
+                  onClick={() => handleStatusUpdate(selectedOrder._id, 'verpackt')}
+                >
+                  📦 Als verpackt markieren
+                </Button>
+              )}
+              
+              {selectedOrder.status === 'verpackt' && (
+                <>
+                  <Button 
+                    color="primary" 
+                    variant="contained"
+                    onClick={() => {
+                      setTrackingDialog(true);
+                    }}
+                  >
+                    🚚 Versenden
+                  </Button>
+                </>
+              )}
+              
+              {selectedOrder.status === 'verschickt' && (
+                <Button 
+                  color="success" 
+                  variant="contained"
+                  onClick={() => handleStatusUpdate(selectedOrder._id, 'zugestellt')}
+                >
+                  🏠 Als zugestellt markieren
+                </Button>
+              )}
+              
+              {['abgelehnt', 'storniert'].includes(selectedOrder.status) && 
+               selectedOrder.zahlungsDetails?.paypal?.paymentId && (
+                <Button 
+                  color="warning" 
+                  variant="contained"
+                  onClick={() => handlePayPalRefund(selectedOrder)}
+                >
+                  💰 PayPal Rückerstattung
+                </Button>
+              )}
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
 
-    const TrackingDialog = ({ open, onClose, onSave, trackingData, setTrackingData, carrierOptions, order, validateTrackingNumber }) => {
-      // Live-Validierung der Sendungsnummer
-      const validation = trackingData.sendungsnummer && trackingData.anbieter 
-        ? validateTrackingNumber(trackingData.sendungsnummer, trackingData.anbieter)
-        : null;
+      {/* Inquiry Details Dialog */}
+      <Dialog 
+        open={inquiryDialogOpen} 
+        onClose={() => {
+          setInquiryDialogOpen(false);
+          setSelectedInquiry(null);
+        }} 
+        maxWidth="md" 
+        fullWidth
+      >
+        {selectedInquiry && (
+          <>
+            <DialogTitle>
+              💬 Anfrage #{selectedInquiry.bestellnummer}
+            </DialogTitle>
+            <DialogContent>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>
+                    👤 Kontaktinformationen
+                  </Typography>
+                  <Typography>
+                    <strong>Name:</strong> {selectedInquiry.vorname} {selectedInquiry.nachname}
+                  </Typography>
+                  <Typography>
+                    <strong>E-Mail:</strong> {selectedInquiry.email}
+                  </Typography>
+                  <Typography>
+                    <strong>Telefon:</strong> {selectedInquiry.telefon || 'Nicht angegeben'}
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    📝 Nachricht
+                  </Typography>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                    <Typography>
+                      {selectedInquiry.nachricht || 'Keine Nachricht verfügbar'}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setInquiryDialogOpen(false)}>
+                Schließen
+              </Button>
+              <Button 
+                color="success" 
+                variant="contained"
+                onClick={() => handleInquiryAction(selectedInquiry, 'approve')}
+              >
+                ✅ Genehmigen
+              </Button>
+              <Button 
+                color="error" 
+                variant="outlined"
+                onClick={() => handleInquiryAction(selectedInquiry, 'reject')}
+              >
+                ❌ Ablehnen
+              </Button>
+            </DialogActions>
+          </>
+        )}
+      </Dialog>
 
-      // Prüfe, ob es sich um eine Bearbeitung handelt (existierende Sendungsnummer)
-      const isEditing = order?.versand?.sendungsnummer;
-
-      return (
-        <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-          <DialogTitle>
-            📦 {isEditing ? 'Tracking-Informationen bearbeiten' : 'Tracking-Informationen hinzufügen'}
-          </DialogTitle>
-          <DialogContent dividers>
-            <Box display="flex" flexDirection="column" gap={3} pt={1}>
-          <Typography variant="body2" color="text.secondary">
-            Bestellung: <strong>{order?.bestellnummer}</strong>
-            {isEditing && (
-              <Chip 
-                label="Bearbeitung" 
-                size="small" 
-                color="warning" 
-                sx={{ ml: 1 }} 
-              />
-            )}
-          </Typography>
-
-          <FormControl fullWidth>
-            <InputLabel>Versanddienstleister</InputLabel>
-            <Select
-              value={trackingData.anbieter}
-              onChange={(e) => setTrackingData({ ...trackingData, anbieter: e.target.value })}
-              label="Versanddienstleister"
-            >
-              {carrierOptions.map(option => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.icon} {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <Box>
-            <TextField
-              fullWidth
-              label="Sendungsnummer"
-              value={trackingData.sendungsnummer}
-              onChange={(e) => setTrackingData({ ...trackingData, sendungsnummer: e.target.value })}
-              placeholder={getPlaceholderForCarrier(trackingData.anbieter)}
-              required
-              error={validation && !validation.isValid}
-              helperText={validation ? validation.message : getFormatHelpForCarrier(trackingData.anbieter)}
-            />
-          </Box>
-
-          <TextField
-            fullWidth
-            multiline
-            rows={2}
-            label="Notiz (optional)"
-            value={trackingData.notiz}
-            onChange={(e) => setTrackingData({ ...trackingData, notiz: e.target.value })}
-            placeholder="Zusätzliche Versandhinweise..."
-          />
-        </Box>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>
-          Abbrechen
-        </Button>
-        <Button 
-          onClick={onSave} 
-          variant="contained"
-          disabled={!trackingData.sendungsnummer || (validation && !validation.isValid)}
-        >
-          {isEditing ? 'Tracking aktualisieren' : 'Tracking hinzufügen'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
-// Hilfsfunktionen für Platzhalter und Format-Hilfen
-const getPlaceholderForCarrier = (carrier) => {
-  switch (carrier?.toLowerCase()) {
-    case 'dhl': return 'z.B. 1234567890 oder JD123456789012';
-    case 'gls': return 'z.B. 56T89AS2 oder 54478966532';
-    case 'tnt': return 'z.B. 598846521';
-    case 'dpd': return 'z.B. 1154565645 oder 12222335412365';
-    case 'ups': return 'z.B. 1Z12345E1234567890';
-    case 'hermes': return 'z.B. H1234567890';
-    default: return 'Sendungsnummer eingeben';
-  }
-};
-
-const getFormatHelpForCarrier = (carrier) => {
-  switch (carrier?.toLowerCase()) {
-    case 'dhl': return 'DHL: 10 Ziffern oder 2-3 Buchstaben + 12 Ziffern';
-    case 'gls': return 'GLS: 8 Zeichen (gemischt) oder 11 Ziffern';
-    case 'tnt': return 'TNT: 8 oder 9 Ziffern';
-    case 'dpd': return 'DPD: 10-14 Ziffern, optional ein Buchstabe am Ende';
-    case 'ups': return 'UPS: 1Z + 6 Zeichen + 8 Ziffern oder 9-18 Zeichen';
-    case 'hermes': return 'Hermes: 8-16 Zeichen (Buchstaben und Ziffern)';
-    default: return 'Sendungsnummer im korrekten Format eingeben';
-  }
-};
-
-// Anfrage-Details Dialog
-const InquiryDetailsDialog = ({ inquiry, open, onClose }) => {
-  if (!inquiry) return null;
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(price);
-  };
-
-  const formatDate = (date) => {
-    return new Date(date).toLocaleString('de-DE');
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        Anfrage {inquiry.inquiryId}
-        <Chip
-          label="Anfrage"
-          color="info"
-          size="small"
-          sx={{ ml: 2 }}
-        />
-      </DialogTitle>
-      <DialogContent>
-        <Grid container spacing={3}>
-          {/* Kundendaten */}
-          <Grid item xs={12} md={6}>
-            <Typography variant="h6" gutterBottom>Kunde</Typography>
-            <Typography variant="body2">
-              <strong>Name:</strong> {inquiry.customer.name}
-            </Typography>
-            <Typography variant="body2">
-              <strong>E-Mail:</strong> {inquiry.customer.email}
-            </Typography>
-            
-            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-              Rechnungsadresse
-            </Typography>
-            <Typography variant="body2">
-              {inquiry.rechnungsadresse.vorname} {inquiry.rechnungsadresse.nachname}<br />
-              {inquiry.rechnungsadresse.strasse} {inquiry.rechnungsadresse.hausnummer}<br />
-              {inquiry.rechnungsadresse.plz} {inquiry.rechnungsadresse.stadt}
-            </Typography>
-          </Grid>
-
-          {/* Artikel */}
-          <Grid item xs={12} md={6}>
-            <Typography variant="h6" gutterBottom>Artikel</Typography>
-            <List dense>
-              {inquiry.items.map((item, index) => (
-                <ListItem key={index}>
-                  <ListItemText
-                    primary={`${item.quantity}x ${item.name}`}
-                    secondary={formatPrice(item.price * item.quantity)}
-                  />
-                </ListItem>
-              ))}
-            </List>
-            <Typography variant="body1" sx={{ mt: 1, fontWeight: 'bold' }}>
-              Gesamtwert: {formatPrice(inquiry.total)}
-            </Typography>
-          </Grid>
-
-          {/* Notizen */}
-          {inquiry.customerNote && (
+      {/* Tracking Dialog */}
+      <Dialog 
+        open={trackingDialog} 
+        onClose={() => setTrackingDialog(false)}
+        maxWidth="sm" 
+        fullWidth
+      >
+        <DialogTitle>🚚 Sendungsverfolgung hinzufügen</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>Kundennotiz</Typography>
-              <Typography variant="body2">
-                {inquiry.customerNote}
-              </Typography>
+              <FormControl fullWidth>
+                <InputLabel>Versandanbieter</InputLabel>
+                <Select
+                  value={trackingData.anbieter}
+                  label="Versandanbieter"
+                  onChange={(e) => setTrackingData({ ...trackingData, anbieter: e.target.value })}
+                >
+                  {carrierOptions.map((carrier) => (
+                    <MenuItem key={carrier.value} value={carrier.value}>
+                      {carrier.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
-          )}
-
-          {/* Anfrage-Info */}
-          <Grid item xs={12}>
-            <Typography variant="body2" color="text.secondary">
-              Anfrage erstellt: {formatDate(inquiry.createdAt)}
-            </Typography>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Sendungsnummer"
+                value={trackingData.sendungsnummer}
+                onChange={(e) => setTrackingData({ ...trackingData, sendungsnummer: e.target.value })}
+                placeholder="Tracking-Nummer eingeben"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Hinweis (optional)"
+                value={trackingData.hinweis}
+                onChange={(e) => setTrackingData({ ...trackingData, hinweis: e.target.value })}
+                multiline
+                rows={2}
+                placeholder="Zusätzliche Informationen zum Versand"
+              />
+            </Grid>
           </Grid>
-        </Grid>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>
-          Schließen
-        </Button>
-        <Button 
-          variant="contained" 
-          color="success"
-          onClick={() => {
-            // Zur Anfragen-Verwaltung weiterleiten
-            window.open(`/admin/anfragen`, '_blank');
-          }}
-        >
-          In Anfragen-Verwaltung öffnen
-        </Button>
-      </DialogActions>
-    </Dialog>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTrackingDialog(false)}>
+            Abbrechen
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={handleAddTracking}
+            disabled={!trackingData.sendungsnummer || !trackingData.anbieter}
+          >
+            🚚 Versenden
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 };
 

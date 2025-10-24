@@ -20,7 +20,9 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip
+  Chip,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   ShoppingCart,
@@ -39,7 +41,15 @@ import api from '../services/api';
 const CheckoutPage = () => {
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
-  const { items, getCartTotal } = useCart();
+  const { items } = useCart();
+  // clearAvailableItems wird in CheckoutSuccessPage verwendet
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Nur verfügbare Artikel für Checkout verwenden
+  const availableItems = items.filter(item => item.hasEnoughStock === true);
+  const availableTotal = availableItems.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
   
   const [loading, setLoading] = useState(false);
   const [customerData, setCustomerData] = useState(null);
@@ -70,10 +80,24 @@ const CheckoutPage = () => {
   });
   const [error, setError] = useState('');
 
-  // Prüfen ob Warenkorb leer ist
+  // Prüfen ob Warenkorb leer ist oder keine verfügbaren Artikel
   useEffect(() => {
     if (!items || items.length === 0) {
       navigate('/cart');
+      return;
+    }
+    
+    // Prüfen ob verfügbare Artikel vorhanden sind
+    const availableCount = items.filter(item => item.hasEnoughStock === true).length;
+    if (availableCount === 0) {
+      console.warn('⚠️ Keine verfügbaren Artikel im Checkout - Weiterleitung zum Warenkorb');
+      navigate('/cart');
+      return;
+    }
+    
+    // Warnung wenn nicht alle Artikel verfügbar sind
+    if (availableCount < items.length) {
+      console.warn(`⚠️ Nur ${availableCount}/${items.length} Artikel sind verfügbar`);
     }
   }, [items, navigate]);
 
@@ -298,14 +322,14 @@ const CheckoutPage = () => {
 
   const handleCreateInquiry = async () => {
     const inquiryData = {
-      items: items.map(item => ({
+      items: availableItems.map(item => ({
         productId: item.id,
         name: item.name,
         quantity: item.quantity,
         price: item.price,
         image: item.image || ''
       })),
-      total: getCartTotal(),
+      total: availableTotal,
       rechnungsadresse: {
         vorname: orderData.rechnungsadresse.vorname,
         nachname: orderData.rechnungsadresse.nachname,
@@ -347,8 +371,8 @@ const CheckoutPage = () => {
   };
 
   const handleCreateOrder = async () => {
-      // Bestellung erstellen (KORREKTE Steuerberechnung)
-      const gesamtsumme = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      // Bestellung erstellen (KORREKTE Steuerberechnung) - nur verfügbare Artikel
+      const gesamtsumme = availableItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
       const versandkosten = gesamtsumme >= 50 ? 0 : 4.99;
       
       // In Deutschland sind Preise INKLUSIVE MwSt.
@@ -359,7 +383,7 @@ const CheckoutPage = () => {
       const mwstBetrag = endpreis - (endpreis / 1.19);
 
       const bestellungData = {
-        artikel: items.map(item => ({
+        artikel: availableItems.map(item => ({
           produktType: 'portfolio', // Standardwert für Portfolio-Produkte
           produktId: item.id,
           produktSnapshot: {
@@ -455,11 +479,11 @@ const CheckoutPage = () => {
     }).format(price);
   };
 
-  if (!items || items.length === 0) {
+  if (!items || items.length === 0 || availableItems.length === 0) {
     return null; // Weiterleitung erfolgt durch useEffect
   }
 
-  const subtotal = getCartTotal();
+  const subtotal = availableTotal;
   const versandkosten = subtotal >= 50 ? 0 : 4.99;
   
   // KORREKTE Steuerberechnung: In Deutschland sind Preise INKLUSIVE MwSt.
@@ -470,13 +494,43 @@ const CheckoutPage = () => {
   const mwst = total - (total / 1.19);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 4 }}>
+    <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
+      <Typography 
+        variant={isMobile ? "h5" : "h4"} 
+        component="h1" 
+        gutterBottom 
+        sx={{ mb: isMobile ? 2 : 4 }}
+      >
         <ShoppingCart sx={{ mr: 2, verticalAlign: 'middle' }} />
         Kasse
       </Typography>
       
       {/* Urlaubs-/Wartungsmodus Benachrichtigung */}
+      {/* Warnung für nicht verfügbare Artikel */}
+      {availableItems.length < items.length && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: isMobile ? 2 : 3,
+            backgroundColor: '#ffebee',
+            '& .MuiAlert-icon': { color: '#d32f2f' },
+            '& .MuiAlert-message': { fontWeight: 'medium' }
+          }}
+        >
+          <Typography variant={isMobile ? "subtitle1" : "h6"} sx={{ mb: 1 }}>
+            ⚠️ Nicht verfügbare Artikel
+          </Typography>
+          <Typography variant={isMobile ? "body2" : "body2"}>
+            {items.length - availableItems.length} Artikel in Ihrem Warenkorb sind derzeit nicht verfügbar 
+            und werden <strong>nicht bestellt</strong>. Diese Artikel verbleiben im Warenkorb für eine spätere Bestellung.
+          </Typography>
+          <Typography variant={isMobile ? "body2" : "body2"} sx={{ mt: 1, fontWeight: 'bold' }}>
+            Nur {availableItems.length} von {items.length} Artikeln werden bestellt.
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Shop-Status Warnungen */}
       {shopSettings?.shop === 'vacation' && (
         <Alert 
           severity="info" 
@@ -541,16 +595,23 @@ const CheckoutPage = () => {
         </Alert>
       )}
 
-      <Grid container spacing={4}>
+      <Grid container spacing={isMobile ? 2 : 4}>
         {/* Linke Spalte: Bestellübersicht */}
         <Grid item xs={12} md={8}>
           {/* Warenkorb-Übersicht */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: isMobile ? 2 : 3, mb: isMobile ? 2 : 3 }}>
+            <Typography variant={isMobile ? "h6" : "h6"} gutterBottom>
               Ihre Bestellung
             </Typography>
             <List>
-              {items.map((item, index) => (
+              {/* Warnung bei nicht verfügbaren Artikeln */}
+              {availableItems.length < items.length && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  {items.length - availableItems.length} Artikel sind nicht verfügbar und werden nicht bestellt.
+                </Alert>
+              )}
+              
+              {availableItems.map((item, index) => (
                 <div key={item._id || index}>
                   <ListItem>
                     <ListItemAvatar>
@@ -566,15 +627,15 @@ const CheckoutPage = () => {
                       {formatPrice(item.quantity * (item.preis || item.price || 0))}
                     </Typography>
                   </ListItem>
-                  {index < items.length - 1 && <Divider />}
+                  {index < availableItems.length - 1 && <Divider />}
                 </div>
               ))}
             </List>
           </Paper>
 
           {/* Rechnungsadresse - Aus Kundenprofil oder manuell */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: isMobile ? 2 : 3, mb: isMobile ? 2 : 3 }}>
+            <Typography variant={isMobile ? "h6" : "h6"} gutterBottom>
               Rechnungsadresse
             </Typography>
             
@@ -618,13 +679,14 @@ const CheckoutPage = () => {
                     </Typography>
                   </Alert>
                 )}
-                <Grid container spacing={2}>
+                <Grid container spacing={isMobile ? 1 : 2}>
                   <Grid item xs={12} sm={6}>
                     <TextField
                       fullWidth
                       label="Vorname *"
                       value={orderData.rechnungsadresse.vorname}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'vorname', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6}>
@@ -633,6 +695,7 @@ const CheckoutPage = () => {
                       label="Nachname *"
                       value={orderData.rechnungsadresse.nachname}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'nachname', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   <Grid item xs={12} sm={8}>
@@ -641,6 +704,7 @@ const CheckoutPage = () => {
                       label="Straße *"
                       value={orderData.rechnungsadresse.strasse}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'strasse', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   <Grid item xs={12} sm={4}>
@@ -649,6 +713,7 @@ const CheckoutPage = () => {
                       label="Hausnummer *"
                       value={orderData.rechnungsadresse.hausnummer}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'hausnummer', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   <Grid item xs={12} sm={4}>
@@ -657,6 +722,7 @@ const CheckoutPage = () => {
                       label="PLZ *"
                       value={orderData.rechnungsadresse.plz}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'plz', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                   <Grid item xs={12} sm={8}>
@@ -665,6 +731,7 @@ const CheckoutPage = () => {
                       label="Stadt *"
                       value={orderData.rechnungsadresse.stadt}
                       onChange={(e) => handleInputChange('rechnungsadresse', 'stadt', e.target.value)}
+                      size={isMobile ? "small" : "medium"}
                     />
                   </Grid>
                 </Grid>
@@ -672,8 +739,8 @@ const CheckoutPage = () => {
             )}
           </Paper>
           {/* Lieferadresse */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: isMobile ? 2 : 3, mb: isMobile ? 2 : 3 }}>
+            <Typography variant={isMobile ? "h6" : "h6"} gutterBottom>
               Lieferadresse
             </Typography>
             <FormControlLabel
@@ -684,16 +751,22 @@ const CheckoutPage = () => {
                 />
               }
               label="Lieferadresse = Rechnungsadresse (Haken entfernen für abweichende Lieferadresse)"
+              sx={{ 
+                '& .MuiFormControlLabel-label': { 
+                  fontSize: isMobile ? '0.875rem' : '1rem' 
+                } 
+              }}
             />
             
             {!orderData.lieferadresse.verwendeRechnungsadresse && (
-              <Grid container spacing={2} sx={{ mt: 2 }}>
+              <Grid container spacing={isMobile ? 1 : 2} sx={{ mt: 2 }}>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
                     label="Vorname"
                     value={orderData.lieferadresse.vorname}
                     onChange={(e) => handleInputChange('lieferadresse', 'vorname', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -702,6 +775,7 @@ const CheckoutPage = () => {
                     label="Nachname"
                     value={orderData.lieferadresse.nachname}
                     onChange={(e) => handleInputChange('lieferadresse', 'nachname', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={8}>
@@ -710,6 +784,7 @@ const CheckoutPage = () => {
                     label="Straße"
                     value={orderData.lieferadresse.strasse}
                     onChange={(e) => handleInputChange('lieferadresse', 'strasse', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -718,6 +793,7 @@ const CheckoutPage = () => {
                     label="Hausnummer"
                     value={orderData.lieferadresse.hausnummer}
                     onChange={(e) => handleInputChange('lieferadresse', 'hausnummer', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={4}>
@@ -726,6 +802,7 @@ const CheckoutPage = () => {
                     label="PLZ"
                     value={orderData.lieferadresse.plz}
                     onChange={(e) => handleInputChange('lieferadresse', 'plz', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
                 <Grid item xs={12} sm={8}>
@@ -734,6 +811,7 @@ const CheckoutPage = () => {
                     label="Stadt"
                     value={orderData.lieferadresse.stadt}
                     onChange={(e) => handleInputChange('lieferadresse', 'stadt', e.target.value)}
+                    size={isMobile ? "small" : "medium"}
                   />
                 </Grid>
               </Grid>
@@ -741,17 +819,18 @@ const CheckoutPage = () => {
           </Paper>
 
           {/* Notizen */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: isMobile ? 2 : 3, mb: isMobile ? 2 : 3 }}>
+            <Typography variant={isMobile ? "h6" : "h6"} gutterBottom>
               Anmerkungen (optional)
             </Typography>
             <TextField
               fullWidth
               multiline
-              rows={3}
+              rows={isMobile ? 2 : 3}
               placeholder="Besondere Wünsche oder Anmerkungen zu Ihrer Bestellung..."
               value={orderData.notizen}
               onChange={(e) => setOrderData(prev => ({ ...prev, notizen: e.target.value }))}
+              size={isMobile ? "small" : "medium"}
             />
           </Paper>
         </Grid>
@@ -759,8 +838,13 @@ const CheckoutPage = () => {
         {/* Rechte Spalte: Zusammenfassung */}
         <Grid item xs={12} md={4}>
           {/* Preisübersicht */}
-          <Paper sx={{ p: 3, mb: 3, position: 'sticky', top: 20 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ 
+            p: isMobile ? 2 : 3, 
+            mb: isMobile ? 2 : 3, 
+            position: isMobile ? 'static' : 'sticky', 
+            top: 20 
+          }}>
+            <Typography variant={isMobile ? "h6" : "h6"} gutterBottom>
               Bestellzusammenfassung
             </Typography>
             
@@ -840,7 +924,7 @@ const CheckoutPage = () => {
             </Accordion>
 
             {/* Zustimmungen */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: isMobile ? 2 : 3 }}>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -848,8 +932,13 @@ const CheckoutPage = () => {
                     onChange={(e) => handleCheckboxChange('agbAkzeptiert', e.target.checked)}
                   />
                 }
+                sx={{ 
+                  '& .MuiFormControlLabel-label': { 
+                    fontSize: isMobile ? '0.875rem' : '1rem' 
+                  } 
+                }}
                 label={
-                  <Typography variant="body2">
+                  <Typography variant={isMobile ? "body2" : "body2"}>
                     Ich akzeptiere die{' '}
                     <Button size="small" onClick={() => window.open('/agb', '_blank')}>
                       AGB
@@ -882,11 +971,14 @@ const CheckoutPage = () => {
             <Button
               fullWidth
               variant="contained"
-              size="large"
+              size={isMobile ? "large" : "large"}
               onClick={handleSubmitOrder}
               disabled={loading || !orderData.agbAkzeptiert || !orderData.datenschutzAkzeptiert}
               startIcon={loading ? <CircularProgress size={20} /> : <CheckCircle />}
-              sx={{ py: 2 }}
+              sx={{ 
+                py: isMobile ? 1.5 : 2,
+                fontSize: isMobile ? '1rem' : '1.125rem'
+              }}
             >
               {loading 
                 ? (shopSettings?.checkoutMode === 'inquiry' ? 'Anfrage wird gesendet...' : 'Bestellung wird erstellt...') 
@@ -897,7 +989,15 @@ const CheckoutPage = () => {
               }
             </Button>
             
-            <Typography variant="caption" display="block" sx={{ mt: 2, textAlign: 'center' }}>
+            <Typography 
+              variant="caption" 
+              display="block" 
+              sx={{ 
+                mt: 2, 
+                textAlign: 'center',
+                fontSize: isMobile ? '0.75rem' : '0.875rem'
+              }}
+            >
               {shopSettings?.checkoutMode === 'inquiry' 
                 ? 'Ihre Anfrage wird an unser Team gesendet'
                 : 'Nach dem Klick werden Sie zu PayPal weitergeleitet'
