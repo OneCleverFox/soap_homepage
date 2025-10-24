@@ -290,9 +290,9 @@ router.get('/with-prices', async (req, res) => {
   console.log('🚀 Portfolio with-prices request started');
   
   try {
-    // 1. Portfolio Items laden (Alle Items - auch ohne aktiv-Status)
+    // 1. Portfolio Items laden (Nur aktive Items)
     const portfolioStart = Date.now();
-    const portfolioItems = await Portfolio.find({})
+    const portfolioItems = await Portfolio.find({ aktiv: true })
       .sort({ reihenfolge: 1, name: 1 })
       .lean(); // lean() für bessere Performance
     

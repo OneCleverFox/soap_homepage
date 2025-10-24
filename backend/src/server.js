@@ -449,6 +449,9 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 API verfügbar unter: http://localhost:${PORT}/api`);
   console.log(`🔗 Health Check: http://localhost:${PORT}/api/health`);
+  
+  // Upload-Cleanup starten
+  require('./utils/uploadCleanup');
 });
 
 // Graceful shutdown

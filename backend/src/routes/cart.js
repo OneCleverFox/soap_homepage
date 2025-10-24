@@ -27,28 +27,85 @@ router.get('/', authenticateToken, async (req, res) => {
       await cart.save();
     }
 
-    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
-    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
+    // Aktualisiere Bild-URLs und Verfügbarkeitsinformationen aus Portfolio für alle Artikel
+    const Bestand = require('../models/Bestand');
+    
+    // Optimierung: Batch-Abfragen statt einzelne Abfragen pro Artikel
+    const produktIds = cart.artikel.map(item => item.produktId);
+    
+    // Alle Produkte in einem Batch laden
+    const products = await Portfolio.find({ 
+      _id: { $in: produktIds } 
+    }).lean(); // lean() für bessere Performance
+    
+    // Alle Bestandsinformationen in einem Batch laden
+    const bestandInfos = await Bestand.find({ 
+      artikelId: { $in: produktIds },
+      typ: 'produkt'
+    }).lean();
+    
+    // Maps für schnellen Zugriff erstellen
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+    const bestandMap = new Map(bestandInfos.map(b => [b.artikelId.toString(), b]));
+    
+    const enrichedItems = cart.artikel.map((item) => {
       try {
-        // Hole aktuelles Produkt aus Portfolio
-        const product = await Portfolio.findById(item.produktId);
+        const product = productMap.get(item.produktId.toString());
+        const bestandInfo = bestandMap.get(item.produktId.toString());
+        
+        console.log('🔍 Customer Cart - Checking bestand for:', {
+          produktId: item.produktId,
+          productName: product?.name,
+          bestandFound: !!bestandInfo,
+          bestandMenge: bestandInfo?.menge,
+          bestandVerfuegbar: bestandInfo?.verfuegbar
+        });
         
         if (product && product.bilder && product.bilder.hauptbild) {
-          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
+          // Aktualisiere mit Portfolio-Daten und Verfügbarkeitsstatus
           return {
             ...item.toObject(),
-            bild: product.bilder.hauptbild
+            bild: product.bilder.hauptbild,
+            bestand: bestandInfo ? {
+              verfuegbar: (bestandInfo.menge || 0) > 0,
+              menge: bestandInfo.menge || 0,
+              einheit: bestandInfo.einheit || 'Stück'
+            } : {
+              // Fallback: Wenn kein Bestand-Eintrag, aber Produkt aktiv
+              verfuegbar: product.aktiv !== false, // Standard: verfügbar außer explizit deaktiviert
+              menge: 5, // Standard-Menge
+              einheit: 'Stück'
+            }
           };
         }
         
-        // Fallback: behalte vorhandene Bild-URL
-        return item.toObject();
+        // Fallback: behalte vorhandene Daten aber füge Bestandsinfo hinzu
+        return {
+          ...item.toObject(),
+          bestand: bestandInfo ? {
+            verfuegbar: (bestandInfo.menge || 0) > 0,
+            menge: bestandInfo.menge || 0,
+            einheit: bestandInfo.einheit || 'Stück'
+          } : {
+            // Fallback: Wenn kein Bestand-Eintrag und kein Produkt gefunden
+            verfuegbar: false,
+            menge: 0,
+            einheit: 'Stück'
+          }
+        };
       } catch (err) {
         console.error('Fehler beim Laden des Produkts:', item.produktId, err);
-        // Bei Fehler: behalte Artikel wie er ist
-        return item.toObject();
+        // Bei Fehler: behalte Artikel mit "nicht verfügbar" Status
+        return {
+          ...item.toObject(),
+          bestand: {
+            verfuegbar: false,
+            menge: 0,
+            einheit: 'Stück'
+          }
+        };
       }
-    }));
+    });
 
     res.json({
       success: true,
@@ -194,10 +251,26 @@ router.put('/update', authenticateToken, async (req, res) => {
   try {
     const { produktId, menge } = req.body;
 
-    if (!produktId || menge === undefined) {
+    console.log('📦 Cart update request:', {
+      produktId,
+      menge,
+      body: req.body,
+      userId: req.user.id || req.user.userId
+    });
+
+    if (!produktId || menge === undefined || menge === null) {
+      console.log('❌ Missing produktId or menge');
       return res.status(400).json({
         success: false,
         message: 'Produkt-ID und Menge erforderlich'
+      });
+    }
+
+    if (typeof menge !== 'number' || menge < 0) {
+      console.log('❌ Invalid menge value:', menge);
+      return res.status(400).json({
+        success: false,
+        message: 'Menge muss eine positive Zahl sein'
       });
     }
 
@@ -205,6 +278,7 @@ router.put('/update', authenticateToken, async (req, res) => {
     const cart = await Cart.findOne({ kundeId });
 
     if (!cart) {
+      console.log('❌ Cart not found for user:', kundeId);
       return res.status(404).json({
         success: false,
         message: 'Warenkorb nicht gefunden'
@@ -212,10 +286,17 @@ router.put('/update', authenticateToken, async (req, res) => {
     }
 
     const itemIndex = cart.artikel.findIndex(
-      item => item.produktId.toString() === produktId
+      item => item.produktId.toString() === produktId.toString()
     );
 
+    console.log('🔍 Item search result:', {
+      itemIndex,
+      cartItemCount: cart.artikel.length,
+      searchingFor: produktId
+    });
+
     if (itemIndex === -1) {
+      console.log('❌ Item not found in cart');
       return res.status(404).json({
         success: false,
         message: 'Artikel nicht im Warenkorb'
@@ -224,13 +305,16 @@ router.put('/update', authenticateToken, async (req, res) => {
 
     if (menge <= 0) {
       // Artikel entfernen
+      console.log('🗑️ Removing item from cart');
       cart.artikel.splice(itemIndex, 1);
     } else {
       // Menge aktualisieren
+      console.log('🔄 Updating quantity:', { old: cart.artikel[itemIndex].menge, new: menge });
       cart.artikel[itemIndex].menge = menge;
     }
 
     await cart.save();
+    console.log('✅ Cart updated successfully');
 
     // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
     const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
