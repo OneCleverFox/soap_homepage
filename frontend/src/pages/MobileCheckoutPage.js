@@ -5,9 +5,6 @@ import {
   Box,
   Paper,
   Grid,
-  Card,
-  CardContent,
-  Divider,
   Button,
   List,
   ListItem,
@@ -19,31 +16,19 @@ import {
   Checkbox,
   Alert,
   CircularProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Chip,
   useMediaQuery,
   useTheme,
-  Fab,
-  Collapse,
   IconButton,
   AppBar,
-  Toolbar,
-  Slide
+  Toolbar
 } from '@mui/material';
 import {
   ShoppingCart,
   Payment,
   LocalShipping,
   Security,
-  ExpandMore,
   CheckCircle,
-  Receipt,
-  ArrowBack,
-  ExpandLess,
-  ExpandMore as ExpandIcon,
-  ShoppingBag
+  ArrowBack
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -54,12 +39,16 @@ const MobileCheckoutPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { user } = useContext(AuthContext);
-  const { items, getCartTotal, clearCart } = useCart();
+  const { items } = useCart();
+
+  // Nur verfügbare Artikel für Checkout verwenden
+  const availableItems = items.filter(item => item.hasEnoughStock === true);
+  const availableTotal = availableItems.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
+
+  // Schrittweise Checkout-States
   
   const [loading, setLoading] = useState(false);
-  const [customerData, setCustomerData] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
-  const [showOrderSummary, setShowOrderSummary] = useState(false);
   const [orderData, setOrderData] = useState({
     rechnungsadresse: {
       vorname: '',
@@ -68,7 +57,8 @@ const MobileCheckoutPage = () => {
       hausnummer: '',
       plz: '',
       stadt: '',
-      land: 'Deutschland'
+      land: 'Deutschland',
+      email: ''
     },
     lieferadresse: {
       verwendeRechnungsadresse: true,
@@ -88,8 +78,9 @@ const MobileCheckoutPage = () => {
 
   // Mobile Steps
   const checkoutSteps = [
+    { label: 'Produkte', icon: <ShoppingCart /> },
     { label: 'Adresse', icon: <LocalShipping /> },
-    { label: 'Prüfung', icon: <Receipt /> },
+    { label: 'Datenschutz', icon: <Security /> },
     { label: 'Zahlung', icon: <Payment /> }
   ];
 
@@ -118,7 +109,7 @@ const MobileCheckoutPage = () => {
         const data = await response.json();
         const kunde = data.data;
         
-        setCustomerData(kunde);
+        // setCustomerData(kunde); // Entfernt da nicht verwendet
         
         if (kunde) {
           setOrderData(prev => ({
@@ -170,7 +161,7 @@ const MobileCheckoutPage = () => {
         })),
         besteller: {
           name: user?.name || `${orderData.rechnungsadresse.vorname} ${orderData.rechnungsadresse.nachname}`,
-          email: user?.email || '',
+          email: user?.email || orderData.rechnungsadresse.email || '',
           kundennummer: user?.kundennummer || ''
         },
         rechnungsadresse: orderData.rechnungsadresse,
@@ -183,7 +174,7 @@ const MobileCheckoutPage = () => {
 
       console.log('🛒 Sende Bestellung an PayPal:', orderPayload);
 
-      const response = await fetch(`${apiUrl}/orders/paypal-checkout`, {
+      const response = await fetch(`${apiUrl}/orders/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -230,15 +221,6 @@ const MobileCheckoutPage = () => {
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           Bestellung abschließen
         </Typography>
-        <IconButton 
-          onClick={() => setShowOrderSummary(!showOrderSummary)}
-          sx={{ 
-            bgcolor: showOrderSummary ? 'primary.main' : 'transparent',
-            color: showOrderSummary ? 'white' : 'inherit'
-          }}
-        >
-          <ShoppingBag />
-        </IconButton>
       </Toolbar>
     </AppBar>
   );
@@ -284,177 +266,136 @@ const MobileCheckoutPage = () => {
     </Box>
   );
 
-  // Mobile Order Summary
-  const MobileOrderSummary = () => (
-    <Slide direction="up" in={showOrderSummary} mountOnEnter unmountOnExit>
-      <Paper 
-        sx={{ 
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1300,
-          maxHeight: '70vh',
-          overflow: 'auto'
-        }}
-      >
-        <Box sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Bestellübersicht</Typography>
-            <IconButton onClick={() => setShowOrderSummary(false)}>
-              <ExpandLess />
-            </IconButton>
-          </Box>
-          
-          <List dense>
-            {items.map((item, index) => (
-              <ListItem key={index} sx={{ px: 0 }}>
-                <ListItemAvatar>
-                  <Avatar 
-                    src={item.hauptbild || item.images?.[0]} 
-                    variant="rounded"
-                    sx={{ width: 40, height: 40 }}
-                  />
-                </ListItemAvatar>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" noWrap>
-                        {item.name || item.title}
-                      </Typography>
-                      <Typography variant="body2" fontWeight="bold">
-                        €{((item.preis || item.price) * item.quantity).toFixed(2)}
-                      </Typography>
-                    </Box>
-                  }
-                  secondary={`${item.quantity}x €${(item.preis || item.price).toFixed(2)}`}
-                />
-              </ListItem>
-            ))}
-          </List>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h6">Gesamt:</Typography>
-            <Typography variant="h6" color="primary">
-              €{getCartTotal().toFixed(2)}
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
-    </Slide>
-  );
-
   // Address Form für Mobile
   const MobileAddressForm = () => (
-    <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
+    <Box sx={{ p: 3, bgcolor: 'background.default', minHeight: '60vh' }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 3 }}>
         Rechnungsadresse
       </Typography>
       
-      <Grid container spacing={2}>
-        <Grid item xs={6}>
-          <TextField
-            fullWidth
-            label="Vorname"
-            value={orderData.rechnungsadresse.vorname}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, vorname: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-        <Grid item xs={6}>
-          <TextField
-            fullWidth
-            label="Nachname"
-            value={orderData.rechnungsadresse.nachname}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, nachname: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-        <Grid item xs={8}>
-          <TextField
-            fullWidth
-            label="Straße"
-            value={orderData.rechnungsadresse.strasse}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, strasse: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <TextField
-            fullWidth
-            label="Nr."
-            value={orderData.rechnungsadresse.hausnummer}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, hausnummer: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-        <Grid item xs={4}>
-          <TextField
-            fullWidth
-            label="PLZ"
-            value={orderData.rechnungsadresse.plz}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, plz: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-        <Grid item xs={8}>
-          <TextField
-            fullWidth
-            label="Stadt"
-            value={orderData.rechnungsadresse.stadt}
-            onChange={(e) => setOrderData(prev => ({
-              ...prev,
-              rechnungsadresse: { ...prev.rechnungsadresse, stadt: e.target.value }
-            }))}
-            size="small"
-          />
-        </Grid>
-      </Grid>
-
-      {/* Delivery Address Toggle */}
-      <Box sx={{ mt: 3 }}>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={orderData.lieferadresse.verwendeRechnungsadresse}
+      <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              label="Vorname *"
+              value={orderData.rechnungsadresse.vorname}
               onChange={(e) => setOrderData(prev => ({
                 ...prev,
-                lieferadresse: { ...prev.lieferadresse, verwendeRechnungsadresse: e.target.checked }
+                rechnungsadresse: { ...prev.rechnungsadresse, vorname: e.target.value }
               }))}
+              variant="outlined"
+              required
             />
-          }
-          label="Lieferadresse ist identisch mit Rechnungsadresse"
-        />
-      </Box>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              label="Nachname *"
+              value={orderData.rechnungsadresse.nachname}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, nachname: e.target.value }
+              }))}
+              variant="outlined"
+              required
+            />
+          </Grid>
+          <Grid item xs={8}>
+            <TextField
+              fullWidth
+              label="Straße *"
+              value={orderData.rechnungsadresse.strasse}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, strasse: e.target.value }
+              }))}
+              variant="outlined"
+              required
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              label="Nr."
+              value={orderData.rechnungsadresse.hausnummer}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, hausnummer: e.target.value }
+              }))}
+              variant="outlined"
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              label="PLZ *"
+              value={orderData.rechnungsadresse.plz}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, plz: e.target.value }
+              }))}
+              variant="outlined"
+              required
+            />
+          </Grid>
+          <Grid item xs={8}>
+            <TextField
+              fullWidth
+              label="Stadt *"
+              value={orderData.rechnungsadresse.stadt}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, stadt: e.target.value }
+              }))}
+              variant="outlined"
+              required
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="E-Mail *"
+              type="email"
+              value={orderData.rechnungsadresse.email || ''}
+              onChange={(e) => setOrderData(prev => ({
+                ...prev,
+                rechnungsadresse: { ...prev.rechnungsadresse, email: e.target.value }
+              }))}
+              variant="outlined"
+              required
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={orderData.lieferadresse.verwendeRechnungsadresse}
+                  onChange={(e) => setOrderData(prev => ({
+                    ...prev,
+                    lieferadresse: { ...prev.lieferadresse, verwendeRechnungsadresse: e.target.checked }
+                  }))}
+                />
+              }
+              label="Lieferadresse ist identisch mit Rechnungsadresse"
+            />
+          </Grid>
+        </Grid>
+      </Paper>
 
       {/* Notes */}
-      <Box sx={{ mt: 2 }}>
-        <TextField
-          fullWidth
-          label="Anmerkungen (optional)"
-          multiline
-          rows={3}
-          value={orderData.notizen}
-          onChange={(e) => setOrderData(prev => ({ ...prev, notizen: e.target.value }))}
-          size="small"
-        />
+      <Box sx={{ mt: 3 }}>
+        <Paper elevation={1} sx={{ p: 2, borderRadius: 2 }}>
+          <TextField
+            fullWidth
+            label="Anmerkungen (optional)"
+            multiline
+            rows={3}
+            value={orderData.notizen}
+            onChange={(e) => setOrderData(prev => ({ ...prev, notizen: e.target.value }))}
+            variant="outlined"
+          />
+        </Paper>
       </Box>
     </Box>
   );
@@ -504,37 +445,39 @@ const MobileCheckoutPage = () => {
         left: 0,
         right: 0,
         p: 2,
-        zIndex: 1200,
-        display: showOrderSummary ? 'none' : 'block'
+        zIndex: 1200
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          Gesamt: <strong>€{getCartTotal().toFixed(2)}</strong>
+          Gesamt: <strong>€{availableTotal.toFixed(2)}</strong>
         </Typography>
-        <Button
-          variant="text"
-          size="small"
-          onClick={() => setShowOrderSummary(true)}
-          endIcon={<ExpandIcon />}
-        >
-          Details
-        </Button>
       </Box>
       
-      {activeStep < checkoutSteps.length - 1 ? (
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        {activeStep > 0 && (
+          <Button
+            variant="outlined"
+            onClick={() => setActiveStep(prev => prev - 1)}
+            sx={{ minHeight: 48, flex: '0 0 100px' }}
+          >
+            Zurück
+          </Button>
+        )}
+        
+        {activeStep < checkoutSteps.length - 1 ? (
         <Button
           fullWidth
           variant="contained"
           size="large"
           onClick={() => setActiveStep(prev => prev + 1)}
           disabled={
-            (activeStep === 0 && (!orderData.rechnungsadresse.vorname || !orderData.rechnungsadresse.nachname)) ||
-            (activeStep === 1 && (!orderData.agbAkzeptiert || !orderData.datenschutzAkzeptiert))
+            (activeStep === 1 && (!orderData.rechnungsadresse.vorname || !orderData.rechnungsadresse.nachname || !orderData.rechnungsadresse.strasse || !orderData.rechnungsadresse.plz || !orderData.rechnungsadresse.stadt || !orderData.rechnungsadresse.email)) ||
+            (activeStep === 2 && (!orderData.agbAkzeptiert || !orderData.datenschutzAkzeptiert))
           }
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 56, fontSize: '1.1rem', fontWeight: 600 }}
         >
-          Weiter
+          {activeStep === 0 ? 'Zur Adresse' : activeStep === 1 ? 'Zu den AGB' : 'Zur Zahlung'}
         </Button>
       ) : (
         <Button
@@ -549,6 +492,7 @@ const MobileCheckoutPage = () => {
           {loading ? 'Wird verarbeitet...' : 'Mit PayPal bezahlen'}
         </Button>
       )}
+      </Box>
     </Paper>
   );
 
@@ -556,18 +500,103 @@ const MobileCheckoutPage = () => {
   const renderCurrentStep = () => {
     switch (activeStep) {
       case 0:
-        return <MobileAddressForm />;
+        // Schritt 1: Produkte anzeigen
+        return (
+          <Box sx={{ p: 3, bgcolor: 'background.default', minHeight: '60vh' }}>
+            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'primary.main', mb: 3 }}>
+              Ihre Bestellung
+            </Typography>
+            <Paper elevation={2} sx={{ borderRadius: 2, overflow: 'hidden' }}>
+              <List sx={{ p: 0 }}>
+                {availableItems.map((item, index) => (
+                  <ListItem key={index} sx={{ 
+                    py: 2, 
+                    px: 2,
+                    borderBottom: index < availableItems.length - 1 ? '1px solid' : 'none',
+                    borderColor: 'divider'
+                  }}>
+                    <ListItemAvatar>
+                      <Avatar 
+                        src={item.hauptbild || item.images?.[0]} 
+                        variant="rounded"
+                        sx={{ width: 70, height: 70, mr: 2 }}
+                      />
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={
+                        <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <span style={{ fontSize: '1.1rem', lineHeight: 1.3, fontWeight: 500 }}>
+                            {item.name || item.title}
+                          </span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1976d2' }}>
+                            €{((item.preis || item.price) * item.quantity).toFixed(2)}
+                          </span>
+                        </span>
+                      }
+                      secondary={
+                        <>
+                          <span style={{ color: '#666', fontSize: '0.875rem', display: 'block', marginBottom: '4px' }}>
+                            {item.quantity} Stück × €{(item.preis || item.price).toFixed(2)}
+                          </span>
+                          {item.hasEnoughStock && (
+                            <span style={{ 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              backgroundColor: '#c8e6c9', 
+                              color: '#2e7d32',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem'
+                            }}>
+                              ✓ Verfügbar
+                            </span>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
+            
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              mt: 3,
+              p: 2,
+              bgcolor: 'primary.light',
+              borderRadius: 2
+            }}>
+              <Typography variant="h6" color="primary.dark">Gesamt:</Typography>
+              <Typography variant="h5" color="primary.dark" fontWeight="bold">
+                €{availableTotal.toFixed(2)}
+              </Typography>
+            </Box>
+          </Box>
+        );
       case 1:
-        return <MobileTermsSection />;
+        // Schritt 2: Lieferadresse
+        return <MobileAddressForm />;
       case 2:
+        // Schritt 3: Datenschutzerklärung
+        return <MobileTermsSection />;
+      case 3:
+        // Schritt 4: Bezahlung
         return (
           <Box sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h6" gutterBottom>
               Bereit für die Zahlung
             </Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Klicken Sie unten, um mit PayPal zu bezahlen
             </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="body1">Gesamtbetrag:</Typography>
+              <Typography variant="h6" color="primary" fontWeight="bold">
+                €{availableTotal.toFixed(2)}
+              </Typography>
+            </Box>
           </Box>
         );
       default:
@@ -591,7 +620,6 @@ const MobileCheckoutPage = () => {
         </Box>
         
         <StickyBottomBar />
-        <MobileOrderSummary />
       </Box>
     );
   }

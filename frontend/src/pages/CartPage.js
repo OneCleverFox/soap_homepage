@@ -15,7 +15,8 @@ import {
   TextField,
   CircularProgress,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Chip
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -98,6 +99,20 @@ const CartPage = () => {
       console.log('🛒 User exists, navigating to checkout');
       navigate('/checkout');
     }
+  };
+
+  // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
+  const getAvailableTotal = () => {
+    return items
+      .filter(item => item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
+  };
+
+  // Berechne verfügbare Artikel-Anzahl
+  const getAvailableItemsCount = () => {
+    return items
+      .filter(item => item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + item.quantity, 0);
   };
 
   if (!user) {
@@ -206,6 +221,34 @@ const CartPage = () => {
                       <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
                         {item.seife} • {item.gramm}g
                       </Typography>
+                      
+                      {/* Verfügbarkeitsstatus */}
+                      {item.bestand && (
+                        <Box sx={{ mt: 0.5 }}>
+                          {!item.isAvailable ? (
+                            <Chip 
+                              label="Nicht verfügbar" 
+                              color="error" 
+                              size="small" 
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          ) : !item.hasEnoughStock ? (
+                            <Chip 
+                              label={`Nur ${item.bestand?.menge || 0} verfügbar`} 
+                              color="warning" 
+                              size="small" 
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          ) : (
+                            <Chip 
+                              label="Verfügbar" 
+                              color="success" 
+                              size="small" 
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          )}
+                        </Box>
+                      )}
                     </Box>
                     
                     <Box sx={{ 
@@ -311,9 +354,20 @@ const CartPage = () => {
             <Divider sx={{ my: 2 }} />
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant={isMobile ? "body2" : "body1"}>Zwischensumme:</Typography>
-              <Typography variant={isMobile ? "body2" : "body1"}>€{getCartTotal().toFixed(2)}</Typography>
+              <Typography variant={isMobile ? "body2" : "body1"}>Verfügbare Artikel:</Typography>
+              <Typography variant={isMobile ? "body2" : "body1"}>€{getAvailableTotal().toFixed(2)}</Typography>
             </Box>
+            
+            {getCartTotal() !== getAvailableTotal() && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant={isMobile ? "caption" : "body2"} color="warning.main">
+                  Nicht verfügbare Artikel:
+                </Typography>
+                <Typography variant={isMobile ? "caption" : "body2"} color="warning.main">
+                  €{(getCartTotal() - getAvailableTotal()).toFixed(2)}
+                </Typography>
+              </Box>
+            )}
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
@@ -331,7 +385,7 @@ const CartPage = () => {
                 Gesamt:
               </Typography>
               <Typography variant={isMobile ? "body1" : "h6"} fontWeight="bold" color="primary">
-                €{(getCartTotal() + SHIPPING_COST).toFixed(2)}
+                €{(getAvailableTotal() + SHIPPING_COST).toFixed(2)}
               </Typography>
             </Box>
             
@@ -347,10 +401,17 @@ const CartPage = () => {
               fullWidth
               size={isMobile ? "large" : "medium"}
               onClick={handleCheckout}
+              disabled={getAvailableItemsCount() === 0}
               sx={{ mb: 2 }}
             >
-              Zur Kasse
+              Zur Kasse ({getAvailableItemsCount()} verfügbare Artikel)
             </Button>
+            
+            {getAvailableItemsCount() === 0 && items.length > 0 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Keine verfügbaren Artikel im Warenkorb
+              </Alert>
+            )}
             
             <Button
               variant="outlined"

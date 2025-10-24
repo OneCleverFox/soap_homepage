@@ -28,7 +28,7 @@ import {
   Inventory2 as InventoryIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import { portfolioAPI, cartAPI } from '../services/api';
+import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import toast from 'react-hot-toast';
@@ -43,7 +43,7 @@ const ProductsPage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const { user } = useAuth();
-  const { loadCart } = useCart();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
@@ -93,22 +93,17 @@ const ProductsPage = () => {
         return;
       }
 
-      await cartAPI.addToCart({
-        produktId: product._id,
+      // Verwende die addToCart-Funktion aus dem CartContext
+      await addToCart({
+        id: product._id,
         name: product.name,
-        preis: product.preis,
-        menge: quantity,
-        bild: product.bilder?.hauptbild, // Nur relativen Pfad speichern
+        price: product.preis,
+        image: product.bilder?.hauptbild,
         gramm: product.gramm,
         seife: product.seife
-      });
+      }, quantity);
       
-      toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
-      
-      // Warenkorb neu laden um die Anzeige zu aktualisieren
-      console.log('🔄 Lade Warenkorb nach Hinzufügen neu...');
-      await loadCart();
-      
+      // Erfolgs-Toast wird bereits in addToCart gezeigt
       // Produkte neu laden um aktuellen Bestand anzuzeigen
       console.log('🔄 Aktualisiere Produktbestände...');
       fetchProducts(true);
