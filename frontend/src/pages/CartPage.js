@@ -85,8 +85,17 @@ const CartPage = () => {
   };
 
   const handleQuantityChange = (productId, newQuantity) => {
-    if (newQuantity >= 1 && newQuantity <= 99) {
+    // Finde das entsprechende Item um verfügbare Menge zu prüfen
+    const item = items.find(item => item.id === productId);
+    const maxAvailable = item?.bestand?.menge || 0;
+    const isAvailable = item?.bestand?.verfuegbar !== false;
+    
+    // Prüfe Grenzen: mindestens 1, maximal verfügbare Menge
+    if (newQuantity >= 1 && newQuantity <= maxAvailable && isAvailable) {
       updateQuantity(productId, newQuantity);
+    } else if (newQuantity > maxAvailable && isAvailable) {
+      // Wenn Benutzer mehr als verfügbar eingeben will, setze auf Maximum
+      updateQuantity(productId, maxAvailable);
     }
   };
 
@@ -240,12 +249,17 @@ const CartPage = () => {
                               sx={{ fontSize: '0.75rem' }}
                             />
                           ) : (
-                            <Chip 
-                              label="Verfügbar" 
-                              color="success" 
-                              size="small" 
-                              sx={{ fontSize: '0.75rem' }}
-                            />
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Chip 
+                                label="Verfügbar" 
+                                color="success" 
+                                size="small" 
+                                sx={{ fontSize: '0.75rem' }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                (max. {item.bestand?.menge || 0} {item.bestand?.einheit || 'Stück'})
+                              </Typography>
+                            </Box>
                           )}
                         </Box>
                       )}
@@ -285,7 +299,7 @@ const CartPage = () => {
                           }}
                           inputProps={{
                             min: 1,
-                            max: 99,
+                            max: item.bestand?.menge || 99,
                             style: { textAlign: 'center', width: isMobile ? 60 : 50 }
                           }}
                           variant="standard"
@@ -294,7 +308,10 @@ const CartPage = () => {
                         <IconButton
                           size={isMobile ? "medium" : "small"}
                           onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                          disabled={item.quantity >= 99}
+                          disabled={
+                            item.quantity >= (item.bestand?.menge || 0) || 
+                            !item.bestand?.verfuegbar
+                          }
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
                         </IconButton>

@@ -349,10 +349,39 @@ export const CartProvider = ({ children }) => {
       const item = items.find(item => item.id === productId || item.produktId === productId);
       const backendProduktId = item?.produktId || productId;
 
+      // Bestandsprüfung
+      const maxAvailable = item?.bestand?.menge || 0;
+      const isAvailable = item?.bestand?.verfuegbar !== false;
+      
+      if (!isAvailable) {
+        toast('⚠️ Artikel ist nicht mehr verfügbar', {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
+        return;
+      }
+      
+      if (quantity > maxAvailable) {
+        toast(`⚠️ Nur ${maxAvailable} Stück verfügbar`, {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
+        quantity = maxAvailable; // Auf verfügbare Menge begrenzen
+      }
+
       console.log('🔄 Updating quantity:', {
         frontendId: productId,
         backendProduktId: backendProduktId,
         quantity: quantity,
+        maxAvailable: maxAvailable,
         foundItem: !!item
       });
 
