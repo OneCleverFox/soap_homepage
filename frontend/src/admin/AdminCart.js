@@ -34,7 +34,6 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { cartAPI } from '../services/api';
 import stockEventService from '../services/stockEventService';
-import stockTestService from '../services/stockTestService'; // Für Entwicklungstests
 import toast from 'react-hot-toast';
 
 const AdminCart = () => {

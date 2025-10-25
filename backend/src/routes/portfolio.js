@@ -8,6 +8,20 @@ const Rohseife = require('../models/Rohseife');
 const Verpackung = require('../models/Verpackung');
 const Duftoil = require('../models/Duftoil');
 const { auth } = require('../middleware/auth');
+
+// Cache für Portfolio-Daten (5 Minuten TTL)
+let portfolioCache = {
+  data: null,
+  timestamp: 0,
+  ttl: 5 * 60 * 1000 // 5 Minuten
+};
+
+// Hilfsfunktion zum Cache-Invalidieren
+function invalidatePortfolioCache() {
+  portfolioCache.data = null;
+  portfolioCache.timestamp = 0;
+  console.log('🗑️ Portfolio cache invalidated');
+}
 const { optimizeMainImage } = require('../middleware/imageOptimization');
 
 // Multer-Konfiguration für Produktbilder
@@ -282,6 +296,107 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Optimierte Preisberechnung ohne Datenbankabfragen (nutzt gecachte Maps)
+function calculatePortfolioPriceOptimized(portfolioItem, rohseifenMap, verpackungsMap, duftoelMap) {
+  const details = {
+    rohseife: 0,
+    verpackung: 0,
+    duftoele: 0,
+    zusaetze: 0
+  };
+
+  // 1. Rohseifen-Kosten berechnen
+  try {
+    const rohseifeKey = portfolioItem.seife.toLowerCase();
+    const rohseife = rohseifenMap.get(rohseifeKey);
+    
+    if (rohseife) {
+      details.rohseife = rohseife.preisProGramm * portfolioItem.gramm;
+    } else {
+      // Suche mit partiellem Match
+      for (const [key, value] of rohseifenMap.entries()) {
+        if (key.includes(rohseifeKey) || rohseifeKey.includes(key)) {
+          details.rohseife = value.preisProGramm * portfolioItem.gramm;
+          break;
+        }
+      }
+      // Fallback: Schätzpreis basierend auf Durchschnittswerten
+      if (details.rohseife === 0) {
+        details.rohseife = portfolioItem.gramm * 0.05; // 5 Cent pro Gramm
+      }
+    }
+  } catch (error) {
+    details.rohseife = portfolioItem.gramm * 0.05;
+  }
+
+  // 2. Verpackungskosten berechnen
+  try {
+    const verpackungKey = portfolioItem.verpackung.toLowerCase();
+    const verpackung = verpackungsMap.get(verpackungKey);
+    
+    if (verpackung) {
+      details.verpackung = verpackung.kostenProStueck;
+    } else {
+      // Suche mit partiellem Match
+      for (const [key, value] of verpackungsMap.entries()) {
+        if (key.includes(verpackungKey) || verpackungKey.includes(key)) {
+          details.verpackung = value.kostenProStueck;
+          break;
+        }
+      }
+      // Fallback: Standardverpackungskosten
+      if (details.verpackung === 0) {
+        details.verpackung = 0.5; // 50 Cent pro Verpackung
+      }
+    }
+  } catch (error) {
+    details.verpackung = 0.5;
+  }
+
+  // 3. Duftöl-Kosten (falls vorhanden)
+  if (portfolioItem.aroma && portfolioItem.aroma !== 'Neutral') {
+    try {
+      const duftoelKey = portfolioItem.aroma.toLowerCase();
+      const duftoil = duftoelMap.get(duftoelKey);
+      
+      if (duftoil) {
+        // Annahme: 2-3 Tropfen pro 100g Seife
+        const tropfenProGramm = 0.025;
+        const benoetigteTropfen = portfolioItem.gramm * tropfenProGramm;
+        details.duftoele = benoetigteTropfen * duftoil.preisProTropfen;
+      } else {
+        // Suche mit partiellem Match
+        for (const [key, value] of duftoelMap.entries()) {
+          if (key.includes(duftoelKey) || duftoelKey.includes(key)) {
+            const tropfenProGramm = 0.025;
+            const benoetigteTropfen = portfolioItem.gramm * tropfenProGramm;
+            details.duftoele = benoetigteTropfen * value.preisProTropfen;
+            break;
+          }
+        }
+        // Fallback: Schätzpreis für Duftöl
+        if (details.duftoele === 0) {
+          details.duftoele = 0.3; // 30 Cent pro Duftung
+        }
+      }
+    } catch (error) {
+      details.duftoele = 0.3;
+    }
+  }
+
+  // 4. Zusatzkosten (falls zusätzliche Zutaten)
+  if (portfolioItem.zusatz && portfolioItem.zusatz.trim() !== '') {
+    details.zusaetze = 0.2; // 20 Cent für Zusätze
+  }
+
+  const gesamtpreis = details.rohseife + details.verpackung + details.duftoele + details.zusaetze;
+
+  return {
+    gesamtpreis: Math.round(gesamtpreis * 100) / 100, // Auf 2 Dezimalstellen runden
+    details
+  };
+}
+
 // @route   GET /api/portfolio/with-prices
 // @desc    Alle Portfolio-Einträge mit berechneten Preisen und Bestandsinformationen abrufen
 // @access  Public
@@ -290,6 +405,20 @@ router.get('/with-prices', async (req, res) => {
   console.log('🚀 Portfolio with-prices request started');
   
   try {
+    // Cache-Check
+    const now = Date.now();
+    if (portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
+      console.log(`⚡ Cache hit! Returning cached data (${now - portfolioCache.timestamp}ms old)`);
+      return res.status(200).json({
+        success: true,
+        count: portfolioCache.data.length,
+        data: portfolioCache.data,
+        cached: true,
+        cacheAge: now - portfolioCache.timestamp
+      });
+    }
+    
+    console.log('🔄 Cache miss or expired, fetching fresh data...');
     // 1. Portfolio Items laden (Nur aktive Items)
     const portfolioStart = Date.now();
     const portfolioItems = await Portfolio.find({ aktiv: true })
@@ -312,109 +441,132 @@ router.get('/with-prices', async (req, res) => {
       console.log(`⚠️ WARNUNG: Keine Portfolio-Items in der Datenbank gefunden!`);
     }
 
-    // 2. Importiere Bestand-Model dynamisch
-    const Bestand = require('../models/Bestand');
+    // 2. Alle benötigten Daten in Batch-Abfragen laden
+    const batchStart = Date.now();
     
-    // 3. Hole alle Produktbestände in einem Batch
-    const bestandStart = Date.now();
+    // 2a. Bestand-Daten
     const alleBestaende = await Bestand.find({ typ: 'produkt' }).lean();
     const bestandMap = new Map(
       alleBestaende.map(b => [b.artikelId.toString(), b])
     );
-    console.log(`📦 Bestand loaded: ${Date.now() - bestandStart}ms`);
-
-    // 4. Preise für jedes Portfolio-Element berechnen (parallel)
-    const priceStart = Date.now();
-    const portfolioWithPrices = await Promise.all(
-      portfolioItems.map(async (item) => {
-        const itemStart = Date.now();
-        try {
-          const priceData = await calculatePortfolioPrice(item);
-          
-          // Bestandsinformationen hinzufügen
-          const bestand = bestandMap.get(item._id.toString());
-          const verfuegbareMenge = bestand ? bestand.menge : 0;
-          const istVerfuegbar = verfuegbareMenge > 0;
-          
-          // Bilder-URLs hinzufügen (optimiert)
-          let imageData = { hauptbild: null, galerie: [] };
-          
-          if (item.bilder?.hauptbild) {
-            imageData.hauptbild = item.bilder.hauptbild;
-          }
-          
-          if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-            imageData.galerie = item.bilder.galerie.map(imageObj => 
-              typeof imageObj === 'string' ? imageObj : imageObj.url
-            );
-          }
-          
-          const result = {
-            ...item,
-            berechneterPreis: priceData.gesamtpreis,
-            preisDetails: priceData.details,
-            verkaufspreis: Math.ceil(priceData.gesamtpreis * 1.5), // 50% Marge
-            bestand: {
-              verfuegbar: istVerfuegbar,
-              menge: verfuegbareMenge,
-              einheit: 'Stück'
-            },
-            bilder: {
-              ...item.bilder,
-              ...imageData
-            }
-          };
-          
-          console.log(`✅ ${item.name}: ${Date.now() - itemStart}ms`);
-          return result;
-        } catch (priceError) {
-          console.warn(`⚠️ Preisberechnung für ${item.name} fehlgeschlagen (${Date.now() - itemStart}ms):`, priceError.message);
-          
-          // Bestandsinformationen auch bei Preisfehler hinzufügen
-          const bestand = bestandMap.get(item._id.toString());
-          const verfuegbareMenge = bestand ? bestand.menge : 0;
-          const istVerfuegbar = verfuegbareMenge > 0;
-          const imageData = {
-            hauptbild: null,
-            galerie: []
-          };
-          
-          if (item.bilder?.hauptbild) {
-            imageData.hauptbild = item.bilder.hauptbild; // URL bereits komplett
-          }
-          
-          if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-            imageData.galerie = item.bilder.galerie.map(imageObj => 
-              typeof imageObj === 'string' ? imageObj : imageObj.url
-            );
-          }
-          
-          return {
-            ...item,
-            berechneterPreis: 0,
-            preisDetails: { error: 'Preisberechnung nicht möglich' },
-            verkaufspreis: 0,
-            bestand: {
-              verfuegbar: istVerfuegbar,
-              menge: verfuegbareMenge,
-              einheit: 'Stück'
-            },
-            bilder: {
-              ...item.bilder,
-              ...imageData
-            }
-          };
-        }
-      })
+    
+    // 2b. Rohseifen-Daten
+    const alleRohseifen = await Rohseife.find({}).lean();
+    const rohseifenMap = new Map(
+      alleRohseifen.map(r => [r.bezeichnung.toLowerCase(), r])
     );
+    
+    // 2c. Verpackungs-Daten
+    const alleVerpackungen = await Verpackung.find({}).lean();
+    const verpackungsMap = new Map(
+      alleVerpackungen.map(v => [v.bezeichnung.toLowerCase(), v])
+    );
+    
+    // 2d. Duftöl-Daten
+    const alleDuftoele = await Duftoil.find({}).lean();
+    const duftoelMap = new Map(
+      alleDuftoele.map(d => [d.bezeichnung.toLowerCase(), d])
+    );
+    
+    console.log(`📦 Batch data loaded: ${Date.now() - batchStart}ms`);
+
+    // 3. Preise für jedes Portfolio-Element berechnen (parallel, aber mit gecachten Daten)
+    const priceStart = Date.now();
+    const portfolioWithPrices = portfolioItems.map((item) => {
+      const itemStart = Date.now();
+      try {
+        const priceData = calculatePortfolioPriceOptimized(item, rohseifenMap, verpackungsMap, duftoelMap);
+        
+        // Bestandsinformationen hinzufügen
+        const bestand = bestandMap.get(item._id.toString());
+        const verfuegbareMenge = bestand ? bestand.menge : 0;
+        const istVerfuegbar = verfuegbareMenge > 0;
+        
+        // Bilder-URLs hinzufügen (optimiert)
+        let imageData = { hauptbild: null, galerie: [] };
+        
+        if (item.bilder?.hauptbild) {
+          imageData.hauptbild = item.bilder.hauptbild;
+        }
+        
+        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
+          imageData.galerie = item.bilder.galerie.map(imageObj => 
+            typeof imageObj === 'string' ? imageObj : imageObj.url
+          );
+        }
+        
+        const result = {
+          ...item,
+          berechneterPreis: priceData.gesamtpreis,
+          preisDetails: priceData.details,
+          verkaufspreis: Math.ceil(priceData.gesamtpreis * 1.5), // 50% Marge
+          bestand: {
+            verfuegbar: istVerfuegbar,
+            menge: verfuegbareMenge,
+            einheit: 'Stück'
+          },
+          bilder: {
+            ...item.bilder,
+            ...imageData
+          }
+        };
+        
+        console.log(`✅ ${item.name}: ${Date.now() - itemStart}ms`);
+        return result;
+      } catch (priceError) {
+        console.warn(`⚠️ Preisberechnung für ${item.name} fehlgeschlagen (${Date.now() - itemStart}ms):`, priceError.message);
+        
+        // Bestandsinformationen auch bei Preisfehler hinzufügen
+        const bestand = bestandMap.get(item._id.toString());
+        const verfuegbareMenge = bestand ? bestand.menge : 0;
+        const istVerfuegbar = verfuegbareMenge > 0;
+        const imageData = {
+          hauptbild: null,
+          galerie: []
+        };
+        
+        if (item.bilder?.hauptbild) {
+          imageData.hauptbild = item.bilder.hauptbild;
+        }
+        
+        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
+          imageData.galerie = item.bilder.galerie.map(imageObj => 
+            typeof imageObj === 'string' ? imageObj : imageObj.url
+          );
+        }
+        
+        return {
+          ...item,
+          berechneterPreis: 0,
+          preisDetails: { error: 'Preisberechnung nicht möglich' },
+          verkaufspreis: 0,
+          bestand: {
+            verfuegbar: istVerfuegbar,
+            menge: verfuegbareMenge,
+            einheit: 'Stück'
+          },
+          bilder: {
+            ...item.bilder,
+            ...imageData
+          }
+        };
+      }
+    });
     
     console.log(`🎯 Price calculation completed: ${Date.now() - priceStart}ms`);
     console.log(`🏁 Total portfolio with-prices time: ${Date.now() - startTime}ms`);
 
+    // Cache aktualisieren
+    portfolioCache.data = portfolioWithPrices;
+    portfolioCache.timestamp = Date.now();
+    console.log('💾 Portfolio data cached for 5 minutes');
+
     res.status(200).json({
       success: true,
       count: portfolioWithPrices.length,
-      data: portfolioWithPrices
+      data: portfolioWithPrices,
+      cached: false,
+      generationTime: Date.now() - startTime
     });
   } catch (error) {
     console.error('Portfolio with Prices Fetch Error:', error);
@@ -515,6 +667,9 @@ router.post('/', auth, async (req, res) => {
     const portfolioItem = new Portfolio(req.body);
     const savedItem = await portfolioItem.save();
 
+    // Cache invalidieren nach erfolgreichem Erstellen
+    invalidatePortfolioCache();
+    
     res.status(201).json({
       success: true,
       message: 'Portfolio-Eintrag erfolgreich erstellt',
@@ -556,6 +711,9 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
+    // Cache invalidieren nach erfolgreichem Update
+    invalidatePortfolioCache();
+    
     res.status(200).json({
       success: true,
       message: 'Portfolio-Eintrag erfolgreich aktualisiert',
@@ -585,6 +743,9 @@ router.delete('/:id', auth, async (req, res) => {
       });
     }
 
+    // Cache invalidieren nach erfolgreichem Löschen
+    invalidatePortfolioCache();
+    
     res.status(200).json({
       success: true,
       message: 'Portfolio-Eintrag erfolgreich gelöscht'
@@ -594,6 +755,22 @@ router.delete('/:id', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Löschen des Portfolio-Eintrags'
+    });
+  }
+});
+
+// DEBUG Route - Cache manuell invalidieren
+router.post('/debug/clear-cache', async (req, res) => {
+  try {
+    invalidatePortfolioCache();
+    res.json({
+      success: true,
+      message: 'Portfolio cache cleared successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
