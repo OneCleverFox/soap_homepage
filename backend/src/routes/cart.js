@@ -172,6 +172,28 @@ router.post('/add', authenticateToken, async (req, res) => {
       });
     }
 
+    // Bestandsprüfung vor dem Hinzufügen
+    const Bestand = require('../models/Bestand');
+    const bestandInfo = await Bestand.findOne({ 
+      artikelId: produktId,
+      typ: 'produkt'
+    });
+    
+    console.log('📦 Stock check for add:', {
+      produktId,
+      requestedQuantity: menge,
+      availableStock: bestandInfo?.menge || 0,
+      isAvailable: bestandInfo?.verfuegbar !== false
+    });
+    
+    if (!bestandInfo || !bestandInfo.verfuegbar || (bestandInfo.menge || 0) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Artikel ist nicht verfügbar',
+        errorType: 'NOT_AVAILABLE'
+      });
+    }
+
     let cart = await Cart.findOne({ kundeId });
 
     if (!cart) {
@@ -185,6 +207,23 @@ router.post('/add', authenticateToken, async (req, res) => {
     const existingItemIndex = cart.artikel.findIndex(
       item => item.produktId.toString() === produktId
     );
+
+    let totalRequestedQuantity = menge;
+    if (existingItemIndex > -1) {
+      // Wenn bereits im Warenkorb, addiere zur vorhandenen Menge
+      totalRequestedQuantity += cart.artikel[existingItemIndex].menge;
+    }
+    
+    // Prüfe ob genug Bestand für die Gesamtmenge vorhanden ist
+    if (totalRequestedQuantity > bestandInfo.menge) {
+      return res.status(400).json({
+        success: false,
+        message: `Nur ${bestandInfo.menge} Stück verfügbar`,
+        errorType: 'INSUFFICIENT_STOCK',
+        availableQuantity: bestandInfo.menge,
+        currentInCart: existingItemIndex > -1 ? cart.artikel[existingItemIndex].menge : 0
+      });
+    }
 
     if (existingItemIndex > -1) {
       // Menge erhöhen
@@ -308,6 +347,37 @@ router.put('/update', authenticateToken, async (req, res) => {
       console.log('🗑️ Removing item from cart');
       cart.artikel.splice(itemIndex, 1);
     } else {
+      // Bestandsprüfung vor Update
+      const Bestand = require('../models/Bestand');
+      const bestandInfo = await Bestand.findOne({ 
+        artikelId: produktId,
+        typ: 'produkt'
+      });
+      
+      console.log('📦 Stock check for update:', {
+        produktId,
+        requestedQuantity: menge,
+        availableStock: bestandInfo?.menge || 0,
+        isAvailable: bestandInfo?.verfuegbar !== false
+      });
+      
+      if (!bestandInfo || !bestandInfo.verfuegbar || (bestandInfo.menge || 0) <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Artikel ist nicht mehr verfügbar',
+          errorType: 'NOT_AVAILABLE'
+        });
+      }
+      
+      if (menge > bestandInfo.menge) {
+        return res.status(400).json({
+          success: false,
+          message: `Nur ${bestandInfo.menge} Stück verfügbar`,
+          errorType: 'INSUFFICIENT_STOCK',
+          availableQuantity: bestandInfo.menge
+        });
+      }
+      
       // Menge aktualisieren
       console.log('🔄 Updating quantity:', { old: cart.artikel[itemIndex].menge, new: menge });
       cart.artikel[itemIndex].menge = menge;
