@@ -99,7 +99,14 @@ export const CartProvider = ({ children }) => {
       
       if (removedItems.length > 0) {
         console.log('📦 Entferne nicht verfügbare Artikel:', removedItems.map(item => item.name));
-        toast.warning(`${removedItems.length} nicht verfügbare Artikel wurden entfernt`);
+        toast(`⚠️ ${removedItems.length} nicht verfügbare Artikel wurden entfernt`, {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
         
         // Backend-Updates für entfernte Artikel
         for (const item of removedItems) {

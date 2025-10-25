@@ -25,68 +25,86 @@ import {
   Select,
   MenuItem,
   Divider,
-  Tooltip,
   CircularProgress,
   IconButton,
   Tabs,
   Tab,
   Badge,
   InputAdornment,
-  Collapse,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  AccordionSummary,
-  AccordionDetails,
-  Accordion,
   useTheme,
-  useMediaQuery,
-  Snackbar,
-  SnackbarContent,
-  Fab,
-  SpeedDial,
-  SpeedDialAction,
-  SpeedDialIcon
+  useMediaQuery
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
-  Edit as EditIcon,
-  Check as CheckIcon,
-  Close as CloseIcon,
   Refresh as RefreshIcon,
   Search,
-  FilterList,
   ViewList,
   Sort,
-  Dashboard,
-  LocalShipping,
-  Payment,
-  Info,
-  Warning,
-  Error as ErrorIcon,
-  CheckCircle,
-  Schedule,
-  ExpandMore,
-  Add,
-  Print,
-  Email,
-  Phone,
-  Home,
-  Person,
-  ShoppingCart,
-  Receipt,
-  Settings,
-  Help,
-  Inventory,
-  Assessment,
-  TrendingUp,
-  MonetizationOn,
-  AccountBalance
+  Dashboard
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../services/api';
+
+// Status configuration with enhanced features
+const statusConfig = {
+  neu: {
+    label: '⏳ Neu',
+    color: 'warning',
+    priority: 1,
+    description: 'Neue Bestellung eingegangen',
+    actions: ['confirm', 'reject', 'note']
+  },
+  bezahlt: {
+    label: '💰 Bezahlt',
+    color: 'info',
+    priority: 2,
+    description: 'Zahlung eingegangen',
+    actions: ['confirm', 'reject', 'note']
+  },
+  bestaetigt: {
+    label: '✅ Bestätigt',
+    color: 'success',
+    priority: 3,
+    description: 'Bestellung bestätigt',
+    actions: ['pack', 'note']
+  },
+  verpackt: {
+    label: '📦 Verpackt',
+    color: 'primary',
+    priority: 4,
+    description: 'Bestellung verpackt',
+    actions: ['ship', 'note']
+  },
+  verschickt: {
+    label: '🚚 Verschickt',
+    color: 'secondary',
+    priority: 5,
+    description: 'Bestellung verschickt',
+    actions: ['deliver', 'track', 'note']
+  },
+  zugestellt: {
+    label: '🏠 Zugestellt',
+    color: 'success',
+    priority: 6,
+    description: 'Bestellung zugestellt',
+    actions: ['complete', 'note']
+  },
+  abgeschlossen: {
+    label: '🎉 Abgeschlossen',
+    color: 'success',
+    priority: 7,
+    description: 'Bestellung abgeschlossen',
+    actions: ['note']
+  },
+  storniert: {
+    label: '❌ Storniert',
+    color: 'error',
+    priority: 8,
+    description: 'Bestellung storniert',
+    actions: ['note']
+  }
+};
 
 const AdminOrdersManagement = () => {
   const theme = useTheme();
@@ -103,7 +121,6 @@ const AdminOrdersManagement = () => {
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [inquiryDialogOpen, setInquiryDialogOpen] = useState(false);
   const [trackingDialog, setTrackingDialog] = useState(false);
-  const [hilfeOpen, setHilfeOpen] = useState(false);
 
   // Filter and view state
   const [filters, setFilters] = useState({
@@ -122,65 +139,7 @@ const AdminOrdersManagement = () => {
     hinweis: ''
   });
 
-  // Status configuration with enhanced features
-  const statusConfig = {
-    neu: {
-      label: '⏳ Neu',
-      color: 'warning',
-      priority: 1,
-      description: 'Neue Bestellung eingegangen',
-      actions: ['confirm', 'reject', 'note']
-    },
-    bezahlt: {
-      label: '💰 Bezahlt',
-      color: 'info',
-      priority: 2,
-      description: 'Zahlung eingegangen',
-      actions: ['confirm', 'reject', 'note']
-    },
-    bestaetigt: {
-      label: '✅ Bestätigt',
-      color: 'success',
-      priority: 3,
-      description: 'Bestellung bestätigt',
-      actions: ['pack', 'note']
-    },
-    verpackt: {
-      label: '📦 Verpackt',
-      color: 'primary',
-      priority: 4,
-      description: 'Bestellung verpackt',
-      actions: ['ship', 'note']
-    },
-    verschickt: {
-      label: '🚚 Verschickt',
-      color: 'secondary',
-      priority: 5,
-      description: 'Bestellung verschickt',
-      actions: ['deliver', 'track', 'note']
-    },
-    zugestellt: {
-      label: '🏠 Zugestellt',
-      color: 'success',
-      priority: 6,
-      description: 'Bestellung zugestellt',
-      actions: ['archive']
-    },
-    abgelehnt: {
-      label: '❌ Abgelehnt',
-      color: 'error',
-      priority: 0,
-      description: 'Bestellung abgelehnt',
-      actions: ['refund', 'note']
-    },
-    storniert: {
-      label: '🔄 Storniert',
-      color: 'error',
-      priority: 0,
-      description: 'Bestellung storniert',
-      actions: ['refund', 'note']
-    }
-  };
+  // Core functionality
 
   // Carrier options for tracking
   const carrierOptions = [
@@ -470,7 +429,6 @@ const AdminOrdersManagement = () => {
       
       const refundAmount = order.preise?.gesamtsumme || 0;
       const customerEmail = order.besteller?.email || '';
-      const customerName = `${order.besteller?.vorname || ''} ${order.besteller?.nachname || ''}`.trim();
       
       // Create PayPal Send Money URL
       const paypalUrl = new URL('https://www.paypal.com/myaccount/transfer/send');
@@ -514,11 +472,6 @@ const AdminOrdersManagement = () => {
         variant="filled"
       />
     );
-  };
-
-  const getNextAction = (order) => {
-    const config = statusConfig[order.status] || statusConfig.neu;
-    return config.description;
   };
 
   const formatDate = (dateString) => {
