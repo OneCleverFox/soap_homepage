@@ -32,7 +32,7 @@ import DatenschutzPage from './pages/DatenschutzPage';
 import AGBPage from './pages/AGBPage';
 
 // Admin Pages
-import AdminPortfolio from './pages/AdminPortfolio';
+import AdminPortfolio from './admin/AdminPortfolio';
 
 // Original Admin Pages
 import AdminDashboard from './admin/AdminDashboard';
