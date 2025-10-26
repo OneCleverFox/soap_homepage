@@ -8,6 +8,7 @@ const emailService = require('../services/emailService');
 const orderInvoiceService = require('../services/orderInvoiceService');
 const { validateCheckoutStatus, validatePayPalStatus } = require('../middleware/checkoutValidation');
 const { createInquiryFromOrder } = require('../utils/inquiryHelper');
+const { validateShippingData, generateTrackingUrl } = require('../utils/trackingValidation');
 
 // 🎯 PayPal-Erfolg: Bestellung finalisieren
 router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, async (req, res) => {
@@ -1098,12 +1099,24 @@ router.put('/:orderId/status', async (req, res) => {
       });
     }
     
-    // Für verschickt Status: Sendungsnummer erforderlich
-    if (status === 'verschickt' && (!versand || !versand.sendungsnummer)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Für den Status "Verschickt" ist eine Sendungsnummer erforderlich'
-      });
+    // Für verschickt Status: Sendungsnummer erforderlich und validieren
+    if (status === 'verschickt') {
+      if (!versand || !versand.sendungsnummer) {
+        return res.status(400).json({
+          success: false,
+          message: 'Für den Status "Verschickt" ist eine Sendungsnummer erforderlich'
+        });
+      }
+      
+      // Validiere Versanddaten
+      const shippingValidation = validateShippingData(versand);
+      if (!shippingValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültige Versanddaten',
+          errors: shippingValidation.errors
+        });
+      }
     }
     
     const order = await Order.findById(orderId);
@@ -1141,10 +1154,29 @@ router.put('/:orderId/status', async (req, res) => {
       }
       
       // Versanddaten setzen
-      if (versand.sendungsnummer) order.versand.sendungsnummer = versand.sendungsnummer;
-      if (versand.anbieter) order.versand.anbieter = versand.anbieter;
-      if (versand.trackingUrl) order.versand.trackingUrl = versand.trackingUrl;
-      if (versand.versendetAm) order.versand.versendetAm = new Date(versand.versendetAm);
+      if (versand.sendungsnummer) {
+        order.versand.sendungsnummer = versand.sendungsnummer.replace(/[\s-]/g, ''); // Bereinige Tracking-Nummer
+      }
+      if (versand.anbieter) {
+        order.versand.anbieter = versand.anbieter;
+      }
+      
+      // Automatische Tracking-URL-Generierung
+      if (versand.anbieter && versand.sendungsnummer) {
+        const trackingUrl = generateTrackingUrl(versand.anbieter, versand.sendungsnummer);
+        if (trackingUrl) {
+          order.versand.trackingUrl = trackingUrl;
+        }
+      }
+      
+      // Manuelle Tracking-URL falls gewünscht
+      if (versand.trackingUrl) {
+        order.versand.trackingUrl = versand.trackingUrl;
+      }
+      
+      if (versand.versendetAm) {
+        order.versand.versendetAm = new Date(versand.versendetAm);
+      }
     }
     
     // Automatische Aktionen basierend auf Status
@@ -2196,6 +2228,51 @@ router.post('/paypal-webhook', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Verarbeiten des PayPal-Webhooks: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/orders/validate-tracking
+// @desc    Validiert Tracking-Nummer für einen bestimmten Anbieter
+// @access  Private (Admin)
+router.post('/validate-tracking', async (req, res) => {
+  try {
+    const { anbieter, sendungsnummer } = req.body;
+    
+    if (!anbieter || !sendungsnummer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Anbieter und Sendungsnummer sind erforderlich'
+      });
+    }
+    
+    const validation = validateShippingData({ anbieter, sendungsnummer });
+    
+    if (validation.valid) {
+      const trackingUrl = generateTrackingUrl(anbieter, sendungsnummer);
+      
+      res.json({
+        success: true,
+        message: 'Tracking-Nummer ist gültig',
+        data: {
+          valid: true,
+          cleanedNumber: sendungsnummer.replace(/[\s-]/g, ''),
+          trackingUrl: trackingUrl
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Ungültige Tracking-Nummer',
+        errors: validation.errors
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Fehler bei Tracking-Validierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei der Validierung'
     });
   }
 });
