@@ -113,14 +113,14 @@ const CartPage = () => {
   // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
   const getAvailableTotal = () => {
     return items
-      .filter(item => item.hasEnoughStock === true)
+      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
       .reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
   };
 
   // Berechne verfügbare Artikel-Anzahl
   const getAvailableItemsCount = () => {
     return items
-      .filter(item => item.hasEnoughStock === true)
+      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
       .reduce((sum, item) => sum + item.quantity, 0);
   };
 
@@ -196,7 +196,11 @@ const CartPage = () => {
                   sx={{ 
                     display: 'flex', 
                     mb: 2,
-                    flexDirection: isMobile ? 'column' : 'row'
+                    flexDirection: isMobile ? 'column' : 'row',
+                    // Visuell hervorheben wenn nicht verfügbar
+                    opacity: item.isAvailable ? 1 : 0.6,
+                    border: item.isAvailable ? 'none' : '2px dashed #f44336',
+                    backgroundColor: item.isAvailable ? 'transparent' : '#ffebee'
                   }}
                 >
                   {item.image && (
