@@ -1954,19 +1954,6 @@ router.get('/admin/all', async (req, res) => {
   }
 });
 
-// �🔍 Hilfsfunktion: Tracking-URL generieren
-function generateTrackingUrl(anbieter, sendungsnummer) {
-  const trackingUrls = {
-    dhl: `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?lang=de&idc=${sendungsnummer}`,
-    hermes: `https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#${sendungsnummer}`,
-    ups: `https://www.ups.com/track?tracknum=${sendungsnummer}`,
-    dpd: `https://tracking.dpd.de/status/de_DE/parcel/${sendungsnummer}`,
-    gls: `https://gls-group.eu/DE/de/paketverfolgung?match=${sendungsnummer}`
-  };
-  
-  return trackingUrls[anbieter] || '';
-}
-
 // 📄 NEUE RECHNUNGS-ROUTEN
 
 // Rechnung für Bestellung generieren
