@@ -60,9 +60,10 @@ export const CartProvider = ({ children }) => {
         let shouldRemoveItem = false;
         
         if (!isAvailable) {
-          // Artikel nicht verfügbar - zum Entfernen markieren
-          shouldRemoveItem = true;
-          console.log(`📦 Artikel nicht verfügbar, wird entfernt: ${item.name}`);
+          // Artikel nicht verfügbar - NICHT entfernen, sondern als nicht verfügbar markieren
+          console.log(`📦 Artikel nicht verfügbar, bleibt im Warenkorb: ${item.name}`);
+          // Menge auf 0 setzen für Berechnungen, aber Item behalten
+          correctedQuantity = 0;
         } else if (item.menge > (item.bestand?.menge || 0)) {
           // Bestandsüberschreitung - Menge korrigieren
           correctedQuantity = item.bestand.menge;
@@ -93,13 +94,12 @@ export const CartProvider = ({ children }) => {
       
       console.log('📦 Mapped Cart Items:', cartItems);
       
-      // Nicht verfügbare Artikel herausfiltern
-      const availableItems = cartItems.filter(item => !item.shouldRemoveItem);
-      const removedItems = cartItems.filter(item => item.shouldRemoveItem);
+      // Prüfe auf nicht verfügbare Artikel und zeige Warnung
+      const unavailableItems = cartItems.filter(item => !item.isAvailable);
       
-      if (removedItems.length > 0) {
-        console.log('📦 Entferne nicht verfügbare Artikel:', removedItems.map(item => item.name));
-        toast(`⚠️ ${removedItems.length} nicht verfügbare Artikel wurden entfernt`, {
+      if (unavailableItems.length > 0) {
+        console.log('📦 Nicht verfügbare Artikel im Warenkorb:', unavailableItems.map(item => item.name));
+        toast(`⚠️ ${unavailableItems.length} Artikel sind nicht mehr verfügbar`, {
           icon: '⚠️',
           style: {
             background: '#fff3cd',
@@ -107,21 +107,13 @@ export const CartProvider = ({ children }) => {
             color: '#856404',
           },
         });
-        
-        // Backend-Updates für entfernte Artikel
-        for (const item of removedItems) {
-          try {
-            await cartAPI.removeItem(item.produktId);
-          } catch (removeError) {
-            console.error(`❌ Fehler beim Entfernen von ${item.name}:`, removeError);
-          }
-        }
       }
       
-      setItems(availableItems);
+      // Alle Artikel im Warenkorb behalten (auch nicht verfügbare)
+      setItems(cartItems);
       
-      // Backend-Updates für korrigierte Mengen
-      const itemsNeedingUpdate = availableItems.filter(item => item.needsBackendUpdate);
+      // Backend-Updates für korrigierte Mengen (nur für verfügbare Artikel)
+      const itemsNeedingUpdate = cartItems.filter(item => item.needsBackendUpdate && item.isAvailable);
       if (itemsNeedingUpdate.length > 0) {
         console.log('📦 Führe Backend-Updates für korrigierte Mengen durch...');
         
