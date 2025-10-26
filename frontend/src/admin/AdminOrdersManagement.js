@@ -1,3 +1,4 @@
+import { validateTrackingNumber, detectCarrier, CARRIERS } from '../utils/trackingUtils';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
@@ -318,41 +319,30 @@ const AdminOrdersManagement = () => {
     }
   };
 
-  // Tracking validation
-  const validateTrackingNumber = (trackingNumber, carrier) => {
+  // Enhanced tracking validation using utils
+  const validateTrackingNumberEnhanced = (trackingNumber, carrier) => {
     if (!trackingNumber || trackingNumber.trim().length === 0) {
       return { isValid: false, message: 'Sendungsnummer ist erforderlich' };
     }
 
-    const trimmedNumber = trackingNumber.trim().toUpperCase();
-
-    const patterns = {
-      dhl: /^[0-9]{10,12}$|^[A-Z]{2}[0-9]{9}[A-Z]{2}$/,
-      dpd: /^[0-9]{14}$/,
-      ups: /^1Z[A-Z0-9]{16}$/,
-      fedex: /^[0-9]{12,14}$/,
-      hermes: /^[0-9]{10,16}$/,
-      gls: /^[0-9]{11}$/
+    const validation = validateTrackingNumber(carrier, trackingNumber.trim());
+    
+    return {
+      isValid: validation.valid,
+      message: validation.message || 'Gültige Sendungsnummer',
+      formattedNumber: validation.formattedNumber
     };
+  };
 
-    const pattern = patterns[carrier];
-    if (pattern && !pattern.test(trimmedNumber)) {
-      const examples = {
-        dhl: '1234567890 oder AB123456789DE',
-        dpd: '12345678901234',
-        ups: '1Z999AA1234567890',
-        fedex: '123456789012',
-        hermes: '1234567890123456',
-        gls: '12345678901'
-      };
-      
-      return {
-        isValid: false,
-        message: `Ungültige ${carrier.toUpperCase()} Sendungsnummer. Beispiel: ${examples[carrier]}`
-      };
+  // Auto-detect carrier
+  const handleTrackingNumberChange = (value) => {
+    setTrackingData(prev => ({ ...prev, sendungsnummer: value }));
+    
+    // Auto-detect carrier if possible
+    const detectedCarrier = detectCarrier(value);
+    if (detectedCarrier && detectedCarrier !== trackingData.anbieter) {
+      setTrackingData(prev => ({ ...prev, anbieter: detectedCarrier }));
     }
-
-    return { isValid: true, message: 'Gültige Sendungsnummer' };
   };
 
   // Add tracking handler
@@ -364,7 +354,7 @@ const AdminOrdersManagement = () => {
       return;
     }
 
-    const validation = validateTrackingNumber(trackingData.sendungsnummer, trackingData.anbieter);
+    const validation = validateTrackingNumberEnhanced(trackingData.sendungsnummer, trackingData.anbieter);
     if (!validation.isValid) {
       setError(validation.message);
       return;
@@ -1187,8 +1177,23 @@ const AdminOrdersManagement = () => {
                 fullWidth
                 label="Sendungsnummer"
                 value={trackingData.sendungsnummer}
-                onChange={(e) => setTrackingData({ ...trackingData, sendungsnummer: e.target.value })}
-                placeholder="Tracking-Nummer eingeben"
+                onChange={(e) => handleTrackingNumberChange(e.target.value)}
+                placeholder="Tracking-Nummer eingeben (Auto-Erkennung)"
+                helperText={
+                  trackingData.sendungsnummer 
+                    ? (() => {
+                        const validation = validateTrackingNumberEnhanced(trackingData.sendungsnummer, trackingData.anbieter);
+                        return validation.isValid 
+                          ? `✅ ${validation.message}` 
+                          : `❌ ${validation.message}`;
+                      })()
+                    : "Geben Sie eine Tracking-Nummer ein für automatische Anbieter-Erkennung"
+                }
+                error={
+                  trackingData.sendungsnummer 
+                    ? !validateTrackingNumberEnhanced(trackingData.sendungsnummer, trackingData.anbieter).isValid
+                    : false
+                }
               />
             </Grid>
             

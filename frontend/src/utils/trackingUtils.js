@@ -7,7 +7,8 @@ export const CARRIERS = {
   HERMES: 'hermes',
   UPS: 'ups',
   DPD: 'dpd',
-  GLS: 'gls'
+  GLS: 'gls',
+  FEDEX: 'fedex'
 };
 
 /**
@@ -21,7 +22,8 @@ export const generateTrackingUrl = (carrier, trackingNumber) => {
     [CARRIERS.HERMES]: `https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#${trackingNumber}`,
     [CARRIERS.UPS]: `https://www.ups.com/track?tracknum=${trackingNumber}`,
     [CARRIERS.DPD]: `https://tracking.dpd.de/status/de_DE/parcel/${trackingNumber}`,
-    [CARRIERS.GLS]: `https://gls-group.eu/DE/de/paketverfolgung?match=${trackingNumber}`
+    [CARRIERS.GLS]: `https://gls-group.eu/DE/de/paketverfolgung?match=${trackingNumber}`,
+    [CARRIERS.FEDEX]: `https://www.fedex.com/fedextrack/?trknbr=${trackingNumber}`
   };
   
   return trackingUrls[carrier] || '';
@@ -29,30 +31,44 @@ export const generateTrackingUrl = (carrier, trackingNumber) => {
 
 /**
  * Validiert Tracking-Nummern basierend auf Versanddienstleister-Formaten
+ * Erweiterte Validierung nach internationalen Standards
  */
 export const validateTrackingNumber = (carrier, trackingNumber) => {
   if (!trackingNumber) return { valid: false, message: 'Tracking-Nummer ist erforderlich' };
   
+  // Entferne Leerzeichen und Bindestriche für Validierung
+  const cleanNumber = trackingNumber.replace(/[\s-]/g, '');
+  
   const validationRules = {
     [CARRIERS.DHL]: {
-      pattern: /^[0-9]{10,39}$/, // DHL Tracking-Nummern sind normalerweise 10-39 Zeichen
-      message: 'DHL Tracking-Nummer muss 10-39 Ziffern enthalten'
+      // DHL: 10-stellig numerisch ODER 3 Buchstaben + 9 Ziffern + 'DE'/'SG'
+      pattern: /^([0-9]{10,11}|[A-Z]{3}[0-9]{9}(DE|SG))$/,
+      message: 'DHL: 10-11 Ziffern oder Format ABC123456789DE'
     },
     [CARRIERS.HERMES]: {
-      pattern: /^[HT][0-9]{12,14}$/, // Hermes beginnt oft mit H oder T
-      message: 'Hermes Tracking-Nummer beginnt mit H oder T gefolgt von 12-14 Ziffern'
+      // Hermes: H/T + 12-14 Ziffern
+      pattern: /^[HT][0-9]{12,14}$/,
+      message: 'Hermes: H oder T gefolgt von 12-14 Ziffern'
     },
     [CARRIERS.UPS]: {
-      pattern: /^(1Z[A-Z0-9]{16}|[T0-9]{10})$/, // UPS hat spezifische Formate
-      message: 'UPS Tracking-Nummer: 1Z + 16 Zeichen oder 10-stellige Nummer'
+      // UPS: 1Z + 16 alphanumerische Zeichen ODER T + 9 Ziffern
+      pattern: /^(1Z[A-Z0-9]{16}|T[0-9]{9})$/,
+      message: 'UPS: 1Z + 16 Zeichen (z.B. 1Z999AA10123456784) oder T + 9 Ziffern'
     },
     [CARRIERS.DPD]: {
-      pattern: /^[0-9]{14}$/, // DPD normalerweise 14 Ziffern
-      message: 'DPD Tracking-Nummer muss 14 Ziffern enthalten'
+      // DPD: 14 Ziffern
+      pattern: /^[0-9]{14}$/,
+      message: 'DPD: Genau 14 Ziffern'
     },
     [CARRIERS.GLS]: {
-      pattern: /^[0-9]{11}$/, // GLS normalerweise 11 Ziffern
-      message: 'GLS Tracking-Nummer muss 11 Ziffern enthalten'
+      // GLS: 11 Ziffern
+      pattern: /^[0-9]{11}$/,
+      message: 'GLS: Genau 11 Ziffern'
+    },
+    [CARRIERS.FEDEX]: {
+      // FedEx: 12-14 Ziffern (alle numerisch)
+      pattern: /^[0-9]{12,14}$/,
+      message: 'FedEx: 12-14 Ziffern (z.B. 123456789012)'
     }
   };
   
@@ -61,10 +77,11 @@ export const validateTrackingNumber = (carrier, trackingNumber) => {
     return { valid: true, message: '' }; // Unbekannte Anbieter werden als gültig akzeptiert
   }
   
-  const isValid = rule.pattern.test(trackingNumber);
+  const isValid = rule.pattern.test(cleanNumber);
   return {
     valid: isValid,
-    message: isValid ? '' : rule.message
+    message: isValid ? '' : rule.message,
+    formattedNumber: isValid ? formatTrackingNumber(carrier, cleanNumber) : trackingNumber
   };
 };
 
@@ -74,25 +91,131 @@ export const validateTrackingNumber = (carrier, trackingNumber) => {
 export const formatTrackingNumber = (carrier, trackingNumber) => {
   if (!trackingNumber) return '';
   
+  // Entferne bereits vorhandene Leerzeichen
+  const clean = trackingNumber.replace(/[\s-]/g, '');
+  
   switch (carrier) {
     case CARRIERS.DHL:
-      // DHL: Formatierung in 4er-Gruppen
-      return trackingNumber.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+      // DHL: Standard 10-stellig in 4er-Gruppen: XXXX XXXX XX
+      if (/^[0-9]{10,11}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{2,3})/, '$1 $2 $3');
+      }
+      // DHL: ABC123456789DE Format
+      if (/^[A-Z]{3}[0-9]{9}[A-Z]{2}$/.test(clean)) {
+        return clean.replace(/^([A-Z]{3})([0-9]{9})([A-Z]{2})$/, '$1 $2 $3');
+      }
+      return clean;
     
     case CARRIERS.UPS:
       // UPS: 1Z XXXXXX XX XXXX XXXX
-      if (trackingNumber.startsWith('1Z')) {
-        return trackingNumber.replace(/^(1Z)([A-Z0-9]{6})([A-Z0-9]{2})([A-Z0-9]{4})([A-Z0-9]{4})$/, '$1 $2 $3 $4 $5');
+      if (clean.startsWith('1Z') && clean.length === 18) {
+        return clean.replace(/^(1Z)([A-Z0-9]{6})([A-Z0-9]{2})([A-Z0-9]{4})([A-Z0-9]{4})$/, '$1 $2 $3 $4 $5');
       }
-      return trackingNumber;
+      // UPS: T123456789 Format
+      if (clean.startsWith('T') && clean.length === 10) {
+        return clean.replace(/^(T)([0-9]{9})$/, '$1 $2');
+      }
+      return clean;
     
     case CARRIERS.DPD:
-      // DPD: XXXX XXXX XXXX XX
-      return trackingNumber.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+      // DPD: XXXX XXXX XXXX XX (14 Ziffern)
+      if (/^[0-9]{14}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{4})(\d{2})/, '$1 $2 $3 $4');
+      }
+      return clean;
+    
+    case CARRIERS.FEDEX:
+      // FedEx: XXXX XXXX XXXX (12 Ziffern) oder XXXX XXXX XXXX XX (14 Ziffern)
+      if (/^[0-9]{12}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3');
+      }
+      if (/^[0-9]{14}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{4})(\d{2})/, '$1 $2 $3 $4');
+      }
+      return clean;
+    
+    case CARRIERS.GLS:
+      // GLS: XXXX XXXX XXX (11 Ziffern)
+      if (/^[0-9]{11}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{3})/, '$1 $2 $3');
+      }
+      return clean;
+    
+    case CARRIERS.HERMES:
+      // Hermes: H XXXX XXXX XXXX XX (13-15 Zeichen)
+      if (/^[HT][0-9]{12,14}$/.test(clean)) {
+        const prefix = clean.charAt(0);
+        const numbers = clean.slice(1);
+        return `${prefix} ${numbers.replace(/(\d{4})(?=\d)/g, '$1 ').trim()}`;
+      }
+      return clean;
     
     default:
-      return trackingNumber;
+      return clean;
   }
+};
+
+/**
+ * Automatische Erkennung des Versandanbieters basierend auf der Tracking-Nummer
+ */
+export const detectCarrier = (trackingNumber) => {
+  if (!trackingNumber) return null;
+  
+  const clean = trackingNumber.replace(/[\s-]/g, '');
+  
+  // UPS: Beginnt mit 1Z und 18 Zeichen total ODER T + 9 Ziffern
+  if (/^1Z[A-Z0-9]{16}$/.test(clean) || /^T[0-9]{9}$/.test(clean)) {
+    return CARRIERS.UPS;
+  }
+  
+  // DHL: 3 Buchstaben + 9 Ziffern + 2 Buchstaben ODER 10-11 Ziffern
+  if (/^[A-Z]{3}[0-9]{9}[A-Z]{2}$/.test(clean) || /^[0-9]{10,11}$/.test(clean)) {
+    return CARRIERS.DHL;
+  }
+  
+  // Hermes: H oder T + 12-14 Ziffern
+  if (/^[HT][0-9]{12,14}$/.test(clean)) {
+    return CARRIERS.HERMES;
+  }
+  
+  // DPD: Genau 14 Ziffern
+  if (/^[0-9]{14}$/.test(clean)) {
+    return CARRIERS.DPD;
+  }
+  
+  // FedEx: 12-13 Ziffern (wenn nicht DPD)
+  if (/^[0-9]{12,13}$/.test(clean)) {
+    return CARRIERS.FEDEX;
+  }
+  
+  // GLS: Genau 11 Ziffern
+  if (/^[0-9]{11}$/.test(clean)) {
+    return CARRIERS.GLS;
+  }
+  
+  return null; // Unbekannter Anbieter
+};
+
+/**
+ * Validiert Tracking-Nummer mit automatischer Anbieter-Erkennung
+ */
+export const validateTrackingNumberAuto = (trackingNumber) => {
+  const detectedCarrier = detectCarrier(trackingNumber);
+  
+  if (!detectedCarrier) {
+    return {
+      valid: false,
+      message: 'Tracking-Nummer Format nicht erkannt. Bitte Anbieter manuell auswählen.',
+      carrier: null
+    };
+  }
+  
+  const validation = validateTrackingNumber(detectedCarrier, trackingNumber);
+  return {
+    ...validation,
+    carrier: detectedCarrier,
+    carrierName: getCarrierInfo(detectedCarrier).name
+  };
 };
 
 /**
@@ -239,13 +362,17 @@ export const getStatusInfo = (status) => {
   };
 };
 
-export default {
+const trackingUtils = {
   CARRIERS,
   generateTrackingUrl,
   validateTrackingNumber,
+  validateTrackingNumberAuto,
+  detectCarrier,
   formatTrackingNumber,
   getCarrierInfo,
   estimateDeliveryDate,
   TRACKING_STATUS,
   getStatusInfo
 };
+
+export default trackingUtils;
