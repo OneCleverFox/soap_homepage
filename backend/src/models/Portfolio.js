@@ -136,7 +136,7 @@ const portfolioSchema = new mongoose.Schema({
   // Zusätzliche Metadaten
   aktiv: {
     type: Boolean,
-    default: true
+    default: false // ✅ Neue Produkte standardmäßig inaktiv
   },
   reihenfolge: {
     type: Number,

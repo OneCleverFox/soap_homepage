@@ -67,7 +67,7 @@ const AdminPortfolio = () => {
     zusatz: '',
     optional: '',
     verpackung: '',
-    aktiv: true,
+    aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
     reihenfolge: 0
   });
 
@@ -290,7 +290,7 @@ const AdminPortfolio = () => {
       zusatz: '',
       optional: '',
       verpackung: '',
-      aktiv: true,
+      aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
       reihenfolge: 0
     });
     setEditingProduct(null);
