@@ -152,8 +152,8 @@ const AdminCart = () => {
       if (data.success) {
         // Sichere Verarbeitung der Warenkorb-Daten
         const processedItems = data.data.items.map(item => {
-          // Verfügbarkeitsstatus direkt berechnen ohne useCallback Abhängigkeit
-          const isAvailable = item.bestand?.verfuegbar === true && (item.bestand?.menge || 0) > 0;
+          // Verfügbarkeitsstatus basierend auf aktiv Status und Bestandsmenge
+          const isAvailable = item.aktiv && (item.bestand?.menge || 0) > 0;
           const hasEnoughStock = isAvailable && (parseInt(item.menge) || 0) <= (item.bestand?.menge || 0);
           
           const processedItem = {
@@ -212,6 +212,25 @@ const AdminCart = () => {
     try {
       setUpdating(true);
       
+      // Bestandsprüfung vor dem Update
+      const item = cartData.items.find(item => item.produktId === produktId);
+      if (!item) {
+        toast.error('Artikel nicht im Warenkorb gefunden');
+        return;
+      }
+      
+      // Prüfe Verfügbarkeit und Bestand
+      if (!item.isAvailable) {
+        toast.error('Artikel ist nicht verfügbar');
+        return;
+      }
+      
+      const maxAvailable = item.bestand?.menge || 0;
+      if (newQuantity > maxAvailable) {
+        toast.error(`Nur ${maxAvailable} Stück verfügbar`);
+        return;
+      }
+
       // Optimistische UI-Update - sofort das lokale State aktualisieren
       setCartData(prevData => {
         const updatedItems = prevData.items.map(item => {
@@ -238,7 +257,17 @@ const AdminCart = () => {
       toast.success('Menge aktualisiert');
     } catch (error) {
       console.error('Fehler beim Aktualisieren der Menge:', error);
-      toast.error('Fehler beim Aktualisieren der Menge');
+      
+      // Spezifische Fehlermeldungen basierend auf Backend-Response
+      if (error.response?.data?.errorType === 'INSUFFICIENT_STOCK') {
+        const available = error.response.data.availableQuantity || 0;
+        toast.error(`Nur ${available} Stück verfügbar`);
+      } else if (error.response?.data?.errorType === 'NOT_AVAILABLE') {
+        toast.error('Artikel ist nicht mehr verfügbar');
+      } else {
+        toast.error('Fehler beim Aktualisieren der Menge');
+      }
+      
       // Bei Fehler: Daten neu laden
       await loadAdminCart();
     } finally {
@@ -322,8 +351,8 @@ const AdminCart = () => {
               const updatedItem = {
                 ...item,
                 bestand: newStock,
-                isAvailable: newStock?.verfuegbar && (newStock?.menge || 0) > 0,
-                hasEnoughStock: newStock?.verfuegbar && (newStock?.menge || 0) >= item.menge
+                isAvailable: item.aktiv && (newStock?.menge || 0) > 0,
+                hasEnoughStock: item.aktiv && (newStock?.menge || 0) >= item.menge
               };
               return updatedItem;
             }
@@ -634,11 +663,15 @@ const AdminCart = () => {
                     <IconButton
                       size="small"
                       onClick={() => updateQuantity(item.produktId, item.menge + 1)}
-                      disabled={updating}
+                      disabled={updating || !item.isAvailable || item.menge >= (item.bestand?.menge || 0)}
                       sx={{ 
                         bgcolor: 'primary.main', 
                         color: 'white',
                         '&:hover': { bgcolor: 'primary.dark' },
+                        '&.Mui-disabled': { 
+                          bgcolor: 'grey.300', 
+                          color: 'grey.500' 
+                        },
                         width: 40,
                         height: 40
                       }}
@@ -795,7 +828,7 @@ const AdminCart = () => {
                           <IconButton
                             size="small"
                             onClick={() => updateQuantity(item.produktId, item.menge + 1)}
-                            disabled={updating}
+                            disabled={updating || !item.isAvailable || item.menge >= (item.bestand?.menge || 0)}
                           >
                             <AddIcon />
                           </IconButton>
