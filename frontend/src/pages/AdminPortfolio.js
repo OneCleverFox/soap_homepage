@@ -68,7 +68,7 @@ const AdminPortfolio = () => {
     optional: '',
     verpackung: '',
     aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
-    reihenfolge: 0
+    reihenfolge: 0 // Wird beim Öffnen des Dialogs automatisch gesetzt
   });
 
   // State für dynamische Optionen
@@ -280,6 +280,17 @@ const AdminPortfolio = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // Funktion zur Berechnung der nächsten verfügbaren Reihenfolge-Nummer
+  const getNextAvailableOrder = () => {
+    if (products.length === 0) {
+      return 0; // Erstes Produkt bekommt Reihenfolge 0
+    }
+    
+    // Finde die höchste Reihenfolge-Nummer und addiere 1
+    const maxOrder = Math.max(...products.map(p => p.reihenfolge || 0));
+    return maxOrder + 1;
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -291,7 +302,7 @@ const AdminPortfolio = () => {
       optional: '',
       verpackung: '',
       aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
-      reihenfolge: 0
+      reihenfolge: getNextAvailableOrder() // ✅ Automatisch nächste verfügbare Nummer
     });
     setEditingProduct(null);
   };
@@ -326,7 +337,21 @@ const AdminPortfolio = () => {
       });
       setEditingProduct(product);
     } else {
-      resetForm();
+      // Für neue Produkte: automatisch nächste Reihenfolge setzen
+      const nextOrder = getNextAvailableOrder();
+      setFormData({
+        name: '',
+        seife: '',
+        gramm: '',
+        aroma: '',
+        seifenform: '',
+        zusatz: '',
+        optional: '',
+        verpackung: '',
+        aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
+        reihenfolge: nextOrder.toString() // ✅ Automatisch nächste verfügbare Nummer
+      });
+      setEditingProduct(null);
     }
     setOpenDialog(true);
   };
