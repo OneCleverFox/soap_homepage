@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { cartAPI } from '../services/api';
+import { useAuth } from './AuthContext';
 import stockEventService from '../services/stockEventService';
 import toast from 'react-hot-toast';
 
@@ -18,6 +19,7 @@ export const CartProvider = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastLoadTime, setLastLoadTime] = useState(0);
+  const { user } = useAuth();
 
   // Load cart from backend when user logs in (with caching)
   const loadCart = useCallback(async (force = false) => {
@@ -38,7 +40,12 @@ export const CartProvider = ({ children }) => {
 
     try {
       setLoading(true);
-      const response = await cartAPI.getCart();
+      
+      // Verwende Admin-Cart-API für Admin-User
+      const response = user?.role === 'admin' 
+        ? await cartAPI.getAdminCart()
+        : await cartAPI.getCart();
+        
       console.log('📦 Raw Cart Data:', response.data);
       
       setLastLoadTime(now); // Cache-Zeit aktualisieren
@@ -50,15 +57,20 @@ export const CartProvider = ({ children }) => {
           produktId: item.produktId,
           bestand: item.bestand,
           aktiv: item.aktiv,
+          menge: item.menge,
+          quantity: item.quantity,
           fullItem: item
         });
+        
+        // Normalisiere Quantity-Feld (Admin-Cart verwendet 'menge', normale Cart 'quantity')
+        const itemQuantity = item.menge || item.quantity || 0;
         
         // Verfügbarkeitsprüfung basierend auf aktiv Status und Bestandsmenge
         // aktiv ist verfügbar wenn true oder undefined (Fallback für alte Daten)
         const isAvailable = (item.aktiv !== false) && (item.bestand?.menge || 0) > 0;
         
         // Automatische Mengenkorrektur bei Bestandsüberschreitung
-        let correctedQuantity = item.menge;
+        let correctedQuantity = itemQuantity;
         let needsBackendUpdate = false;
         let shouldRemoveItem = false;
         
@@ -67,7 +79,7 @@ export const CartProvider = ({ children }) => {
           console.log(`📦 Artikel nicht verfügbar, bleibt im Warenkorb: ${item.name}`);
           // Menge auf 0 setzen für Berechnungen, aber Item behalten
           correctedQuantity = 0;
-        } else if (item.menge > (item.bestand?.menge || 0)) {
+        } else if (itemQuantity > (item.bestand?.menge || 0)) {
           // Bestandsüberschreitung - Menge korrigieren
           correctedQuantity = item.bestand.menge;
           needsBackendUpdate = true;
@@ -148,7 +160,7 @@ export const CartProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [lastLoadTime]);
+  }, [lastLoadTime, user?.role]);
 
   // Load cart on component mount if user is logged in
   useEffect(() => {
