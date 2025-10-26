@@ -51,8 +51,8 @@ export const CartProvider = ({ children }) => {
           bestand: item.bestand
         });
         
-        // Verfügbarkeitsprüfung
-        const isAvailable = item.bestand?.verfuegbar === true && (item.bestand?.menge || 0) > 0;
+        // Verfügbarkeitsprüfung basierend auf aktiv Status und Bestandsmenge
+        const isAvailable = item.aktiv && (item.bestand?.menge || 0) > 0;
         
         // Automatische Mengenkorrektur bei Bestandsüberschreitung
         let correctedQuantity = item.menge;
@@ -176,7 +176,7 @@ export const CartProvider = ({ children }) => {
         setItems(currentItems => {
           const affectedItem = currentItems.find(item => item.id === productId);
           if (affectedItem) {
-            const isStillAvailable = newStock?.verfuegbar && (newStock?.menge || 0) >= affectedItem.quantity;
+            const isStillAvailable = affectedItem.aktiv && (newStock?.menge || 0) >= affectedItem.quantity;
             
             if (!isStillAvailable) {
               toast.warning(`${affectedItem.name}: Bestand geändert - bitte Warenkorb prüfen`);
@@ -343,7 +343,7 @@ export const CartProvider = ({ children }) => {
 
       // Bestandsprüfung
       const maxAvailable = item?.bestand?.menge || 0;
-      const isAvailable = item?.bestand?.verfuegbar !== false;
+      const isAvailable = item?.aktiv && (item?.bestand?.menge || 0) > 0;
       
       if (!isAvailable) {
         toast('⚠️ Artikel ist nicht mehr verfügbar', {
