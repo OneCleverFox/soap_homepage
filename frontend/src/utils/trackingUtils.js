@@ -41,9 +41,9 @@ export const validateTrackingNumber = (carrier, trackingNumber) => {
   
   const validationRules = {
     [CARRIERS.DHL]: {
-      // DHL: 10-stellig numerisch ODER 3 Buchstaben + 9 Ziffern + 'DE'/'SG'
-      pattern: /^([0-9]{10,11}|[A-Z]{3}[0-9]{9}(DE|SG))$/,
-      message: 'DHL: 10-11 Ziffern oder Format ABC123456789DE'
+      // DHL: Standard-Sendung (12 oder 20 Stellen), Express (10-11 Stellen), International (13-22 Stellen)
+      pattern: /^([0-9]{10,12}|[0-9]{20}|[A-Z]{2}[0-9A-Z]{9,18}[A-Z]{2})$/,
+      message: 'DHL: Standard (12 oder 20 Ziffern), Express (10-11 Ziffern), oder International (z.B. GH1234567890DE)'
     },
     [CARRIERS.HERMES]: {
       // Hermes: H/T + 12-14 Ziffern
@@ -96,13 +96,24 @@ export const formatTrackingNumber = (carrier, trackingNumber) => {
   
   switch (carrier) {
     case CARRIERS.DHL:
-      // DHL: Standard 10-stellig in 4er-Gruppen: XXXX XXXX XX
+      // DHL: Standard 12-stellig: XXXX XXXX XXXX
+      if (/^[0-9]{12}$/.test(clean)) {
+        return clean.replace(/(\d{4})(\d{4})(\d{4})/, '$1 $2 $3');
+      }
+      // DHL: Standard 20-stellig: XX XXXXXX XXXX XXXX X
+      if (/^[0-9]{20}$/.test(clean)) {
+        return clean.replace(/(\d{2})(\d{6})(\d{4})(\d{4})(\d{4})/, '$1 $2 $3 $4 $5');
+      }
+      // DHL: Express 10-11 stellig: XXXX XXXX XX
       if (/^[0-9]{10,11}$/.test(clean)) {
         return clean.replace(/(\d{4})(\d{4})(\d{2,3})/, '$1 $2 $3');
       }
-      // DHL: ABC123456789DE Format
-      if (/^[A-Z]{3}[0-9]{9}[A-Z]{2}$/.test(clean)) {
-        return clean.replace(/^([A-Z]{3})([0-9]{9})([A-Z]{2})$/, '$1 $2 $3');
+      // DHL: International AA123456789DE Format
+      if (/^[A-Z]{2}[0-9A-Z]{9,18}[A-Z]{2}$/.test(clean)) {
+        const start = clean.slice(0, 2);
+        const middle = clean.slice(2, -2);
+        const end = clean.slice(-2);
+        return `${start} ${middle} ${end}`;
       }
       return clean;
     
@@ -168,8 +179,8 @@ export const detectCarrier = (trackingNumber) => {
     return CARRIERS.UPS;
   }
   
-  // DHL: 3 Buchstaben + 9 Ziffern + 2 Buchstaben ODER 10-11 Ziffern
-  if (/^[A-Z]{3}[0-9]{9}[A-Z]{2}$/.test(clean) || /^[0-9]{10,11}$/.test(clean)) {
+  // DHL: Standard (12 oder 20 Ziffern), Express (10-11 Ziffern), International (AA123...DE)
+  if (/^[0-9]{10,12}$/.test(clean) || /^[0-9]{20}$/.test(clean) || /^[A-Z]{2}[0-9A-Z]{9,18}[A-Z]{2}$/.test(clean)) {
     return CARRIERS.DHL;
   }
   
@@ -200,138 +211,137 @@ export const detectCarrier = (trackingNumber) => {
  * Validiert Tracking-Nummer mit automatischer Anbieter-Erkennung
  */
 export const validateTrackingNumberAuto = (trackingNumber) => {
-  const detectedCarrier = detectCarrier(trackingNumber);
+  if (!trackingNumber || trackingNumber.trim().length === 0) {
+    return { valid: false, message: 'Tracking-Nummer ist erforderlich', carrier: null };
+  }
   
+  const detectedCarrier = detectCarrier(trackingNumber);
   if (!detectedCarrier) {
-    return {
-      valid: false,
-      message: 'Tracking-Nummer Format nicht erkannt. Bitte Anbieter manuell auswählen.',
-      carrier: null
+    return { 
+      valid: false, 
+      message: 'Versandanbieter konnte nicht erkannt werden', 
+      carrier: null 
     };
   }
   
   const validation = validateTrackingNumber(detectedCarrier, trackingNumber);
   return {
     ...validation,
-    carrier: detectedCarrier,
-    carrierName: getCarrierInfo(detectedCarrier).name
+    carrier: detectedCarrier
   };
 };
 
 /**
- * Extrahiert Anbieter-spezifische Informationen
+ * Erweiterte Informationen über Versandanbieter
  */
 export const getCarrierInfo = (carrier) => {
-  const carrierInfo = {
+  const carrierData = {
     [CARRIERS.DHL]: {
       name: 'DHL',
-      fullName: 'DHL Deutschland',
+      fullName: 'DHL Express',
+      website: 'https://www.dhl.de',
       color: '#FFCC00',
       icon: '📦',
-      supportUrl: 'https://www.dhl.de/de/privatkunden/hilfe-kundenservice.html',
-      estimatedDeliveryDays: '1-2'
+      estimatedDays: '1-3'
     },
     [CARRIERS.HERMES]: {
       name: 'Hermes',
       fullName: 'Hermes Germany',
-      color: '#0066CC',
-      icon: '🚚',
-      supportUrl: 'https://www.myhermes.de/kundenservice/',
-      estimatedDeliveryDays: '1-3'
+      website: 'https://www.myhermes.de',
+      color: '#3056A0',
+      icon: '📦',
+      estimatedDays: '2-4'
     },
     [CARRIERS.UPS]: {
       name: 'UPS',
       fullName: 'United Parcel Service',
+      website: 'https://www.ups.com',
       color: '#8B4513',
-      icon: '📮',
-      supportUrl: 'https://www.ups.com/de/de/help-support-center.page',
-      estimatedDeliveryDays: '1-2'
+      icon: '📦',
+      estimatedDays: '1-3'
     },
     [CARRIERS.DPD]: {
       name: 'DPD',
       fullName: 'Dynamic Parcel Distribution',
-      color: '#D50000',
-      icon: '🚛',
-      supportUrl: 'https://www.dpd.com/de/de/kundenservice/',
-      estimatedDeliveryDays: '1-2'
+      website: 'https://www.dpd.com',
+      color: '#DC143C',
+      icon: '📦',
+      estimatedDays: '1-2'
     },
     [CARRIERS.GLS]: {
       name: 'GLS',
       fullName: 'General Logistics Systems',
-      color: '#0066CC',
-      icon: '📫',
-      supportUrl: 'https://gls-group.eu/DE/de/kundenservice',
-      estimatedDeliveryDays: '1-3'
+      website: 'https://gls-group.eu',
+      color: '#003875',
+      icon: '📦',
+      estimatedDays: '1-3'
+    },
+    [CARRIERS.FEDEX]: {
+      name: 'FedEx',
+      fullName: 'Federal Express',
+      website: 'https://www.fedex.com',
+      color: '#4B0082',
+      icon: '📦',
+      estimatedDays: '1-2'
     }
   };
   
-  return carrierInfo[carrier] || {
-    name: carrier.toUpperCase(),
-    fullName: carrier.toUpperCase(),
+  return carrierData[carrier] || {
+    name: 'Unbekannt',
+    fullName: 'Unbekannter Anbieter',
+    website: '',
     color: '#666666',
-    icon: '📦',
-    supportUrl: '',
-    estimatedDeliveryDays: '1-5'
+    icon: '❓',
+    estimatedDays: 'Unbekannt'
   };
 };
 
 /**
- * Schätzt Lieferdatum basierend auf Anbieter und Versanddatum
+ * Schätzt Lieferdatum basierend auf Versandanbieter
  */
-export const estimateDeliveryDate = (carrier, shippingDate) => {
-  if (!shippingDate) return null;
-  
+export const estimateDeliveryDate = (carrier, shippedDate = new Date()) => {
   const carrierInfo = getCarrierInfo(carrier);
-  const deliveryDays = parseInt(carrierInfo.estimatedDeliveryDays.split('-')[1]) || 3;
+  const estimatedDays = parseInt(carrierInfo.estimatedDays.split('-')[1]) || 3;
   
-  const estimatedDate = new Date(shippingDate);
-  estimatedDate.setDate(estimatedDate.getDate() + deliveryDays);
+  const deliveryDate = new Date(shippedDate);
+  deliveryDate.setDate(deliveryDate.getDate() + estimatedDays);
   
-  // Wochenende überspringen
-  while (estimatedDate.getDay() === 0 || estimatedDate.getDay() === 6) {
-    estimatedDate.setDate(estimatedDate.getDate() + 1);
-  }
-  
-  return estimatedDate;
+  return deliveryDate;
 };
 
 /**
- * Status-Mapping für einheitliche Darstellung
+ * Tracking Status Konstanten
  */
 export const TRACKING_STATUS = {
-  LABEL_CREATED: 'label_created',
-  PICKED_UP: 'picked_up',
-  IN_TRANSIT: 'in_transit',
+  PENDING: 'pending',
+  IN_TRANSIT: 'in_transit', 
   OUT_FOR_DELIVERY: 'out_for_delivery',
   DELIVERED: 'delivered',
   EXCEPTION: 'exception',
   RETURNED: 'returned'
 };
 
+/**
+ * Status-Informationen für UI
+ */
 export const getStatusInfo = (status) => {
   const statusInfo = {
-    [TRACKING_STATUS.LABEL_CREATED]: {
-      label: 'Versandlabel erstellt',
-      icon: '🏷️',
-      color: 'info',
-      description: 'Das Paket wurde beim Versanddienstleister angemeldet'
-    },
-    [TRACKING_STATUS.PICKED_UP]: {
-      label: 'Abgeholt',
-      icon: '📦',
-      color: 'primary',
-      description: 'Das Paket wurde vom Versanddienstleister abgeholt'
+    [TRACKING_STATUS.PENDING]: {
+      label: 'Wartend',
+      icon: '⏳',
+      color: 'default',
+      description: 'Das Paket wurde noch nicht abgeholt'
     },
     [TRACKING_STATUS.IN_TRANSIT]: {
       label: 'Unterwegs',
       icon: '🚚',
-      color: 'warning',
-      description: 'Das Paket ist auf dem Weg zum Ziel'
+      color: 'info',
+      description: 'Das Paket ist auf dem Weg zum Zielort'
     },
     [TRACKING_STATUS.OUT_FOR_DELIVERY]: {
       label: 'Wird zugestellt',
       icon: '🚛',
-      color: 'secondary',
+      color: 'warning',
       description: 'Das Paket wird heute zugestellt'
     },
     [TRACKING_STATUS.DELIVERED]: {
@@ -361,18 +371,3 @@ export const getStatusInfo = (status) => {
     description: 'Status unbekannt'
   };
 };
-
-const trackingUtils = {
-  CARRIERS,
-  generateTrackingUrl,
-  validateTrackingNumber,
-  validateTrackingNumberAuto,
-  detectCarrier,
-  formatTrackingNumber,
-  getCarrierInfo,
-  estimateDeliveryDate,
-  TRACKING_STATUS,
-  getStatusInfo
-};
-
-export default trackingUtils;
