@@ -278,7 +278,13 @@ router.get('/admin/all', auth, async (req, res) => {
     
     const filter = {};
     if (status && status !== 'all') {
-      filter.status = status;
+      // Unterstütze mehrere Status durch Komma getrennt
+      const statusList = status.split(',').map(s => s.trim());
+      if (statusList.length > 1) {
+        filter.status = { $in: statusList };
+      } else {
+        filter.status = status;
+      }
     }
     
     const skip = (page - 1) * limit;
@@ -366,7 +372,7 @@ router.get('/admin/:inquiryId', auth, async (req, res) => {
 router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { message, convertToOrder = true } = req.body;
+    const { message } = req.body;
     
     console.log(`✅ Anfrage ${inquiryId} annehmen...`);
     
@@ -393,11 +399,33 @@ router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
       respondedAt: new Date()
     };
     
-    if (convertToOrder) {
-      // In Bestellung konvertieren
-      const orderId = `ORD-${Date.now()}`;
-      
-      // Prüfe, ob Kunde existiert
+    // Status ändern zu "accepted" - KEINE automatische Bestellung!
+    // Kunde muss erst bezahlen, bevor es eine Bestellung wird
+    inquiry.status = 'accepted';
+    inquiry.acceptedAt = new Date();
+    
+    await inquiry.save();
+    
+    console.log(`✅ Anfrage ${inquiryId} wurde angenommen - Kunde muss noch bezahlen`);
+    
+    res.json({
+      success: true,
+      message: 'Anfrage wurde angenommen. Kunde wird über Zahlungsmöglichkeit informiert.',
+      inquiry: {
+        ...inquiry.toObject(),
+        statusLabel: 'Angenommen - Warten auf Zahlung',
+        statusColor: 'warning'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Fehler beim Annehmen der Anfrage:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Annehmen der Anfrage'
+    });
+  }
+});
       const Customer = require('../models/Kunde');
       const customer = await Customer.findById(inquiry.customer.id);
       if (!customer) {

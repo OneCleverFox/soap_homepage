@@ -666,7 +666,169 @@ router.get('/meine-bestellungen/:id', async (req, res) => {
   }
 });
 
-// 📋 Alle Bestellungen für einen Kunden abrufen
+// � Admin: Bestellungen abrufen mit Query-Parametern (für AdminOrdersManagement)
+router.get('/admin', async (req, res) => {
+  try {
+    const { status, sort = 'oldest', limit = 100 } = req.query;
+    
+    console.log('🔍 Admin orders request:', { status, sort, limit });
+    
+    // Filter für Status
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sort) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} Admin-Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// 👑 Admin: Alle Bestellungen abrufen (sortiert nach Datum)
+router.get('/admin/all', async (req, res) => {
+  try {
+    console.log('👑 Admin ruft alle Bestellungen ab');
+    
+    const orders = await Order.find({})
+      .sort({ bestelldatum: 1 }) // Älteste zuerst
+      .lean();
+    
+    console.log(`📦 ${orders.length} Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// 👑 Admin: Offene Bestellungen laden (nach Alter sortiert, arbeitsrelevant)
+router.get('/admin/pending', async (req, res) => {
+  try {
+    const { status, sortBy = 'oldest', limit = 50 } = req.query;
+    
+    console.log('🔍 Admin pending orders request:', { status, sortBy, limit });
+    
+    // Filter für zu bearbeitende Bestellungen (inkl. abgelehnt für Rückerstattung)
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'abgelehnt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Abgelehnte Bestellungen mit erfolgreich abgeschlossener Rückerstattung nur bei "zu bearbeiten" ausschließen
+    // Aber bei spezifischem "abgelehnt" Filter alle abgelehnten Bestellungen anzeigen
+    if (statusArray.includes('abgelehnt') && statusArray.length > 1) {
+      // Multi-Status Filter (z.B. "zu bearbeiten") - erledigte Rückerstattungen ausschließen
+      filter.$or = [
+        { status: { $in: statusArray.filter(s => s !== 'abgelehnt') } },
+        { 
+          status: 'abgelehnt', 
+          $or: [
+            { 'rueckerstattung.status': { $ne: 'erfolgreich' } },
+            { rueckerstattung: { $exists: false } },
+            { rueckerstattungErledigt: false } // Fallback für altes Format
+          ]
+        }
+      ];
+      delete filter.status; // Remove simple status filter as we use $or now
+    }
+    // Wenn nur "abgelehnt" Filter: alle abgelehnten Bestellungen anzeigen (auch erledigte)
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sortBy) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    // Abfrage ausführen
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} offene Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der offenen Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// �📋 Alle Bestellungen für einen Kunden abrufen
 router.get('/customer/:kundennummer', async (req, res) => {
   try {
     const { kundennummer } = req.params;
