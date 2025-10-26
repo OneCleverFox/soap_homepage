@@ -721,6 +721,65 @@ router.get('/:bestellnummer', async (req, res) => {
   }
 });
 
+// 👑 Admin: Bestellungen abrufen mit Query-Parametern (für AdminOrdersManagement)
+router.get('/admin', async (req, res) => {
+  try {
+    const { status, sort = 'oldest', limit = 100 } = req.query;
+    
+    console.log('🔍 Admin orders request:', { status, sort, limit });
+    
+    // Filter für Status
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sort) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} Admin-Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
 // 👑 Admin: Alle Bestellungen abrufen (sortiert nach Datum)
 router.get('/admin/all', async (req, res) => {
   try {
