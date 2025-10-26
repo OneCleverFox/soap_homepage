@@ -39,20 +39,23 @@ export const CartProvider = ({ children }) => {
     try {
       setLoading(true);
       const response = await cartAPI.getCart();
-      console.log('📦 Raw Cart Data:', response.data.data);
+      console.log('📦 Raw Cart Data:', response.data);
       
       setLastLoadTime(now); // Cache-Zeit aktualisieren
       
-      const cartItems = response.data.data.items.map(item => {
+      const cartItems = (response.data.data?.items || []).map(item => {
         console.log('📦 Cart Item:', {
           name: item.name,
-          bildUrl: item.bild,
+          bildUrl: item.bildUrl || item.bild,
           produktId: item.produktId,
-          bestand: item.bestand
+          bestand: item.bestand,
+          aktiv: item.aktiv,
+          fullItem: item
         });
         
         // Verfügbarkeitsprüfung basierend auf aktiv Status und Bestandsmenge
-        const isAvailable = item.aktiv && (item.bestand?.menge || 0) > 0;
+        // aktiv ist verfügbar wenn true oder undefined (Fallback für alte Daten)
+        const isAvailable = (item.aktiv !== false) && (item.bestand?.menge || 0) > 0;
         
         // Automatische Mengenkorrektur bei Bestandsüberschreitung
         let correctedQuantity = item.menge;
@@ -176,7 +179,7 @@ export const CartProvider = ({ children }) => {
         setItems(currentItems => {
           const affectedItem = currentItems.find(item => item.id === productId);
           if (affectedItem) {
-            const isStillAvailable = affectedItem.aktiv && (newStock?.menge || 0) >= affectedItem.quantity;
+            const isStillAvailable = (affectedItem.aktiv !== false) && (newStock?.menge || 0) >= affectedItem.quantity;
             
             if (!isStillAvailable) {
               toast.warning(`${affectedItem.name}: Bestand geändert - bitte Warenkorb prüfen`);
@@ -343,7 +346,7 @@ export const CartProvider = ({ children }) => {
 
       // Bestandsprüfung
       const maxAvailable = item?.bestand?.menge || 0;
-      const isAvailable = item?.aktiv && (item?.bestand?.menge || 0) > 0;
+      const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
       
       if (!isAvailable) {
         toast('⚠️ Artikel ist nicht mehr verfügbar', {
