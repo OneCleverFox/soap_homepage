@@ -1,4 +1,4 @@
-import { validateTrackingNumber, detectCarrier, CARRIERS } from '../utils/trackingUtils';
+import { validateTrackingNumber, detectCarrier, generateTrackingUrl } from '../utils/trackingUtils';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
@@ -457,7 +457,12 @@ const AdminOrdersManagement = () => {
 
   // Utility functions
   const getStatusChip = (status) => {
-    const config = statusConfig[status] || statusConfig.neu;
+    // Sichere Behandlung von status als Objekt oder String
+    const statusKey = typeof status === 'object' ? 
+      (status.status || 'neu') : 
+      (status || 'neu');
+    
+    const config = statusConfig[statusKey] || statusConfig.neu;
     return (
       <Chip 
         label={config.label} 
@@ -482,6 +487,37 @@ const AdminOrdersManagement = () => {
       style: 'currency',
       currency: 'EUR'
     }).format(amount || 0);
+  };
+
+  // Funktion zur benutzerfreundlichen Darstellung von Objekten
+  const formatDisplayValue = (value) => {
+    if (typeof value === 'string') {
+      return value;
+    }
+    
+    if (typeof value === 'object' && value !== null) {
+      // Spezielle Behandlung für bekannte Objektstrukturen
+      if (value.status && value.emailVersendet !== undefined) {
+        return `Status: ${value.status}, E-Mail versendet: ${value.emailVersendet ? 'Ja' : 'Nein'}`;
+      }
+      
+      if (value.kunde !== undefined && value.intern !== undefined && value.versand !== undefined) {
+        const parts = [];
+        if (value.kunde) parts.push(`Kunde: ${value.kunde}`);
+        if (value.intern) parts.push(`Intern: ${value.intern}`);
+        if (value.versand) parts.push(`Versand: ${value.versand}`);
+        return parts.join(', ') || 'Keine Notizen';
+      }
+      
+      // Fallback: Objekt-Eigenschaften lesbar darstellen
+      const entries = Object.entries(value)
+        .filter(([_, val]) => val !== '' && val !== null && val !== undefined)
+        .map(([key, val]) => `${key}: ${val}`);
+      
+      return entries.length > 0 ? entries.join(', ') : 'Leer';
+    }
+    
+    return String(value || 'Nicht verfügbar');
   };
 
   // Combined data for display
@@ -609,7 +645,9 @@ const AdminOrdersManagement = () => {
                     </Typography>
                     
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      📧 {item.besteller?.email}
+                      📧 {typeof item.besteller?.email === 'object' 
+                        ? JSON.stringify(item.besteller.email) 
+                        : item.besteller?.email}
                     </Typography>
                     
                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -947,62 +985,332 @@ const AdminOrdersManagement = () => {
             </DialogTitle>
             <DialogContent>
               <Grid container spacing={3}>
+                {/* Kundeninformationen - Erweitert */}
                 <Grid item xs={12} md={6}>
-                  <Typography variant="h6" gutterBottom>
-                    👤 Kundeninformationen
-                  </Typography>
-                  <Typography>
-                    <strong>Name:</strong> {selectedOrder.besteller?.vorname} {selectedOrder.besteller?.nachname}
-                  </Typography>
-                  <Typography>
-                    <strong>E-Mail:</strong> {selectedOrder.besteller?.email}
-                  </Typography>
-                  <Typography>
-                    <strong>Telefon:</strong> {selectedOrder.besteller?.telefon || 'Nicht angegeben'}
-                  </Typography>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Typography variant="h6" gutterBottom>
-                    📍 Lieferadresse
-                  </Typography>
-                  {selectedOrder.lieferadresse && (
-                    <>
-                      <Typography>{selectedOrder.lieferadresse.strasse}</Typography>
-                      <Typography>
-                        {selectedOrder.lieferadresse.plz} {selectedOrder.lieferadresse.ort}
-                      </Typography>
-                      <Typography>{selectedOrder.lieferadresse.land}</Typography>
-                    </>
-                  )}
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Typography variant="h6" gutterBottom>
-                    🛒 Bestellte Artikel
-                  </Typography>
-                  {selectedOrder.warenkorb && selectedOrder.warenkorb.map((item, index) => (
-                    <Box key={index} p={2} border={1} borderColor="grey.300" borderRadius={1} mb={1}>
-                      <Typography><strong>{item.name}</strong></Typography>
-                      <Typography>Menge: {item.menge}</Typography>
-                      <Typography>Preis: {formatCurrency(item.preis || 0)}</Typography>
-                    </Box>
-                  ))}
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Typography variant="h6" gutterBottom>
-                    💰 Preisdetails
-                  </Typography>
-                  <Typography>
-                    <strong>Gesamtsumme:</strong> {formatCurrency(selectedOrder.preise?.gesamtsumme || 0)}
-                  </Typography>
-                  {selectedOrder.preise?.versandkosten > 0 && (
-                    <Typography>
-                      Versandkosten: {formatCurrency(selectedOrder.preise.versandkosten)}
+                  <Card sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      👤 Kundeninformationen
                     </Typography>
-                  )}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">Name:</Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedOrder.besteller?.vorname} {selectedOrder.besteller?.nachname}
+                        </Typography>
+                      </Box>
+                      
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">E-Mail:</Typography>
+                        <Typography variant="body1" fontWeight="medium" sx={{ color: 'primary.main' }}>
+                          {typeof selectedOrder.besteller?.email === 'object' 
+                            ? JSON.stringify(selectedOrder.besteller.email) 
+                            : selectedOrder.besteller?.email}
+                        </Typography>
+                      </Box>
+                      
+                      {/* Zeige Tracking-Nummer für verschickte Bestellungen oder Telefon für andere */}
+                      {(selectedOrder.status === 'verschickt' || selectedOrder.status === 'Verschickt') && 
+                       (selectedOrder.trackingNumber || selectedOrder.versand?.sendungsnummer) ? (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Sendungsnummer:</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography 
+                              variant="body1" 
+                              fontWeight="medium" 
+                              fontFamily="monospace"
+                              sx={{ 
+                                color: 'primary.main', 
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                '&:hover': { color: 'primary.dark' }
+                              }}
+                              onClick={() => {
+                                const trackingNum = selectedOrder.trackingNumber || selectedOrder.versand?.sendungsnummer;
+                                const carrier = selectedOrder.carrier || selectedOrder.versand?.anbieter;
+                                const trackingUrl = generateTrackingUrl(carrier, trackingNum);
+                                if (trackingUrl) {
+                                  window.open(trackingUrl, '_blank');
+                                }
+                              }}
+                              title="Klicken um Sendung zu verfolgen"
+                            >
+                              {selectedOrder.trackingNumber || selectedOrder.versand?.sendungsnummer}
+                            </Typography>
+                            {(selectedOrder.carrier || selectedOrder.versand?.anbieter) && (
+                              <Chip 
+                                label={(selectedOrder.carrier || selectedOrder.versand?.anbieter).toUpperCase()} 
+                                size="small" 
+                                variant="outlined"
+                                color="primary"
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Telefon:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {selectedOrder.besteller?.telefon || 'Nicht angegeben'}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {selectedOrder.besteller?.kundennummer && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Kundennummer:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {typeof selectedOrder.besteller.kundennummer === 'object' 
+                              ? JSON.stringify(selectedOrder.besteller.kundennummer) 
+                              : selectedOrder.besteller.kundennummer}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Card>
                 </Grid>
+                
+                {/* Rechnungsadresse */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      🧾 Rechnungsadresse
+                    </Typography>
+                    {selectedOrder.rechnungsadresse && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedOrder.besteller?.vorname} {selectedOrder.besteller?.nachname}
+                        </Typography>
+                        <Typography variant="body1">
+                          {selectedOrder.rechnungsadresse.strasse} {selectedOrder.rechnungsadresse.hausnummer}
+                        </Typography>
+                        {selectedOrder.rechnungsadresse.zusatz && (
+                          <Typography variant="body1" color="text.secondary">
+                            {selectedOrder.rechnungsadresse.zusatz}
+                          </Typography>
+                        )}
+                        <Typography variant="body1">
+                          {selectedOrder.rechnungsadresse.plz} {selectedOrder.rechnungsadresse.stadt}
+                        </Typography>
+                        <Typography variant="body1" fontWeight="medium">
+                          {selectedOrder.rechnungsadresse.land}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Card>
+                </Grid>
+                
+                {/* Lieferadresse */}
+                <Grid item xs={12}>
+                  <Card sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      📍 Lieferadresse
+                    </Typography>
+                    {selectedOrder.lieferadresse && (
+                      <>
+                        {selectedOrder.lieferadresse.verwendeRechnungsadresse ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                            <Typography variant="body1" color="text.secondary">
+                              ✓ Lieferung an Rechnungsadresse
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            {selectedOrder.lieferadresse.firma && (
+                              <Typography variant="body1" fontWeight="medium">
+                                {selectedOrder.lieferadresse.firma}
+                              </Typography>
+                            )}
+                            <Typography variant="body1" fontWeight="medium">
+                              {selectedOrder.besteller?.vorname} {selectedOrder.besteller?.nachname}
+                            </Typography>
+                            <Typography variant="body1">
+                              {selectedOrder.lieferadresse.strasse} {selectedOrder.lieferadresse.hausnummer}
+                            </Typography>
+                            {selectedOrder.lieferadresse.zusatz && (
+                              <Typography variant="body1" color="text.secondary">
+                                {selectedOrder.lieferadresse.zusatz}
+                              </Typography>
+                            )}
+                            <Typography variant="body1">
+                              {selectedOrder.lieferadresse.plz} {selectedOrder.lieferadresse.stadt}
+                            </Typography>
+                            <Typography variant="body1" fontWeight="medium">
+                              {selectedOrder.lieferadresse.land}
+                            </Typography>
+                          </Box>
+                        )}
+                      </>
+                    )}
+                  </Card>
+                </Grid>
+                
+                {/* Bestellte Artikel */}
+                <Grid item xs={12}>
+                  <Card sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      🛒 Bestellte Artikel
+                    </Typography>
+                    {selectedOrder.warenkorb && selectedOrder.warenkorb.map((item, index) => (
+                      <Box key={index} sx={{ p: 2, border: 1, borderColor: 'grey.300', borderRadius: 1, mb: 1, bgcolor: 'grey.50' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Box>
+                            <Typography variant="body1" fontWeight="medium">{item.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Menge: {item.menge} × {formatCurrency(item.preis || 0)}
+                            </Typography>
+                          </Box>
+                          <Typography variant="body1" fontWeight="bold">
+                            {formatCurrency((item.menge || 1) * (item.preis || 0))}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ))}
+                  </Card>
+                </Grid>
+                
+                {/* Preisdetails */}
+                <Grid item xs={12}>
+                  <Card sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      💰 Preisdetails
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {selectedOrder.preise?.zwischensumme && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Zwischensumme:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {formatCurrency(selectedOrder.preise.zwischensumme)}
+                          </Typography>
+                        </Box>
+                      )}
+                      {selectedOrder.preise?.versandkosten > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Versandkosten:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {formatCurrency(selectedOrder.preise.versandkosten)}
+                          </Typography>
+                        </Box>
+                      )}
+                      {selectedOrder.preise?.mwst?.betrag && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">MwSt ({selectedOrder.preise.mwst.satz}%):</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {formatCurrency(selectedOrder.preise.mwst.betrag)}
+                          </Typography>
+                        </Box>
+                      )}
+                      <Divider />
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="h6" fontWeight="bold">Gesamtsumme:</Typography>
+                        <Typography variant="h6" fontWeight="bold" color="primary.main">
+                          {formatCurrency(selectedOrder.preise?.gesamtsumme || 0)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Card>
+                </Grid>
+
+                {/* Bestellstatus und Tracking */}
+                <Grid item xs={12}>
+                  <Card sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      📦 Bestellstatus & Versand
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body1">Status:</Typography>
+                        <Chip 
+                          label={
+                            selectedOrder.statusLabel || 
+                            (typeof selectedOrder.status === 'object' 
+                              ? JSON.stringify(selectedOrder.status) 
+                              : selectedOrder.status) || 
+                            'Unbekannt'
+                          } 
+                          color={
+                            selectedOrder.statusColor ||
+                            (selectedOrder.status === 'delivered' ? 'success' :
+                            selectedOrder.status === 'shipped' ? 'info' :
+                            selectedOrder.status === 'processing' ? 'warning' :
+                            'default')
+                          }
+                          variant="outlined"
+                        />
+                      </Box>
+                      
+                      {selectedOrder.bestelldatum && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Bestellt am:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {new Date(selectedOrder.bestelldatum).toLocaleDateString('de-DE')}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {selectedOrder.bestelltAm && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Bestellt am:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {new Date(selectedOrder.bestelltAm).toLocaleDateString('de-DE')}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {selectedOrder.versanddatum && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Versandt am:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {new Date(selectedOrder.versanddatum).toLocaleDateString('de-DE')}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Card>
+                </Grid>
+                
+                {/* Zusätzliche Informationen */}
+                {((selectedOrder.notizen && typeof selectedOrder.notizen !== 'undefined') || 
+                  (selectedOrder.paymentMethod && typeof selectedOrder.paymentMethod !== 'undefined') || 
+                  (selectedOrder.rechnung && typeof selectedOrder.rechnung !== 'undefined') || 
+                  (selectedOrder.notes && typeof selectedOrder.notes !== 'undefined')) && (
+                  <Grid item xs={12}>
+                    <Card sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        ℹ️ Zusätzliche Informationen
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {selectedOrder.paymentMethod && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body1">Zahlungsmethode:</Typography>
+                            <Typography variant="body1" fontWeight="medium">
+                              {formatDisplayValue(selectedOrder.paymentMethod)}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        {selectedOrder.rechnung && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body1">Rechnungsnummer:</Typography>
+                            <Typography variant="body1" fontWeight="medium">
+                              {formatDisplayValue(selectedOrder.rechnung)}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        {(selectedOrder.notizen || selectedOrder.notes) && (
+                          <Box>
+                            <Typography variant="body1" sx={{ mb: 1 }}>Notizen:</Typography>
+                            <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1 }}>
+                              <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
+                                {formatDisplayValue(selectedOrder.notizen || selectedOrder.notes)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        )}
+                      </Box>
+                    </Card>
+                  </Grid>
+                )}
               </Grid>
             </DialogContent>
             <DialogActions>
@@ -1103,7 +1411,9 @@ const AdminOrdersManagement = () => {
                     <strong>Name:</strong> {selectedInquiry.vorname} {selectedInquiry.nachname}
                   </Typography>
                   <Typography>
-                    <strong>E-Mail:</strong> {selectedInquiry.email}
+                    <strong>E-Mail:</strong> {typeof selectedInquiry.email === 'object' 
+                      ? JSON.stringify(selectedInquiry.email) 
+                      : selectedInquiry.email}
                   </Typography>
                   <Typography>
                     <strong>Telefon:</strong> {selectedInquiry.telefon || 'Nicht angegeben'}
