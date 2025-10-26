@@ -218,6 +218,7 @@ export const portfolioAPI = {
 // Cart API
 export const cartAPI = {
   getCart: () => api.get('/cart'),
+  getAdminCart: () => api.get('/admin/cart'),
   addToCart: (cartItem) => api.post('/cart/add', cartItem),
   updateQuantity: (produktId, menge) => api.put('/cart/update', { produktId, menge }),
   removeItem: (produktId) => api.delete(`/cart/remove/${produktId}`),
