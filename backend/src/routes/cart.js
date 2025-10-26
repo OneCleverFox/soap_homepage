@@ -58,7 +58,7 @@ router.get('/', authenticateToken, async (req, res) => {
           productName: product?.name,
           bestandFound: !!bestandInfo,
           bestandMenge: bestandInfo?.menge,
-          bestandVerfuegbar: bestandInfo?.verfuegbar
+          productActive: product?.aktiv
         });
         
         if (product && product.bilder && product.bilder.hauptbild) {
@@ -194,10 +194,11 @@ router.post('/add', authenticateToken, async (req, res) => {
       produktId,
       requestedQuantity: menge,
       availableStock: bestandInfo?.menge || 0,
-      isAvailable: bestandInfo?.verfuegbar !== false
+      productActive: product.aktiv,
+      hasStock: (bestandInfo?.menge || 0) > 0
     });
     
-    if (!bestandInfo || !bestandInfo.verfuegbar || (bestandInfo.menge || 0) <= 0) {
+    if (!bestandInfo || (bestandInfo.menge || 0) <= 0) {
       return res.status(400).json({
         success: false,
         message: 'Artikel ist nicht verfügbar',
@@ -379,10 +380,10 @@ router.put('/update', authenticateToken, async (req, res) => {
         produktId,
         requestedQuantity: menge,
         availableStock: bestandInfo?.menge || 0,
-        isAvailable: bestandInfo?.verfuegbar !== false
+        hasStock: (bestandInfo?.menge || 0) > 0
       });
       
-      if (!bestandInfo || !bestandInfo.verfuegbar || (bestandInfo.menge || 0) <= 0) {
+      if (!bestandInfo || (bestandInfo.menge || 0) <= 0) {
         return res.status(400).json({
           success: false,
           message: 'Artikel ist nicht mehr verfügbar',
