@@ -137,7 +137,7 @@ router.post('/portfolio', async (req, res) => {
       zusatz: zusatz || '',
       optional: optional || '',
       verpackung,
-      aktiv: aktiv !== undefined ? aktiv : true,
+      aktiv: aktiv !== undefined ? aktiv : false, // ✅ Neue Produkte standardmäßig inaktiv
       reihenfolge: parseInt(reihenfolge) || 0,
       bilder: {
         hauptbild: '',
