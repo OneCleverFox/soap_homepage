@@ -140,14 +140,27 @@ const ProductsPage = () => {
   useEffect(() => {
     let isMounted = true;
     
+    // Event-Listener für Lageränderungen
+    const handleInventoryUpdate = () => {
+      console.log('📦 Inventory update detected - refreshing products');
+      // Cache invalidieren und Produkte neu laden
+      sessionStorage.removeItem('cachedProducts');
+      if (isMounted) {
+        fetchProducts(false); // Fresh load
+      }
+    };
+
+    // Event-Listener registrieren
+    window.addEventListener('inventoryUpdated', handleInventoryUpdate);
+    
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
         const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
           const { data, timestamp } = JSON.parse(cached);
-          // Verwende Cache wenn er weniger als 5 Minuten alt ist
-          if (Date.now() - timestamp < 5 * 60 * 1000) {
+          // Verwende Cache wenn er weniger als 30 Sekunden alt ist (für Bestandsdaten)
+          if (Date.now() - timestamp < 30 * 1000) {
             console.log('⚡ Loading cached products immediately');
             if (isMounted) {
               setProducts(data);
@@ -179,6 +192,7 @@ const ProductsPage = () => {
     // Cleanup function
     return () => {
       isMounted = false;
+      window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
   }, []);
 
@@ -191,24 +205,34 @@ const ProductsPage = () => {
       
       // Performance Tracking
       const startTime = performance.now();
-      const response = await portfolioAPI.getWithPrices();
-      const duration = performance.now() - startTime;
       
+      // 1. Lade Produktdaten (können gecacht werden)
+      const response = await portfolioAPI.getWithPrices();
+      const productsData = response.data?.data || response.data || [];
+      
+      // 2. Setze Produktdaten sofort (mit eventuell veralteten Bestandsdaten)
+      setProducts(productsData);
+      
+      const duration = performance.now() - startTime;
       console.log(`⏱️ Products API Call ${isBackgroundUpdate ? '(Background)' : '(Initial)'}: ${duration.toFixed(2)}ms`);
       console.log('📦 API Response:', response);
-      console.log('📊 Products count:', response.data?.data?.length || response.data?.length || 0);
+      console.log('📊 Products count:', productsData.length);
       
-      const productsData = response.data?.data || response.data || [];
-      setProducts(productsData);
       setInitialLoading(false);
       
-      // Cache Produktdaten im SessionStorage für schnelleres Nachladen
+      // Cache NUR Produktdaten (ohne Bestand) im SessionStorage
       try {
+        const productsForCache = productsData.map(product => ({
+          ...product,
+          // Entferne Bestandsdaten vom Cache
+          bestand: undefined
+        }));
+        
         sessionStorage.setItem('cachedProducts', JSON.stringify({
-          data: productsData,
+          data: productsForCache,
           timestamp: Date.now()
         }));
-        console.log('💾 Products cached in SessionStorage');
+        console.log('💾 Products cached in SessionStorage (without inventory)');
       } catch (e) {
         console.warn('⚠️ Could not cache products:', e);
       }
@@ -221,8 +245,8 @@ const ProductsPage = () => {
           const cached = sessionStorage.getItem('cachedProducts');
           if (cached) {
             const { data, timestamp } = JSON.parse(cached);
-            // Verwende Cache wenn er weniger als 5 Minuten alt ist
-            if (Date.now() - timestamp < 5 * 60 * 1000) {
+            // Verwende Cache wenn er weniger als 30 Sekunden alt ist (für Bestandsdaten)
+            if (Date.now() - timestamp < 30 * 1000) {
               console.log('📦 Using cached products (API failed)');
               setProducts(data);
               setInitialLoading(false);

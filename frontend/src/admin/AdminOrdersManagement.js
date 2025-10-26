@@ -218,7 +218,8 @@ const AdminOrdersManagement = () => {
   // Load inquiries
   const loadInquiries = useCallback(async () => {
     try {
-      const response = await api.get('/inquiries/admin/all?status=pending&limit=50');
+      // Lade sowohl pending als auch accepted (unbezahlte) Anfragen
+      const response = await api.get('/inquiries/admin/all?status=pending,accepted&limit=50');
       
       if (response.data && response.data.success) {
         const inquiriesData = response.data.inquiries || [];
@@ -397,9 +398,12 @@ const AdminOrdersManagement = () => {
   // Inquiry action handler
   const handleInquiryAction = async (inquiry, action) => {
     try {
-      const endpoint = action === 'approve' ? 'approve' : 'reject';
+      const endpoint = action === 'approve' ? 'accept' : 'reject';
       
-      const response = await api.put(`/inquiries/${inquiry._id}/${endpoint}`, {
+      // Verwende inquiryId statt _id für Backend-Kompatibilität
+      const inquiryIdentifier = inquiry.inquiryId || inquiry._id;
+      
+      const response = await api.put(`/inquiries/admin/${inquiryIdentifier}/${endpoint}`, {
         adminNote: `${action === 'approve' ? 'Genehmigt' : 'Abgelehnt'} durch Admin`
       });
       
@@ -495,19 +499,48 @@ const AdminOrdersManagement = () => {
     let items = [...orders];
     
     if (filters.showInquiries) {
-      const inquiryItems = inquiries.map(inquiry => ({
-        ...inquiry,
-        isInquiry: true,
-        bestellnummer: `INQ-${inquiry._id.slice(-6)}`,
-        besteller: {
-          vorname: inquiry.vorname,
-          nachname: inquiry.nachname,
-          email: inquiry.email
-        },
-        bestelltAm: inquiry.createdAt,
-        status: inquiry.status || 'neu',
-        preise: { gesamtsumme: 0 }
-      }));
+      const inquiryItems = inquiries.map(inquiry => {
+        // Status-Mapping für Anfragen
+        let mappedStatus, statusLabel, statusColor;
+        switch (inquiry.status) {
+          case 'pending':
+            mappedStatus = 'neu';
+            statusLabel = '❓ Anfrage wartend';
+            statusColor = 'warning';
+            break;
+          case 'accepted':
+            mappedStatus = 'bezahlt'; // Verwende bezahlt-Status für das UI, aber sie sind noch nicht bezahlt
+            statusLabel = '⏳ Angenommen - Zahlung ausstehend';
+            statusColor = 'info';
+            break;
+          case 'rejected':
+            mappedStatus = 'storniert';
+            statusLabel = '❌ Abgelehnt';
+            statusColor = 'error';
+            break;
+          default:
+            mappedStatus = 'neu';
+            statusLabel = '❓ Unbekannt';
+            statusColor = 'grey';
+        }
+        
+        return {
+          ...inquiry,
+          isInquiry: true,
+          awaitingPayment: inquiry.status === 'accepted', // Flag für Zahlungsaufforderung
+          bestellnummer: `INQ-${inquiry._id.slice(-6)}`,
+          besteller: {
+            vorname: inquiry.vorname,
+            nachname: inquiry.nachname,
+            email: inquiry.email
+          },
+          bestelltAm: inquiry.createdAt,
+          status: mappedStatus,
+          statusLabel: statusLabel,
+          statusColor: statusColor,
+          preise: { gesamtsumme: inquiry.total || 0 }
+        };
+      });
       items = [...items, ...inquiryItems];
     }
 

@@ -598,6 +598,7 @@ router.get('/cart', async (req, res) => {
           return {
             ...item.toObject(),
             bild: product.bilder.hauptbild,
+            aktiv: product.aktiv, // Produktstatus direkt hinzufügen
             bestand: bestandInfo ? {
               verfuegbar: (bestandInfo.menge || 0) > 0,
               menge: bestandInfo.menge || 0,
@@ -614,6 +615,7 @@ router.get('/cart', async (req, res) => {
         // Fallback: behalte vorhandene Daten aber füge Bestandsinfo hinzu
         return {
           ...item.toObject(),
+          aktiv: product?.aktiv || false, // Produktstatus direkt hinzufügen
           bestand: bestandInfo ? {
             verfuegbar: (bestandInfo.menge || 0) > 0,
             menge: bestandInfo.menge || 0,

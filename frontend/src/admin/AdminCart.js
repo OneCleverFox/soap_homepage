@@ -152,9 +152,19 @@ const AdminCart = () => {
       if (data.success) {
         // Sichere Verarbeitung der Warenkorb-Daten
         const processedItems = data.data.items.map(item => {
-          // Verfügbarkeitsstatus basierend auf aktiv Status und Bestandsmenge
-          const isAvailable = item.aktiv && (item.bestand?.menge || 0) > 0;
+          // Verfügbarkeitsstatus: Prüfe sowohl aktiv als auch bestand.verfuegbar
+          const isAvailable = (item.aktiv !== false) && (item.bestand?.verfuegbar !== false) && (item.bestand?.menge || 0) > 0;
           const hasEnoughStock = isAvailable && (parseInt(item.menge) || 0) <= (item.bestand?.menge || 0);
+          
+          console.log('📦 AdminCart Availability Check:', {
+            name: item.name,
+            aktiv: item.aktiv,
+            bestandVerfuegbar: item.bestand?.verfuegbar,
+            bestandMenge: item.bestand?.menge,
+            itemMenge: item.menge,
+            isAvailable: isAvailable,
+            hasEnoughStock: hasEnoughStock
+          });
           
           const processedItem = {
             ...item,

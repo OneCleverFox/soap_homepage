@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Container,
   Typography,
@@ -88,14 +89,20 @@ const CartPage = () => {
     // Finde das entsprechende Item um verfügbare Menge zu prüfen
     const item = items.find(item => item.id === productId);
     const maxAvailable = item?.bestand?.menge || 0;
-    const isAvailable = item?.aktiv && (item?.bestand?.menge || 0) > 0;
+    // Verbesserte Verfügbarkeitsprüfung: aktiv ist verfügbar wenn true oder undefined
+    const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
     
     // Prüfe Grenzen: mindestens 1, maximal verfügbare Menge
     if (newQuantity >= 1 && newQuantity <= maxAvailable && isAvailable) {
       updateQuantity(productId, newQuantity);
     } else if (newQuantity > maxAvailable && isAvailable) {
       // Wenn Benutzer mehr als verfügbar eingeben will, setze auf Maximum
+      toast.info(`Nur ${maxAvailable} Stück verfügbar`);
       updateQuantity(productId, maxAvailable);
+    } else if (!isAvailable) {
+      toast.error('Artikel ist nicht verfügbar');
+    } else {
+      toast.error('Mengenänderung nicht möglich');
     }
   };
 
@@ -296,6 +303,7 @@ const CartPage = () => {
                         </IconButton>
                         <TextField
                           size={isMobile ? "medium" : "small"}
+                          type="number"
                           value={item.quantity}
                           onChange={(e) => {
                             const val = parseInt(e.target.value) || 1;

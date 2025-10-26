@@ -674,6 +674,11 @@ const AdminLager = () => {
         // Erfolg: Daten sind bereits optimistisch aktualisiert
         toast.success('Inventur erfolgreich gespeichert!', { id: 'inventur-save' });
         
+        // Event für ProductsPage auslösen
+        window.dispatchEvent(new CustomEvent('inventoryUpdated', {
+          detail: { type: inventurForm.typ, artikelId: inventurForm.artikelId }
+        }));
+        
         // 🔄 MODERNE REAKTIVITÄT: Nur betroffene Daten aktualisieren statt alles neu zu laden
         if (inventurForm.typ === 'fertigprodukt') {
           console.log('🔄 Fertigprodukt-Inventur: Aktualisiere gezielt Rohstoff-Daten...');

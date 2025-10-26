@@ -63,45 +63,60 @@ router.get('/', authenticateToken, async (req, res) => {
         
         if (product && product.bilder && product.bilder.hauptbild) {
           // Aktualisiere mit Portfolio-Daten und Verfügbarkeitsstatus
-          return {
+          const enrichedItem = {
             ...item.toObject(),
             bild: product.bilder.hauptbild,
+            aktiv: product.aktiv, // Produktstatus direkt hinzufügen
             bestand: bestandInfo ? {
-              // Verfügbar nur wenn Produkt aktiv ist UND Bestand vorhanden
-              verfuegbar: product.aktiv !== false && (bestandInfo.menge || 0) > 0,
               menge: bestandInfo.menge || 0,
               einheit: bestandInfo.einheit || 'Stück'
             } : {
-              // Fallback: Wenn kein Bestand-Eintrag, prüfe nur Produkt-Status
-              verfuegbar: product.aktiv !== false && product.aktiv !== undefined,
               menge: product.aktiv !== false ? 5 : 0, // Standard-Menge nur wenn aktiv
               einheit: 'Stück'
             }
           };
+          
+          console.log('✅ Enriched item:', {
+            produktId: item.produktId,
+            name: product?.name,
+            aktiv: enrichedItem.aktiv,
+            aktivFromProduct: product.aktiv,
+            hasBestand: !!bestandInfo
+          });
+          
+          return enrichedItem;
         }
         
         // Fallback: behalte vorhandene Daten aber füge Bestandsinfo hinzu
-        return {
+        const fallbackItem = {
           ...item.toObject(),
+          aktiv: product?.aktiv || false, // Produktstatus direkt hinzufügen
           bestand: bestandInfo ? {
-            // Verfügbar nur wenn Produkt aktiv ist UND Bestand vorhanden
-            verfuegbar: product?.aktiv !== false && (bestandInfo.menge || 0) > 0,
             menge: bestandInfo.menge || 0,
             einheit: bestandInfo.einheit || 'Stück'
           } : {
             // Fallback: Wenn kein Bestand-Eintrag und kein Produkt gefunden
-            verfuegbar: false,
             menge: 0,
             einheit: 'Stück'
           }
         };
+        
+        console.log('🔄 Fallback item:', {
+          produktId: item.produktId,
+          name: product?.name,
+          aktiv: fallbackItem.aktiv,
+          aktivFromProduct: product?.aktiv,
+          hasBestand: !!bestandInfo
+        });
+        
+        return fallbackItem;
       } catch (err) {
         console.error('Fehler beim Laden des Produkts:', item.produktId, err);
         // Bei Fehler: behalte Artikel mit "nicht verfügbar" Status
         return {
           ...item.toObject(),
+          aktiv: false, // Bei Fehler als inaktiv markieren
           bestand: {
-            verfuegbar: false,
             menge: 0,
             einheit: 'Stück'
           }
