@@ -48,7 +48,7 @@ const CheckoutPage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Nur verfügbare Artikel für Checkout verwenden
-  const availableItems = items.filter(item => item.hasEnoughStock === true);
+  const availableItems = items.filter(item => item.isAvailable === true && item.hasEnoughStock === true);
   const availableTotal = availableItems.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
   
   const [loading, setLoading] = useState(false);
@@ -88,7 +88,7 @@ const CheckoutPage = () => {
     }
     
     // Prüfen ob verfügbare Artikel vorhanden sind
-    const availableCount = items.filter(item => item.hasEnoughStock === true).length;
+    const availableCount = items.filter(item => item.isAvailable === true && item.hasEnoughStock === true).length;
     if (availableCount === 0) {
       console.warn('⚠️ Keine verfügbaren Artikel im Checkout - Weiterleitung zum Warenkorb');
       navigate('/cart');

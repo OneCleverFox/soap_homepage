@@ -480,7 +480,8 @@ router.get('/with-prices', async (req, res) => {
         // Bestandsinformationen hinzufügen
         const bestand = bestandMap.get(item._id.toString());
         const verfuegbareMenge = bestand ? bestand.menge : 0;
-        const istVerfuegbar = verfuegbareMenge > 0;
+        // Verfügbarkeit: Produkt muss aktiv sein UND Bestand haben
+        const istVerfuegbar = item.aktiv !== false && verfuegbareMenge > 0;
         
         // Bilder-URLs hinzufügen (optimiert)
         let imageData = { hauptbild: null, galerie: [] };

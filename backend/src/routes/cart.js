@@ -67,13 +67,14 @@ router.get('/', authenticateToken, async (req, res) => {
             ...item.toObject(),
             bild: product.bilder.hauptbild,
             bestand: bestandInfo ? {
-              verfuegbar: (bestandInfo.menge || 0) > 0,
+              // Verfügbar nur wenn Produkt aktiv ist UND Bestand vorhanden
+              verfuegbar: product.aktiv !== false && (bestandInfo.menge || 0) > 0,
               menge: bestandInfo.menge || 0,
               einheit: bestandInfo.einheit || 'Stück'
             } : {
-              // Fallback: Wenn kein Bestand-Eintrag, aber Produkt aktiv
-              verfuegbar: product.aktiv !== false, // Standard: verfügbar außer explizit deaktiviert
-              menge: 5, // Standard-Menge
+              // Fallback: Wenn kein Bestand-Eintrag, prüfe nur Produkt-Status
+              verfuegbar: product.aktiv !== false && product.aktiv !== undefined,
+              menge: product.aktiv !== false ? 5 : 0, // Standard-Menge nur wenn aktiv
               einheit: 'Stück'
             }
           };
@@ -83,7 +84,8 @@ router.get('/', authenticateToken, async (req, res) => {
         return {
           ...item.toObject(),
           bestand: bestandInfo ? {
-            verfuegbar: (bestandInfo.menge || 0) > 0,
+            // Verfügbar nur wenn Produkt aktiv ist UND Bestand vorhanden
+            verfuegbar: product?.aktiv !== false && (bestandInfo.menge || 0) > 0,
             menge: bestandInfo.menge || 0,
             einheit: bestandInfo.einheit || 'Stück'
           } : {
@@ -158,6 +160,15 @@ router.post('/add', authenticateToken, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Produkt nicht gefunden'
+      });
+    }
+
+    // Prüfe ob Produkt aktiv ist
+    if (product.aktiv === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Produkt ist nicht mehr verfügbar',
+        errorType: 'PRODUCT_INACTIVE'
       });
     }
 
@@ -347,6 +358,16 @@ router.put('/update', authenticateToken, async (req, res) => {
       console.log('🗑️ Removing item from cart');
       cart.artikel.splice(itemIndex, 1);
     } else {
+      // Produktstatus prüfen
+      const product = await Portfolio.findById(produktId);
+      if (!product || product.aktiv === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Produkt ist nicht mehr verfügbar',
+          errorType: 'PRODUCT_INACTIVE'
+        });
+      }
+      
       // Bestandsprüfung vor Update
       const Bestand = require('../models/Bestand');
       const bestandInfo = await Bestand.findOne({ 
