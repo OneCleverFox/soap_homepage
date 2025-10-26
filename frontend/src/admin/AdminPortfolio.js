@@ -642,7 +642,7 @@ const AdminPortfolio = () => {
             <Card>
               <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
                 <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Ohne
+                  Ohne Bilder
                 </Typography>
                 <Typography variant={isMobile ? "h6" : "h5"} color="warning.main">
                   {stats.productsWithoutImages}
