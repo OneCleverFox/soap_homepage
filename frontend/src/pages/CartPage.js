@@ -88,7 +88,7 @@ const CartPage = () => {
     // Finde das entsprechende Item um verfügbare Menge zu prüfen
     const item = items.find(item => item.id === productId);
     const maxAvailable = item?.bestand?.menge || 0;
-    const isAvailable = item?.bestand?.verfuegbar !== false;
+    const isAvailable = item?.aktiv && (item?.bestand?.menge || 0) > 0;
     
     // Prüfe Grenzen: mindestens 1, maximal verfügbare Menge
     if (newQuantity >= 1 && newQuantity <= maxAvailable && isAvailable) {
@@ -314,7 +314,8 @@ const CartPage = () => {
                           onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
                           disabled={
                             item.quantity >= (item.bestand?.menge || 0) || 
-                            !item.bestand?.verfuegbar
+                            !item.aktiv || 
+                            (item.bestand?.menge || 0) <= 0
                           }
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
