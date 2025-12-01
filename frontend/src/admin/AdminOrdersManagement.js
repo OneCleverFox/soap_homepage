@@ -2411,11 +2411,13 @@ const OrderDetailsDialog = ({ order, open, onClose, onStatusUpdate, onConfirmOrd
                 
                 {/* E-Mail-Historie */}
                 {order.kommunikation && order.kommunikation.length > 0 && (
-                  <Box mt={3}>
-                    <Typography variant="h6" gutterBottom>
-                      📧 E-Mail-Historie
-                    </Typography>
-                    <List dense>
+                  <Grid item xs={12}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                          📧 E-Mail-Historie
+                        </Typography>
+                        <List dense>
                           {order.kommunikation
                             .filter(comm => comm.typ === 'email')
                             .sort((a, b) => new Date(b.zeitpunkt) - new Date(a.zeitpunkt))
@@ -2465,12 +2467,10 @@ const OrderDetailsDialog = ({ order, open, onClose, onStatusUpdate, onConfirmOrd
                             ))
                           }
                         </List>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                )}
 
             {/* 📄 RECHNUNGSINFORMATIONEN */}
             <Grid container spacing={2}>
@@ -2571,8 +2571,8 @@ const OrderDetailsDialog = ({ order, open, onClose, onStatusUpdate, onConfirmOrd
             </DialogContent>
 
             <DialogActions>
-                  <Box display="flex" justifyContent="space-between" width="100%" p={1}>
-                    <Box display="flex" gap={1}>
+              <Box display="flex" justifyContent="space-between" width="100%" p={1}>
+                <Box display="flex" gap={1}>
                       {/* Status-Aktionen */}
                       {order.status === 'neu' && (
                         <>
@@ -2687,13 +2687,13 @@ const OrderDetailsDialog = ({ order, open, onClose, onStatusUpdate, onConfirmOrd
                           )}
                         </>
                       )}
-                    </Box>
+                </Box>
 
-                    <Button onClick={onClose}>
-                      Schließen
-                    </Button>
-                  </Box>
-                </DialogActions>
+                <Button onClick={onClose}>
+                  Schließen
+                </Button>
+              </Box>
+            </DialogActions>
               </Dialog>
 
               {/* Status-Notiz Dialog */}
