@@ -11,12 +11,10 @@ import {
   Select,
   MenuItem,
   Button,
-  Divider,
   Card,
   CardContent,
   CardHeader,
   Chip,
-  IconButton,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -26,14 +24,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Tab,
   Tabs,
   FormControlLabel,
-  ColorPicker,
   Snackbar
 } from '@mui/material';
 import {
@@ -41,16 +34,12 @@ import {
   Preview as PreviewIcon,
   Save as SaveIcon,
   Add as AddIcon,
-  Delete as DeleteIcon,
   DragIndicator as DragIcon,
-  Settings as SettingsIcon,
-  Palette as PaletteIcon,
   ViewColumn as LayoutIcon,
   Business as CompanyIcon,
   Receipt as InvoiceIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { SketchPicker } from 'react-color';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -77,115 +66,18 @@ const VariableChip = styled(Chip)(({ theme }) => ({
 
 const AdminInvoiceConfiguration = () => {
   const [currentTemplate, setCurrentTemplate] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
-  const [previewDialog, setPreviewDialog] = useState(false);
   const [variablesDialog, setVariablesDialog] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Verfügbare Variablen
   const [availableVariables, setAvailableVariables] = useState([]);
-
-  // Standard Template-Struktur
-  const defaultTemplate = {
-    name: 'Neue Rechnungsvorlage',
-    isDefault: false,
-    companyInfo: {
-      name: 'Glücksmomente Manufaktur',
-      address: {
-        street: 'Musterstraße 123',
-        city: '12345 Musterstadt',
-        country: 'Deutschland'
-      },
-      contact: {
-        phone: '+49 123 456789',
-        email: 'info@gluecksmomente-manufaktur.de',
-        website: 'www.gluecksmomente-manufaktur.de'
-      },
-      taxInfo: {
-        taxNumber: 'DE123456789',
-        vatId: 'USt-IdNr.: DE123456789'
-      }
-    },
-    layout: {
-      header: {
-        showLogo: true,
-        logoPosition: 'left',
-        logoSize: 'medium',
-        showCompanyInfo: true,
-        companyInfoPosition: 'right'
-      },
-      colors: {
-        primary: '#8b4a8b',
-        secondary: '#f5f5f5',
-        text: '#333333',
-        accent: '#4caf50'
-      },
-      fonts: {
-        primary: 'Arial, sans-serif',
-        size: {
-          heading: 24,
-          subheading: 18,
-          body: 12,
-          small: 10
-        }
-      },
-      spacing: {
-        margin: 20,
-        lineHeight: 1.4
-      }
-    },
-    sections: {
-      invoiceInfo: {
-        enabled: true,
-        position: 1,
-        title: 'RECHNUNG',
-        showInvoiceNumber: true,
-        showInvoiceDate: true,
-        showDueDate: true,
-        showOrderNumber: true
-      },
-      customerInfo: {
-        enabled: true,
-        position: 2,
-        title: 'Rechnungsadresse',
-        showTitle: true
-      },
-      productTable: {
-        enabled: true,
-        position: 3,
-        columns: {
-          position: { enabled: true, width: 8 },
-          description: { enabled: true, width: 40 },
-          quantity: { enabled: true, width: 12 },
-          unitPrice: { enabled: true, width: 15 },
-          total: { enabled: true, width: 15 }
-        },
-        showHeaders: true,
-        alternateRowColors: true
-      },
-      totals: {
-        enabled: true,
-        position: 4,
-        showSubtotal: true,
-        showTax: true,
-        showShipping: true,
-        showTotal: true,
-        alignment: 'right'
-      },
-      footer: {
-        enabled: true,
-        position: 5,
-        customText: 'Vielen Dank für Ihren Einkauf bei Glücksmomente Manufaktur!',
-        showPaymentInfo: true,
-        showReturnPolicy: true
-      }
-    }
-  };
 
   // API-Aufrufe
   const loadTemplates = useCallback(async () => {
@@ -317,12 +209,6 @@ const AdminInvoiceConfiguration = () => {
       current[keys[keys.length - 1]] = value;
       return newTemplate;
     });
-  };
-
-  const insertVariable = (variable, targetField) => {
-    const currentValue = targetField || '';
-    const newValue = currentValue + `{{${variable.name}}}`;
-    return newValue;
   };
 
   useEffect(() => {

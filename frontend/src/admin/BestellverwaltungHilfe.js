@@ -23,8 +23,6 @@ import {
   Payment,
   CheckCircle,
   LocalShipping,
-  Cancel,
-  PayPal,
   HelpOutline
 } from '@mui/icons-material';
 

@@ -29,7 +29,6 @@ import {
   FormGroup,
   useTheme,
   useMediaQuery,
-  Slide,
   InputAdornment
 } from '@mui/material';
 import {
@@ -48,8 +47,8 @@ import {
 import api from '../services/api';
 
 const AdminSettingsPanel = () => {
+  // eslint-disable-next-line no-unused-vars
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [currentTab, setCurrentTab] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -381,7 +380,6 @@ const AdminSettingsPanel = () => {
 // PayPal Configuration Component
 const PayPalConfigTab = ({ config, saving, onSave, onTest, onUpdateEnvVars }) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [editMode, setEditMode] = useState(false);
   const [editConfig, setEditConfig] = useState(config);
