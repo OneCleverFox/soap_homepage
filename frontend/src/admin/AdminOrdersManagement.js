@@ -650,6 +650,45 @@ const AdminOrdersManagement = () => {
                         : item.besteller?.email}
                     </Typography>
                     
+                    {/* Zeige Tracking-Nummer für verschickte Bestellungen */}
+                    {item.status === 'verschickt' && (item.trackingNumber || item.versand?.sendungsnummer) ? (
+                      <Typography 
+                        variant="body2" 
+                        color="primary.main" 
+                        gutterBottom
+                        sx={{ 
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          '&:hover': { color: 'primary.dark' }
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation(); // Verhindert das Öffnen des Detail-Dialogs
+                          const trackingNum = item.trackingNumber || item.versand?.sendungsnummer;
+                          const carrier = item.carrier || item.versand?.anbieter;
+                          const trackingUrl = generateTrackingUrl(carrier, trackingNum);
+                          if (trackingUrl) {
+                            window.open(trackingUrl, '_blank');
+                          }
+                        }}
+                        title="Klicken um Sendung zu verfolgen"
+                      >
+                        📦 {item.trackingNumber || item.versand?.sendungsnummer}
+                        {(item.carrier || item.versand?.anbieter) && (
+                          <Chip 
+                            size="small" 
+                            label={(item.carrier || item.versand?.anbieter).toUpperCase()} 
+                            sx={{ ml: 1, fontSize: '0.6rem', height: '16px' }}
+                            variant="outlined"
+                            color="primary"
+                          />
+                        )}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        📞 {item.besteller?.telefon || 'Telefon nicht verfügbar'}
+                      </Typography>
+                    )}
+                    
                     <Typography variant="body2" color="text.secondary" gutterBottom>
                       📅 {formatDate(item.bestelltAm)}
                     </Typography>
