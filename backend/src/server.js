@@ -222,8 +222,7 @@ app.use('/uploads', express.static('uploads'));
 function validateCriticalEnvVars() {
   const critical = [
     'JWT_SECRET',
-    'MONGODB_URI',
-    'RESEND_API_KEY'
+    'MONGODB_URI'
   ];
   
   const missing = critical.filter(key => !process.env[key]);
@@ -233,6 +232,11 @@ function validateCriticalEnvVars() {
     console.error('❌ Fehlende Environment Variables:', missing);
     console.error('🛑 SERVER WIRD NICHT GESTARTET');
     process.exit(1);
+  }
+  
+  // Warnung bei fehlender E-Mail-Konfiguration
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ RESEND_API_KEY nicht konfiguriert - E-Mail-Service deaktiviert');
   }
   
   // Warnung bei schwachen JWT Secrets
