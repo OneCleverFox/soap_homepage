@@ -208,6 +208,8 @@ const Navbar = () => {
     { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
+    { label: 'Rechnungskonfiguration', path: '/admin/rechnungen', icon: '📄' },
+    { label: 'E-Mail-Verwaltung', path: '/admin/email-tests', icon: '📧' },
     { label: 'System-Einstellungen', path: '/admin/einstellungen', icon: '⚙️' }
   ];
 
