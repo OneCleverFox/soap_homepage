@@ -11,12 +11,10 @@ import {
   Select,
   MenuItem,
   Button,
-  Divider,
   Card,
   CardContent,
   CardHeader,
   Chip,
-  IconButton,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -26,14 +24,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Tab,
   Tabs,
   FormControlLabel,
-  ColorPicker,
   Snackbar
 } from '@mui/material';
 import {
@@ -41,16 +34,12 @@ import {
   Preview as PreviewIcon,
   Save as SaveIcon,
   Add as AddIcon,
-  Delete as DeleteIcon,
-  DragIndicator as DragIcon,
-  Settings as SettingsIcon,
-  Palette as PaletteIcon,
-  ViewColumn as LayoutIcon,
-  Business as CompanyIcon,
-  Receipt as InvoiceIcon
+  DragIndicator as _DragIcon,
+  ViewColumn as _LayoutIcon,
+  Business as _CompanyIcon,
+  Receipt as _InvoiceIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { SketchPicker } from 'react-color';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -77,12 +66,10 @@ const VariableChip = styled(Chip)(({ theme }) => ({
 
 const AdminInvoiceConfiguration = () => {
   const [currentTemplate, setCurrentTemplate] = useState(null);
-  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
-  const [previewDialog, setPreviewDialog] = useState(false);
   const [variablesDialog, setVariablesDialog] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -90,8 +77,8 @@ const AdminInvoiceConfiguration = () => {
   // Verfügbare Variablen
   const [availableVariables, setAvailableVariables] = useState([]);
 
-  // Standard Template-Struktur
-  const defaultTemplate = {
+  // Template-Struktur wird direkt in der Funktion definiert
+  const _createDefaultTemplate = () => ({
     name: 'Neue Rechnungsvorlage',
     isDefault: false,
     companyInfo: {
@@ -185,10 +172,10 @@ const AdminInvoiceConfiguration = () => {
         showReturnPolicy: true
       }
     }
-  };
+  });
 
   // API-Aufrufe
-  const loadTemplates = useCallback(async () => {
+  const _loadTemplates = useCallback(async () => {
     try {
       const response = await fetch('/api/invoice/templates', {
         headers: {
@@ -198,7 +185,7 @@ const AdminInvoiceConfiguration = () => {
       const data = await response.json();
       
       if (data.success) {
-        setTemplates(data.data);
+        // Templates werden hier verarbeitet
         const defaultTemplate = data.data.find(t => t.isDefault);
         if (defaultTemplate) {
           setCurrentTemplate(defaultTemplate);
@@ -258,7 +245,7 @@ const AdminInvoiceConfiguration = () => {
         if (!currentTemplate._id) {
           setCurrentTemplate(data.data);
         }
-        loadTemplates();
+        _loadTemplates();
       } else {
         showSnackbar('Fehler beim Speichern', 'error');
       }
@@ -319,16 +306,16 @@ const AdminInvoiceConfiguration = () => {
     });
   };
 
-  const insertVariable = (variable, targetField) => {
+  const _insertVariable = (variable, targetField) => {
     const currentValue = targetField || '';
     const newValue = currentValue + `{{${variable.name}}}`;
     return newValue;
   };
 
   useEffect(() => {
-    loadTemplates();
+    _loadTemplates();
     loadVariables();
-  }, [loadTemplates, loadVariables]);
+  }, [_loadTemplates, loadVariables]);
 
   if (loading) {
     return (
@@ -341,7 +328,7 @@ const AdminInvoiceConfiguration = () => {
   const tabPanels = [
     {
       label: 'Firmeninformationen',
-      icon: <CompanyIcon />,
+      icon: <_CompanyIcon />,
       content: (
         <Grid container spacing={3}>
           <Grid item xs={12} md={6}>
@@ -413,7 +400,7 @@ const AdminInvoiceConfiguration = () => {
     },
     {
       label: 'Layout & Design',
-      icon: <LayoutIcon />,
+      icon: <_LayoutIcon />,
       content: (
         <Grid container spacing={3}>
           {/* Header-Einstellungen */}
@@ -585,14 +572,14 @@ const AdminInvoiceConfiguration = () => {
     },
     {
       label: 'Rechnungssektionen',
-      icon: <InvoiceIcon />,
+      icon: <_InvoiceIcon />,
       content: (
         <Box>
           {Object.entries(currentTemplate?.sections || {}).map(([sectionKey, section]) => (
             <Accordion key={sectionKey} defaultExpanded>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <DragIcon />
+                  <_DragIcon />
                   <Switch
                     checked={section.enabled}
                     onChange={(e) => updateTemplate(`sections.${sectionKey}.enabled`, e.target.checked)}

@@ -20,7 +20,8 @@ import {
   Dashboard as DashboardIcon,
   ShoppingBag as CartIcon,
   Receipt as CheckoutIcon,
-  Description as InvoiceIcon
+  Description as InvoiceIcon,
+  Email as EmailIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -85,6 +86,13 @@ const AdminDashboard = () => {
       icon: <InvoiceIcon sx={{ fontSize: 40, color: 'info.main' }} />,
       path: '/admin/rechnungen',
       color: 'info'
+    },
+    {
+      title: 'E-Mail-Tests',
+      description: 'Testen Sie alle E-Mail-Funktionen der Anwendung.',
+      icon: <EmailIcon sx={{ fontSize: 40, color: 'success.main' }} />,
+      path: '/admin/email-tests',
+      color: 'success'
     },
     {
       title: 'Mein Warenkorb',
