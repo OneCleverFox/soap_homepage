@@ -225,6 +225,16 @@ router.post('/create', authenticateToken, async (req, res) => {
     
     console.log(`✅ Anfrage ${inquiryId} erstellt für Kunde ${kunde.email}`);
     
+    // Admin-E-Mail-Benachrichtigung senden
+    try {
+      const emailService = require('../services/emailService');
+      await emailService.sendAdminInquiryNotification(inquiry);
+      console.log('✅ Admin-Benachrichtigung für Anfrage gesendet');
+    } catch (emailError) {
+      console.error('❌ Fehler beim Senden der Admin-Benachrichtigung:', emailError);
+      // Anfrage trotzdem speichern, auch wenn E-Mail fehlschlägt
+    }
+
     res.status(201).json({
       success: true,
       message: 'Anfrage erfolgreich erstellt',

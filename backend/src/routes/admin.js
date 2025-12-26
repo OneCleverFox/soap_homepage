@@ -711,4 +711,115 @@ router.post('/invoice/send/:orderId', invoiceController.sendInvoiceForOrder);
 // @access  Private (Admin)
 router.get('/invoice/download/:orderId', invoiceController.downloadInvoiceForOrder);
 
+// E-Mail-Konfiguration-Routen
+// @route   GET /api/admin/email-config
+// @desc    Get email configuration
+// @access  Private (Admin)
+router.get('/email-config', async (req, res) => {
+  try {
+    // TODO: E-Mail-Konfiguration aus Datenbank laden
+    const defaultConfig = {
+      verification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'user_registration',
+        subject: '✅ E-Mail-Adresse bestätigen - Gluecksmomente Seifenmanufaktur',
+        template: 'default'
+      },
+      welcome: {
+        enabled: true,
+        automatic: true,
+        trigger: 'email_verified',
+        subject: '🌸 Willkommen bei Gluecksmomente Manufaktur!',
+        template: 'default'
+      },
+      passwordReset: {
+        enabled: true,
+        automatic: true,
+        trigger: 'password_reset_request',
+        subject: '🔒 Passwort zurücksetzen - Gluecksmomente Manufaktur',
+        template: 'default'
+      },
+      orderConfirmation: {
+        enabled: true,
+        automatic: true,
+        trigger: 'order_placed',
+        subject: '📦 Bestellbestätigung - Gluecksmomente Manufaktur',
+        template: 'default'
+      },
+      adminNotification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'new_order',
+        subject: '🚨 Neue Bestellung eingegangen - {{orderNumber}}',
+        template: 'default'
+      },
+      adminInquiryNotification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'new_inquiry',
+        subject: '📝 Neue Kundenanfrage von {{customerName}}',
+        template: 'default'
+      }
+    };
+
+    const globalSettings = {
+      fromName: 'Gluecksmomente Manufaktur',
+      fromEmail: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      adminEmail: process.env.ADMIN_EMAIL || 'ralle.jacob84@googlemail.com',
+      emailEnabled: true,
+      defaultLanguage: 'de',
+      footer: 'Vielen Dank für Ihr Vertrauen in die Gluecksmomente Manufaktur',
+      notifications: {
+        newOrders: true,
+        newInquiries: true,
+        orderUpdates: false,
+        highValueOrders: true,
+        highValueThreshold: 100
+      }
+    };
+
+    console.log('📧 [Admin] E-Mail-Konfiguration abgerufen');
+    res.json({
+      success: true,
+      emailConfigs: defaultConfig,
+      globalSettings
+    });
+  } catch (error) {
+    console.error('❌ [Admin] Fehler beim Abrufen der E-Mail-Konfiguration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/admin/email-config
+// @desc    Save email configuration
+// @access  Private (Admin)
+router.post('/email-config', async (req, res) => {
+  try {
+    const { emailConfigs, globalSettings } = req.body;
+
+    // TODO: E-Mail-Konfiguration in Datenbank speichern
+    console.log('📧 [Admin] E-Mail-Konfiguration gespeichert:', {
+      emailConfigs: Object.keys(emailConfigs),
+      globalSettings: globalSettings?.fromName
+    });
+
+    res.json({
+      success: true,
+      message: 'E-Mail-Konfiguration erfolgreich gespeichert'
+    });
+  } catch (error) {
+    console.error('❌ [Admin] Fehler beim Speichern der E-Mail-Konfiguration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

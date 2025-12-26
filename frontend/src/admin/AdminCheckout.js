@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
-  Paper,
   Grid,
   Box,
   Button,
@@ -16,10 +15,6 @@ import {
   ListItemText,
   Alert,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   FormControlLabel,
   Checkbox,
   Step,
@@ -28,9 +23,6 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  ShoppingCart as CartIcon,
-  Person as PersonIcon,
-  Receipt as ReceiptIcon,
   Check as CheckIcon
 } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
@@ -42,7 +34,6 @@ const AdminCheckout = () => {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [customerDialog, setCustomerDialog] = useState(false);
   
   // States für neue Kundendaten
   const [newCustomer, setNewCustomer] = useState({

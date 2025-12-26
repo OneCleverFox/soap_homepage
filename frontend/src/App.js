@@ -47,6 +47,8 @@ import AdminLager from './admin/AdminLagerNew';
 import AdminCart from './admin/AdminCart';
 import AdminSettingsPanel from './admin/AdminSettingsPanel';
 import AdminInvoiceConfiguration from './admin/AdminInvoiceConfiguration';
+import AdminEmailTesting from './admin/AdminEmailTesting';
+import AdminEmailConfiguration from './admin/AdminEmailConfiguration';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -275,6 +277,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <AdminInvoiceConfiguration />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/email-tests"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminEmailConfiguration />
                 </ProtectedRoute>
               </>
             }
