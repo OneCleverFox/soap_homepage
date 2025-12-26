@@ -161,8 +161,7 @@ class EmailService {
     try {
       const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/verify-email?token=${verificationToken}`;
       
-      const htmlContent = `
-        <div style="font-family: 'Georgia', 'Times New Roman', serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 15px;">
+      const htmlContent = `<div style="font-family: 'Georgia', 'Times New Roman', serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 15px;">
           <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center; border-radius: 15px 15px 0 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
             <h1 style="color: white; margin: 0; font-size: 32px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🌸 Glücksmomente Manufaktur</h1>
             <p style="color: white; margin: 15px 0 0 0; font-size: 18px; opacity: 0.95; font-style: italic;">Wo Träume zu duftenden Realitäten werden</p>
@@ -176,7 +175,7 @@ class EmailService {
                 <strong>Herzlich willkommen in unserer besonderen Welt der handgemachten Seifen!</strong> ✨<br><br>
                 
                 Es freut uns riesig, dass Sie sich für die Glücksmomente Manufaktur entschieden haben. 
-                Seit über 10 Jahren kreieren wir mit Liebe und Sorgfalt einzigartige Seifen aus natürlichen Zutaten, 
+                Wir kreieren mit Liebe und Sorgfalt einzigartige Seifen aus natürlichen Zutaten, 
                 die nicht nur Ihre Haut verwöhnen, sondern auch kleine Glücksmomente in Ihren Alltag bringen.
               </p>
             </div>
@@ -234,8 +233,7 @@ class EmailService {
               </p>
             </div>
           </div>
-        </div>
-      `;
+        </div>`;
 
       const result = await this.resend.emails.send({
         from: this.fromEmail,

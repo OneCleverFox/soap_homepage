@@ -48,6 +48,9 @@ import {
   Visibility as PreviewIcon,
   Save as SaveIcon,
   Add as AddIcon,
+  Code as CodeIcon,
+  FileCopy as FileCopyIcon,
+  Refresh as RefreshIcon,
   Schedule as ScheduleIcon,
   Notifications as NotificationIcon
 } from '@mui/icons-material';
@@ -60,6 +63,11 @@ const AdminEmailConfiguration = () => {
   const [results, setResults] = useState([]);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [editDialog, setEditDialog] = useState({ open: false, emailType: null, template: '' });
+  const [templates, setTemplates] = useState({});
+  const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [templateEditor, setTemplateEditor] = useState(false);
+  const [templateContent, setTemplateContent] = useState('');
+  const [templatePreview, setTemplatePreview] = useState('');
 
   // E-Mail-Konfigurationen laden
   useEffect(() => {
@@ -73,6 +81,9 @@ const AdminEmailConfiguration = () => {
         setEmailConfigs(response.data.emailConfigs);
         setGlobalEmailSettings(response.data.globalSettings);
       }
+      
+      // Templates laden
+      await loadTemplates();
     } catch (error) {
       console.error('Fehler beim Laden der E-Mail-Konfiguration:', error);
       setSnackbar({
@@ -80,6 +91,18 @@ const AdminEmailConfiguration = () => {
         message: 'Fehler beim Laden der E-Mail-Konfiguration',
         severity: 'error'
       });
+    }
+  };
+
+  // Templates von Backend laden
+  const loadTemplates = async () => {
+    try {
+      const response = await api.get('/admin/email-templates');
+      if (response.data.success) {
+        setTemplates(response.data.templates);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Templates:', error);
     }
   };
 
@@ -292,6 +315,87 @@ const AdminEmailConfiguration = () => {
     }
   };
 
+  // Template-Management-Funktionen
+  const openTemplateEditor = async (templateType) => {
+    try {
+      const response = await api.get(`/admin/email-templates/${templateType}`);
+      if (response.data.success) {
+        setSelectedTemplate(templateType);
+        setTemplateContent(response.data.template);
+        setTemplateEditor(true);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden des Templates:', error);
+      setSnackbar({
+        open: true,
+        message: 'Fehler beim Laden des Templates',
+        severity: 'error'
+      });
+    }
+  };
+
+  const saveTemplate = async () => {
+    try {
+      const response = await api.post(`/admin/email-templates/${selectedTemplate}`, {
+        template: templateContent
+      });
+      
+      if (response.data.success) {
+        setSnackbar({
+          open: true,
+          message: 'Template erfolgreich gespeichert!',
+          severity: 'success'
+        });
+        setTemplateEditor(false);
+        await loadTemplates();
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern des Templates:', error);
+      setSnackbar({
+        open: true,
+        message: 'Fehler beim Speichern des Templates',
+        severity: 'error'
+      });
+    }
+  };
+
+  const previewTemplate = () => {
+    setTemplatePreview(templateContent);
+  };
+
+  const sendTestEmailWithCurrentTemplate = async (emailType) => {
+    try {
+      const response = await api.post(`/admin/test-email-with-template/${emailType}`, {
+        template: templateContent || templates[emailType],
+        email: globalEmailSettings.adminEmail
+      });
+      
+      const newResult = {
+        id: Date.now(),
+        type: `${emailType} (Custom Template)`,
+        email: globalEmailSettings.adminEmail,
+        success: response.data.success,
+        message: response.data.message,
+        timestamp: new Date(),
+        data: response.data.data
+      };
+      
+      setResults(prev => [newResult, ...prev.slice(0, 9)]);
+      setSnackbar({
+        open: true,
+        message: newResult.success ? 'Test-E-Mail mit Template erfolgreich gesendet!' : 'Fehler beim E-Mail-Versand',
+        severity: newResult.success ? 'success' : 'error'
+      });
+    } catch (error) {
+      console.error('Fehler beim Test-E-Mail-Versand:', error);
+      setSnackbar({
+        open: true,
+        message: 'Fehler beim Test-E-Mail-Versand',
+        severity: 'error'
+      });
+    }
+  };
+
   // Konfiguration speichern
   const saveEmailConfig = async () => {
     setSaveLoading(true);
@@ -319,30 +423,11 @@ const AdminEmailConfiguration = () => {
     }
   };
 
-  // Template bearbeiten
-  const openTemplateEditor = (emailType) => {
-    setEditDialog({
-      open: true,
-      emailType,
-      template: `Hallo {{userName}},\n\nDies ist die ${emailTypes.find(e => e.id === emailType)?.label}...\n\nViele Grüße,\nIhr Gluecksmomente Team`
-    });
-  };
-
-  const saveTemplate = () => {
-    // Template speichern logic hier
-    setEditDialog({ open: false, emailType: null, template: '' });
-    setSnackbar({
-      open: true,
-      message: 'Template gespeichert',
-      severity: 'success'
-    });
-  };
-
   const getEmailTypeInfo = (typeId) => {
     return emailTypes.find(type => type.id === typeId);
   };
 
-  // Tab-Content Rendering
+  // Tab-Content Rendering - Updated to fix emailTypes reference
   const renderConfigurationTab = () => (
     <Grid container spacing={3}>
       {/* Globale E-Mail-Einstellungen */}
@@ -730,6 +815,114 @@ const AdminEmailConfiguration = () => {
     </Grid>
   );
 
+  // Template-Management Tab
+  const renderTemplateManagementTab = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12}>
+        <Paper elevation={2} sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            📝 E-Mail-Template-Verwaltung
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Bearbeiten Sie die HTML-Templates für alle E-Mail-Typen. Änderungen werden sofort für Tests und Live-E-Mails verwendet.
+          </Typography>
+
+          <Grid container spacing={3}>
+            {emailTypes.map((emailType) => (
+              <Grid item xs={12} md={6} lg={4} key={emailType.id}>
+                <Card variant="outlined">
+                  <CardContent>
+                    <Box display="flex" alignItems="center" gap={1} mb={2}>
+                      <Typography variant="h6">
+                        {emailType.icon} {emailType.label}
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      {emailType.description}
+                    </Typography>
+                    
+                    <Box display="flex" gap={1} flexWrap="wrap">
+                      <Button
+                        startIcon={<EditIcon />}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => openTemplateEditor(emailType.id)}
+                      >
+                        Bearbeiten
+                      </Button>
+                      <Button
+                        startIcon={<PreviewIcon />}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => openTemplateEditor(emailType.id)}
+                      >
+                        Vorschau
+                      </Button>
+                      <Button
+                        startIcon={<SendIcon />}
+                        variant="contained"
+                        size="small"
+                        color="primary"
+                        onClick={() => sendTestEmailWithCurrentTemplate(emailType.id)}
+                      >
+                        Testen
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+      </Grid>
+
+      {/* Template-Übersicht */}
+      <Grid item xs={12}>
+        <Paper elevation={2} sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            🔍 Template-Übersicht
+          </Typography>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Diese Templates werden für alle E-Mails verwendet. Änderungen wirken sich sofort auf Test- und Live-E-Mails aus.
+          </Alert>
+          
+          <Grid container spacing={2}>
+            {Object.keys(templates).map((templateKey) => (
+              <Grid item xs={12} md={6} key={templateKey}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    {emailTypes.find(t => t.id === templateKey)?.label || templateKey}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Letzte Änderung: {new Date().toLocaleDateString()}
+                  </Typography>
+                  <Box display="flex" gap={1}>
+                    <Button
+                      startIcon={<CodeIcon />}
+                      variant="outlined"
+                      size="small"
+                      onClick={() => openTemplateEditor(templateKey)}
+                    >
+                      Code ansehen
+                    </Button>
+                    <Button
+                      startIcon={<FileCopyIcon />}
+                      variant="outlined"
+                      size="small"
+                      onClick={() => navigator.clipboard.writeText(templates[templateKey])}
+                    >
+                      Kopieren
+                    </Button>
+                  </Box>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+      </Grid>
+    </Grid>
+  );
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ mb: 4 }}>
@@ -757,13 +950,133 @@ const AdminEmailConfiguration = () => {
             icon={<SendIcon />}
             iconPosition="start"
           />
+          <Tab 
+            label="Templates" 
+            icon={<CodeIcon />}
+            iconPosition="start"
+          />
         </Tabs>
       </Box>
 
       {currentTab === 0 && renderConfigurationTab()}
       {currentTab === 1 && renderTestingTab()}
+      {currentTab === 2 && renderTemplateManagementTab()}
 
       {/* Template-Editor Dialog */}
+      <Dialog
+        open={templateEditor}
+        onClose={() => setTemplateEditor(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <CodeIcon />
+            Template bearbeiten: {emailTypes.find(t => t.id === selectedTemplate)?.label}
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ mb: 2 }}>
+            <Alert severity="info">
+              Verfügbare Variablen: $&#123;userName&#125;, $&#123;userEmail&#125;, $&#123;verificationUrl&#125;, $&#123;resetUrl&#125;, $&#123;orderData&#125;, etc.
+            </Alert>
+          </Box>
+          
+          <Box display="flex" gap={2} sx={{ mb: 2 }}>
+            <Button
+              startIcon={<PreviewIcon />}
+              variant="outlined"
+              onClick={previewTemplate}
+            >
+              Vorschau
+            </Button>
+            <Button
+              startIcon={<SendIcon />}
+              variant="outlined"
+              color="primary"
+              onClick={() => sendTestEmailWithCurrentTemplate(selectedTemplate)}
+            >
+              Test senden
+            </Button>
+            <Button
+              startIcon={<RefreshIcon />}
+              variant="outlined"
+              onClick={() => loadTemplates()}
+            >
+              Neu laden
+            </Button>
+          </Box>
+
+          <TextField
+            fullWidth
+            multiline
+            label="HTML-Template"
+            value={templateContent}
+            onChange={(e) => setTemplateContent(e.target.value)}
+            sx={{ 
+              flex: 1,
+              '& .MuiInputBase-root': {
+                height: '100%',
+                alignItems: 'stretch'
+              },
+              '& textarea': {
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                fontSize: '14px',
+                lineHeight: '1.5'
+              }
+            }}
+            InputProps={{
+              style: { height: '100%' }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTemplateEditor(false)}>
+            Abbrechen
+          </Button>
+          <Button onClick={saveTemplate} variant="contained" startIcon={<SaveIcon />}>
+            Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Template-Vorschau Dialog */}
+      <Dialog
+        open={Boolean(templatePreview)}
+        onClose={() => setTemplatePreview('')}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <PreviewIcon />
+            Template-Vorschau
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box
+            sx={{
+              border: '1px solid #ddd',
+              borderRadius: 1,
+              p: 2,
+              backgroundColor: '#f9f9f9',
+              maxHeight: '70vh',
+              overflow: 'auto'
+            }}
+            dangerouslySetInnerHTML={{ __html: templatePreview }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTemplatePreview('')}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Legacy Template-Editor Dialog */}
       <Dialog
         open={editDialog.open}
         onClose={() => setEditDialog({ open: false, emailType: null, template: '' })}
