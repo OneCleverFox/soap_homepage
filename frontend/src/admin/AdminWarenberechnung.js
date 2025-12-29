@@ -90,8 +90,10 @@ const AdminWarenberechnung = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Lade Portfolio-Produkte...');
-      const response = await api.get('/portfolio');
+      console.log('Lade Portfolio-Produkte (inklusive inaktive)...');
+      
+      // Lade ALLE Produkte (aktiv + inaktiv) für Admin-Warenberechnung
+      const response = await api.get('/portfolio?includeInactive=true');
       console.log('Portfolio-Produkte geladen:', response.data);
       
       // API gibt { success: true, count: X, data: [...] } zurück
@@ -211,8 +213,19 @@ const AdminWarenberechnung = () => {
                 label="Produkt auswählen"
               >
                 {portfolioProducts.map((product) => (
-                  <MenuItem key={product._id} value={product._id}>
-                    {product.name} {!product.seife && '⚠️ Keine Rohseife'} {!product.verpackung && '⚠️ Keine Verpackung'}
+                  <MenuItem 
+                    key={product._id} 
+                    value={product._id}
+                    sx={{
+                      opacity: product.aktiv ? 1 : 0.6,
+                      fontStyle: product.aktiv ? 'normal' : 'italic'
+                    }}
+                  >
+                    {!product.aktiv && '🚫 '}
+                    {product.name} 
+                    {!product.aktiv && ' (INAKTIV)'}
+                    {!product.seife && ' ⚠️ Keine Rohseife'} 
+                    {!product.verpackung && ' ⚠️ Keine Verpackung'}
                   </MenuItem>
                 ))}
               </Select>
@@ -271,7 +284,17 @@ const AdminWarenberechnung = () => {
                 alignItems: isMobile ? 'stretch' : 'center',
                 gap: isMobile ? 1.5 : 2
               }}>
-                <Typography variant={isMobile ? "h6" : "h5"}>{selectedProduct.name}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant={isMobile ? "h6" : "h5"}>{selectedProduct.name}</Typography>
+                  {!selectedProduct.aktiv && (
+                    <Chip 
+                      label="🚫 INAKTIV" 
+                      color="warning" 
+                      size="small"
+                      sx={{ fontWeight: 'bold' }}
+                    />
+                  )}
+                </Box>
                 <Stack 
                   direction={isMobile ? "column" : "row"} 
                   spacing={isMobile ? 1 : 2} 
@@ -711,8 +734,18 @@ const AdminWarenberechnung = () => {
         maxWidth="md" 
         fullWidth
         fullScreen={isMobile}
+        disableRestoreFocus
+        aria-labelledby="edit-dialog-title"
+        PaperProps={{
+          sx: {
+            height: isMobile ? '100vh' : 'auto',
+            maxHeight: isMobile ? 'none' : '90vh'
+          }
+        }}
       >
-        <DialogTitle>Kostenberechnung bearbeiten - {selectedProduct?.name}</DialogTitle>
+        <DialogTitle id="edit-dialog-title">
+          Kostenberechnung bearbeiten - {selectedProduct?.name}
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={isMobile ? 2 : 3} sx={{ mt: 1 }}>
             <Grid item xs={12}>

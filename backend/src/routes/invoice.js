@@ -4,21 +4,119 @@ const invoiceController = require('../controllers/invoiceController');
 const auth = require('../middleware/auth');
 const emailService = require('../services/emailService');
 
-// Alle Routen benötigen Admin-Authentifizierung
-router.use(auth.authenticateToken);
-router.use(auth.requireAdmin);
+// Alle Routen benötigen Admin-Authentifizierung (außer öffentliche Designer-Routen)
+router.use((req, res, next) => {
+  // Öffentliche Routen für Designer-Tool
+  const publicRoutes = [
+    { path: '/preview', method: 'POST' },
+    { path: '/sample-data', method: 'GET' },
+    { path: '/variables', method: 'GET' }
+  ];
+  
+  const isPublicRoute = publicRoutes.some(route => 
+    req.path === route.path && req.method === route.method
+  );
+  
+  if (isPublicRoute) {
+    return next();
+  }
+  
+  // Alle anderen Routen benötigen Authentifizierung
+  auth.authenticateToken(req, res, () => {
+    auth.requireAdmin(req, res, next);
+  });
+});
 
 // Template-Verwaltung
-router.get('/templates', invoiceController.getAllTemplates);
-router.get('/templates/default', invoiceController.getDefaultTemplate);
-router.post('/templates', invoiceController.createTemplate);
-router.put('/templates/:id', invoiceController.updateTemplate);
-router.put('/templates/:id/set-default', invoiceController.setDefaultTemplate);
-router.delete('/templates/:id', invoiceController.deleteTemplate);
+router.get('/templates', (req, res) => invoiceController.getAllTemplates(req, res));
+router.get('/templates/default', (req, res) => invoiceController.getDefaultTemplate(req, res));
+router.post('/templates', (req, res) => invoiceController.createTemplate(req, res));
+router.put('/templates/:id', (req, res) => invoiceController.updateTemplate(req, res));
+router.put('/templates/:id/set-default', (req, res) => invoiceController.setDefaultTemplate(req, res));
+router.delete('/templates/:id', (req, res) => invoiceController.deleteTemplate(req, res));
 
-// Vorschau und Variablen
-router.post('/preview', invoiceController.generatePreview);
-router.get('/variables', invoiceController.getAvailableVariables);
+// Vorschau und Variablen (öffentlich für Designer-Tool)
+router.post('/preview', (req, res) => invoiceController.generatePreview(req, res));
+router.get('/variables', (req, res) => invoiceController.getAvailableVariables(req, res));
+
+// 🎨 Neue Designer-spezifische Routen
+router.get('/sample-data', (req, res) => {
+  const sampleData = {
+    company: {
+      name: 'Glücksmomente Manufaktur',
+      address: {
+        street: 'Musterstraße 123',
+        postalCode: '12345',
+        city: 'Musterstadt',
+        country: 'Deutschland'
+      },
+      contact: {
+        phone: '+49 123 456789',
+        email: 'info@gluecksmomente-manufaktur.de',
+        website: 'www.gluecksmomente-manufaktur.de'
+      },
+      taxInfo: {
+        taxNumber: 'Steuernummer: 123/456/78910',
+        vatId: 'USt-IdNr.: DE123456789',
+        ceo: 'Max Mustermann',
+        registrationCourt: 'Amtsgericht Musterstadt',
+        registrationNumber: 'HRB 123456'
+      },
+      bankDetails: {
+        bankName: 'Musterbank',
+        iban: 'DE89 3704 0044 0532 0130 00',
+        bic: 'COBADEFF'
+      }
+    },
+    customer: {
+      name: 'Max Mustermann',
+      email: 'max@example.com',
+      address: {
+        street: 'Beispielstraße 456',
+        postalCode: '98765',
+        city: 'Beispielstadt',
+        country: 'Deutschland'
+      },
+      customerNumber: 'KD-2025-001'
+    },
+    order: {
+      number: 'ORD-2025-001',
+      date: new Date().toLocaleDateString('de-DE'),
+      products: [
+        {
+          name: 'Lavendel Handseife',
+          description: 'Natürliche Handseife mit Lavendelduft, 100g',
+          quantity: 2,
+          unitPrice: 8.99,
+          vatRate: 19,
+          total: 17.98
+        }
+      ],
+      netTotal: 26.03,
+      vatTotal: 4.94,
+      shipping: { cost: 4.99 },
+      grandTotal: 35.96
+    },
+    invoice: {
+      number: 'RE-2025-001',
+      date: new Date().toLocaleDateString('de-DE'),
+      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('de-DE'),
+      paymentTerms: 'Zahlbar innerhalb 14 Tagen ohne Abzug.',
+      deliveryDate: new Date().toLocaleDateString('de-DE'),
+      performanceDate: new Date().toLocaleDateString('de-DE'),
+      legalNotice: 'Gerichtsstand ist Musterstadt. Es gilt deutsches Recht.'
+    },
+    legal: {
+      isSmallBusiness: true,
+      vatExemptionNote: 'Gemäß §19 UStG wird keine Umsatzsteuer ausgewiesen.'
+    }
+  };
+
+  res.json({
+    success: true,
+    data: sampleData
+  });
+});
 
 // E-Mail-Test-Funktionen
 router.post('/test-email/verification', async (req, res) => {
@@ -283,5 +381,12 @@ router.get('/email-logs', async (req, res) => {
     });
   }
 });
+
+// ===== NEUE ROUTEN FÜR ECHTE BESTELLRECHNUNGEN =====
+// Rechnung aus echter Bestellung generieren
+router.get('/order/:orderId/generate', (req, res) => invoiceController.generateInvoiceFromOrder(req, res));
+
+// Gespeicherte Rechnung einer Bestellung abrufen
+router.get('/order/:orderId/stored', (req, res) => invoiceController.getStoredInvoice(req, res));
 
 module.exports = router;

@@ -1,9 +1,17 @@
 const jwt = require('jsonwebtoken');
+const logger = require('../utils/logger');
+const { AuthenticationError, AuthorizationError } = require('./errorHandler');
 
 // Generische Authentifizierung für alle eingeloggten Benutzer
 const authenticateToken = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    // Token aus Header oder Query-Parameter extrahieren
+    let token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    // Fallback: Token aus Query-Parameter für PDF-Vorschau
+    if (!token && req.query.token) {
+      token = req.query.token;
+    }
     
     if (!token) {
       return res.status(401).json({
@@ -23,16 +31,17 @@ const authenticateToken = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     // Logging nur in Development
     if (process.env.NODE_ENV !== 'production') {
-      console.log('🔐 Decoded JWT Token:', { userId: decoded.id, role: decoded.rolle || decoded.role });
+      logger.info('🔐 Decoded JWT Token:', { userId: decoded.id, role: decoded.rolle || decoded.role });
     }
     req.user = decoded;
     next();
 
   } catch (error) {
-    console.error('Auth Error:', error.message);
-    res.status(401).json({
+    logger.warning('Auth Error:', { message: error.message, ip: req.ip });
+    return res.status(401).json({
       success: false,
-      message: 'Token ungültig'
+      message: 'Token ungültig',
+      error: 'AUTH_ERROR'
     });
   }
 };
@@ -50,7 +59,7 @@ const auth = async (req, res, next) => {
     }
 
     if (!process.env.JWT_SECRET) {
-      console.error('🚨 CRITICAL: JWT_SECRET not set!');
+      logger.critical('🚨 CRITICAL: JWT_SECRET not set in admin auth!');
       return res.status(500).json({
         success: false,
         message: 'Server-Konfigurationsfehler'

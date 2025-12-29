@@ -6,10 +6,16 @@ import {
   Container,
   Grid,
   IconButton,
-  Divider
+  Divider,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
+import { useCompany } from '../../contexts/CompanyContext';
 
 const Footer = () => {
+  const { name, email, phone } = useCompany();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const footerLinks = {
     shop: [
@@ -50,7 +56,7 @@ const Footer = () => {
           {/* Company Info */}
           <Grid item xs={12} md={4}>
             <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold' }}>
-              Glücksmomente Manufaktur
+              {name || 'Glücksmomente Manufaktur'}
             </Typography>
             <Typography variant="body2" paragraph sx={{ opacity: 0.9 }}>
               Handgefertigte Unikate für besondere Momente. 
@@ -63,13 +69,13 @@ const Footer = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <span style={{ marginRight: 8, fontSize: 16 }}>📧</span>
                 <Typography variant="body2">
-                  info@gluecksmomente-manufaktur.de
+                  {email || 'info@gluecksmomente-manufaktur.de'}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <span style={{ marginRight: 8, fontSize: 16 }}>📞</span>
                 <Typography variant="body2">
-                  +49 (0) 123 456789
+                  {phone || '+49 (0) 123 456789'}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -208,7 +214,7 @@ const Footer = () => {
           }}
         >
           <Typography variant="body2" sx={{ opacity: 0.8 }}>
-            © 2025 Glücksmomente Manufaktur. Alle Rechte vorbehalten.
+            © 2025 {name || 'Glücksmomente Manufaktur'}. Alle Rechte vorbehalten.
           </Typography>
           
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>

@@ -1,13 +1,8 @@
-import React from 'react';
-import { useMediaQuery, useTheme } from '@mui/material';
 import CheckoutPage from '../../pages/CheckoutPage';
 import MobileCheckoutPage from '../../pages/MobileCheckoutPage';
+import createResponsivePage from '../../utils/createResponsivePage';
 
-const ResponsiveCheckoutPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  return isMobile ? <MobileCheckoutPage /> : <CheckoutPage />;
-};
+// Verwendung der Factory-Funktion für Code-Reduktion
+const ResponsiveCheckoutPage = createResponsivePage(CheckoutPage, MobileCheckoutPage);
 
 export default ResponsiveCheckoutPage;

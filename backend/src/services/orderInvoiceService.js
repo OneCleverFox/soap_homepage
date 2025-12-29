@@ -30,11 +30,14 @@ class OrderInvoiceService {
         throw new Error('Bestellung nicht gefunden');
       }
 
-      // Standard-Template laden
+      // AKTUELLES Standard-Template aus Datenbank laden
       const template = await InvoiceTemplate.findOne({ isDefault: true });
       if (!template) {
-        throw new Error('Kein Standard-Template gefunden');
+        throw new Error('Kein Standard-Template in der Datenbank gefunden');
       }
+      
+      console.log('🎨 OrderInvoice Template:', template.name);
+      console.log('💰 OrderInvoice USt:', template.companyInfo?.isSmallBusiness ? 'Kleinunternehmer' : 'USt-pflichtig');
 
       // Rechnungsnummer generieren
       const invoiceNumber = await this.generateInvoiceNumber();
@@ -44,12 +47,53 @@ class OrderInvoiceService {
       order.invoiceDate = new Date();
       await order.save();
 
-      // Daten für PDF-Generierung vorbereiten
-      const invoiceData = this.prepareInvoiceData(order, template);
+      // Daten für PDFService vorbereiten
+      const bestellungData = {
+        bestellnummer: invoiceNumber,
+        bestelldatum: order.createdAt.toISOString(),
+        faelligkeitsdatum: null,
+        kundennummer: order._id.toString().slice(-6),
+        besteller: {
+          vorname: customer.firstName || '',
+          nachname: customer.lastName || '',
+          firma: customer.company || '',
+          email: customer.email || '',
+          adresse: {
+            strasse: customer.address?.street || '',
+            plz: customer.address?.postalCode || '',
+            stadt: customer.address?.city || ''
+          }
+        },
+        rechnungsadresse: {
+          vorname: customer.firstName || '',
+          nachname: customer.lastName || '',
+          firma: customer.company || '',
+          strasse: (customer.address?.street || '').split(' ')[0] || '',
+          hausnummer: (customer.address?.street || '').split(' ').slice(1).join(' ') || '',
+          plz: customer.address?.postalCode || '',
+          stadt: customer.address?.city || '',
+          land: 'Deutschland'
+        },
+        artikel: order.items.map(item => ({
+          name: item.product?.name || item.name || 'Produktname nicht verfügbar',
+          beschreibung: item.product?.description || item.description || 'Keine Beschreibung verfügbar',
+          menge: item.quantity || 1,
+          preis: item.price || 0,
+          einzelpreis: item.price || 0,
+          gesamtpreis: (item.quantity || 1) * (item.price || 0)
+        })),
+        gesamtsumme: order.totalPrice,
+        nettosumme: order.netPrice || order.totalPrice,
+        mwst: order.vatAmount || 0,
+        zahlungsmethode: order.paymentMethod || 'Überweisung'
+      };
 
-      // PDF generieren
-      const html = invoiceController.generateInvoiceHTML(template, invoiceData);
-      const pdfBuffer = await invoiceController.generatePDFFromHTML(html);
+      console.log('🧾 Generiere PDF für Bestellung:', invoiceNumber);
+      console.log('📦 Artikel:', bestellungData.artikel.length);
+
+      // PDF mit Template generieren
+      const PDFService = require('./PDFService');
+      const pdfBuffer = await PDFService.generateInvoicePDF(bestellungData, template);
 
       return {
         invoiceNumber,

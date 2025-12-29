@@ -21,7 +21,9 @@ import {
   ShoppingBag as CartIcon,
   Receipt as CheckoutIcon,
   Description as InvoiceIcon,
-  Email as EmailIcon
+  Email as EmailIcon,
+  Receipt,
+  Description
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,11 +83,25 @@ const AdminDashboard = () => {
       color: 'error'
     },
     {
-      title: 'Rechnungskonfiguration',
-      description: 'Anpassung der Rechnungsvorlagen und PDF-Design.',
+      title: 'Rechnungs-Designer',
+      description: 'Visueller Designer für Rechnungsvorlagen mit allen gesetzlichen Pflichtangaben.',
       icon: <InvoiceIcon sx={{ fontSize: 40, color: 'info.main' }} />,
-      path: '/admin/rechnungen',
+      path: '/admin/rechnungs-designer',
       color: 'info'
+    },
+    {
+      title: 'Rechnung erstellen',
+      description: 'Neue Rechnung mit Kundenverwaltung und Produktauswahl erstellen.',
+      icon: <Receipt sx={{ fontSize: 40, color: 'primary.main' }} />,
+      path: '/admin/create-invoice',
+      color: 'primary'
+    },
+    {
+      title: 'Rechnungen verwalten',
+      description: 'Alle Rechnungen anzeigen, Status verwalten und PDFs generieren.',
+      icon: <Description sx={{ fontSize: 40, color: 'secondary.main' }} />,
+      path: '/admin/invoice-list',
+      color: 'secondary'
     },
     {
       title: 'E-Mail-Tests',

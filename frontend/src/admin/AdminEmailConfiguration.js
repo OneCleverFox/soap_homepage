@@ -154,7 +154,7 @@ const AdminEmailConfiguration = () => {
 
   const [globalEmailSettings, setGlobalEmailSettings] = useState({
     fromName: 'Gluecksmomente Manufaktur',
-    fromEmail: 'onboarding@resend.dev',
+    fromEmail: 'info@gluecksmomente-manufaktur.de',
     adminEmail: 'ralle.jacob84@googlemail.com',
     emailEnabled: true,
     defaultLanguage: 'de',

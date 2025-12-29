@@ -1,0 +1,484 @@
+const express = require('express');
+const Portfolio = require('../../models/Portfolio');
+const { optimizeMainImage } = require('../../middleware/imageOptimization');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const router = express.Router();
+
+// Multer-Konfiguration für Portfolio-Uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../../../uploads/products');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'product-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Nur Bilddateien sind erlaubt!'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB Limit
+  }
+});
+
+// @route   GET /api/admin/portfolio
+// @desc    Alle Portfolio-Produkte für Admin abrufen
+// @access  Private (Admin only)
+router.get('/', async (req, res) => {
+  try {
+    const products = await Portfolio.find({}).sort({ reihenfolge: 1, createdAt: -1 });
+    
+    res.json({
+      success: true,
+      count: products.length,
+      data: products
+    });
+  } catch (error) {
+    console.error('Admin Portfolio Load Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Portfolio-Daten'
+    });
+  }
+});
+
+// @route   POST /api/admin/portfolio
+// @desc    Neues Portfolio-Produkt erstellen
+// @access  Private (Admin only)
+router.post('/', async (req, res) => {
+  try {
+    const {
+      name,
+      seife,
+      gramm,
+      aroma,
+      seifenform,
+      zusatz,
+      optional,
+      verpackung,
+      aktiv,
+      reihenfolge
+    } = req.body;
+
+    // Prüfen ob Name bereits existiert
+    const existingProduct = await Portfolio.findOne({ name });
+    if (existingProduct) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ein Produkt mit diesem Namen existiert bereits'
+      });
+    }
+
+    // Neues Produkt erstellen
+    const newProduct = new Portfolio({
+      name,
+      seife,
+      gramm: parseInt(gramm),
+      aroma,
+      seifenform,
+      zusatz: zusatz || '',
+      optional: optional || '',
+      verpackung,
+      aktiv: aktiv !== undefined ? aktiv : false,
+      reihenfolge: parseInt(reihenfolge) || 0,
+      bilder: {
+        hauptbild: '',
+        galerie: [],
+        alt_text: ''
+      }
+    });
+
+    const savedProduct = await newProduct.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Produkt erfolgreich erstellt',
+      data: savedProduct
+    });
+
+  } catch (error) {
+    console.error('Admin Portfolio Create Error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Produkts'
+    });
+  }
+});
+
+// @route   PUT /api/admin/portfolio/:id
+// @desc    Portfolio-Produkt bearbeiten
+// @access  Private (Admin only)
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    const product = await Portfolio.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produkt nicht gefunden'
+      });
+    }
+
+    // Name-Duplikat prüfen
+    if (updateData.name && updateData.name !== product.name) {
+      const existingProduct = await Portfolio.findOne({ 
+        name: updateData.name,
+        _id: { $ne: id }
+      });
+      if (existingProduct) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ein Produkt mit diesem Namen existiert bereits'
+        });
+      }
+    }
+
+    // Daten aktualisieren
+    const allowedFields = [
+      'name', 'seife', 'gramm', 'aroma', 'seifenform', 
+      'zusatz', 'optional', 'verpackung', 'aktiv', 'reihenfolge', 'preis'
+    ];
+
+    allowedFields.forEach(field => {
+      if (updateData[field] !== undefined) {
+        if (field === 'gramm' || field === 'reihenfolge') {
+          product[field] = parseInt(updateData[field]);
+        } else if (field === 'preis') {
+          product[field] = parseFloat(updateData[field]);
+        } else {
+          product[field] = updateData[field];
+        }
+      }
+    });
+
+    const updatedProduct = await product.save();
+
+    res.json({
+      success: true,
+      message: 'Produkt erfolgreich aktualisiert',
+      data: updatedProduct
+    });
+
+  } catch (error) {
+    console.error('Admin Portfolio Update Error:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren des Produkts'
+    });
+  }
+});
+
+// @route   DELETE /api/admin/portfolio/:id
+// @desc    Portfolio-Produkt löschen
+// @access  Private (Admin only)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Portfolio.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produkt nicht gefunden'
+      });
+    }
+
+    // Bilder löschen
+    if (product.bilder) {
+      if (product.bilder.hauptbild) {
+        const hauptbildPath = path.join(__dirname, '../../../uploads/products', 
+          path.basename(product.bilder.hauptbild));
+        if (fs.existsSync(hauptbildPath)) {
+          fs.unlinkSync(hauptbildPath);
+        }
+      }
+
+      if (product.bilder.galerie && product.bilder.galerie.length > 0) {
+        product.bilder.galerie.forEach(img => {
+          const imagePath = path.join(__dirname, '../../../uploads/products', 
+            path.basename(img.url));
+          if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+          }
+        });
+      }
+    }
+
+    await Portfolio.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: 'Produkt erfolgreich gelöscht'
+    });
+
+  } catch (error) {
+    console.error('Admin Portfolio Delete Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Produkts'
+    });
+  }
+});
+
+// @route   POST /api/admin/portfolio/:id/upload-image
+// @desc    Bild für Portfolio-Produkt hochladen
+// @access  Private (Admin only)
+router.post('/:id/upload-image', upload.single('image'), optimizeMainImage, async (req, res) => {
+  console.log('🔄 Admin Image Upload started for product:', req.params.id);
+  
+  try {
+    const { id } = req.params;
+    const { alt_text, isHauptbild } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Bilddatei hochgeladen'
+      });
+    }
+
+    const product = await Portfolio.findById(id);
+    if (!product) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        success: false,
+        message: 'Produkt nicht gefunden'
+      });
+    }
+
+    // Bild als Base64 einlesen
+    const imageBuffer = fs.readFileSync(req.file.path);
+    const base64Image = imageBuffer.toString('base64');
+    const contentType = req.file.mimetype;
+
+    // Temporäre Datei löschen
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+    } catch (unlinkError) {
+      console.warn('⚠️ Could not delete temporary file:', unlinkError.message);
+    }
+
+    // Bilder-Objekt initialisieren
+    if (!product.bilder) {
+      product.bilder = {
+        hauptbild: '',
+        hauptbildData: { data: '', contentType: '' },
+        galerie: [],
+        alt_text: ''
+      };
+    }
+
+    if (isHauptbild === 'true') {
+      product.bilder.hauptbild = `data:${contentType};base64,${base64Image}`;
+      product.bilder.hauptbildData = {
+        data: base64Image,
+        contentType: contentType
+      };
+      product.bilder.alt_text = alt_text || '';
+    } else {
+      product.bilder.galerie.push({
+        url: `data:${contentType};base64,${base64Image}`,
+        data: base64Image,
+        contentType: contentType,
+        alt_text: alt_text || ''
+      });
+    }
+
+    await product.save();
+
+    res.json({
+      success: true,
+      message: 'Bild erfolgreich hochgeladen',
+      data: {
+        imageUrl: isHauptbild === 'true' ? product.bilder.hauptbild : product.bilder.galerie[product.bilder.galerie.length - 1].url,
+        isHauptbild: isHauptbild === 'true',
+        product: product
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Admin Image Upload Error:', error);
+    
+    if (req.file && req.file.path) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        if (fs.existsSync(req.file.path)) {
+          fs.unlinkSync(req.file.path);
+        }
+      } catch (cleanupError) {
+        console.warn('⚠️ Could not clean up temporary file:', cleanupError.message);
+      }
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Hochladen des Bildes',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   DELETE /api/admin/portfolio/:id/image/:imageType/:imageIndex?
+// @desc    Bild von Portfolio-Produkt löschen
+// @access  Private (Admin only)
+router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
+  try {
+    const { id, imageType, imageIndex } = req.params;
+
+    const product = await Portfolio.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produkt nicht gefunden'
+      });
+    }
+
+    if (!product.bilder) {
+      return res.status(404).json({
+        success: false,
+        message: 'Keine Bilder vorhanden'
+      });
+    }
+
+    let deletedImagePath = null;
+
+    if (imageType === 'hauptbild') {
+      if (product.bilder.hauptbild) {
+        deletedImagePath = path.join(__dirname, '../../../uploads/products', 
+          path.basename(product.bilder.hauptbild));
+        product.bilder.hauptbild = '';
+        product.bilder.alt_text = '';
+      }
+    } else if (imageType === 'galerie' && imageIndex !== undefined) {
+      const index = parseInt(imageIndex);
+      if (index >= 0 && index < product.bilder.galerie.length) {
+        const galerieImage = product.bilder.galerie[index];
+        deletedImagePath = path.join(__dirname, '../../../uploads/products', 
+          path.basename(galerieImage.url));
+        product.bilder.galerie.splice(index, 1);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültiger Galerie-Index'
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültiger Bildtyp oder fehlender Index'
+      });
+    }
+
+    if (deletedImagePath && fs.existsSync(deletedImagePath)) {
+      fs.unlinkSync(deletedImagePath);
+    }
+
+    await product.save();
+
+    res.json({
+      success: true,
+      message: 'Bild erfolgreich gelöscht',
+      data: product
+    });
+
+  } catch (error) {
+    console.error('Admin Image Delete Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Bildes'
+    });
+  }
+});
+
+// @route   GET /api/admin/portfolio/stats
+// @desc    Portfolio-Statistiken abrufen
+// @access  Private (Admin only)
+router.get('/stats', async (req, res) => {
+  try {
+    const totalProducts = await Portfolio.countDocuments();
+    const activeProducts = await Portfolio.countDocuments({ aktiv: true });
+    const inactiveProducts = await Portfolio.countDocuments({ aktiv: false });
+    
+    const seifenTypes = await Portfolio.aggregate([
+      { $group: { _id: '$seife', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+
+    const aromaTypes = await Portfolio.aggregate([
+      { $group: { _id: '$aroma', count: { $sum: 1 } } },
+      { $sort: { count: -1 } }
+    ]);
+
+    const productsWithImages = await Portfolio.countDocuments({
+      $or: [
+        { 'bilder.hauptbild': { $ne: '', $exists: true } },
+        { 'bilder.galerie.0': { $exists: true } }
+      ]
+    });
+
+    const productsWithoutImages = totalProducts - productsWithImages;
+
+    res.json({
+      success: true,
+      data: {
+        totalProducts,
+        activeProducts,
+        inactiveProducts,
+        productsWithImages,
+        productsWithoutImages,
+        seifenTypes,
+        aromaTypes
+      }
+    });
+  } catch (error) {
+    console.error('Admin Portfolio Stats Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Portfolio-Statistiken'
+    });
+  }
+});
+
+module.exports = router;
