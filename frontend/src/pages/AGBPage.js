@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -8,6 +9,7 @@ import {
 } from '@mui/material';
 
 const AGBPage = () => {
+  const { name } = useCompany();
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -23,7 +25,7 @@ const AGBPage = () => {
           </Typography>
           <Typography variant="body1" paragraph>
             (1) Diese Allgemeinen Geschäftsbedingungen (nachfolgend "AGB") der 
-            Glücksmomente Manufaktur (nachfolgend "Verkäufer") gelten für alle 
+            {name || 'Glücksmomente Manufaktur'} (nachfolgend "Verkäufer") gelten für alle 
             Verträge über die Lieferung von Waren, die ein Verbraucher oder Unternehmer 
             (nachfolgend "Kunde") mit dem Verkäufer hinsichtlich der vom Verkäufer 
             in seinem Online-Shop dargestellten Waren abschließt.

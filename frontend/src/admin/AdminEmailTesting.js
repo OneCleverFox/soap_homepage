@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Typography,
@@ -15,7 +16,10 @@ import {
   Select,
   MenuItem,
   Divider,
-  Chip
+  Chip,
+  useTheme,
+  useMediaQuery,
+  Stack
 } from '@mui/material';
 import {
   Email as EmailIcon,
@@ -26,7 +30,18 @@ import {
 import api from '../services/api';
 
 const AdminEmailTesting = () => {
-  const [loading, setLoading] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Verwendung des standardisierten Admin-State-Hooks
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    snackbar, showSnackbar, hideSnackbar,
+    handleAsyncOperation
+  } = useAdminState();
+  
   const [results, setResults] = useState([]);
   const [testEmail, setTestEmail] = useState('');
   const [selectedEmailType, setSelectedEmailType] = useState('');

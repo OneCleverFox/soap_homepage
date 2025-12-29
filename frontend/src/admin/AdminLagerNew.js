@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
+import { useAdminSearch } from '../hooks/useAdminSearch';
 import toast from 'react-hot-toast';
 import {
   Container,
@@ -52,10 +54,16 @@ const AdminLager = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    handleAsyncOperation
+  } = useAdminState(true);
+  
   const [activeTab, setActiveTab] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [saving, setSaving] = useState(false); // Neuer State für Speichern-Loading
+  const [saving, setSaving] = useState(false);
   
   // Dialog States
   const [inventurDialog, setInventurDialog] = useState(false);
@@ -93,6 +101,20 @@ const AdminLager = () => {
     duftoele: [],
     verpackungen: []
   });
+
+  // Search Hook für die aktuelle Tab-Daten
+  const getCurrentTabData = () => {
+    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen'];
+    return data[tabNames[activeTab]] || [];
+  };
+
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems,
+    clearSearch,
+    hasSearchTerm
+  } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung']);
 
   const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -292,14 +314,18 @@ const AdminLager = () => {
   const loadRohstoffInfo = useCallback(async (produktId) => {
     try {
       // Debug: API-URL prüfen
-      console.log('🔍 Debug - API_BASE:', API_BASE);
-      console.log('🔍 Debug - Full URL:', `${API_BASE}/lager/fertigprodukt-rohstoffe/${produktId}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Debug - API_BASE:', API_BASE);
+        console.log('🔍 Debug - Full URL:', `${API_BASE}/lager/fertigprodukt-rohstoffe/${produktId}`);
+      }
       
       const response = await fetch(`${API_BASE}/lager/fertigprodukt-rohstoffe/${produktId}`, {
         headers: getAuthHeaders()
       });
       
-      console.log('🔍 Debug - Response Status:', response.status);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Debug - Response Status:', response.status);
+      }
       
       if (response.ok) {
         const result = await response.json();

@@ -8,6 +8,9 @@ const Rohseife = require('../models/Rohseife');
 const Verpackung = require('../models/Verpackung');
 const Duftoil = require('../models/Duftoil');
 const { auth } = require('../middleware/auth');
+const logger = require('../utils/logger');
+const { cacheManager } = require('../utils/cacheManager');
+const { asyncHandler } = require('../middleware/errorHandler');
 
 // Cache für Portfolio-Daten (5 Minuten TTL)
 let portfolioCache = {
@@ -18,9 +21,8 @@ let portfolioCache = {
 
 // Hilfsfunktion zum Cache-Invalidieren
 function invalidatePortfolioCache() {
-  portfolioCache.data = null;
-  portfolioCache.timestamp = 0;
-  console.log('🗑️ Portfolio cache invalidated');
+  cacheManager.invalidateProductCache();
+  logger.info('🗑️ Portfolio cache invalidated');
 }
 const { optimizeMainImage } = require('../middleware/imageOptimization');
 
@@ -66,11 +68,11 @@ router.get('/debug/portfolio-status', async (req, res) => {
     
     const sampleItems = await Portfolio.find({}).limit(5).lean();
     
-    console.log('🔍 Portfolio Debug Info:');
-    console.log(`📊 Total Portfolio Items: ${totalPortfolio}`);
-    console.log(`✅ Active Portfolio Items: ${activePortfolio}`);
-    console.log(`❌ Inactive Portfolio Items: ${inactivePortfolio}`);
-    console.log(`❔ Undefined Active Status: ${undefinedActive}`);
+    logger.info('🔍 Portfolio Debug Info:');
+    logger.info(`📊 Total Portfolio Items: ${totalPortfolio}`);
+    logger.info(`✅ Active Portfolio Items: ${activePortfolio}`);
+    logger.info(`❌ Inactive Portfolio Items: ${inactivePortfolio}`);
+    logger.info(`❔ Undefined Active Status: ${undefinedActive}`);
     
     res.json({
       success: true,
@@ -83,7 +85,7 @@ router.get('/debug/portfolio-status', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Portfolio Debug Error:', error);
+    logger.error('❌ Portfolio Debug Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -92,10 +94,10 @@ router.get('/debug/portfolio-status', async (req, res) => {
 router.get('/debug/bestaende', async (req, res) => {
   try {
     const alleBestaende = await Bestand.find({}).populate('artikelId');
-    console.log('🔍 Alle Bestände in der DB:', alleBestaende.length);
+    logger.info('🔍 Alle Bestände in der DB:', alleBestaende.length);
     
     const produktBestaende = alleBestaende.filter(b => b.typ === 'produkt');
-    console.log('📦 Produkt-Bestände:', produktBestaende.length);
+    logger.info('📦 Produkt-Bestände:', produktBestaende.length);
     
     res.json({
       success: true,
@@ -112,7 +114,7 @@ router.get('/debug/bestaende', async (req, res) => {
       }))
     });
   } catch (error) {
-    console.error('Debug Error:', error);
+    logger.error('Debug Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -242,11 +244,20 @@ async function calculatePortfolioPrice(portfolioItem) {
 
 // @route   GET /api/portfolio
 // @desc    Alle Portfolio-Einträge abrufen
-// @access  Public
+// @access  Public (aktive), Admin (alle mit includeInactive=true)
 router.get('/', async (req, res) => {
   try {
-    const portfolioItems = await Portfolio.find({ aktiv: true })
-      .sort({ reihenfolge: 1, name: 1 });
+    const { includeInactive } = req.query;
+    
+    // Filter-Query basierend auf Parameter
+    let filter = {};
+    if (includeInactive !== 'true') {
+      filter.aktiv = true; // Nur aktive Produkte für normale Benutzer
+    }
+    // Wenn includeInactive=true, werden alle Produkte (aktiv + inaktiv) geladen
+    
+    const portfolioItems = await Portfolio.find(filter)
+      .sort({ aktiv: -1, reihenfolge: 1, name: 1 }); // Aktive zuerst, dann Sortierung
 
     // Lade Bestand-Daten für jedes Portfolio-Item
     const portfolioWithBestand = await Promise.all(

@@ -44,7 +44,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { API_URL } from '../services/api';
-import BestellungenAPI from '../services/bestellungenAPI';
+import { ordersAPI } from '../services/api';
 
 const AccordionProfilePage = () => {
   const navigate = useNavigate();
@@ -444,7 +444,7 @@ const AccordionProfilePage = () => {
   // Prüfe, ob Account gelöscht werden kann (alle Bestellungen zugestellt)
   const checkAccountDeletionEligibility = async () => {
     try {
-      const result = await BestellungenAPI.getBestellungen({
+      const result = await ordersAPI.getCustomerOrders({
         limit: 100, // Alle Bestellungen laden
         sortBy: 'bestelldatum',
         sortOrder: 'desc'

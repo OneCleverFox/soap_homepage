@@ -5,9 +5,9 @@ import AccordionProfilePage from './AccordionProfilePage';
 const SmartProfilePage = () => {
   const { user } = useContext(AuthContext);
 
-  console.log('🔍 SmartProfile - User:', user);
-  console.log('🔍 SmartProfile - user.rolle:', user?.rolle);
-  console.log('🔍 SmartProfile - user.role:', user?.role);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 SmartProfile - User:', user?.username || 'No user');
+  }
 
   // Alle Benutzer verwenden die neue AccordionProfilePage
   return <AccordionProfilePage />;

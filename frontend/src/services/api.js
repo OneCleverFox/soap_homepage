@@ -11,8 +11,8 @@ const API_BASE_URL = process.env.NODE_ENV === 'development'
 // Export für direkten Zugriff
 export const API_URL = API_BASE_URL;
 
-// Debug: Log API URL on startup
-if (process.env.NODE_ENV === 'production') {
+// Debug: Log API URL only in development
+if (process.env.NODE_ENV === 'development') {
   console.log('🔧 API Base URL:', API_BASE_URL);
   console.log('🔧 REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
 }
@@ -155,11 +155,102 @@ export const productsAPI = {
 
 // Orders API
 export const ordersAPI = {
+  // Admin Order Functions
   createOrder: (orderData) => api.post('/orders', orderData),
   getOrders: (params = {}) => api.get('/orders', { params }),
   getOrder: (id) => api.get(`/orders/${id}`),
   updateOrderStatus: (id, statusData) => api.put(`/orders/${id}/status`, statusData),
   trackOrder: (orderNumber, email) => api.get(`/orders/public/${orderNumber}?email=${email}`),
+  
+  // Customer Order Functions (from bestellungenAPI.js)
+  getCustomerOrders: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.limit) params.append('limit', filters.limit);
+    if (filters.skip) params.append('skip', filters.skip);
+    if (filters.sortBy) params.append('sortBy', filters.sortBy);
+    if (filters.sortOrder) params.append('sortOrder', filters.sortOrder);
+    
+    const queryString = params.toString() ? '?' + params.toString() : '';
+    return api.get(`/orders/meine-bestellungen${queryString}`);
+  },
+  
+  getCustomerOrder: (bestellungId) => api.get(`/orders/meine-bestellungen/${bestellungId}`),
+  
+  downloadCustomerInvoice: async (bestellungId) => {
+    const response = await api.get(`/orders/meine-bestellungen/${bestellungId}/rechnung`, {
+      responseType: 'blob'
+    });
+    
+    if (response.data.type === 'application/json') {
+      const text = await response.data.text();
+      const error = JSON.parse(text);
+      throw new Error(error.message || 'Rechnung nicht verfügbar');
+    }
+    
+    return response.data;
+  },
+  
+  // Statistics calculation (from bestellungenAPI.js)
+  calculateStats: (bestellungen) => {
+    if (!bestellungen || bestellungen.length === 0) {
+      return {
+        gesamtsumme: 0,
+        anzahlBestellungen: 0,
+        durchschnittswert: 0,
+        statusVerteilung: {}
+      };
+    }
+    
+    const gesamtsumme = bestellungen.reduce((sum, b) => sum + (b.gesamt?.brutto || 0), 0);
+    const anzahlBestellungen = bestellungen.length;
+    const durchschnittswert = gesamtsumme / anzahlBestellungen;
+    
+    const statusVerteilung = bestellungen.reduce((acc, b) => {
+      acc[b.status] = (acc[b.status] || 0) + 1;
+      return acc;
+    }, {});
+    
+    return {
+      gesamtsumme,
+      anzahlBestellungen,
+      durchschnittswert,
+      statusVerteilung
+    };
+  },
+  
+  // Utility functions (from bestellungenAPI.js)
+  formatStatus: (status) => {
+    const statusMap = {
+      'ausstehend': { text: 'Ausstehend', color: '#ff9800', icon: '⏳' },
+      'bestätigt': { text: 'Bestätigt', color: '#2196f3', icon: '✅' },
+      'in_bearbeitung': { text: 'In Bearbeitung', color: '#9c27b0', icon: '🔄' },
+      'versendet': { text: 'Versendet', color: '#4caf50', icon: '📦' },
+      'geliefert': { text: 'Geliefert', color: '#4caf50', icon: '✅' },
+      'storniert': { text: 'Storniert', color: '#f44336', icon: '❌' }
+    };
+
+    return statusMap[status] || { text: status, color: '#666', icon: '❓' };
+  },
+  
+  formatPrice: (price) => {
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(price || 0);
+  },
+  
+  formatDate: (date) => {
+    if (!date) return '-';
+    
+    return new Intl.DateTimeFormat('de-DE', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(date));
+  }
 };
 
 // Inventory API

@@ -26,7 +26,7 @@ import {
   Warning
 } from '@mui/icons-material';
 import { AuthContext } from '../contexts/AuthContext';
-import BestellungenAPI from '../services/bestellungenAPI';
+import { ordersAPI } from '../services/api';
 import BestellStatusBar from './BestellStatusBar';
 import api from '../services/api';
 
@@ -183,7 +183,7 @@ const OrderHistory = () => {
 
     try {
       setLoading(true);
-      const result = await BestellungenAPI.getBestellungen({
+      const result = await ordersAPI.getCustomerOrders({
         limit: 50,
         sortBy: 'bestelldatum',
         sortOrder: 'desc'

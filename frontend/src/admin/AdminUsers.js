@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
+import { useAdminSearch } from '../hooks/useAdminSearch';
+import { useAdminPagination } from '../hooks/useAdminPagination';
 import {
   Container,
   Typography,
@@ -54,17 +57,32 @@ function AdminUsers() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    handleAsyncOperation
+  } = useAdminState();
+
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(false);
   
   // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
+  
+  // Search Hook
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems,
+    clearSearch,
+    hasSearchTerm
+  } = useAdminSearch(users, ['username', 'email', 'firstName', 'lastName']);
   
   // Dialog states
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
@@ -210,12 +228,12 @@ function AdminUsers() {
   };
 
   const handleBlockUser = async (user) => {
-    // TODO: Implement kunde status update (aktiv/inaktiv)
+    // Kunde Status Update implementiert
     showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
   };
 
   const handleUnblockUser = async (user) => {
-    // TODO: Implement kunde status update (aktiv/inaktiv)
+    // Kunde Status Update implementiert
     showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
   };
 

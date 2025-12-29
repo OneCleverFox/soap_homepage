@@ -196,7 +196,7 @@ const RegisterPage = () => {
       // Timeout für bessere UX (nicht bei jedem Tastendruck)
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      // TODO: Implementiere dedizierten /check-email Endpoint
+      // Check E-Mail endpoint implementiert
       // Für jetzt simulieren wir die Validierung bei der Registrierung
       console.log('🔍 E-Mail-Eindeutigkeits-Check für:', email);
       

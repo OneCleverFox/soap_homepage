@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
+import { useAdminSearch } from '../hooks/useAdminSearch';
 import { useSearchParams } from 'react-router-dom';
 import {
   Container,
@@ -56,14 +58,18 @@ const AdminRohstoffe = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [searchParams] = useSearchParams();
   
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    handleAsyncOperation
+  } = useAdminState();
+  
   const [currentTab, setCurrentTab] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
   const [rohseife, setRohseife] = useState([]);
   const [duftoele, setDuftoele] = useState([]);
   const [verpackungen, setVerpackungen] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
   
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -72,6 +78,21 @@ const AdminRohstoffe = () => {
 
   // Form states
   const [formData, setFormData] = useState({});
+
+  // Search Hook für die aktuelle Tab-Daten
+  const getCurrentTabData = () => {
+    if (currentTab === 0) return rohseife;
+    if (currentTab === 1) return duftoele;
+    return verpackungen;
+  };
+
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems,
+    clearSearch,
+    hasSearchTerm
+  } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung']);
 
   const loadData = React.useCallback(async () => {
     setLoading(true);

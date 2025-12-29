@@ -140,7 +140,7 @@ const CheckoutPage = () => {
       // Kundendaten aus Profil laden
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
       const fullUrl = `${apiUrl}/kunden/profil`;
-      console.log('🌐 API URL:', fullUrl);
+      console.log('🌐 Lade Kundendaten...');
       
       const response = await fetch(fullUrl, {
         headers: {
@@ -154,8 +154,8 @@ const CheckoutPage = () => {
       if (response.ok) {
         const data = await response.json();
         const kunde = data.data;
-        console.log('👤 Customer data loaded:', kunde);
-        console.log('🏠 Customer address:', kunde.adresse);
+        console.log('👤 Kundendaten erfolgreich geladen');
+        console.log('🏠 Kundenadresse aktualisiert');
         
         // Kundendaten speichern
         setCustomerData(kunde);
@@ -172,7 +172,7 @@ const CheckoutPage = () => {
             land: kunde.adresse?.land || 'Deutschland'
           };
           
-          console.log('🏠 Setting rechnungsadresse:', newRechnungsadresse);
+          console.log('🏠 Rechnungsadresse gesetzt');
           
           setOrderData(prev => ({
             ...prev,
@@ -197,9 +197,13 @@ const CheckoutPage = () => {
 
   useEffect(() => {
     console.log('🔄 CheckoutPage: useEffect triggered, user:', user);
-    console.log('🔍 User properties:', user ? Object.keys(user) : 'No user');
-    console.log('🔍 User.kundeId:', user?.kundeId);
-    console.log('🔍 User.id:', user?.id);
+    console.log('🔍 CheckoutPage: useEffect triggered');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 User.kundeId:', user?.kundeId);
+    }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 User.id:', user?.id);
+    }
     
     if (user && (user.kundeId || user.id)) {
       const customerId = user.kundeId || user.id;
@@ -218,7 +222,9 @@ const CheckoutPage = () => {
 
   // Debug useEffect für Rechnungsadresse
   useEffect(() => {
-    console.log('🏠 Rechnungsadresse changed:', orderData.rechnungsadresse);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🏠 Rechnungsadresse changed');
+    }
   }, [orderData.rechnungsadresse]);
 
   const handleInputChange = (section, field, value) => {
