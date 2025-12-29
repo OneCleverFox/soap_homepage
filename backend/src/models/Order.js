@@ -243,6 +243,14 @@ const orderSchema = new mongoose.Schema({
     default: 'neu'
   },
   
+  // Rechnung (gespeicherte Rechnungsdaten)
+  invoice: {
+    number: String,
+    html: String,
+    generatedAt: Date,
+    data: Object
+  },
+  
   // Rückerstattungsstatus für abgelehnte Bestellungen
   rueckerstattungErledigt: {
     type: Boolean,

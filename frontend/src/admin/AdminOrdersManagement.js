@@ -1,5 +1,6 @@
 import { validateTrackingNumber, detectCarrier, generateTrackingUrl } from '../utils/trackingUtils';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Box,
   Typography,
@@ -111,12 +112,16 @@ const AdminOrdersManagement = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess
+  } = useAdminState();
+
   // Core state
   const [orders, setOrders] = useState([]);
   const [inquiries, setInquiries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);

@@ -1,13 +1,11 @@
 import React from 'react';
-import { Container, Typography } from '@mui/material';
+import AdminPageTemplate from '../components/AdminPageTemplate';
 
 const AdminAnalytics = () => {
   return (
-    <Container maxWidth="lg">
-      <Typography variant="h2" component="h1" gutterBottom>
-        Analytics
-      </Typography>
-    </Container>
+    <AdminPageTemplate title="Analytics">
+      {/* Analytics-Inhalt wird hier ergänzt */}
+    </AdminPageTemplate>
   );
 };
 

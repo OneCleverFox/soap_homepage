@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -9,6 +10,7 @@ import {
 } from '@mui/material';
 
 const ImpressumPage = () => {
+  const { name, email, ceo } = useCompany();
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -26,8 +28,8 @@ const ImpressumPage = () => {
             
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" paragraph>
-                <strong>Glücksmomente Manufaktur</strong><br />
-                Ralf Jacob<br />                
+                <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
+                {ceo || 'Ralf Jacob'}<br />                
                 68642 Bürstadt
               </Typography>
               
@@ -35,7 +37,7 @@ const ImpressumPage = () => {
                 Kontakt
               </Typography>
               <Typography variant="body1" paragraph>                
-                E-Mail: info@gluecksmomente-manufaktur.de
+                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>

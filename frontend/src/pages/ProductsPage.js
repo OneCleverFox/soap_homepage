@@ -536,13 +536,17 @@ const ProductsPage = () => {
                         }}
                       >
                         <IconButton
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, -1);
                           }}
                           disabled={!product.bestand?.verfuegbar || quantities[product._id] <= 1}
-                          sx={{ borderRadius: 0 }}
+                          sx={{ 
+                            borderRadius: 0,
+                            minWidth: isMobile ? 44 : 'auto',
+                            minHeight: isMobile ? 44 : 'auto'
+                          }}
                           aria-label={`Menge von ${product.name} verringern`}
                           title={`Menge von ${product.name} verringern`}
                         >
@@ -562,13 +566,17 @@ const ProductsPage = () => {
                         </Typography>
                         
                         <IconButton
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, 1);
                           }}
                           disabled={!product.bestand?.verfuegbar || (quantities[product._id] || 1) >= (product.bestand?.menge || 0)}
-                          sx={{ borderRadius: 0 }}
+                          sx={{ 
+                            borderRadius: 0,
+                            minWidth: isMobile ? 44 : 'auto',
+                            minHeight: isMobile ? 44 : 'auto'
+                          }}
                           aria-label={`Menge von ${product.name} erhöhen`}
                           title={`Menge von ${product.name} erhöhen`}
                         >

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Typography,
@@ -22,7 +23,8 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Stack
+  Stack,
+  Snackbar
 } from '@mui/material';
 import {
   ShoppingCart as CartIcon,
@@ -34,15 +36,24 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { cartAPI } from '../services/api';
 import stockEventService from '../services/stockEventService';
-import toast from 'react-hot-toast';
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const AdminCart = () => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    snackbar, showSnackbar, hideSnackbar,
+    handleAsyncOperation
+  } = useAdminState();
+  
   const [cartData, setCartData] = useState({ items: [], total: 0, itemCount: 0 });
-  const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [swipeStates, setSwipeStates] = useState({});
 
@@ -207,7 +218,7 @@ const AdminCart = () => {
       }
     } catch (error) {
       console.error('Fehler beim Laden des Admin-Warenkorbs:', error);
-      toast.error('Fehler beim Laden des Warenkorbs: ' + error.message);
+      showSnackbar('Fehler beim Laden des Warenkorbs: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -225,19 +236,19 @@ const AdminCart = () => {
       // Bestandsprüfung vor dem Update
       const item = cartData.items.find(item => item.produktId === produktId);
       if (!item) {
-        toast.error('Artikel nicht im Warenkorb gefunden');
+        showSnackbar('Artikel nicht im Warenkorb gefunden', 'error');
         return;
       }
       
       // Prüfe Verfügbarkeit und Bestand
       if (!item.isAvailable) {
-        toast.error('Artikel ist nicht verfügbar');
+        showSnackbar('Artikel ist nicht verfügbar', 'error');
         return;
       }
       
       const maxAvailable = item.bestand?.menge || 0;
       if (newQuantity > maxAvailable) {
-        toast.error(`Nur ${maxAvailable} Stück verfügbar`);
+        showSnackbar(`Nur ${maxAvailable} Stück verfügbar`, 'warning');
         return;
       }
 
@@ -264,18 +275,18 @@ const AdminCart = () => {
 
       // Backend-Update
       await cartAPI.updateQuantity(produktId, newQuantity);
-      toast.success('Menge aktualisiert');
+      showSnackbar('Menge aktualisiert', 'success');
     } catch (error) {
       console.error('Fehler beim Aktualisieren der Menge:', error);
       
       // Spezifische Fehlermeldungen basierend auf Backend-Response
       if (error.response?.data?.errorType === 'INSUFFICIENT_STOCK') {
         const available = error.response.data.availableQuantity || 0;
-        toast.error(`Nur ${available} Stück verfügbar`);
+        showSnackbar(`Nur ${available} Stück verfügbar`, 'warning');
       } else if (error.response?.data?.errorType === 'NOT_AVAILABLE') {
-        toast.error('Artikel ist nicht mehr verfügbar');
+        showSnackbar('Artikel ist nicht mehr verfügbar', 'error');
       } else {
-        toast.error('Fehler beim Aktualisieren der Menge');
+        showSnackbar('Fehler beim Aktualisieren der Menge', 'error');
       }
       
       // Bei Fehler: Daten neu laden
@@ -304,10 +315,10 @@ const AdminCart = () => {
 
       // Backend-Update
       await cartAPI.removeItem(produktId);
-      toast.success('Artikel entfernt');
+      showSnackbar('Artikel entfernt', 'success');
     } catch (error) {
       console.error('Fehler beim Entfernen des Artikels:', error);
-      toast.error('Fehler beim Entfernen des Artikels');
+      showSnackbar('Fehler beim Entfernen des Artikels', 'error');
       // Bei Fehler: Daten neu laden
       await loadAdminCart();
     } finally {
@@ -328,10 +339,10 @@ const AdminCart = () => {
 
       // Backend-Update
       await cartAPI.clearCart();
-      toast.success('Warenkorb geleert');
+      showSnackbar('Warenkorb geleert', 'success');
     } catch (error) {
       console.error('Fehler beim Leeren des Warenkorbs:', error);
-      toast.error('Fehler beim Leeren des Warenkorbs');
+      showSnackbar('Fehler beim Leeren des Warenkorbs', 'error');
       // Bei Fehler: Daten neu laden
       await loadAdminCart();
     } finally {
@@ -382,7 +393,7 @@ const AdminCart = () => {
           };
         });
         
-        toast.info('Bestandsänderung erkannt - Warenkorb aktualisiert');
+        showSnackbar('Bestandsänderung erkannt - Warenkorb aktualisiert', 'info');
       }
     });
 

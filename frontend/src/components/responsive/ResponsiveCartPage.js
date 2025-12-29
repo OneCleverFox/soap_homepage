@@ -1,13 +1,8 @@
-import React from 'react';
-import { useMediaQuery, useTheme } from '@mui/material';
 import CartPage from '../../pages/CartPage';
 import MobileCartPage from '../../pages/MobileCartPage';
+import createResponsivePage from '../../utils/createResponsivePage';
 
-const ResponsiveCartPage = () => {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  return isMobile ? <MobileCartPage /> : <CartPage />;
-};
+// Verwendung der Factory-Funktion für Code-Reduktion
+const ResponsiveCartPage = createResponsivePage(CartPage, MobileCartPage);
 
 export default ResponsiveCartPage;

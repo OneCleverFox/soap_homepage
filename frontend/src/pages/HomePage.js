@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -15,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import ShopStatusAlert from '../components/common/ShopStatusAlert';
 
 const HomePage = () => {
+  const { name } = useCompany();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -63,7 +65,7 @@ const HomePage = () => {
               mb: { xs: 2, md: 3 }
             }}
           >
-            Willkommen bei Glücksmomente
+            Willkommen bei {name || 'Glücksmomente'}
           </Typography>
           <Typography 
             variant={isMobile ? "h6" : "h5"} 

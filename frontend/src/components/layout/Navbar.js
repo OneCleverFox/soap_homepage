@@ -23,7 +23,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import api from '../../services/api';
-import BestellungenAPI from '../../services/bestellungenAPI';
+import { ordersAPI } from '../../services/api';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -93,7 +93,7 @@ const Navbar = () => {
     if (!user) return;
     
     try {
-      const result = await BestellungenAPI.getBestellungen({ limit: 100 });
+      const result = await ordersAPI.getCustomerOrders({ limit: 100 });
       if (result.success) {
         // Zähle Bestellungen die Zahlung benötigen
         const paymentNeeded = result.data.bestellungen.filter(order => {
@@ -208,9 +208,11 @@ const Navbar = () => {
     { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
-    { label: 'Rechnungskonfiguration', path: '/admin/rechnungen', icon: '📄' },
+    { label: 'Rechnung erstellen', path: '/admin/create-invoice', icon: '📄' },
+    { label: 'Rechnungen verwalten', path: '/admin/invoice-list', icon: '🧾' },
+    { label: 'Rechnungskonfiguration', path: '/admin/rechnungen', icon: '⚙️' },
     { label: 'E-Mail-Verwaltung', path: '/admin/email-tests', icon: '📧' },
-    { label: 'System-Einstellungen', path: '/admin/einstellungen', icon: '⚙️' }
+    { label: 'System-Einstellungen', path: '/admin/einstellungen', icon: '🔧' }
   ];
 
   const drawer = (

@@ -30,11 +30,11 @@ class EmailService {
     
     // Domain-Konfiguration basierend auf Environment
     if (this.isProduction) {
-      this.fromEmail = 'noreply@notifications.gluecksmomente-manufaktur.com';
+      this.fromEmail = 'info@gluecksmomente-manufaktur.de';
       this.fromName = 'Glücksmomente Manufaktur';
     } else {
-      // Development: Verwende Resend's Onboarding-Domain
-      this.fromEmail = 'onboarding@resend.dev';
+      // Development: Verwende auch die verifizierte Domain
+      this.fromEmail = 'info@gluecksmomente-manufaktur.de';
       this.fromName = 'Glücksmomente Manufaktur (DEV)';
     }
     
@@ -1597,6 +1597,212 @@ class EmailService {
       return { success: true, messageId: result.id };
     } catch (error) {
       console.error('❌ Order rejection email failed:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 🧾 Rechnung per E-Mail an Kunden versenden
+  async sendInvoiceEmail(customerEmail, invoiceData, pdfAttachment) {
+    if (this.isDisabled) {
+      console.log('📧 E-Mail-Service deaktiviert - Rechnungsversand übersprungen');
+      return { success: false, error: 'E-Mail-Service deaktiviert' };
+    }
+
+    try {
+      const formatPrice = (price) => {
+        return new Intl.NumberFormat('de-DE', {
+          style: 'currency',
+          currency: 'EUR'
+        }).format(price || 0);
+      };
+
+      const formatDate = (date) => {
+        return new Intl.DateTimeFormat('de-DE', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        }).format(new Date(date));
+      };
+
+      const customerName = invoiceData.customer?.customerData?.firstName ? 
+                          `${invoiceData.customer.customerData.firstName} ${invoiceData.customer.customerData.lastName}`.trim() :
+                          invoiceData.besteller ? 
+                          `${invoiceData.besteller.vorname} ${invoiceData.besteller.nachname}`.trim() :
+                          invoiceData.customer?.customerData?.company || 
+                          invoiceData.besteller?.firma || 'Liebe Kundin, lieber Kunde';
+
+      // Flexibel mit verschiedenen Datenstrukturen arbeiten
+      const invoiceNumber = invoiceData.invoiceNumber || invoiceData.bestellnummer;
+      const invoiceDate = invoiceData.dates?.invoiceDate || invoiceData.bestelldatum;
+      const totalAmount = invoiceData.amounts?.total || invoiceData.gesamtsumme;
+
+      const htmlContent = `
+        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 35px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; font-size: 32px;">🧾 Ihre Rechnung ist da!</h1>
+            <p style="margin: 15px 0 5px 0; font-size: 18px; opacity: 0.9;">
+              ${customerName}
+            </p>
+            <p style="margin: 0; font-size: 16px; opacity: 0.8;">
+              Vielen Dank für Ihr Vertrauen in unsere handgemachten Seifen ✨
+            </p>
+          </div>
+          
+          <div style="background: white; padding: 30px; border: 1px solid #eee; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+            
+            <div style="background: #e8f5e8; padding: 25px; border-radius: 12px; margin-bottom: 30px; border: 2px solid #4caf50;">
+              <h2 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 20px; text-align: center;">💚 Rechnung für Ihre Bestellung</h2>
+              <p style="margin: 0; color: #2e7d32; text-align: center; line-height: 1.6;">
+                Anbei finden Sie Ihre Rechnung als PDF.<br>
+                <strong>Herzlichen Dank für Ihr Vertrauen!</strong>
+              </p>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+              <h2 style="color: #333; margin: 0 0 15px 0; font-size: 20px;">📋 Rechnungsdetails</h2>
+              <p style="margin: 5px 0; color: #666;"><strong>Rechnungsnummer:</strong> <span style="color: #667eea; font-weight: bold;">${invoiceNumber}</span></p>
+              <p style="margin: 5px 0; color: #666;"><strong>Rechnungsdatum:</strong> ${formatDate(invoiceDate)}</p>
+              <p style="margin: 5px 0; color: #666;"><strong>Gesamtbetrag:</strong> <span style="color: #2e7d32; font-weight: bold; font-size: 18px;">${formatPrice(totalAmount)}</span></p>
+            </div>
+
+            ${invoiceData.artikel ? `
+            <h3 style="color: #333; margin: 30px 0 15px 0;">🛍️ Ihre Artikel</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+              <thead>
+                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                  <th style="text-align: left; padding: 12px; border-bottom: 1px solid #dee2e6;">Artikel</th>
+                  <th style="text-align: center; padding: 12px; border-bottom: 1px solid #dee2e6;">Menge</th>
+                  <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Einzelpreis</th>
+                  <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Gesamtpreis</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${invoiceData.artikel.map(artikel => `
+                  <tr>
+                    <td style="padding: 12px; border-bottom: 1px solid #f1f1f1;">
+                      <strong>${artikel.name}</strong>
+                      ${artikel.beschreibung ? `<br><small style="color: #666;">${artikel.beschreibung}</small>` : ''}
+                    </td>
+                    <td style="text-align: center; padding: 12px; border-bottom: 1px solid #f1f1f1;">${artikel.menge}</td>
+                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.einzelpreis)}</td>
+                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.gesamtpreis)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Nettosumme:</span>
+                <span>${formatPrice(invoiceData.nettosumme)}</span>
+              </div>
+              ${invoiceData.mwst > 0 ? `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                  <span>MwSt. (19%):</span>
+                  <span>${formatPrice(invoiceData.mwst)}</span>
+                </div>
+              ` : `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px; color: #666; font-size: 14px;">
+                  <span>Kleinunternehmer-Regelung (§19 UStG):</span>
+                  <span>Keine MwSt.</span>
+                </div>
+              `}
+              <hr style="border: none; border-top: 1px solid #dee2e6; margin: 15px 0;">
+              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; color: #333;">
+                <span>Gesamtsumme:</span>
+                <span style="color: #28a745;">${formatPrice(totalAmount)}</span>
+              </div>
+            </div>
+            ` : ''}
+
+            <div style="background: #fff3e0; padding: 20px; border-radius: 8px; border-left: 4px solid #ff9800; margin-bottom: 30px;">
+              <h3 style="color: #e65100; margin: 0 0 15px 0; font-size: 16px;">📄 Rechnungsanhang</h3>
+              <p style="margin: 0; color: #e65100;">
+                Ihre Rechnung finden Sie als PDF im Anhang dieser E-Mail.
+              </p>
+            </div>
+
+            <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2196f3; margin-bottom: 30px;">
+              <h3 style="color: #1565c0; margin: 0 0 15px 0; font-size: 16px;">💳 Zahlungsinformation</h3>
+              <p style="margin: 0; color: #1565c0; line-height: 1.6;">
+                ${invoiceData.zahlungsmethode === 'pending' ? 
+                  'Die Zahlung für diese Rechnung steht noch aus. Weitere Informationen finden Sie in der PDF-Rechnung.' :
+                  'Vielen Dank für die pünktliche Zahlung!'
+                }
+              </p>
+            </div>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; text-align: center;">
+              <p style="color: #666; margin: 10px 0;">
+                Bei Fragen zur Rechnung kontaktieren Sie uns gerne!
+              </p>
+              <div style="color: #999; font-size: 14px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Glücksmomente Manufaktur</strong></p>
+                <p style="margin: 5px 0;">📧 info@gluecksmomente-manufaktur.de</p>
+                <p style="margin: 5px 0;">📞 +49 123 456789</p>
+              </div>
+              
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <p style="color: #666; margin: 0; font-size: 12px; line-height: 1.4;">
+                  <strong>Glücksmomente Manufaktur</strong> • Wasserwerkstrasse 15 • 68642 Bürstadt<br>
+                  Geschäftsführer: Ralf Jacob • Einzelunternehmen<br>
+                  Finanzamt Bensheim • Steuernummer: DE123456789
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const attachments = [];
+      if (pdfAttachment) {
+        attachments.push({
+          filename: `Rechnung_${invoiceNumber}.pdf`,
+          content: pdfAttachment
+        });
+      }
+
+      const emailData = {
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: customerEmail,
+        subject: `📧 Ihre Rechnung ${invoiceNumber} von Glücksmomente Manufaktur`,
+        html: htmlContent,
+        attachments
+      };
+
+      console.log(`📧 [EmailService] Sending invoice email to: ${customerEmail}`);
+      
+      const result = await this.resend.emails.send(emailData);
+
+      // E-Mail-Versand in DB protokollieren
+      await this.logEmail({
+        to: customerEmail,
+        from: emailData.from,
+        subject: emailData.subject,
+        content: htmlContent,
+        type: 'invoice',
+        status: 'sent',
+        invoiceId: invoiceData._id,
+        messageId: result.id
+      });
+
+      console.log('✅ Invoice email sent:', result);
+      return { success: true, messageId: result.id };
+    } catch (error) {
+      console.error('❌ Invoice email failed:', error);
+      
+      // Fehler in DB protokollieren
+      await this.logEmail({
+        to: customerEmail,
+        from: `${this.fromName} <${this.fromEmail}>`,
+        subject: `Rechnung ${invoiceNumber}`,
+        content: 'E-Mail-Versand fehlgeschlagen',
+        type: 'invoice',
+        status: 'failed',
+        invoiceId: invoiceData._id,
+        error: error.message
+      });
+      
       return { success: false, error: error.message };
     }
   }
