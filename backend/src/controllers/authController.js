@@ -114,7 +114,7 @@ const loginAdmin = async (req, res) => {
     // Status-Migration für ältere Kunden-Datensätze
     let statusFixed = false;
     if (typeof kunde.status === 'string') {
-      console.log('🔧 Status-Migration erforderlich für:', email);
+      console.log('🔧 Status-Migration erforderlich für:', email, 'Status:', kunde.status);
       
       // String-Status in Objekt-Status konvertieren
       const newStatus = {
@@ -129,9 +129,28 @@ const loginAdmin = async (req, res) => {
       statusFixed = true;
       
       console.log('✅ Status migriert:', { 
-        old: typeof kunde.status === 'string' ? kunde.status : 'object',
-        new: newStatus 
+        alt: 'string: ' + kunde.status,
+        neu: newStatus 
       });
+    }
+
+    // Zusätzliche Prüfung für defekte Status-Objekte
+    if (typeof kunde.status === 'object' && kunde.status !== null) {
+      if (kunde.status.aktiv === undefined || kunde.status.emailVerifiziert === undefined) {
+        console.log('🔧 Status-Reparatur erforderlich für:', email);
+        
+        kunde.status = {
+          aktiv: true, // Standardmäßig aktiv für existierende User
+          emailVerifiziert: true, // Existierende User als verifiziert betrachten
+          telefonVerifiziert: kunde.status.telefonVerifiziert || false,
+          gesperrt: kunde.status.gesperrt || false
+        };
+        
+        await kunde.save();
+        statusFixed = true;
+        
+        console.log('✅ Status repariert für:', email, kunde.status);
+      }
     }
 
     // Admin-Einstellungen für E-Mail-Verifikation prüfen
@@ -142,12 +161,19 @@ const loginAdmin = async (req, res) => {
     console.log('📋 Admin-Einstellungen:', {
       requireEmailVerification,
       kundeStatus: kunde.status,
-      statusFixed
+      statusFixed,
+      kundeStatusAktiv: kunde.status?.aktiv,
+      kundeStatusGesperrt: kunde.status?.gesperrt
     });
 
     // Account-Status prüfen (nach Migration)
-    if (!kunde.status.aktiv || kunde.status.gesperrt) {
-      console.log('❌ Account inaktiv oder gesperrt:', email, kunde.status);
+    if (!kunde.status || !kunde.status.aktiv || kunde.status.gesperrt) {
+      console.log('❌ Account inaktiv oder gesperrt:', email, {
+        status: kunde.status,
+        aktiv: kunde.status?.aktiv,
+        gesperrt: kunde.status?.gesperrt,
+        checkResult: !kunde.status || !kunde.status.aktiv || kunde.status.gesperrt
+      });
       return res.status(401).json({
         success: false,
         message: 'Account ist deaktiviert oder gesperrt'
