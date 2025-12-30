@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const User = require('../models/User');
+const Kunde = require('../models/Kunde');
 const emailService = require('../services/emailService');
 const PasswordValidator = require('../utils/passwordValidator');
 const UsernameGenerator = require('../utils/usernameGenerator');
@@ -86,7 +87,6 @@ const loginAdmin = async (req, res) => {
     }
 
     // Nicht der Admin - prüfen ob Kunde existiert
-    const Kunde = require('../models/Kunde');
     
     console.log('🔍 Suche Kunde mit E-Mail:', email.toLowerCase().trim());
     const kunde = await Kunde.findOne({ email: email.toLowerCase().trim() });
@@ -350,7 +350,6 @@ const registerUser = async (req, res) => {
     }
 
     // Neuen Kunden erstellen (parallell zum User für die Bestellsystem-Kompatibilität)
-    const Kunde = require('../models/Kunde');
     const newKunde = new Kunde({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
