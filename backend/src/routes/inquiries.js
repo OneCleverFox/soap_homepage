@@ -4,6 +4,17 @@ const Inquiry = require('../models/Inquiry');
 const Order = require('../models/Order');
 const { auth, authenticateToken } = require('../middleware/auth');
 const PayPalService = require('../services/PayPalService');
+const { cacheManager } = require('../utils/cacheManager');
+
+// Hilfsfunktion zum Portfolio-Cache-Invalidieren
+function invalidatePortfolioCache() {
+  // Referenz auf den Portfolio-Cache aus der Portfolio-Route
+  // Da der Portfolio-Cache als lokale Variable in portfolio.js definiert ist,
+  // setzen wir eine globale Variable für die Cache-Invalidierung
+  global.portfolioCache = { data: null, timestamp: 0 };
+  cacheManager.invalidateProductCache();
+  console.log('🗑️ Portfolio cache invalidated due to inventory change');
+}
 
 // Middleware: Admin-Berechtigung prüfen
 const requireAdmin = (req, res, next) => {
@@ -17,15 +28,36 @@ const requireAdmin = (req, res, next) => {
 };
 
 // 📊 GET: Admin-Statistiken
-router.get('/admin/stats', auth, requireAdmin, async (req, res) => {
+router.get('/admin/stats', auth, async (req, res) => {
   try {
-    console.log('🔍 Anfrage stats für Admin abrufen...');
+    console.log('🔍 Anfrage stats für Admin abrufen... [VERSION: v2-totalValue]');
     
+    // Basis-Zählungen
     const totalInquiries = await Inquiry.countDocuments();
     const pendingInquiries = await Inquiry.countDocuments({ status: 'pending' });
     const acceptedInquiries = await Inquiry.countDocuments({ status: 'accepted' });
     const rejectedInquiries = await Inquiry.countDocuments({ status: 'rejected' });
     const convertedInquiries = await Inquiry.countDocuments({ status: 'converted_to_order' });
+    
+    // Gesamtwert aller Anfragen berechnen
+    console.log('🔍 Starte totalValue Aggregation...');
+    const totalValueResult = await Inquiry.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalValue: { $sum: '$total' }
+        }
+      }
+    ]);
+    
+    const totalValue = totalValueResult.length > 0 ? totalValueResult[0].totalValue : 0;
+    console.log('💰 TotalValue Aggregation Ergebnis:', { totalValueResult, totalValue });
+    
+    console.log('📊 Admin-Statistiken:', {
+      total: totalInquiries,
+      pending: pendingInquiries,
+      totalValue: totalValue
+    });
     
     res.json({
       success: true,
@@ -34,7 +66,8 @@ router.get('/admin/stats', auth, requireAdmin, async (req, res) => {
         pending: pendingInquiries || 0,
         accepted: acceptedInquiries || 0,
         rejected: rejectedInquiries || 0,
-        converted: convertedInquiries || 0
+        converted: convertedInquiries || 0,
+        totalValue: totalValue || 0
       }
     });
   } catch (error) {
@@ -379,12 +412,12 @@ router.get('/admin/:inquiryId', auth, async (req, res) => {
 });
 
 // ✅ PUT: Anfrage annehmen (Admin)
-router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
+router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { message } = req.body;
+    const { message, convertToOrder } = req.body;
     
-    console.log(`✅ Anfrage ${inquiryId} annehmen...`);
+    console.log(`✅ Anfrage ${inquiryId} annehmen... Konvertieren: ${convertToOrder}`);
     
     const inquiry = await Inquiry.findOne({ inquiryId });
     
@@ -409,24 +442,182 @@ router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
       respondedAt: new Date()
     };
     
-    // Status ändern zu "accepted" - KEINE automatische Bestellung!
-    // Kunde muss erst bezahlen, bevor es eine Bestellung wird
-    inquiry.status = 'accepted';
-    inquiry.acceptedAt = new Date();
+    // ⚡ BESTAND IMMER REDUZIEREN beim Annehmen einer Anfrage
+    const Bestand = require('../models/Bestand');
     
-    await inquiry.save();
-    
-    console.log(`✅ Anfrage ${inquiryId} wurde angenommen - Kunde muss noch bezahlen`);
-    
-    res.json({
-      success: true,
-      message: 'Anfrage wurde angenommen. Kunde wird über Zahlungsmöglichkeit informiert.',
-      inquiry: {
-        ...inquiry.toObject(),
-        statusLabel: 'Angenommen - Warten auf Zahlung',
-        statusColor: 'warning'
+    console.log('🔄 Bestandsreduzierung für angenommene Anfrage...');
+    for (const item of inquiry.items) {
+      try {
+        // Bestand finden und reduzieren - prüfe beide mögliche Typ-Bezeichnungen
+        let bestand = await Bestand.findOne({
+          artikelId: item.produktId || item.productId,
+          typ: 'Portfolio' // Korrekter Typ für Portfolio-Produkte
+        });
+        
+        // Falls nicht gefunden, versuche andere Typ-Bezeichnungen
+        if (!bestand) {
+          bestand = await Bestand.findOne({
+            artikelId: item.produktId || item.productId,
+            typ: 'produkt'
+          });
+        }
+        
+        if (!bestand) {
+          bestand = await Bestand.findOne({
+            artikelId: item.produktId || item.productId,
+            typ: 'portfolio'
+          });
+        }
+
+        if (bestand) {
+          const mengeZuReduzieren = item.quantity || item.menge;
+          if (bestand.menge >= mengeZuReduzieren) {
+            bestand.menge -= mengeZuReduzieren;
+            await bestand.save();
+            console.log(`📦 Bestand reduziert: ${item.name} (-${mengeZuReduzieren}), Restbestand: ${bestand.menge}`);
+          } else {
+            console.warn(`⚠️ Nicht genügend Bestand für: ${item.name} (verfügbar: ${bestand.menge}, benötigt: ${mengeZuReduzieren})`);
+          }
+        } else {
+          console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${item.name} (ID: ${item.produktId || item.productId})`);
+        }
+      } catch (bestandError) {
+        console.error('❌ Fehler beim Bestandsabgang:', bestandError);
       }
-    });
+    }
+    
+    // ✅ CACHE-INVALIDIERUNG: Portfolio-Cache nach Bestandsänderungen invalidieren
+    invalidatePortfolioCache();
+    console.log('🔄 Portfolio-Cache invalidiert nach Bestandsreduzierung');
+    
+    if (convertToOrder) {
+      // Direkt in Bestellung umwandeln (Bestand bereits reduziert)
+      const Order = require('../models/Order');
+      
+      console.log('🔄 Konvertiere Anfrage zu Bestellung...');
+      
+      // Artikel für Bestellung formatieren (ohne nochmalige Bestandsreduzierung)
+      const artikelMitBestand = [];
+      for (const item of inquiry.items) {
+        artikelMitBestand.push({
+          produktId: item.produktId || item.productId,
+          produktSnapshot: {
+            name: item.name,
+            beschreibung: item.description || '',
+            bild: item.image || ''
+          },
+          menge: item.quantity || item.menge,
+          einzelpreis: item.price || item.einzelpreis,
+          gesamtpreis: (item.quantity || item.menge) * (item.price || item.einzelpreis)
+        });
+      }
+
+      // Bestellung erstellen
+      const bestellnummer = `ORDER-${Date.now()}`;
+      const neueBestellung = new Order({
+        orderId: bestellnummer,
+        bestellnummer: bestellnummer,
+        besteller: {
+          vorname: inquiry.customer.name ? inquiry.customer.name.split(' ')[0] : 'Unbekannt',
+          nachname: inquiry.customer.name ? inquiry.customer.name.split(' ').slice(1).join(' ') : '',
+          email: inquiry.customer.email,
+          telefon: ''
+        },
+        rechnungsadresse: (inquiry.rechnungsadresse && inquiry.rechnungsadresse !== null) ? inquiry.rechnungsadresse : {
+          strasse: 'Unbekannt',
+          hausnummer: '0',
+          plz: '00000',
+          stadt: 'Unbekannt',
+          land: 'Deutschland'
+        },
+        lieferadresse: {
+          verwendeRechnungsadresse: true,
+          firma: '',
+          strasse: '',
+          hausnummer: '',
+          zusatz: '',
+          plz: '',
+          stadt: '',
+          land: 'Deutschland'
+        },
+        artikel: artikelMitBestand.map(artikel => ({
+          ...artikel,
+          produktType: artikel.produktType || 'portfolio'
+        })),
+        preise: {
+          zwischensumme: inquiry.total,
+          versandkosten: 0,
+          mwst: {
+            satz: 19,
+            betrag: inquiry.total * 0.19 / 1.19
+          },
+          rabatt: {
+            betrag: 0,
+            code: '',
+            grund: '',
+            prozent: 0
+          },
+          gesamtsumme: inquiry.total
+        },
+        status: 'bestaetigt',
+        zahlungsart: 'rechnung',
+        zahlung: {
+          status: 'ausstehend',
+          methode: 'ueberweisung'
+        },
+        source: 'inquiry',
+        sourceInquiryId: inquiry._id
+      });
+
+      await neueBestellung.save();
+      console.log(`✅ Bestellung ${bestellnummer} aus Anfrage erstellt`);
+
+      // ✅ Automatische Rechnungserstellung für konvertierte Bestellung
+      try {
+        const orderInvoiceService = require('../services/orderInvoiceService');
+        console.log('🧾 Erstelle Rechnung für konvertierte Bestellung:', neueBestellung._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(neueBestellung._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für konvertierte Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung für konvertierte Bestellung:', invoiceResult.error);
+          // Konvertierung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung für konvertierte Bestellung:', invoiceError);
+        // Konvertierung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
+
+      // Anfrage als konvertiert markieren
+      inquiry.status = 'converted_to_order';
+      inquiry.convertedOrderId = neueBestellung._id;
+      
+      await inquiry.save();
+
+      res.json({
+        success: true,
+        message: 'Anfrage wurde angenommen und in Bestellung umgewandelt',
+        inquiry: inquiry,
+        order: {
+          orderId: neueBestellung._id,
+          bestellnummer: neueBestellung.bestellnummer
+        }
+      });
+
+    } else {
+      // Nur annehmen, aber nicht konvertieren - Kunde muss erst bezahlen
+      inquiry.status = 'accepted';
+      inquiry.acceptedAt = new Date();
+      
+      await inquiry.save();
+      
+      res.json({
+        success: true,
+        message: 'Anfrage wurde angenommen. Kunde wird über Zahlungsmöglichkeit informiert.',
+        inquiry: inquiry
+      });
+    }
     
   } catch (error) {
     console.error('Fehler beim Annehmen der Anfrage:', error);
@@ -494,7 +685,7 @@ router.put('/admin/:inquiryId/reject', auth, async (req, res) => {
 });
 
 // 📊 GET: Anfragen-Statistiken für Admin
-router.get('/admin/stats', auth, async (req, res) => {
+router.get('/admin/stats-DISABLED', auth, async (req, res) => {
   try {
     console.log('� Anfrage stats für Admin abrufen...');
     
@@ -680,15 +871,17 @@ router.post('/:inquiryId/create-payment', authenticateToken, async (req, res) =>
       });
     }
 
-    // Prüfen, ob Anfrage angenommen wurde
-    if (inquiry.status !== 'accepted' && inquiry.status !== 'converted_to_order') {
+    // Prüfen, ob Anfrage angenommen wurde oder Zahlung ausstehend ist
+    if (inquiry.status !== 'accepted' && 
+        inquiry.status !== 'converted_to_order' && 
+        inquiry.status !== 'payment_pending') {
       return res.status(400).json({
         success: false,
         message: 'Zahlung nur für angenommene Anfragen möglich'
       });
     }
 
-    // Prüfen, ob bereits bezahlt
+    // Prüfen, ob bereits erfolgreich bezahlt (nicht bei "pending" blockieren)
     if (inquiry.payment.status === 'completed') {
       return res.status(400).json({
         success: false,
@@ -825,8 +1018,10 @@ router.post('/:inquiryId/create-order-payment', authenticateToken, async (req, r
       });
     }
 
-    // Prüfen, ob Anfrage zu Bestellung konvertiert wurde
-    if (inquiry.status !== 'converted_to_order' || !inquiry.convertedOrderId) {
+    // Prüfen, ob Anfrage zu Bestellung konvertiert wurde (oder Zahlung ausstehend)
+    if ((inquiry.status !== 'converted_to_order' && 
+         inquiry.status !== 'payment_pending') || 
+        !inquiry.convertedOrderId) {
       return res.status(400).json({
         success: false,
         message: 'Zahlung nur für konvertierte Bestellungen möglich'
@@ -844,7 +1039,7 @@ router.post('/:inquiryId/create-order-payment', authenticateToken, async (req, r
       });
     }
 
-    // Prüfen, ob bereits bezahlt
+    // Prüfen, ob bereits erfolgreich bezahlt (nicht bei ausstehend blockieren)
     if (order.zahlung.status === 'bezahlt') {
       return res.status(400).json({
         success: false,
@@ -957,6 +1152,23 @@ router.post('/:inquiryId/capture-order-payment', authenticateToken, async (req, 
       await inquiry.save();
 
       console.log(`✅ Zahlung für konvertierte Bestellung ${order.bestellnummer} abgeschlossen`);
+
+      // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+      try {
+        const orderInvoiceService = require('../services/orderInvoiceService');
+        console.log('🧾 Automatische Rechnungserstellung für bezahlte konvertierte Bestellung:', order._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für konvertierte Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung (konvertierte Bestellung):', invoiceResult.error);
+          // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung (konvertierte Bestellung):', invoiceError);
+        // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
 
       res.json({
         success: true,

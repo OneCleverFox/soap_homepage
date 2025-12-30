@@ -194,7 +194,14 @@ export const CartProvider = ({ children }) => {
             const isStillAvailable = (affectedItem.aktiv !== false) && (newStock?.menge || 0) >= affectedItem.quantity;
             
             if (!isStillAvailable) {
-              toast.warning(`${affectedItem.name}: Bestand geändert - bitte Warenkorb prüfen`);
+              toast(`${affectedItem.name}: Bestand geändert - bitte Warenkorb prüfen`, {
+                icon: '⚠️',
+                style: {
+                  background: '#fff3cd',
+                  border: '1px solid #ffeaa7',
+                  color: '#856404',
+                },
+              });
             }
             
             // Warenkorb neu laden für aktuelle Verfügbarkeitsdaten
@@ -296,6 +303,10 @@ export const CartProvider = ({ children }) => {
 
       // Backend-Update
       await cartAPI.addToCart(cartItem);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(product.id, null);
+      
       toast.success('Artikel hinzugefügt');
     } catch (error) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', error);
@@ -330,6 +341,10 @@ export const CartProvider = ({ children }) => {
       
       // Backend-Update mit korrekter produktId
       await cartAPI.removeItem(backendProduktId);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(backendProduktId, null);
+      
       toast.success('Artikel entfernt');
     } catch (error) {
       console.error('Fehler beim Entfernen aus Warenkorb:', error);
@@ -401,6 +416,10 @@ export const CartProvider = ({ children }) => {
       
       // Backend-Update mit korrekter produktId
       await cartAPI.updateQuantity(backendProduktId, quantity);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(backendProduktId, null);
+      
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Warenkorbs:', error);
       toast.error('Fehler beim Aktualisieren des Warenkorbs');

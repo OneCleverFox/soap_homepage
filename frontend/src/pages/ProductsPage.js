@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -33,6 +33,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
+import stockEventService from '../services/stockEventService';
 
 // API Base URL für Bild-URLs
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -97,16 +98,27 @@ const ProductsPage = () => {
       await addToCart({
         id: product._id,
         name: product.name,
-        price: product.preis,
+        price: getProductPrice(product),
         image: product.bilder?.hauptbild,
         gramm: product.gramm,
         seife: product.seife
       }, quantity);
       
       // Erfolgs-Toast wird bereits in addToCart gezeigt
-      // Produkte neu laden um aktuellen Bestand anzuzeigen
-      console.log('🔄 Aktualisiere Produktbestände...');
-      fetchProducts(true);
+      // Optimistic Update: Reduziere Bestand sofort im lokalen State
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === product._id 
+            ? {
+                ...p,
+                bestand: {
+                  ...p.bestand,
+                  menge: Math.max(0, (p.bestand?.menge || 0) - quantity)
+                }
+              }
+            : p
+        )
+      );
       
     } catch (err) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
@@ -137,10 +149,45 @@ const ProductsPage = () => {
     return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
   };
 
+  // Helper-Funktion um den Preis eines Produkts zu ermitteln
+  const getProductPrice = (product) => {
+    return product.preis || product.verkaufspreis || 0;
+  };
+
+  // Stock-Update-Handler für reaktive Updates
+  const handleStockUpdate = useCallback((productId, newStock) => {
+    if (!productId) {
+      // Globales Update - alle Produkte neu laden
+      console.log('🔄 Global stock update - refreshing all products');
+      sessionStorage.removeItem('cachedProducts');
+      fetchProducts(true);
+    } else {
+      // Spezifisches Produkt-Update
+      console.log(`📦 Updating stock for product ${productId} to ${newStock}`);
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === productId 
+            ? {
+                ...p,
+                bestand: {
+                  ...p.bestand,
+                  menge: newStock,
+                  verfuegbar: newStock > 0
+                }
+              }
+            : p
+        )
+      );
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
     
-    // Event-Listener für Lageränderungen
+    // Stock-Event-Listener für reaktive Updates
+    const unsubscribeStock = stockEventService.subscribe(handleStockUpdate);
+    
+    // Event-Listener für Lageränderungen (Legacy)
     const handleInventoryUpdate = () => {
       console.log('📦 Inventory update detected - refreshing products');
       // Cache invalidieren und Produkte neu laden
@@ -156,11 +203,15 @@ const ProductsPage = () => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
-        const cached = sessionStorage.getItem('cachedProducts');
+        // TEMPORÄR: Cache für bessere Testing-Experience löschen
+        sessionStorage.removeItem('cachedProducts');
+        return false; // Lade immer frische Daten
+        
+        /* const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
           const { data, timestamp } = JSON.parse(cached);
-          // Verwende Cache wenn er weniger als 30 Sekunden alt ist (für Bestandsdaten)
-          if (Date.now() - timestamp < 30 * 1000) {
+          // Verwende Cache wenn er weniger als 5 Sekunden alt ist (verkürzt für Testing)
+          if (Date.now() - timestamp < 5 * 1000) {
             console.log('⚡ Loading cached products immediately');
             if (isMounted) {
               setProducts(data);
@@ -177,7 +228,7 @@ const ProductsPage = () => {
             }, 100);
             return true;
           }
-        }
+        } */
       } catch (e) {
         console.warn('⚠️ Could not load cached products:', e);
       }
@@ -192,6 +243,7 @@ const ProductsPage = () => {
     // Cleanup function
     return () => {
       isMounted = false;
+      unsubscribeStock(); // Stock-Event-Listener entfernen
       window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
   }, []);
@@ -498,14 +550,14 @@ const ProductsPage = () => {
                       borderColor: 'divider'
                     }}
                   >
-                    {product.preis ? (
+                    {getProductPrice(product) > 0 ? (
                       <Typography 
                         variant="h5" 
                         color="primary" 
                         fontWeight="bold"
                         sx={{ textAlign: 'center' }}
                       >
-                        {product.preis.toFixed(2)} €
+                        {getProductPrice(product).toFixed(2)} €
                       </Typography>
                     ) : (
                       <Typography 
@@ -521,7 +573,7 @@ const ProductsPage = () => {
 
                 <CardActions sx={{ p: 2, pt: 0, flexDirection: 'column', gap: 1 }}>
                   {/* Mengenauswahl und Warenkorb-Button in einer Zeile (für alle angemeldeten Benutzer) */}
-                  {user && product.preis > 0 && (
+                  {user && getProductPrice(product) > 0 && (
                     <Box sx={{ display: 'flex', gap: 1, width: '100%', alignItems: 'center' }}>
                       {/* Kompakte Mengenauswahl */}
                       <Box 

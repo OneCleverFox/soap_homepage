@@ -704,7 +704,17 @@ const resetPassword = async (req, res) => {
 // @access  Private
 const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken');
+    let user;
+    
+    // Versuche zuerst mit ObjectId (neue User)
+    if (req.user.id && req.user.id.match(/^[0-9a-fA-F]{24}$/)) {
+      user = await User.findById(req.user.id).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken');
+    }
+    
+    // Falls nicht gefunden, versuche mit username (Legacy-User wie admin-ralf)
+    if (!user && req.user.id) {
+      user = await User.findOne({ username: req.user.id }).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken');
+    }
     
     if (!user) {
       return res.status(404).json({
@@ -745,7 +755,18 @@ const updateProfile = async (req, res) => {
     console.log('🔄 Profil-Update für User:', userId);
 
     // Aktuellen Benutzer abrufen
-    const user = await User.findById(userId);
+    let user;
+    
+    // Versuche zuerst mit ObjectId (neue User)
+    if (userId && userId.match(/^[0-9a-fA-F]{24}$/)) {
+      user = await User.findById(userId);
+    }
+    
+    // Falls nicht gefunden, versuche mit username (Legacy-User wie admin-ralf)
+    if (!user && userId) {
+      user = await User.findOne({ username: userId });
+    }
+    
     if (!user) {
       return res.status(404).json({
         success: false,

@@ -22,22 +22,23 @@ class OrderInvoiceService {
   async generateInvoiceForOrder(orderId) {
     try {
       // Bestellung laden
-      const order = await Order.findById(orderId)
-        .populate('customer')
-        .populate('items.product');
+      const order = await Order.findById(orderId);
 
       if (!order) {
         throw new Error('Bestellung nicht gefunden');
       }
 
+      console.log('🧾 OrderInvoiceService - Generiere Rechnung für Bestellung:', order.bestellnummer);
+      console.log('📦 OrderInvoiceService - Artikel in Bestellung:', order.artikel ? order.artikel.length : 0);
+
       // AKTUELLES Standard-Template aus Datenbank laden
+      const InvoiceTemplate = require('../models/InvoiceTemplate');
       const template = await InvoiceTemplate.findOne({ isDefault: true });
       if (!template) {
         throw new Error('Kein Standard-Template in der Datenbank gefunden');
       }
       
       console.log('🎨 OrderInvoice Template:', template.name);
-      console.log('💰 OrderInvoice USt:', template.companyInfo?.isSmallBusiness ? 'Kleinunternehmer' : 'USt-pflichtig');
 
       // Rechnungsnummer generieren
       const invoiceNumber = await this.generateInvoiceNumber();
@@ -47,45 +48,59 @@ class OrderInvoiceService {
       order.invoiceDate = new Date();
       await order.save();
 
-      // Daten für PDFService vorbereiten
+      // Kundendaten aus Bestellung extrahieren
+      const rechnungsadresse = order.rechnungsadresse;
+      const kunde = order.besteller; // ✅ Korrekt: Order hat 'besteller', nicht 'kunde'
+
+      console.log('🔍 Bestelldaten:', {
+        bestellnummer: order.bestellnummer,
+        bestellerVorname: kunde?.vorname,
+        bestellerNachname: kunde?.nachname,
+        bestellerEmail: kunde?.email,
+        rechnungsadresseStrasse: rechnungsadresse?.strasse,
+        rechnungsadresseStadt: rechnungsadresse?.stadt
+      });
+
+      // Daten für PDFService vorbereiten (angepasst an Order-Modell)
       const bestellungData = {
         bestellnummer: invoiceNumber,
         bestelldatum: order.createdAt.toISOString(),
         faelligkeitsdatum: null,
-        kundennummer: order._id.toString().slice(-6),
+        kundennummer: kunde?.kundennummer || `K-${order._id.toString().slice(-6).toUpperCase()}`, // ✅ Kundennummer generieren
         besteller: {
-          vorname: customer.firstName || '',
-          nachname: customer.lastName || '',
-          firma: customer.company || '',
-          email: customer.email || '',
+          vorname: kunde?.vorname || '',
+          nachname: kunde?.nachname || '',
+          firma: rechnungsadresse?.firma || '',
+          email: kunde?.email || '',
           adresse: {
-            strasse: customer.address?.street || '',
-            plz: customer.address?.postalCode || '',
-            stadt: customer.address?.city || ''
+            strasse: rechnungsadresse?.strasse || '',
+            plz: rechnungsadresse?.plz || '',
+            stadt: rechnungsadresse?.stadt || ''
           }
         },
         rechnungsadresse: {
-          vorname: customer.firstName || '',
-          nachname: customer.lastName || '',
-          firma: customer.company || '',
-          strasse: (customer.address?.street || '').split(' ')[0] || '',
-          hausnummer: (customer.address?.street || '').split(' ').slice(1).join(' ') || '',
-          plz: customer.address?.postalCode || '',
-          stadt: customer.address?.city || '',
-          land: 'Deutschland'
+          vorname: rechnungsadresse?.vorname || '',
+          nachname: rechnungsadresse?.nachname || '',
+          firma: rechnungsadresse?.firma || '',
+          strasse: rechnungsadresse?.strasse || '',
+          hausnummer: rechnungsadresse?.hausnummer || '',
+          plz: rechnungsadresse?.plz || '',
+          stadt: rechnungsadresse?.stadt || '',
+          land: rechnungsadresse?.land || 'Deutschland'
         },
-        artikel: order.items.map(item => ({
-          name: item.product?.name || item.name || 'Produktname nicht verfügbar',
-          beschreibung: item.product?.description || item.description || 'Keine Beschreibung verfügbar',
-          menge: item.quantity || 1,
-          preis: item.price || 0,
-          einzelpreis: item.price || 0,
-          gesamtpreis: (item.quantity || 1) * (item.price || 0)
-        })),
-        gesamtsumme: order.totalPrice,
-        nettosumme: order.netPrice || order.totalPrice,
-        mwst: order.vatAmount || 0,
-        zahlungsmethode: order.paymentMethod || 'Überweisung'
+        artikel: order.artikel?.map((item, index) => ({
+          artikelnummer: `ART-${(index + 1).toString().padStart(3, '0')}`, // ✅ Artikelnummer hinzufügen
+          name: item.produktSnapshot?.name || 'Produktname nicht verfügbar',
+          beschreibung: item.produktSnapshot?.beschreibung || 'Keine Beschreibung verfügbar',
+          menge: item.menge || 1,
+          preis: item.einzelpreis || 0,
+          einzelpreis: item.einzelpreis || 0,
+          gesamtpreis: item.gesamtpreis || 0
+        })) || [],
+        gesamtsumme: order.preise?.gesamtsumme || 0,
+        nettosumme: order.preise?.zwischensumme || 0,
+        mwst: order.preise?.mwst?.betrag || 0,
+        zahlungsmethode: order.zahlung?.methode || 'Überweisung'
       };
 
       console.log('🧾 Generiere PDF für Bestellung:', invoiceNumber);
@@ -95,15 +110,122 @@ class OrderInvoiceService {
       const PDFService = require('./PDFService');
       const pdfBuffer = await PDFService.generateInvoicePDF(bestellungData, template);
 
+      // ✅ Rechnung auch in Invoice-DB speichern für Admin-Liste (mit Retry-Logic)
+      try {
+        const Invoice = require('../models/Invoice');
+        
+        // Retry-Logic für Race-Condition-sichere Invoice-Erstellung
+        let dbSaveSuccess = false;
+        let attempts = 0;
+        const maxAttempts = 5;
+        
+        while (!dbSaveSuccess && attempts < maxAttempts) {
+          try {
+            attempts++;
+            
+            // Nächste Sequenznummer für Invoice-System ermitteln
+            const { invoiceNumber: dbInvoiceNumber, sequenceNumber } = await Invoice.getNextInvoiceNumber();
+            
+            console.log(`🔄 Versuch ${attempts}/${maxAttempts} - DB-Invoice: ${dbInvoiceNumber}, Sequenz: ${sequenceNumber}`);
+            
+            const savedInvoice = new Invoice({
+              invoiceNumber: dbInvoiceNumber, // Verwende die DB-generierte Nummer für Eindeutigkeit
+              sequenceNumber: sequenceNumber,
+              customer: {
+                customerId: null, // Keine direkte Kunden-ID verfügbar
+                customerData: {
+                  salutation: 'Herr',
+                  firstName: kunde?.vorname || '',
+                  lastName: kunde?.nachname || '',
+                  company: rechnungsadresse?.firma || '',
+                  street: `${rechnungsadresse?.strasse || ''} ${rechnungsadresse?.hausnummer || ''}`.trim(),
+                  postalCode: rechnungsadresse?.plz || '',
+                  city: rechnungsadresse?.stadt || '',
+                  country: rechnungsadresse?.land || 'Deutschland',
+                  email: kunde?.email || '',
+                  phone: kunde?.telefon || ''
+                }
+              },
+              items: bestellungData.artikel.map((item, index) => ({
+                productId: null,
+                productData: {
+                  name: item.name,
+                  description: item.beschreibung,
+                  sku: item.artikelnummer, // ✅ Verwende generierte Artikelnummer
+                  category: 'Seife'
+                },
+                quantity: item.menge,
+                unitPrice: item.einzelpreis,
+                total: item.gesamtpreis
+              })),
+              amounts: {
+                subtotal: bestellungData.nettosumme,
+                shippingCost: order.preise?.versandkosten || 0,
+                vatAmount: bestellungData.mwst,
+                vatRate: template.companyInfo?.isSmallBusiness ? 0 : 19,
+                total: bestellungData.gesamtsumme
+              },
+              dates: {
+                invoiceDate: new Date(),
+                deliveryDate: order.lieferdatum || null,
+                dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 Tage Zahlungsziel
+              },
+              payment: {
+                method: bestellungData.zahlungsmethode === 'ueberweisung' ? 'bank_transfer' : 'pending'
+              },
+              template: template._id,
+              tax: {
+                isSmallBusiness: template.companyInfo?.isSmallBusiness || false
+              },
+              status: 'sent',
+              notes: {
+                internal: `Automatisch generiert für Bestellung ${order.bestellnummer}`,
+                customer: ''
+              },
+              // Verknüpfung zur ursprünglichen Bestellung
+              originalOrder: order._id,
+              source: 'auto-payment'
+            });
+
+            await savedInvoice.save();
+            dbSaveSuccess = true;
+            console.log('✅ Rechnung auch im Invoice-System gespeichert:', dbInvoiceNumber, `(nach ${attempts} Versuchen)`);
+            
+          } catch (retryError) {
+            console.log(`⚠️ DB-Speicherung Versuch ${attempts} fehlgeschlagen:`, retryError.message);
+            
+            if (retryError.code === 11000) {
+              // Duplicate Key Error - nochmal versuchen mit neuer Sequenz
+              console.log('🔄 Duplicate Key Error - versuche mit neuer Sequenznummer...');
+              await new Promise(resolve => setTimeout(resolve, 50 * attempts)); // Kurze Pause
+            } else {
+              throw retryError; // Andere Fehler nicht wiederholen
+            }
+          }
+        }
+        
+        if (!dbSaveSuccess) {
+          console.error('❌ DB-Speicherung nach allen Versuchen fehlgeschlagen');
+        }
+        
+      } catch (dbError) {
+        console.error('⚠️ Rechnung PDF erstellt, aber DB-Speicherung fehlgeschlagen:', dbError);
+        // PDF trotzdem erfolgreich erstellt, also nicht abbrechen
+      }
+
       return {
+        success: true,
         invoiceNumber,
         pdf: pdfBuffer,
         filename: `Rechnung-${invoiceNumber}.pdf`
       };
 
     } catch (error) {
-      console.error('Fehler bei der Rechnungsgenerierung:', error);
-      throw error;
+      console.error('❌ OrderInvoiceService - Fehler bei der Rechnungsgenerierung:', error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 

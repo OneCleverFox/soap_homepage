@@ -33,9 +33,9 @@ const HomePage = () => {
       description: 'Jedes Produkt wird mit Sorgfalt und Leidenschaft handgefertigt'
     },
     {
-      icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.info.main }}>🚚</span>,
-      title: 'Schneller Versand',
-      description: 'Schnelle und sichere Lieferung direkt zu Ihnen nach Hause'
+      icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.info.main }}>🎨</span>,
+      title: 'Kreative Familienarbeit',
+      description: 'Von Seifen über Schmuck bis hin zu Gips-Kunstwerken - vielfältige Kreativität'
     }
   ];
 

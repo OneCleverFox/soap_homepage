@@ -28,6 +28,7 @@ import {
   ListItemText,
   ListItemIcon,
   ListItemSecondaryAction,
+  CircularProgress,
   IconButton,
   Tabs,
   Tab,
@@ -655,7 +656,8 @@ const AdminEmailConfiguration = () => {
                     <FormControl fullWidth margin="normal">
                       <InputLabel>Auslöser</InputLabel>
                       <Select
-                        value={emailConfigs[emailType.id.replace('-', '')]?.trigger || 'manual'}
+                        value={emailConfigs[emailType.id.replace('-', '')]?.trigger || 
+                               (triggerOptions[emailType.id.replace('-', '')] || [])[0]?.value || ''}
                         label="Auslöser"
                         onChange={(e) => {
                           const configKey = emailType.id.replace('-', '');
@@ -708,11 +710,11 @@ const AdminEmailConfiguration = () => {
           <Button
             variant="contained"
             size="large"
-            startIcon={<SaveIcon />}
+            startIcon={saveLoading ? <CircularProgress size={20} /> : <SaveIcon />}
             onClick={saveEmailConfig}
-            loading={saveLoading}
+            disabled={saveLoading}
           >
-            Konfiguration speichern
+            {saveLoading ? 'Speichere...' : 'Konfiguration speichern'}
           </Button>
         </Box>
       </Grid>

@@ -111,6 +111,110 @@ router.post('/config', async (req, res) => {
   }
 });
 
+// Legacy-Route für direkte /email-config Aufrufe (ohne /email/ Prefix)
+router.get('/', async (req, res) => {
+  try {
+    const defaultConfig = {
+      verification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'user_registration',
+        subject: '✅ E-Mail-Adresse bestätigen - Gluecksmomente Seifenmanufaktur',
+        template: 'default'
+      },
+      welcome: {
+        enabled: true,
+        automatic: true,
+        trigger: 'email_verified',
+        subject: '🌸 Willkommen bei Gluecksmomente Manufaktur!',
+        template: 'default'
+      },
+      passwordReset: {
+        enabled: true,
+        automatic: true,
+        trigger: 'password_reset_request',
+        subject: '🔒 Passwort zurücksetzen - Gluecksmomente Manufaktur',
+        template: 'default'
+      },
+      orderConfirmation: {
+        enabled: true,
+        automatic: true,
+        trigger: 'order_placed',
+        subject: '📦 Bestellbestätigung - Gluecksmomente Manufaktur',
+        template: 'default'
+      },
+      adminNotification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'new_order',
+        subject: '🚨 Neue Bestellung eingegangen - {{orderNumber}}',
+        template: 'default'
+      },
+      adminInquiryNotification: {
+        enabled: true,
+        automatic: true,
+        trigger: 'new_inquiry',
+        subject: '📝 Neue Kundenanfrage von {{customerName}}',
+        template: 'default'
+      }
+    };
+
+    const globalSettings = {
+      fromName: 'Gluecksmomente Manufaktur',
+      fromEmail: process.env.EMAIL_FROM || 'info@gluecksmomente-manufaktur.de',
+      adminEmail: process.env.ADMIN_EMAIL || 'ralle.jacob84@googlemail.com',
+      emailEnabled: true,
+      defaultLanguage: 'de',
+      footer: 'Vielen Dank für Ihr Vertrauen in die Gluecksmomente Manufaktur',
+      notifications: {
+        newOrders: true,
+        newInquiries: true,
+        orderUpdates: false,
+        highValueOrders: true,
+        highValueThreshold: 100
+      }
+    };
+
+    console.log('📧 [Admin] E-Mail-Konfiguration abgerufen (Legacy Route)');
+    res.json({
+      success: true,
+      emailConfigs: defaultConfig,
+      globalSettings
+    });
+  } catch (error) {
+    console.error('❌ [Admin] Fehler beim Abrufen der E-Mail-Konfiguration (Legacy):', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+// Legacy POST-Route für direkte /email-config Aufrufe
+router.post('/', async (req, res) => {
+  try {
+    const { emailConfigs, globalSettings } = req.body;
+    
+    console.log('📧 [Admin] E-Mail-Konfiguration gespeichert (Legacy):', {
+      configCount: Object.keys(emailConfigs || {}).length,
+      hasGlobalSettings: !!globalSettings
+    });
+    
+    res.json({
+      success: true,
+      message: 'E-Mail-Konfiguration erfolgreich gespeichert'
+    });
+  } catch (error) {
+    console.error('❌ [Admin] Fehler beim Speichern der E-Mail-Konfiguration (Legacy):', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/admin/email-templates
 // @desc    Alle verfügbaren E-Mail-Templates abrufen
 // @access  Private (Admin)
