@@ -177,16 +177,39 @@ function AdminUsers() {
   const loadVerificationSettings = useCallback(async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/users/verification-settings', {
+      
+      // Try the primary endpoint first
+      let response = await fetch('/api/admin/users/verification-settings', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
       
+      // If that fails, try alternative endpoints
+      if (!response.ok) {
+        console.warn('Primary verification settings endpoint failed, trying alternative...');
+        
+        // Try to get from general admin settings
+        response = await fetch('/api/admin/settings', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+      
       if (response.ok) {
         const data = await response.json();
-        setRequireEmailVerification(data.requireEmailVerification);
+        // Handle different response structures
+        const requireEmailVerification = data.requireEmailVerification ?? 
+                                       data.userManagement?.requireEmailVerification ?? 
+                                       true;
+        setRequireEmailVerification(requireEmailVerification);
+      } else {
+        // Fallback to default if all endpoints fail
+        console.warn('All verification settings endpoints failed, using default (true)');
+        setRequireEmailVerification(true);
       }
     } catch (error) {
       console.error('Error loading verification settings:', error);
