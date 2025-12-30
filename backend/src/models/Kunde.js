@@ -303,6 +303,12 @@ kundenSchema.methods.generiereKundennummer = function() {
 };
 
 kundenSchema.methods.vergleichePasswort = async function(eingabePasswort) {
+  // Sicherheitscheck: Wenn kein Passwort gesetzt ist, Login verweigern
+  if (!this.passwort) {
+    console.log('❌ Kein Passwort für Benutzer:', this.email);
+    return false;
+  }
+  
   return await bcrypt.compare(eingabePasswort, this.passwort);
 };
 

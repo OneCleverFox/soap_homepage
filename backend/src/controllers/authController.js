@@ -111,6 +111,35 @@ const loginAdmin = async (req, res) => {
       statusType: typeof kunde.status
     });
 
+    // Datenreparatur für unvollständige Kunden vor jeder weiteren Verarbeitung
+    let dataFixed = false;
+    if (!kunde.vorname || !kunde.nachname || !kunde.passwort) {
+      console.log('🔧 Datenreparatur erforderlich für unvollständigen Kunde:', email);
+      
+      // Fehlende Daten mit Dummy-Werten füllen
+      if (!kunde.vorname) kunde.vorname = 'Kunde';
+      if (!kunde.nachname) kunde.nachname = 'Nicht vollständig';
+      if (!kunde.kundennummer) {
+        // Kundennummer generieren wie im Model
+        const datum = new Date();
+        const jahr = datum.getFullYear().toString();
+        const monat = (datum.getMonth() + 1).toString().padStart(2, '0');
+        const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
+        kunde.kundennummer = `KD${jahr}${monat}${random}`;
+      }
+      if (!kunde.geschlecht) kunde.geschlecht = 'Keine Angabe';
+      
+      // Adresse reparieren
+      if (!kunde.adresse) kunde.adresse = {};
+      if (!kunde.adresse.strasse) kunde.adresse.strasse = 'Unbekannt';
+      if (!kunde.adresse.hausnummer) kunde.adresse.hausnummer = '0';
+      if (!kunde.adresse.plz) kunde.adresse.plz = '00000';
+      if (!kunde.adresse.stadt) kunde.adresse.stadt = 'Unbekannt';
+      
+      dataFixed = true;
+      console.log('✅ Daten repariert für:', email);
+    }
+
     // Status-Migration für ältere Kunden-Datensätze
     let statusFixed = false;
     if (typeof kunde.status === 'string') {
@@ -125,7 +154,7 @@ const loginAdmin = async (req, res) => {
       };
       
       kunde.status = newStatus;
-      await kunde.save();
+      await kunde.save({ validateBeforeSave: false });
       statusFixed = true;
       
       console.log('✅ Status migriert:', { 
@@ -146,11 +175,17 @@ const loginAdmin = async (req, res) => {
           gesperrt: kunde.status.gesperrt || false
         };
         
-        await kunde.save();
+        await kunde.save({ validateBeforeSave: false });
         statusFixed = true;
         
         console.log('✅ Status repariert für:', email, kunde.status);
       }
+    }
+    
+    // Speichere Datenreparaturen falls nötig
+    if (dataFixed || statusFixed) {
+      await kunde.save({ validateBeforeSave: false });
+      console.log('✅ Kunde-Daten gespeichert nach Reparatur');
     }
 
     // Admin-Einstellungen für E-Mail-Verifikation prüfen
@@ -193,9 +228,21 @@ const loginAdmin = async (req, res) => {
     const istPasswortKorrekt = await kunde.vergleichePasswort(password);
     if (!istPasswortKorrekt) {
       kunde.anmeldeversuche = (kunde.anmeldeversuche || 0) + 1;
-      await kunde.save();
+      await kunde.save({ validateBeforeSave: false });
       
-      console.log('❌ Falsches Passwort für Kunde:', email);
+      console.log('❌ Falsches Passwort für Kunde:', email, {
+        hatPasswort: !!kunde.passwort,
+        eingegebenesPasswort: password ? '***' : 'leer'
+      });
+      
+      // Spezielle Fehlermeldung für Kunden ohne Passwort
+      if (!kunde.passwort) {
+        return res.status(401).json({
+          success: false,
+          message: 'Account unvollständig - bitte kontaktieren Sie den Support'
+        });
+      }
+      
       return res.status(401).json({
         success: false,
         message: 'Ungültige Anmeldedaten'
@@ -205,7 +252,7 @@ const loginAdmin = async (req, res) => {
     // Erfolgreiche Kunden-Anmeldung
     kunde.letzteAnmeldung = new Date();
     kunde.anmeldeversuche = 0;
-    await kunde.save();
+    await kunde.save({ validateBeforeSave: false });
 
     // JWT Token für Kunde erstellen
     const token = jwt.sign(
