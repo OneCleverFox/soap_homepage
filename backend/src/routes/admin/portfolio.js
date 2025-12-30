@@ -74,7 +74,8 @@ router.post('/', async (req, res) => {
       optional,
       verpackung,
       aktiv,
-      reihenfolge
+      reihenfolge,
+      beschreibung
     } = req.body;
 
     // Prüfen ob Name bereits existiert
@@ -98,6 +99,13 @@ router.post('/', async (req, res) => {
       verpackung,
       aktiv: aktiv !== undefined ? aktiv : false,
       reihenfolge: parseInt(reihenfolge) || 0,
+      beschreibung: beschreibung || {
+        kurz: '',
+        lang: '',
+        inhaltsstoffe: '',
+        anwendung: '',
+        besonderheiten: ''
+      },
       bilder: {
         hauptbild: '',
         galerie: [],
@@ -179,6 +187,17 @@ router.put('/:id', async (req, res) => {
         }
       }
     });
+
+    // Beschreibungsfelder separat handhaben
+    if (updateData.beschreibung) {
+      product.beschreibung = {
+        kurz: updateData.beschreibung.kurz || '',
+        lang: updateData.beschreibung.lang || '',
+        inhaltsstoffe: updateData.beschreibung.inhaltsstoffe || '',
+        anwendung: updateData.beschreibung.anwendung || '',
+        besonderheiten: updateData.beschreibung.besonderheiten || ''
+      };
+    }
 
     const updatedProduct = await product.save();
 

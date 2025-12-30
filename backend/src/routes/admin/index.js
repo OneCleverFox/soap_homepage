@@ -22,8 +22,8 @@ router.use('/invoices', invoicesRoutes);
 router.use('/email', emailRoutes); // Für /email-config, /email-templates
 router.use('/kunden', kundenRoutes);
 
-// Für Legacy-Kompatibilität - alte Routen weiterleiten
-router.use('/email-config', emailRoutes);
+// Legacy-Kompatibilität für E-Mail-Konfiguration
+router.use('/email-config', emailRoutes); // Direkte Weiterleitung 
 router.use('/email-templates', emailRoutes);
 
 module.exports = router;

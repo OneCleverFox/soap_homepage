@@ -68,6 +68,22 @@ router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, asy
         await neueBestellung.save();
         console.log('✅ Bestellung nach PayPal-Erfolg gespeichert mit Status "bezahlt":', bestellungData.bestellnummer);
         
+        // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+        try {
+          console.log('🧾 Automatische Rechnungserstellung für bezahlte Bestellung:', neueBestellung._id);
+          const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(neueBestellung._id);
+          
+          if (invoiceResult.success) {
+            console.log('✅ Rechnung automatisch erstellt:', invoiceResult.invoiceNumber);
+          } else {
+            console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceResult.error);
+            // Bestellung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+          }
+        } catch (invoiceError) {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceError);
+          // Bestellung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+        
         res.json({
           success: true,
           message: 'Bestellung erfolgreich abgeschlossen',
@@ -2127,6 +2143,22 @@ router.post('/payment/capture', async (req, res) => {
       await order.save();
 
       console.log('✅ Bestellung als bezahlt markiert:', orderNumber);
+
+      // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+      try {
+        console.log('🧾 Automatische Rechnungserstellung für bezahlte Bestellung:', order._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für bestehende Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung (bestehende Bestellung):', invoiceResult.error);
+          // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung (bestehende Bestellung):', invoiceError);
+        // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
 
       res.json({
         success: true,

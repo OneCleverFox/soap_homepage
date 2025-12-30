@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node backend/src/server.js",
     "dev": "nodemon backend/src/server.js",
-    "build": "npm install --production",
+    "build": "npm install --omit=dev",
     "test": "echo \"No tests specified\""
   },
   "dependencies": {

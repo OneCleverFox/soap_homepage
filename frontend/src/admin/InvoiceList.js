@@ -348,15 +348,24 @@ const InvoiceList = () => {
     }
   };
 
-  // Zusätzliche Hilfsfunktionen aus AdminInvoiceManagement
-  const getPaymentStatusColor = (paymentStatus) => {
-    const statusMap = {
-      'pending': 'warning',
-      'paid': 'success',
-      'failed': 'error',
-      'cancelled': 'default'
+  // Bezahlstatus-Hilfsfunktionen
+  const getPaymentStatusText = (paymentMethod) => {
+    if (!paymentMethod) return 'Unbezahlt';
+    
+    const methodMap = {
+      'paypal': 'PayPal',
+      'stripe': 'Kreditkarte',
+      'bank_transfer': 'Überweisung',
+      'invoice': 'Rechnung'
     };
-    return statusMap[paymentStatus] || 'default';
+    
+    return methodMap[paymentMethod] || 'Bezahlt';
+  };
+
+  // Zusätzliche Hilfsfunktionen aus AdminInvoiceManagement
+  const getPaymentStatusColor = (paymentMethod) => {
+    if (!paymentMethod) return 'warning';
+    return 'success';
   };
 
   const formatCurrency = (amount) => {
@@ -655,6 +664,7 @@ const InvoiceList = () => {
                     <TableCell>Datum</TableCell>
                     <TableCell>Betrag</TableCell>
                     <TableCell>Status</TableCell>
+                    <TableCell>Bezahlstatus</TableCell>
                     <TableCell>Fälligkeitsdatum</TableCell>
                     <TableCell align="center">Aktionen</TableCell>
                   </TableRow>
@@ -662,13 +672,13 @@ const InvoiceList = () => {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center">
+                      <TableCell colSpan={8} align="center">
                         <Typography>Lade Rechnungen...</Typography>
                       </TableCell>
                     </TableRow>
                   ) : invoices.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center">
+                      <TableCell colSpan={8} align="center">
                         <Typography color="textSecondary">
                           Keine Rechnungen gefunden
                         </Typography>
@@ -707,6 +717,13 @@ const InvoiceList = () => {
                             size="small"
                             label={getStatusText(invoice.status)}
                             color={getStatusColor(invoice.status)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={getPaymentStatusText(invoice.payment?.method)}
+                            color={getPaymentStatusColor(invoice.payment?.method)}
                           />
                         </TableCell>
                         <TableCell>
