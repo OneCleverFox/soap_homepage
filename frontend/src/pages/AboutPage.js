@@ -315,27 +315,96 @@ const AboutPage = () => {
                 Sandra
               </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Unterstützung & Organisation
+                Kreative Allrounderin & Designerin
               </Typography>
-              <Stack direction="row" spacing={1} justifyContent="center" mb={2}>
+              <Stack direction="row" spacing={1} justifyContent="center" mb={2} sx={{ flexWrap: 'wrap' }}>
                 <Chip 
-                  label="Organisation" 
+                  label="Plotten" 
                   variant="outlined" 
                   size="small"
                 />
                 <Chip 
-                  label="Unterstützung" 
+                  label="T-Shirts" 
+                  variant="outlined" 
+                  size="small"
+                />
+                <Chip 
+                  label="Karten" 
+                  variant="outlined" 
+                  size="small"
+                />
+                <Chip 
+                  label="Holzmöbel" 
                   variant="outlined" 
                   size="small"
                 />
               </Stack>
               <Typography variant="body2" sx={{ lineHeight: 1.6 }}>
-                Sandra vervollständigt unser Familienteam und sorgt für den 
-                reibungslosen Ablauf unserer gemeinsamen Projekte.
+                Sandra ist unsere kreative Visionärin! Sie fertigt individuelle 
+                geplotterte Aufkleber, T-Shirts und persönliche Karten. Ihre 
+                Leidenschaft fürs Basteln zeigt sich besonders beim Gestalten 
+                von Holzmöbelstücken und der individuellen Umsetzung von Kundenwünschen.
               </Typography>
             </TeamCard>
           </Grid>
         </Grid>
+      </Box>
+
+      {/* Family Creative Projects Section */}
+      <Box textAlign="center" sx={{ 
+        background: 'linear-gradient(135deg, #e3ffe7 0%, #d9e7ff 100%)',
+        borderRadius: 3,
+        py: 5,
+        px: 3,
+        mb: 4
+      }}>
+        <Typography variant="h5" gutterBottom color="primary">
+          <span style={{ marginRight: 8, fontSize: '1.2rem' }}>🎨</span>
+          Unsere kreativen Familienprojekte
+        </Typography>
+        <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
+          Gips-Kunsthandwerk
+        </Typography>
+        <Typography variant="body1" sx={{ 
+          maxWidth: 800, 
+          mx: 'auto', 
+          lineHeight: 1.8,
+          fontSize: '1.1rem',
+          mb: 3
+        }}>
+          Gemeinsam gießen Jonas, Ralf und Sandra aus Gips wunderschöne Formen wie 
+          Schalen und Vasen. Diese werden anschließend von Sandra individuell beklebt 
+          und gestaltet, wodurch jedes Stück zu einem einzigartigen Kunstwerk wird.
+        </Typography>
+        
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          gap: 2, 
+          flexWrap: 'wrap',
+          mt: 2 
+        }}>
+          <Chip 
+            label="Gips-Schalen" 
+            variant="filled" 
+            sx={{ backgroundColor: '#e8f5e8', color: '#2e7d32' }}
+          />
+          <Chip 
+            label="Gips-Vasen" 
+            variant="filled" 
+            sx={{ backgroundColor: '#e8f5e8', color: '#2e7d32' }}
+          />
+          <Chip 
+            label="Individuelle Gestaltung" 
+            variant="filled" 
+            sx={{ backgroundColor: '#e8f5e8', color: '#2e7d32' }}
+          />
+          <Chip 
+            label="Familienprojekt" 
+            variant="filled" 
+            sx={{ backgroundColor: '#e8f5e8', color: '#2e7d32' }}
+          />
+        </Box>
       </Box>
 
       {/* Values Section */}
@@ -357,8 +426,10 @@ const AboutPage = () => {
         }}>
           Familie, Qualität und Kreativität stehen im Mittelpunkt unseres Schaffens. 
           Jedes Produkt wird mit Liebe gefertigt und spiegelt unsere gemeinsame 
-          Leidenschaft für handwerkliche Perfektion und die Freude am Erschaffen schöner Dinge wider.
-          Jonas' Begeisterung für die Seifenproduktion hat unser Familienprojekt zu etwas ganz Besonderem gemacht.
+          Leidenschaft für handwerkliche Perfektion wider. Von Jonas' Begeisterung 
+          für die Seifenproduktion über Sandras vielfältige Bastelkünste bis hin 
+          zu unseren gemeinsamen Gips-Projekten - jeder trägt seine besonderen 
+          Talente zu unserem Familienunternehmen bei und erschafft dadurch einzigartige Glücksmomente.
         </Typography>
       </Box>
     </Container>

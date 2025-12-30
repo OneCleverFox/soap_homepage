@@ -50,6 +50,7 @@ import {
   ExpandLess
 } from '@mui/icons-material';
 import api from '../services/api';
+import stockEventService from '../services/stockEventService';
 
 const AdminInquiries = () => {
   const theme = useTheme();
@@ -89,33 +90,111 @@ const AdminInquiries = () => {
       
       if (response.data.success) {
         setInquiries(response.data.inquiries);
-        setStats(response.data.stats);
+        // ⚠️ ENTFERNT: setStats(response.data.stats) - Das überschreibt die echten Stats!
+        // Stats werden nur von loadStats() gesetzt
         setSuccess('Anfragen erfolgreich geladen');
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📋 Anfragen geladen:', response.data.inquiries.length);
+        }
       }
     }, 'Anfragen werden geladen...');
   }, [statusFilter, handleAsyncOperation, setSuccess]);
 
-  // Statistiken laden mit React Hook Pattern
+  // Statistiken laden mit Anti-Race-Condition Pattern
   const loadStats = useCallback(async () => {
-    await handleAsyncOperation(async () => {
+    // Verhindere mehrfache gleichzeitige Ausführung
+    if (loadStats._isLoading) {
+      console.log('🚫 Stats Loading bereits aktiv, überspringe...');
+      return;
+    }
+    
+    loadStats._isLoading = true;
+    
+    try {
       const response = await api.get('/inquiries/admin/stats');
       if (response.data.success) {
         const statsData = response.data.data;
-        setStats({
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Backend Stats erhalten:', statsData);
+        }
+        
+        // Fallback: Berechne totalValue aus allen Anfragen wenn Backend 0 zurückgibt
+        let totalValue = statsData.totalValue || 0;
+        if (totalValue === 0) {
+          try {
+            const inquiriesResponse = await api.get('/inquiries/admin/all?limit=1000');
+            if (inquiriesResponse.data.success && inquiriesResponse.data.inquiries) {
+              totalValue = inquiriesResponse.data.inquiries.reduce((sum, inquiry) => {
+                return sum + (inquiry.total || 0);
+              }, 0);
+              
+              if (process.env.NODE_ENV === 'development') {
+                console.log('💰 Frontend TotalValue Fallback berechnet:', {
+                  anzahlAnfragen: inquiriesResponse.data.inquiries.length,
+                  calculatedTotalValue: totalValue,
+                  backendTotalValue: statsData.totalValue
+                });
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Fallback totalValue Berechnung fehlgeschlagen:', error);
+          }
+        }
+        
+        const newStats = {
           pendingCount: statsData.pending || 0,
           acceptedCount: statsData.accepted || 0,
           rejectedCount: statsData.rejected || 0,
           convertedCount: statsData.converted || 0,
-          totalCount: statsData.total || 0
-        });
+          totalCount: statsData.total || 0,
+          totalValue: totalValue
+        };
+        
+        setStats(newStats);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📊 Frontend-Statistiken FINAL gesetzt:', {
+            ...newStats,
+            usedFallback: (statsData.totalValue === 0 && totalValue > 0)
+          });
+        }
       }
-    }, 'Statistiken werden geladen...');
-  }, [handleAsyncOperation]);
+    } catch (error) {
+      console.error('❌ Fehler beim Laden der Statistiken:', error);
+    } finally {
+      loadStats._isLoading = false;
+    }
+  }, []);
 
   useEffect(() => {
     loadInquiries();
-    loadStats();
-  }, [loadInquiries, loadStats]);
+    // loadStats wird separat aufgerufen, um Race Conditions zu vermeiden
+    const timer = setTimeout(() => loadStats(), 100);
+    return () => clearTimeout(timer);
+  }, [loadInquiries]);
+  
+  // Separater Effect für Badge-Reset nur wenn wirklich Aktionen durchgeführt wurden
+  useEffect(() => {
+    const handleInquiryAction = () => {
+      // Badge erst nach tatsächlicher Aktion (Ansehen, Bearbeiten) zurücksetzen
+      window.dispatchEvent(new CustomEvent('adminInquiriesViewed'));
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('👑 Admin-Anfrage bearbeitet - Badge-Reset ausgelöst');
+      }
+    };
+    
+    // Event-Listener für Anfragen-Aktionen
+    window.addEventListener('inquiryViewed', handleInquiryAction);
+    window.addEventListener('inquiryActioned', handleInquiryAction);
+    
+    return () => {
+      window.removeEventListener('inquiryViewed', handleInquiryAction);
+      window.removeEventListener('inquiryActioned', handleInquiryAction);
+    };
+  }, []);
 
   // Anfrage-Details anzeigen mit React Hook Pattern
   const showInquiryDetails = useCallback(async (inquiryId) => {
@@ -125,6 +204,11 @@ const AdminInquiries = () => {
         setSelectedInquiry(response.data.inquiry);
         setDialogOpen(true);
         showSnackbar('Details erfolgreich geladen', 'success');
+        
+        // Event senden - Anfrage wurde angesehen
+        window.dispatchEvent(new CustomEvent('inquiryViewed', {
+          detail: { inquiryId }
+        }));
       }
     }, 'Details werden geladen...');
   }, [handleAsyncOperation, showSnackbar]);
@@ -144,6 +228,17 @@ const AdminInquiries = () => {
         await loadInquiries();
         await loadStats();
         showSnackbar('Anfrage erfolgreich angenommen', 'success');
+        
+        // Event senden - Anfrage wurde bearbeitet
+        window.dispatchEvent(new CustomEvent('inquiryActioned', {
+          detail: { action: 'accept', inquiryId: selectedInquiry.inquiryId }
+        }));
+        
+        // ✅ BESTAND-UPDATE: Benachrichtige über Bestandsänderungen
+        window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+        stockEventService.notifyGlobalStockUpdate();
+        
+        console.log('📦 Bestandsänderung durch Anfrage-Annahme - Events ausgelöst');
       }
     }, 'Anfrage wird angenommen...');
   }, [handleAsyncOperation, selectedInquiry, responseMessage, convertToOrder, loadInquiries, loadStats, showSnackbar]);
@@ -161,8 +256,11 @@ const AdminInquiries = () => {
         setResponseMessage('');
         await loadInquiries();
         await loadStats();
-        showSnackbar('Anfrage wurde abgelehnt', 'info');
-      }
+        showSnackbar('Anfrage wurde abgelehnt', 'info');        
+        // Event senden - Anfrage wurde bearbeitet
+        window.dispatchEvent(new CustomEvent('inquiryActioned', {
+          detail: { action: 'reject', inquiryId: selectedInquiry.inquiryId }
+        }));      }
     }, 'Anfrage wird abgelehnt...');
   }, [handleAsyncOperation, selectedInquiry, responseMessage, loadInquiries, loadStats, showSnackbar]);
 

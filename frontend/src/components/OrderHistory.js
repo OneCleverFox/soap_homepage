@@ -183,6 +183,16 @@ const OrderHistory = () => {
 
     try {
       setLoading(true);
+      
+      // Markiere als "besucht" für Badge-System - nur für Kunden
+      const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
+      if (!isAdmin) {
+        window.dispatchEvent(new CustomEvent('ordersViewed'));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📦 Kunden-Bestellungen-Seite besucht - Badge-Reset ausgelöst');
+        }
+      }
+      
       const result = await ordersAPI.getCustomerOrders({
         limit: 50,
         sortBy: 'bestelldatum',

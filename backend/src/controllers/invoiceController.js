@@ -3934,8 +3934,8 @@ class InvoiceController {
       const { invoiceId } = req.params;
 
       const Invoice = require('../models/Invoice');
-      const invoice = await Invoice.findById(invoiceId)
-        .populate('customerId', 'firstName lastName company email phone address');
+      const invoice = await Invoice.findById(invoiceId);
+      // KEIN POPULATE nötig - Customer-Daten sind direkt in invoice.customer.customerData gespeichert
 
       if (!invoice) {
         return res.status(404).json({
@@ -3944,7 +3944,15 @@ class InvoiceController {
         });
       }
 
-      const template = await this.loadTemplateFromDatabase(invoice.templateId);
+      console.log('🔍 Invoice gefunden:', {
+        invoiceNumber: invoice.invoiceNumber,
+        customerId: invoice.customer?.customerId,
+        hasCustomerData: !!invoice.customer?.customerData,
+        customerName: `${invoice.customer?.customerData?.firstName || ''} ${invoice.customer?.customerData?.lastName || ''}`.trim(),
+        customerEmail: invoice.customer?.customerData?.email
+      });
+
+      const template = await this.loadTemplateFromDatabase(invoice.template);
       if (!template) {
         // Verwende immer das aktuelle Default-Template
         const defaultTemplate = await InvoiceTemplate.findOne({ isDefault: true });
@@ -3960,45 +3968,57 @@ class InvoiceController {
       console.log('🎨 InvoiceController Template:', template.name);
       console.log('💰 InvoiceController USt:', template.companyInfo?.isSmallBusiness ? 'Kleinunternehmer' : 'USt-pflichtig');
 
-      // Daten für PDFService vorbereiten
+      console.log('🧾 Bestellung-Daten für PDF:');
+      console.log('  - Kundennummer:', `K-${invoice._id.toString().slice(-6).toUpperCase()}`);
+      console.log('  - Artikel-Count:', invoice.items?.length || 0);
+      console.log('  - Artikel-Namen:', invoice.items?.map(i => i.productData?.name || i.name).join(', ') || 'keine');
+      console.log('  - Kunde:', invoice.customer?.customerData?.firstName, invoice.customer?.customerData?.lastName);
+      console.log('  - Rechnungsadresse:', invoice.customer?.customerData?.street, invoice.customer?.customerData?.city);
+      console.log('  - Customer populated:', !!invoice.customer);
+      console.log('  - Customer Adresse:', invoice.customer?.customerData?.street);
+      console.log('  - Customer PLZ:', invoice.customer?.customerData?.postalCode);
+      console.log('🔍 DEBUG: Full customer object:', JSON.stringify(invoice.customer, null, 2));
+
+      // Daten für PDFService vorbereiten - KORRIGIERT: Verwende customer.customerData statt direktes customerData
       const bestellungData = {
         bestellnummer: invoice.invoiceNumber,
-        bestelldatum: invoice.invoiceDate || new Date().toISOString(),
-        faelligkeitsdatum: invoice.dueDate || null,
-        kundennummer: invoice.customerNumber || invoice._id.toString().slice(-6),
+        bestelldatum: invoice.dates?.invoiceDate?.toISOString() || new Date().toISOString(),
+        faelligkeitsdatum: invoice.dates?.dueDate?.toISOString() || null,
+        kundennummer: `K-${invoice._id.toString().slice(-6).toUpperCase()}`,
         besteller: {
-          vorname: invoice.customerData?.firstName || '',
-          nachname: invoice.customerData?.lastName || '',
-          firma: invoice.customerData?.company || '',
-          email: invoice.customerData?.email || '',
+          vorname: invoice.customer?.customerData?.firstName || '',
+          nachname: invoice.customer?.customerData?.lastName || '',
+          firma: invoice.customer?.customerData?.company || '',
+          email: invoice.customer?.customerData?.email || '',
           adresse: {
-            strasse: invoice.customerData?.street || '',
-            plz: invoice.customerData?.postalCode || '',
-            stadt: invoice.customerData?.city || ''
+            strasse: invoice.customer?.customerData?.street || '',
+            plz: invoice.customer?.customerData?.postalCode || '',
+            stadt: invoice.customer?.customerData?.city || ''
           }
         },
         rechnungsadresse: {
-          vorname: invoice.customerData?.firstName || '',
-          nachname: invoice.customerData?.lastName || '',
-          firma: invoice.customerData?.company || '',
-          strasse: (invoice.customerData?.street || '').split(' ')[0] || '',
-          hausnummer: (invoice.customerData?.street || '').split(' ').slice(1).join(' ') || '',
-          plz: invoice.customerData?.postalCode || '',
-          stadt: invoice.customerData?.city || '',
-          land: 'Deutschland'
+          vorname: invoice.customer?.customerData?.firstName || '',
+          nachname: invoice.customer?.customerData?.lastName || '',
+          firma: invoice.customer?.customerData?.company || '',
+          strasse: (invoice.customer?.customerData?.street || '').split(' ')[0] || '',
+          hausnummer: (invoice.customer?.customerData?.street || '').split(' ').slice(1).join(' ') || '',
+          plz: invoice.customer?.customerData?.postalCode || '',
+          stadt: invoice.customer?.customerData?.city || '',
+          land: invoice.customer?.customerData?.country || 'Deutschland'
         },
         artikel: invoice.items.map(item => ({
-          name: item.name || 'Produktname nicht verfügbar',
-          beschreibung: item.description || 'Keine Beschreibung verfügbar',
+          name: item.productData?.name || 'Produktname nicht verfügbar',
+          beschreibung: item.productData?.description || 'Keine Beschreibung verfügbar',
+          sku: item.productData?.sku || '',
           menge: item.quantity || 1,
           preis: item.unitPrice || 0,
           einzelpreis: item.unitPrice || 0,
-          gesamtpreis: (item.quantity || 1) * (item.unitPrice || 0)
+          gesamtpreis: item.total || ((item.quantity || 1) * (item.unitPrice || 0))
         })),
-        gesamtsumme: invoice.totalAmount || 0,
-        nettosumme: invoice.netAmount || 0,
-        mwst: invoice.vatAmount || 0,
-        zahlungsmethode: invoice.paymentMethod || 'Überweisung'
+        gesamtsumme: invoice.amounts?.total || 0,
+        zahlungsmethode: invoice.payment?.method || 'Überweisung',
+        nettosumme: invoice.amounts?.subtotal || 0,
+        mwst: invoice.amounts?.vatAmount || 0
       };
 
       console.log('🧾 Generiere PDF für gespeicherte Rechnung:', invoice.invoiceNumber);

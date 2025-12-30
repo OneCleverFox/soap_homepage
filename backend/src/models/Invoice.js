@@ -165,37 +165,61 @@ invoiceSchema.pre('save', function(next) {
   next();
 });
 
-// Statische Methode für nächste Rechnungsnummer (fortlaufend mit Lücken-Auffüllung)
+// Statische Methode für nächste Rechnungsnummer (Race-Condition-sicher)
 invoiceSchema.statics.getNextInvoiceNumber = async function(year) {
   const currentYear = year || new Date().getFullYear();
   
-  // Finde alle existierenden Rechnungsnummern für das Jahr, sortiert
-  const existingInvoices = await this.find({
-    invoiceNumber: new RegExp(`^${currentYear}-`)
-  }).sort({ sequenceNumber: 1 }).select('sequenceNumber invoiceNumber');
+  // Race-Condition-sichere Implementierung mit Retry-Logic
+  let attempts = 0;
+  const maxAttempts = 5;
   
-  const existingNumbers = existingInvoices.map(inv => inv.sequenceNumber);
-  
-  console.log('🔍 Existierende Rechnungsnummern:', existingNumbers);
-  
-  // Suche nach der ersten Lücke in der Sequenz
-  let nextSequence = 1;
-  for (let i = 0; i < existingNumbers.length; i++) {
-    if (existingNumbers[i] !== nextSequence) {
-      // Gefunden: Lücke bei nextSequence
-      break;
+  while (attempts < maxAttempts) {
+    try {
+      // Finde alle existierenden Rechnungsnummern für das Jahr, sortiert
+      const existingInvoices = await this.find({
+        invoiceNumber: new RegExp(`^${currentYear}-`)
+      }).sort({ sequenceNumber: 1 }).select('sequenceNumber invoiceNumber');
+      
+      const existingNumbers = existingInvoices.map(inv => inv.sequenceNumber);
+      
+      console.log('🔍 Existierende Rechnungsnummern:', existingNumbers);
+      
+      // Finde die nächste verfügbare Sequenznummer
+      let nextSequence = 1;
+      
+      // Einfache Lösung: Nimm die höchste existierende Sequenznummer + 1
+      if (existingNumbers.length > 0) {
+        nextSequence = Math.max(...existingNumbers) + 1;
+      }
+      
+      // Zusätzlicher Double-Check: Prüfe ob die Sequenznummer bereits existiert
+      const existingWithSameSequence = await this.findOne({ sequenceNumber: nextSequence });
+      if (existingWithSameSequence) {
+        console.log(`⚠️ Sequenznummer ${nextSequence} bereits vergeben, erhöhe um 1...`);
+        nextSequence = Math.max(...existingNumbers, nextSequence) + 1;
+      }
+      
+      const invoiceNumber = `${currentYear}-${String(nextSequence).padStart(6, '0')}`;
+      
+      console.log('📋 Nächste Rechnungsnummer:', invoiceNumber, '(Sequenz:', nextSequence + ')');
+      
+      return {
+        invoiceNumber,
+        sequenceNumber: nextSequence
+      };
+      
+    } catch (error) {
+      attempts++;
+      console.log(`⚠️ Retry ${attempts}/${maxAttempts} für Rechnungsnummer-Generierung:`, error.message);
+      
+      if (attempts >= maxAttempts) {
+        throw new Error(`Konnte keine eindeutige Rechnungsnummer nach ${maxAttempts} Versuchen generieren: ${error.message}`);
+      }
+      
+      // Kurze Pause vor Retry
+      await new Promise(resolve => setTimeout(resolve, 100 * attempts));
     }
-    nextSequence++;
   }
-  
-  const invoiceNumber = `${currentYear}-${String(nextSequence).padStart(6, '0')}`;
-  
-  console.log('📋 Nächste Rechnungsnummer:', invoiceNumber, '(Sequenz:', nextSequence + ')');
-  
-  return {
-    invoiceNumber,
-    sequenceNumber: nextSequence
-  };
 };
 
 // Virtuelle Felder

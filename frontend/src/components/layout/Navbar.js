@@ -53,30 +53,61 @@ const Navbar = () => {
       if (response.data.success) {
         const inquiries = response.data.data;
         
-        // Letzte Ansicht der Anfragen-Seite abrufen
-        const lastViewedKey = `inquiries_last_viewed_${user.id || user.userId}`;
-        const lastViewed = localStorage.getItem(lastViewedKey);
-        const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
+        // Admin vs Kunde Logik
+        const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
         
-        // Ungesehene Benachrichtigungen zählen
-        const unseenNotifications = inquiries.filter(inquiry => {
-          const status = inquiry.status?.toLowerCase();
-          const updatedAt = new Date(inquiry.updatedAt || inquiry.createdAt);
+        if (isAdmin) {
+          // Admin: Zähle neue, unbearbeitete Anfragen mit lastViewed-System
+          const lastViewedKey = 'admin_inquiries_last_viewed';
+          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
           
-          // Nur abgelehnte oder als Bestellung umgewandelte Anfragen zählen
-          // UND nur wenn sie nach dem letzten Besuch aktualisiert wurden
-          return (
-            (status === 'abgelehnt' || status === 'rejected' || 
-             status === 'converted_to_order' || status === 'payment_pending') &&
-            updatedAt > lastViewedDate
-          );
-        });
+          // Nur Anfragen zählen, die nach dem letzten Besuch eingegangen sind
+          const newInquiries = inquiries.filter(inquiry => {
+            const status = inquiry.status?.toLowerCase();
+            const createdAt = new Date(inquiry.createdAt);
+            return (status === 'pending' || !status) && createdAt > lastViewedDate;
+          });
+          
+          setPendingInquiries(newInquiries.length);
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`👑 Admin: ${newInquiries.length} neue Anfragen seit ${lastViewedDate.toLocaleString()}`);
+          }
+        } else {
+          // Kunde: Zähle Antworten auf eigene Anfragen
+          const lastViewedKey = `inquiries_last_viewed_${user.id || user.userId}`;
+          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
+          
+          // Ungesehene Benachrichtigungen zählen - erweiterte Status-Liste
+          const unseenNotifications = inquiries.filter(inquiry => {
+            const status = inquiry.status?.toLowerCase();
+            const updatedAt = new Date(inquiry.updatedAt || inquiry.createdAt);
+            
+            // Zähle alle Status-Änderungen als wichtige Benachrichtigungen
+            const isImportantStatus = [
+              'accepted',          // Anfrage angenommen
+              'abgelehnt', 
+              'rejected',          // Anfrage abgelehnt
+              'converted_to_order', // Als Bestellung umgewandelt
+              'payment_pending',    // Zahlung ausstehend
+              'paid',              // Bezahlt
+              'shipped',           // Versandt
+              'delivered'          // Geliefert
+            ].includes(status);
+            
+            // Nur Status-Änderungen nach dem letzten Besuch zählen
+            return isImportantStatus && updatedAt > lastViewedDate;
+          });
         
-        setPendingInquiries(unseenNotifications.length);
-        
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`📋 Ungesehene Anfragen-Benachrichtigungen: ${unseenNotifications.length}`);
-          console.log(`📅 Letzter Besuch: ${lastViewedDate}`);
+          setPendingInquiries(unseenNotifications.length);
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📋 Ungesehene Anfragen-Updates: ${unseenNotifications.length}`);
+            console.log(`📅 Letzter Besuch: ${lastViewedDate.toLocaleString()}`);
+            console.log('🔍 Updates:', unseenNotifications.map(i => `${i.inquiryId}: ${i.status}`));
+          }
         }
       }
     } catch (error) {
@@ -95,29 +126,54 @@ const Navbar = () => {
     try {
       const result = await ordersAPI.getCustomerOrders({ limit: 100 });
       if (result.success) {
-        // Zähle Bestellungen die Zahlung benötigen
-        const paymentNeeded = result.data.bestellungen.filter(order => {
-          const paymentStatus = order.zahlung?.status?.toLowerCase();
-          const orderStatus = order.status?.toLowerCase();
+        const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
+        
+        if (isAdmin) {
+          // Admin: Zähle Bestellungen die Aufmerksamkeit benötigen
+          const needsAttention = result.data.bestellungen.filter(order => {
+            const paymentStatus = order.zahlung?.status?.toLowerCase();
+            const orderStatus = order.status?.toLowerCase();
+            
+            // Bestellungen die Handlungsbedarf haben
+            return orderStatus === 'neu' || 
+                   orderStatus === 'pending' ||
+                   paymentStatus === 'failed';
+          });
+          setPendingOrders(needsAttention.length);
+        } else {
+          // Kunde: Bestellungs-Updates seit letztem Besuch
+          const lastViewedKey = `orders_last_viewed_${user.id || user.userId}`;
+          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
           
-          const isValidForPayment = 
-            orderStatus === 'bestätigt' || 
-            orderStatus === 'bestaetigt' || 
-            orderStatus === 'neu' ||
-            orderStatus === 'confirmed' ||
-            order.source === 'inquiry';
+          const updatedOrders = result.data.bestellungen.filter(order => {
+            const updatedAt = new Date(order.updatedAt || order.createdAt);
+            const orderStatus = order.status?.toLowerCase();
+            const paymentStatus = order.zahlung?.status?.toLowerCase();
+            
+            // Status-Änderungen die für Kunden wichtig sind
+            const hasImportantUpdate = [
+              'bestätigt', 'confirmed',       // Bestellung bestätigt
+              'in_bearbeitung', 'processing', // In Bearbeitung
+              'versandt', 'shipped',          // Versandt
+              'geliefert', 'delivered',       // Geliefert
+              'storniert', 'cancelled'        // Storniert
+            ].includes(orderStatus) ||
+            [
+              'bezahlt', 'paid', 'completed', // Zahlung eingegangen
+              'failed', 'fehlgeschlagen'      // Zahlung fehlgeschlagen
+            ].includes(paymentStatus);
+            
+            return hasImportantUpdate && updatedAt > lastViewedDate;
+          });
           
-          const isNotPaid = 
-            !paymentStatus || 
-            paymentStatus === 'ausstehend' || 
-            paymentStatus === 'pending' ||
-            (paymentStatus !== 'bezahlt' && 
-             paymentStatus !== 'paid' && 
-             paymentStatus !== 'completed');
+          setPendingOrders(updatedOrders.length);
           
-          return isValidForPayment && isNotPaid;
-        });
-        setPendingOrders(paymentNeeded.length);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`📦 Ungesehene Bestellungs-Updates: ${updatedOrders.length}`);
+            console.log('🔍 Updates:', updatedOrders.map(o => `${o.bestellnummer}: ${o.status} | Zahlung: ${o.zahlung?.status}`));
+          }
+        }
       }
     } catch (error) {
       console.error('Fehler beim Laden der Bestellungen-Badges:', error);
@@ -141,10 +197,57 @@ const Navbar = () => {
       }
     };
     
+    // Event-Listener für Admin-Anfragen-Seite besucht
+    const handleAdminInquiriesViewed = () => {
+      if (user && (user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin'))) {
+        const lastViewedKey = 'admin_inquiries_last_viewed';
+        localStorage.setItem(lastViewedKey, new Date().toISOString());
+        loadPendingInquiries(); // Badges neu laden
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('👑 Admin-Anfrage bearbeitet - Badge zurückgesetzt');
+        }
+      }
+    };
+    
+    // Event-Listener für wirkliche Anfragen-Aktionen (nicht nur Seitenbesuch)
+    const handleInquiryAction = () => {
+      if (user && (user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin'))) {
+        const lastViewedKey = 'admin_inquiries_last_viewed';
+        localStorage.setItem(lastViewedKey, new Date().toISOString());
+        loadPendingInquiries();
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('👑 Admin-Anfrage-Aktion durchgeführt - Badge zurückgesetzt');
+        }
+      }
+    };
+    
+    // Event-Listener für Bestellungen-Seite besucht (Kunde)
+    const handleOrdersViewed = () => {
+      if (user && !(user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin'))) {
+        const lastViewedKey = `orders_last_viewed_${user.id || user.userId}`;
+        localStorage.setItem(lastViewedKey, new Date().toISOString());
+        loadPendingOrders(); // Badges neu laden
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📦 Kunden-Bestellungen-Seite besucht - lastViewed aktualisiert');
+        }
+      }
+    };
+    
     window.addEventListener('inquiriesViewed', handleInquiriesViewed);
+    window.addEventListener('adminInquiriesViewed', handleAdminInquiriesViewed);
+    window.addEventListener('ordersViewed', handleOrdersViewed);
+    window.addEventListener('inquiryViewed', handleInquiryAction);
+    window.addEventListener('inquiryActioned', handleInquiryAction);
     
     return () => {
       window.removeEventListener('inquiriesViewed', handleInquiriesViewed);
+      window.removeEventListener('adminInquiriesViewed', handleAdminInquiriesViewed);
+      window.removeEventListener('ordersViewed', handleOrdersViewed);
+      window.removeEventListener('inquiryViewed', handleInquiryAction);
+      window.removeEventListener('inquiryActioned', handleInquiryAction);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]); // Nur von user abhängig - Funktionen werden bewusst nicht als Dependency hinzugefügt
@@ -462,7 +565,23 @@ const Navbar = () => {
                         selected={isActive(item.path)}
                       >
                         <ListItemIcon sx={{ minWidth: 36 }}>
-                          {item.icon}
+                          {item.path === '/admin/anfragen' && pendingInquiries > 0 ? (
+                            <Badge 
+                              badgeContent={pendingInquiries} 
+                              color="error"
+                              sx={{
+                                '& .MuiBadge-badge': {
+                                  fontSize: '0.7rem',
+                                  minWidth: '18px',
+                                  height: '18px'
+                                }
+                              }}
+                            >
+                              {item.icon}
+                            </Badge>
+                          ) : (
+                            item.icon
+                          )}
                         </ListItemIcon>
                         {item.label}
                       </MenuItem>

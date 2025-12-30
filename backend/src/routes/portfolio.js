@@ -13,14 +13,20 @@ const { cacheManager } = require('../utils/cacheManager');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 // Cache für Portfolio-Daten (5 Minuten TTL)
-let portfolioCache = {
+let portfolioCache = global.portfolioCache || {
   data: null,
   timestamp: 0,
   ttl: 5 * 60 * 1000 // 5 Minuten
 };
 
+// Synchronisiere mit globalem Cache
+global.portfolioCache = portfolioCache;
+
 // Hilfsfunktion zum Cache-Invalidieren
 function invalidatePortfolioCache() {
+  portfolioCache.data = null;
+  portfolioCache.timestamp = 0;
+  global.portfolioCache = portfolioCache;
   cacheManager.invalidateProductCache();
   logger.info('🗑️ Portfolio cache invalidated');
 }
@@ -219,7 +225,7 @@ async function calculatePortfolioPrice(portfolioItem) {
         // Annahme: 2-3 Tropfen pro 100g Seife
         const tropfenProGramm = 0.025;
         const benoetigteTropfen = portfolioItem.gramm * tropfenProGramm;
-        details.duftoele = benoetigteTropfen * duftoil.preisProTropfen;
+        details.duftoele = benoetigteTropfen * (duftoil.preisProTropfen || duftoil.kostenProTropfen);
       } else {
         // Fallback: Schätzpreis für Duftöl
         details.duftoele = 0.3; // 30 Cent pro Duftung
@@ -374,14 +380,14 @@ function calculatePortfolioPriceOptimized(portfolioItem, rohseifenMap, verpackun
         // Annahme: 2-3 Tropfen pro 100g Seife
         const tropfenProGramm = 0.025;
         const benoetigteTropfen = portfolioItem.gramm * tropfenProGramm;
-        details.duftoele = benoetigteTropfen * duftoil.preisProTropfen;
+        details.duftoele = benoetigteTropfen * (duftoil.preisProTropfen || duftoil.kostenProTropfen);
       } else {
         // Suche mit partiellem Match
         for (const [key, value] of duftoelMap.entries()) {
           if (key.includes(duftoelKey) || duftoelKey.includes(key)) {
             const tropfenProGramm = 0.025;
             const benoetigteTropfen = portfolioItem.gramm * tropfenProGramm;
-            details.duftoele = benoetigteTropfen * value.preisProTropfen;
+            details.duftoele = benoetigteTropfen * (value.preisProTropfen || value.kostenProTropfen);
             break;
           }
         }
@@ -507,11 +513,17 @@ router.get('/with-prices', async (req, res) => {
           );
         }
         
+        // Preis-Logik: Verwende gespeicherten Preis, falls vorhanden, sonst berechne automatisch
+        const gespeicherterPreis = item.preis || 0;
+        const automatischerPreis = Math.ceil(priceData.gesamtpreis * 1.5); // 50% Marge
+        const verkaufspreis = gespeicherterPreis > 0 ? gespeicherterPreis : automatischerPreis;
+        
         const result = {
           ...item,
           berechneterPreis: priceData.gesamtpreis,
           preisDetails: priceData.details,
-          verkaufspreis: Math.ceil(priceData.gesamtpreis * 1.5), // 50% Marge
+          verkaufspreis: verkaufspreis,
+          preis: verkaufspreis, // Alias für Frontend-Kompatibilität
           bestand: {
             verfuegbar: istVerfuegbar,
             menge: verfuegbareMenge,
@@ -547,11 +559,16 @@ router.get('/with-prices', async (req, res) => {
           );
         }
         
+        // Preis-Logik auch bei Fehlern: Verwende gespeicherten Preis, falls vorhanden
+        const gespeicherterPreis = item.preis || 0;
+        const verkaufspreis = gespeicherterPreis > 0 ? gespeicherterPreis : 0;
+        
         return {
           ...item,
           berechneterPreis: 0,
           preisDetails: { error: 'Preisberechnung nicht möglich' },
-          verkaufspreis: 0,
+          verkaufspreis: verkaufspreis,
+          preis: verkaufspreis, // Alias für Frontend-Kompatibilität
           bestand: {
             verfuegbar: istVerfuegbar,
             menge: verfuegbareMenge,

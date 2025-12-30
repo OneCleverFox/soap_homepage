@@ -89,7 +89,14 @@ const MobileCartPage = () => {
       updateQuantity(productId, newQuantity);
     } else if (newQuantity > maxQuantity) {
       // Zeige Warnung wenn Bestandslimit erreicht
-      toast.warning(`Nur ${maxStock} Stück verfügbar`);
+      toast(`Nur ${maxStock} Stück verfügbar`, {
+        icon: '⚠️',
+        style: {
+          background: '#fff3cd',
+          border: '1px solid #ffeaa7',
+          color: '#856404',
+        },
+      });
     }
   };
 

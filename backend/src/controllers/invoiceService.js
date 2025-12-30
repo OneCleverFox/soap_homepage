@@ -23,13 +23,20 @@ class InvoiceService {
         filter.status = req.query.status;
       }
       
-      // Filter nach Kunde
+      // Filter nach Kunde (durchsuche customerData direkt)
       if (req.query.customer) {
+        const customerSearch = req.query.customer;
         filter.$or = [
-          { 'customer.customerData.firstName': new RegExp(req.query.customer, 'i') },
-          { 'customer.customerData.lastName': new RegExp(req.query.customer, 'i') },
-          { 'customer.customerData.company': new RegExp(req.query.customer, 'i') }
+          { 'customer.customerData.firstName': new RegExp(customerSearch, 'i') },
+          { 'customer.customerData.lastName': new RegExp(customerSearch, 'i') },
+          { 'customer.customerData.company': new RegExp(customerSearch, 'i') },
+          { 'customer.customerData.email': new RegExp(customerSearch, 'i') }
         ];
+      }
+      
+      // Filter nach Rechnungsnummer
+      if (req.query.invoiceNumber) {
+        filter.invoiceNumber = new RegExp(req.query.invoiceNumber, 'i');
       }
       
       // Filter nach Zeitraum
@@ -44,19 +51,28 @@ class InvoiceService {
       }
 
       const invoices = await Invoice.find(filter)
-        .populate('customer.customerId', 'vorname nachname firma')
         .populate('template', 'name')
-        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment.status customer.customerId customer.firstName customer.lastName customer.company template sequenceNumber')
+        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber')
         .sort({ 'dates.invoiceDate': -1 })
         .limit(limit)
         .skip(skip);
+
+      // Customer-Daten für die Response aufbereiten
+      const invoicesWithCustomer = invoices.map(invoice => ({
+        ...invoice.toObject(),
+        customerName: invoice.customer?.customerData ? 
+          `${invoice.customer.customerData.firstName || ''} ${invoice.customer.customerData.lastName || ''}`.trim() || 
+          invoice.customer.customerData.company || 'Unbekannt'
+          : 'Unbekannt',
+        customerEmail: invoice.customer?.customerData?.email || ''
+      }));
 
       const total = await Invoice.countDocuments(filter);
 
       res.json({
         success: true,
         data: {
-          invoices,
+          invoices: invoicesWithCustomer,
           totalCount: total,
           pagination: {
             current: page,
@@ -685,28 +701,27 @@ class InvoiceService {
         bestellnummer: invoice.invoiceNumber,
         bestelldatum: invoice.dates?.invoiceDate ? new Date(invoice.dates.invoiceDate).toISOString() : new Date().toISOString(),
         faelligkeitsdatum: invoice.dates?.dueDate ? new Date(invoice.dates.dueDate).toISOString() : null,
-        kundennummer: invoice.customer.customerId?.kundennummer || `K-${invoice.customer.customerId?._id?.toString().slice(-6) || 'UNKNOWN'}`,
+        kundennummer: `K-${invoice._id.toString().slice(-6).toUpperCase()}`,
         besteller: {
-          vorname: invoice.customer.firstName || invoice.customer.customerId?.vorname || '',
-          nachname: invoice.customer.lastName || invoice.customer.customerId?.nachname || '',
-          firma: invoice.customer.company || invoice.customer.customerId?.firma || '',
-          email: invoice.customer.email || invoice.customer.customerId?.email || '',
+          vorname: invoice.customer.customerData?.firstName || '',
+          nachname: invoice.customer.customerData?.lastName || '',
+          firma: invoice.customer.customerData?.company || '',
+          email: invoice.customer.customerData?.email || '',
           adresse: {
-            strasse: invoice.customer.street || (invoice.customer.customerId?.adresse?.strasse && invoice.customer.customerId?.adresse?.hausnummer ? 
-              `${invoice.customer.customerId.adresse.strasse} ${invoice.customer.customerId.adresse.hausnummer}` : ''),
-            plz: invoice.customer.postalCode || invoice.customer.customerId?.adresse?.plz || '',
-            stadt: invoice.customer.city || invoice.customer.customerId?.adresse?.stadt || ''
+            strasse: invoice.customer.customerData?.street || '',
+            plz: invoice.customer.customerData?.postalCode || '',
+            stadt: invoice.customer.customerData?.city || ''
           }
         },
         rechnungsadresse: {
-          vorname: invoice.customer.firstName || invoice.customer.customerId?.vorname || '',
-          nachname: invoice.customer.lastName || invoice.customer.customerId?.nachname || '',
-          firma: invoice.customer.company || invoice.customer.customerId?.firma || '',
-          strasse: invoice.customer.customerId?.adresse?.strasse || (invoice.customer.street || '').split(' ')[0] || '',
-          hausnummer: invoice.customer.customerId?.adresse?.hausnummer || (invoice.customer.street || '').split(' ').slice(1).join(' ') || '',
-          plz: invoice.customer.customerId?.adresse?.plz || invoice.customer.postalCode || '',
-          stadt: invoice.customer.customerId?.adresse?.stadt || invoice.customer.city || '',
-          land: invoice.customer.customerId?.adresse?.land || invoice.customer.country || 'Deutschland'
+          vorname: invoice.customer.customerData?.firstName || '',
+          nachname: invoice.customer.customerData?.lastName || '',
+          firma: invoice.customer.customerData?.company || '',
+          strasse: (invoice.customer.customerData?.street || '').split(' ')[0] || '',
+          hausnummer: (invoice.customer.customerData?.street || '').split(' ').slice(1).join(' ') || '',
+          plz: invoice.customer.customerData?.postalCode || '',
+          stadt: invoice.customer.customerData?.city || '',
+          land: invoice.customer.customerData?.country || 'Deutschland'
         },
         artikel: invoice.items.map(item => ({
           name: item.productData?.name || item.name || 'Produktname fehlt',
@@ -764,9 +779,9 @@ class InvoiceService {
       console.log('  - Artikel-Namen:', bestellungData.artikel.map(a => a.name).join(', '));
       console.log('  - Kunde:', bestellungData.besteller.vorname, bestellungData.besteller.nachname);
       console.log('  - Rechnungsadresse:', bestellungData.rechnungsadresse.vorname, bestellungData.rechnungsadresse.nachname, bestellungData.rechnungsadresse.stadt);
-      console.log('  - Customer populated:', !!invoice.customer.customerId?.vorname);
-      console.log('  - Customer Adresse:', invoice.customer.customerId?.adresse);
-      console.log('  - Customer Adresse:', invoice.customer.customerId?.adresse);
+      console.log('  - Customer populated:', !!invoice.customer.customerData);
+      console.log('  - Customer Adresse:', invoice.customer.customerData?.street);
+      console.log('  - Customer PLZ:', invoice.customer.customerData?.postalCode);
       
       // PDF mit AKTUELLEM Template generieren
       console.log('🧾 Generiere PDF für Invoice:', invoice.invoiceNumber);

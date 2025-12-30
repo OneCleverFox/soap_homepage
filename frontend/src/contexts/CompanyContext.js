@@ -21,8 +21,12 @@ export const CompanyProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       const response = await api.get('/company-info');
-      if (response.success && response.data) {
-        setCompanyData(response.data);
+      
+      // Die Axios-Response hat die Daten in response.data
+      const responseData = response.data;
+      
+      if (responseData.success && responseData.data) {
+        setCompanyData(responseData.data);
       } else {
         throw new Error('Invalid response format');
       }
