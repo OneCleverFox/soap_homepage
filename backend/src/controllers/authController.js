@@ -370,6 +370,15 @@ const registerUser = async (req, res) => {
     } = req.body;
 
     console.log('📝 Registrierung-Versuch:', email);
+    console.log('🔍 Empfangene Daten:', {
+      email,
+      firstName,
+      lastName,
+      hasPassword: !!password,
+      hasPhone: !!phone,
+      hasAddress: !!address,
+      addressFields: address ? Object.keys(address) : 'keine'
+    });
 
     // Admin-Einstellungen abrufen
     const AdminSettings = require('../models/AdminSettings');
@@ -378,9 +387,21 @@ const registerUser = async (req, res) => {
 
     // Validierung der Pflichtfelder
     if (!email || !password || !firstName || !lastName) {
+      console.log('❌ Fehlende Pflichtfelder:', {
+        email: !!email,
+        password: !!password,
+        firstName: !!firstName,
+        lastName: !!lastName
+      });
       return res.status(400).json({
         success: false,
-        message: 'E-Mail, Passwort, Vor- und Nachname sind erforderlich'
+        message: 'E-Mail, Passwort, Vor- und Nachname sind erforderlich',
+        missingFields: {
+          email: !email,
+          password: !password,
+          firstName: !firstName,
+          lastName: !lastName
+        }
       });
     }
 
@@ -447,9 +468,11 @@ const registerUser = async (req, res) => {
     const existingKunde = await Kunde.findOne({ email: email.toLowerCase() });
     
     if (existingKunde) {
+      console.log('❌ E-Mail bereits in Kunde-Collection:', email);
       return res.status(400).json({
         success: false,
-        message: 'Ein Kunde mit dieser E-Mail-Adresse ist bereits registriert. Bitte verwenden Sie die Anmeldefunktion.'
+        message: 'Ein Kunde mit dieser E-Mail-Adresse ist bereits registriert. Bitte verwenden Sie die Anmeldefunktion.',
+        error: 'EMAIL_EXISTS_KUNDE'
       });
     }
 
@@ -585,6 +608,12 @@ const registerUser = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Registrierung-Fehler:', error);
+    console.error('📋 Fehler-Details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      keyPattern: error.keyPattern
+    });
     
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
@@ -594,13 +623,30 @@ const registerUser = async (req, res) => {
       
       return res.status(400).json({
         success: false,
-        message
+        message,
+        error: 'DUPLICATE_KEY',
+        field
+      });
+    }
+
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.keys(error.errors).map(field => ({
+        field,
+        message: error.errors[field].message
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler bei der Registrierung',
+        error: 'VALIDATION_FAILED',
+        validationErrors
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Fehler bei der Registrierung. Bitte versuchen Sie es erneut.'
+      message: 'Fehler bei der Registrierung. Bitte versuchen Sie es erneut.',
+      error: 'INTERNAL_SERVER_ERROR'
     });
   }
 };
