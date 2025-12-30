@@ -10,7 +10,7 @@
   "scripts": {
     "start": "node backend/src/server.js",
     "dev": "nodemon backend/src/server.js",
-    "build": "npm install --omit=dev",
+    "build": "npm install --omit=dev && cd backend && npm rebuild sharp",
     "test": "echo \"No tests specified\""
   },
   "dependencies": {
