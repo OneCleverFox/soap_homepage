@@ -37,6 +37,9 @@ import {
   Collapse,
   useMediaQuery,
   useTheme,
+  Switch,
+  FormControlLabel,
+  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -50,6 +53,11 @@ import {
   ExpandLess as ExpandLessIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
+  VerifiedUser as VerifyIcon,
+  ToggleOn as ToggleOnIcon,
+  ToggleOff as ToggleOffIcon,
+  Email as EmailIcon,
+  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { kundenAPI } from '../services/api';
 
@@ -125,6 +133,10 @@ function AdminUsers() {
   // Notification
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
+  // Email verification settings
+  const [requireEmailVerification, setRequireEmailVerification] = useState(true);
+  const [verificationSettingsLoading, setVerificationSettingsLoading] = useState(false);
+
   const showSnackbar = useCallback((message, severity = 'info') => {
     setSnackbar({ open: true, message, severity });
   }, []);
@@ -161,10 +173,126 @@ function AdminUsers() {
     }
   }, []);
 
+  // Load email verification settings
+  const loadVerificationSettings = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/users/verification-settings', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setRequireEmailVerification(data.requireEmailVerification);
+      }
+    } catch (error) {
+      console.error('Error loading verification settings:', error);
+    }
+  }, []);
+
+  // Toggle email verification requirement
+  const toggleEmailVerification = async (enabled) => {
+    try {
+      setVerificationSettingsLoading(true);
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('/api/admin/users/verification-settings', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ requireEmailVerification: enabled })
+      });
+      
+      if (response.ok) {
+        setRequireEmailVerification(enabled);
+        showSnackbar(
+          enabled 
+            ? 'E-Mail-Verifikation ist jetzt erforderlich für neue Benutzer'
+            : 'E-Mail-Verifikation ist jetzt optional für neue Benutzer',
+          'success'
+        );
+      } else {
+        showSnackbar('Fehler beim Aktualisieren der E-Mail-Verifikation', 'error');
+      }
+    } catch (error) {
+      console.error('Error updating verification settings:', error);
+      showSnackbar('Fehler beim Aktualisieren der E-Mail-Verifikation', 'error');
+    } finally {
+      setVerificationSettingsLoading(false);
+    }
+  };
+
+  // Manually verify a user
+  const handleManualVerify = async (userId) => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`/api/admin/users/verify/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        showSnackbar(
+          `Benutzer erfolgreich verifiziert${data.kundennummer ? ` - Kundennummer: ${data.kundennummer}` : ''}`, 
+          'success'
+        );
+        loadUsers(); // Reload users to update the UI
+      } else {
+        const errorData = await response.json();
+        showSnackbar(errorData.message || 'Fehler beim Verifizieren des Benutzers', 'error');
+      }
+    } catch (error) {
+      console.error('Error verifying user:', error);
+      showSnackbar('Fehler beim Verifizieren des Benutzers', 'error');
+    }
+  };
+
+  // Fix missing customer numbers
+  const handleFixMissingCustomerNumbers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch('/api/admin/users/fix-missing-customer-numbers', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        showSnackbar(
+          `Kundennummern repariert: ${data.erfolgreich} erfolgreich von ${data.gesamt} Benutzern`, 
+          'success'
+        );
+        loadUsers(); // Reload users to update the UI
+        loadStats(); // Reload stats as well
+      } else {
+        const errorData = await response.json();
+        showSnackbar(errorData.message || 'Fehler bei der Reparatur', 'error');
+      }
+    } catch (error) {
+      console.error('Error fixing customer numbers:', error);
+      showSnackbar('Fehler bei der Reparatur der Kundennummern', 'error');
+    }
+  };
+
   useEffect(() => {
     loadUsers();
     loadStats();
-  }, [loadUsers, loadStats]);
+    loadVerificationSettings();
+  }, [loadUsers, loadStats, loadVerificationSettings]);
 
   const handleUpdateUser = async () => {
     try {
@@ -228,18 +356,90 @@ function AdminUsers() {
   };
 
   const handleBlockUser = async (user) => {
-    // Kunde Status Update implementiert
-    showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`/api/admin/users/block/${user._id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          sperrgrund: 'Administrativ gesperrt' 
+        })
+      });
+      
+      if (response.ok) {
+        showSnackbar('Benutzer erfolgreich gesperrt', 'success');
+        loadUsers(); // Reload users to update the UI
+      } else {
+        const errorData = await response.json();
+        showSnackbar(errorData.message || 'Fehler beim Sperren des Benutzers', 'error');
+      }
+    } catch (error) {
+      console.error('Error blocking user:', error);
+      showSnackbar('Fehler beim Sperren des Benutzers', 'error');
+    }
   };
 
   const handleUnblockUser = async (user) => {
-    // Kunde Status Update implementiert
-    showSnackbar('Kunden-Status-Änderung noch nicht implementiert', 'warning');
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`/api/admin/users/unblock/${user._id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        showSnackbar('Benutzer erfolgreich entsperrt', 'success');
+        loadUsers(); // Reload users to update the UI
+      } else {
+        const errorData = await response.json();
+        showSnackbar(errorData.message || 'Fehler beim Entsperren des Benutzers', 'error');
+      }
+    } catch (error) {
+      console.error('Error unblocking user:', error);
+      showSnackbar('Fehler beim Entsperren des Benutzers', 'error');
+    }
   };
 
   const handleDeleteUser = async (user) => {
-    // Kunden sollten nicht gelöscht werden (DSGVO: Archivierung statt Löschung)
-    showSnackbar('Kunden können nicht gelöscht werden. Bitte deaktivieren Sie stattdessen.', 'warning');
+    if (!window.confirm(`Sind Sie sicher, dass Sie den Benutzer "${user.vorname || user.firstName} ${user.nachname || user.lastName}" löschen möchten?\n\nHinweis: Bei vorhandenen Bestellungen werden die Daten anonymisiert (DSGVO-konform).`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`/api/admin/users/delete/${user._id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.anonymized) {
+          showSnackbar('Benutzer wurde anonymisiert (hatte Bestellungen)', 'warning');
+        } else {
+          showSnackbar('Benutzer erfolgreich gelöscht', 'success');
+        }
+        loadUsers(); // Reload users to update the UI
+      } else {
+        const errorData = await response.json();
+        showSnackbar(errorData.message || 'Fehler beim Löschen des Benutzers', 'error');
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      showSnackbar('Fehler beim Löschen des Benutzers', 'error');
+    }
   };
 
   const openEditUserDialog = (user) => {
@@ -323,6 +523,20 @@ function AdminUsers() {
     }
   };
 
+  const getEmailVerificationStatus = (user) => {
+    // Check both possible field structures for compatibility
+    const isVerified = user.status?.emailVerifiziert || user.emailVerified;
+    const hasToken = user.emailVerificationToken; // This field might not exist in Kunde model
+    
+    if (isVerified) {
+      return { label: 'Verifiziert', color: 'success', icon: <VerifyIcon fontSize="small" /> };
+    } else if (hasToken) {
+      return { label: 'Ausstehend', color: 'warning', icon: <EmailIcon fontSize="small" /> };
+    } else {
+      return { label: 'Nicht erforderlich', color: 'default', icon: null };
+    }
+  };
+
   const getRoleLabel = (role) => {
     // Backend sendet 'kunde' oder 'admin', Frontend zeigt 'customer', 'user', 'admin'
     switch (role) {
@@ -366,50 +580,83 @@ function AdminUsers() {
 
       {/* Statistics Cards */}
       <Grid container spacing={isMobile ? 1.5 : 3} sx={{ mb: isMobile ? 2 : 3 }}>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Gesamt
               </Typography>
               <Typography variant={isMobile ? "h6" : "h4"}>
-                {stats.total || 0}
+                {stats.gesamtKunden || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Aktiv
               </Typography>
               <Typography variant={isMobile ? "h6" : "h4"} color="success.main">
-                {stats.active || 0}
+                {stats.aktiveKunden || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Gesperrt
               </Typography>
               <Typography variant={isMobile ? "h6" : "h4"} color="error.main">
-                {stats.blocked || 0}
+                {stats.gesperrteKunden || 0}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={6} sm={6} md={2.4}>
           <Card>
             <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
                 Admins
               </Typography>
               <Typography variant={isMobile ? "h6" : "h4"} color="primary.main">
-                {stats.admins || 0}
+                {stats.adminKunden || 0}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={12} md={2.4}>
+          <Card>
+            <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+              <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary" gutterBottom>
+                E-Mail-Verifikation
+              </Typography>
+              <Box display="flex" alignItems="center" gap={1}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={requireEmailVerification}
+                      onChange={(e) => toggleEmailVerification(e.target.checked)}
+                      disabled={verificationSettingsLoading}
+                      size={isMobile ? "small" : "medium"}
+                      color="primary"
+                    />
+                  }
+                  label=""
+                  sx={{ margin: 0 }}
+                />
+                <Typography variant={isMobile ? "caption" : "body2"} color="textSecondary">
+                  {requireEmailVerification ? 'An' : 'Aus'}
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
+                {requireEmailVerification 
+                  ? 'Neue Benutzer müssen ihre E-Mail verifizieren'
+                  : 'E-Mail-Verifikation ist optional'
+                }
               </Typography>
             </CardContent>
           </Card>
@@ -465,7 +712,7 @@ function AdminUsers() {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={2}>
+          <Grid item xs={6} sm={2}>
             <Button
               fullWidth
               variant="contained"
@@ -474,6 +721,19 @@ function AdminUsers() {
               size={isMobile ? "medium" : "large"}
             >
               {isMobile ? <AddIcon /> : 'Neu'}
+            </Button>
+          </Grid>
+          <Grid item xs={6} sm={2}>
+            <Button
+              fullWidth
+              variant="outlined"
+              color="primary"
+              startIcon={!isMobile && <VerifyIcon />}
+              onClick={handleFixMissingCustomerNumbers}
+              size={isMobile ? "medium" : "large"}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              {isMobile ? <VerifyIcon /> : 'Kundennr. reparieren'}
             </Button>
           </Grid>
         </Grid>
@@ -520,6 +780,18 @@ function AdminUsers() {
                           size="small" 
                           color={getStatusColor(user.status)} 
                         />
+                        {(() => {
+                          const verificationStatus = getEmailVerificationStatus(user);
+                          return (
+                            <Chip 
+                              label={verificationStatus.label} 
+                              size="small" 
+                              color={verificationStatus.color} 
+                              variant={verificationStatus.color === 'default' ? 'outlined' : 'filled'}
+                              icon={verificationStatus.icon}
+                            />
+                          );
+                        })()}
                       </Box>
                     </Box>
                     <IconButton size="small" onClick={() => toggleRowExpand(user._id)}>
@@ -556,7 +828,14 @@ function AdminUsers() {
                         <PasswordIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    {user.status === 'blocked' ? (
+                    {!(user.status?.emailVerifiziert || user.emailVerified) && (
+                      <Tooltip title="E-Mail verifizieren">
+                        <IconButton size="small" color="primary" onClick={() => handleManualVerify(user._id)} sx={{ border: 1, borderColor: 'divider' }}>
+                          <VerifyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                    {user.status?.gesperrt ? (
                       <Tooltip title="Entsperren">
                         <IconButton size="small" color="success" onClick={() => handleUnblockUser(user)} sx={{ border: 1, borderColor: 'divider' }}>
                           <UnblockIcon fontSize="small" />
@@ -653,6 +932,7 @@ function AdminUsers() {
               <TableCell width="50px"></TableCell>
               <TableCell>Benutzer</TableCell>
               <TableCell>Email</TableCell>
+              <TableCell>E-Mail Status</TableCell>
               <TableCell>Kundennummer</TableCell>
               <TableCell>Telefon</TableCell>
               <TableCell>Rolle</TableCell>
@@ -664,11 +944,11 @@ function AdminUsers() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">Laden...</TableCell>
+                <TableCell colSpan={10} align="center">Laden...</TableCell>
               </TableRow>
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center">Keine Benutzer gefunden</TableCell>
+                <TableCell colSpan={10} align="center">Keine Benutzer gefunden</TableCell>
               </TableRow>
             ) : (
               users.map((user) => (
@@ -698,6 +978,33 @@ function AdminUsers() {
                       </Box>
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const verificationStatus = getEmailVerificationStatus(user);
+                        return (
+                          <Box display="flex" alignItems="center" gap={1}>
+                            {verificationStatus.icon}
+                            <Chip 
+                              label={verificationStatus.label} 
+                              size="small" 
+                              color={verificationStatus.color} 
+                              variant={verificationStatus.color === 'default' ? 'outlined' : 'filled'}
+                            />
+                            {!(user.status?.emailVerifiziert || user.emailVerified) && (
+                              <Tooltip title="Manuell verifizieren">
+                                <IconButton 
+                                  size="small" 
+                                  color="primary"
+                                  onClick={() => handleManualVerify(user._id)}
+                                >
+                                  <VerifyIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Box>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <Typography variant="body2" fontFamily="monospace">
                         {user.kundennummer || '-'}
@@ -730,7 +1037,14 @@ function AdminUsers() {
                           <PasswordIcon />
                         </IconButton>
                       </Tooltip>
-                      {user.status === 'blocked' ? (
+                      {!(user.status?.emailVerifiziert || user.emailVerified) && (
+                        <Tooltip title="E-Mail verifizieren">
+                          <IconButton size="small" color="primary" onClick={() => handleManualVerify(user._id)}>
+                            <VerifyIcon />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {user.status?.gesperrt ? (
                         <Tooltip title="Entsperren">
                           <IconButton size="small" color="success" onClick={() => handleUnblockUser(user)}>
                             <UnblockIcon />
@@ -753,7 +1067,7 @@ function AdminUsers() {
                   
                   {/* Erweiterte Detailzeile */}
                   <TableRow>
-                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={9}>
+                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
                       <Collapse in={expandedRows[user._id]} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2 }}>
                           <Typography variant="h6" gutterBottom component="div">
@@ -944,7 +1258,7 @@ function AdminUsers() {
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
                 helperText="Mindestens 8 Zeichen"
-                error={formData.password && formData.password.length < 8}
+                error={Boolean(formData.password && formData.password.length < 8)}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
