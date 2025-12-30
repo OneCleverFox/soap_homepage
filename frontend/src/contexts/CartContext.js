@@ -167,13 +167,21 @@ export const CartProvider = ({ children }) => {
     let isMounted = true;
     
     const token = localStorage.getItem('token');
-    console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
+    const sessionToken = sessionStorage.getItem('token');
+    const finalToken = token || sessionToken;
     
-    if (token && isMounted) {
+    console.log('🔑 Token Check:', {
+      localStorage: token ? 'VORHANDEN' : 'NICHT VORHANDEN',
+      sessionStorage: sessionToken ? 'VORHANDEN' : 'NICHT VORHANDEN', 
+      final: finalToken ? 'VORHANDEN' : 'NICHT VORHANDEN'
+    });
+    
+    if (finalToken && isMounted) {
       console.log('📦 Lade Warenkorb beim Mount...');
       loadCart();
     } else {
       console.log('⚠️ Kein Token - Warenkorb wird nicht geladen');
+      console.log('💡 Hinweis: Warenkorb wird geladen sobald Benutzer sich anmeldet');
     }
 
     // Registriere Stock Event Listener für reaktive Updates
