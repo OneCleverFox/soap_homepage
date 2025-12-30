@@ -13,6 +13,7 @@
     "dev:local": "NODE_ENV=development node src/server.js",
     "dev:prod": "NODE_ENV=production node src/server.js",
     "test": "echo \"No tests specified - Backend running\" && exit 0",
+    "postinstall": "npm rebuild sharp",
     "setup:optimizations": "node scripts/setupOptimizations.js",
     "logs:view": "tail -f logs/combined.log",
     "logs:errors": "tail -f logs/error.log",
