@@ -190,16 +190,25 @@ router.get('/verification-settings', async (req, res) => {
 // E-Mail-Verifikationseinstellung ändern
 router.put('/verification-settings', async (req, res) => {
   try {
+    console.log('🔧 E-Mail-Verifikation Toggle-Request:', {
+      body: req.body,
+      user: req.user?.email,
+      requireEmailVerification: req.body.requireEmailVerification
+    });
+    
     const { requireEmailVerification } = req.body;
     
     if (typeof requireEmailVerification !== 'boolean') {
+      console.log('❌ Ungültiger Wert für requireEmailVerification:', requireEmailVerification);
       return res.status(400).json({
         success: false,
         message: 'Ungültiger Wert für requireEmailVerification'
       });
     }
 
+    console.log('📋 Lade AdminSettings...');
     const settings = await AdminSettings.getInstance();
+    console.log('📋 Aktuelle Einstellungen:', settings.userManagement);
     
     // Einstellung aktualisieren
     settings.userManagement = {
@@ -207,7 +216,9 @@ router.put('/verification-settings', async (req, res) => {
       requireEmailVerification
     };
     
+    console.log('💾 Speichere neue Einstellungen...');
     await settings.save();
+    console.log('✅ Einstellungen gespeichert:', settings.userManagement);
     
     console.log(`📧 E-Mail-Verifikation ${requireEmailVerification ? 'aktiviert' : 'deaktiviert'} von Admin: ${req.user.email}`);
     
