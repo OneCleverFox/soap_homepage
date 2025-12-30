@@ -31,6 +31,7 @@
   "devDependencies": {
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "cross-env": "^7.0.3",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -40,8 +41,8 @@
   "scripts": {
     "dev": "react-scripts start",
     "start": "react-scripts start",
-    "build": "react-scripts build",
-    "build:prod": "REACT_APP_ENV=production react-scripts build",
+    "build": "cross-env CI=false react-scripts build",
+    "build:prod": "cross-env CI=false REACT_APP_ENV=production react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
