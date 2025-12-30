@@ -222,6 +222,8 @@ function AdminUsers() {
       setVerificationSettingsLoading(true);
       const token = localStorage.getItem('token');
       
+      console.log('🔧 Toggle E-Mail-Verifikation:', { enabled, token: !!token });
+      
       const response = await fetch('/api/admin/users/verification-settings', {
         method: 'PUT',
         headers: {
@@ -231,7 +233,15 @@ function AdminUsers() {
         body: JSON.stringify({ requireEmailVerification: enabled })
       });
       
+      console.log('📡 Toggle Response:', { 
+        status: response.status, 
+        ok: response.ok,
+        statusText: response.statusText
+      });
+      
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Toggle erfolgreich:', result);
         setRequireEmailVerification(enabled);
         showSnackbar(
           enabled 
@@ -240,6 +250,8 @@ function AdminUsers() {
           'success'
         );
       } else {
+        const errorData = await response.text();
+        console.error('❌ Toggle fehlgeschlagen:', errorData);
         showSnackbar('Fehler beim Aktualisieren der E-Mail-Verifikation', 'error');
       }
     } catch (error) {
