@@ -1,6 +1,7 @@
 /* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Container,
   Typography,
@@ -11,38 +12,26 @@ import {
   Grid,
   Card,
   CardContent,
-  Divider,
   Alert,
-  TextField,
   CircularProgress,
   useMediaQuery,
   useTheme,
-  Fab,
   Dialog,
   DialogContent,
   DialogActions,
   Slide,
-  SwipeableDrawer,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
   Badge,
   AppBar,
   Toolbar,
   Chip
 } from '@mui/material';
 import {
-  Delete as DeleteIcon,
   Add as AddIcon,
   Remove as RemoveIcon,
   ShoppingCart as ShoppingCartIcon,
   ArrowBack as ArrowBackIcon,
   ShoppingBag as ShoppingBagIcon,
-  DeleteSweep,
   LocalShipping,
-  Security,
   ClearAll,
   SwipeLeft
 } from '@mui/icons-material';
@@ -88,8 +77,27 @@ const MobileCartPage = () => {
   };
 
   const handleQuantityChange = (productId, newQuantity) => {
-    if (newQuantity >= 1 && newQuantity <= 99) {
+    // Finde das Item um Bestandslimit zu prüfen
+    const item = items.find(item => (item.id === productId || item.produktId === productId));
+    const maxStock = item?.bestand?.menge || 0;
+    const isAvailable = item?.bestand?.verfuegbar === true;
+    
+    // Prüfe Limits: min 1, max verfügbarer Bestand, max 99
+    const minQuantity = 1;
+    const maxQuantity = isAvailable ? Math.min(maxStock, 99) : 1;
+    
+    if (newQuantity >= minQuantity && newQuantity <= maxQuantity) {
       updateQuantity(productId, newQuantity);
+    } else if (newQuantity > maxQuantity) {
+      // Zeige Warnung wenn Bestandslimit erreicht
+      toast(`Nur ${maxStock} Stück verfügbar`, {
+        icon: '⚠️',
+        style: {
+          background: '#fff3cd',
+          border: '1px solid #ffeaa7',
+          color: '#856404',
+        },
+      });
     }
   };
 
@@ -129,6 +137,20 @@ const MobileCartPage = () => {
         cost: SHIPPING_COST
       };
     }
+  };
+
+  // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
+  const getAvailableTotal = () => {
+    return items
+      .filter(item => item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + (item.price || item.preis || 0) * item.quantity, 0);
+  };
+
+  // Berechne verfügbare Artikel-Anzahl
+  const getAvailableItemsCount = () => {
+    return items
+      .filter(item => item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + item.quantity, 0);
   };
 
   // Mobile Header
@@ -198,7 +220,7 @@ const MobileCartPage = () => {
     const handleTouchEnd = () => {
       if (swipeDistance > 60) {
         setIsDeleting(true);
-        setTimeout(() => handleDeleteItem(item._id), 200);
+        setTimeout(() => handleDeleteItem(item.id || item.produktId), 200);
       } else {
         setSwipeDistance(0);
       }
@@ -243,7 +265,7 @@ const MobileCartPage = () => {
                 overflow: 'hidden'
               }}>
                 <LazyImage
-                  src={getImageUrl(item.hauptbild || item.images?.[0])}
+                  src={getImageUrl(item.image || item.hauptbild || item.images?.[0])}
                   alt={item.name || item.title}
                   style={{
                     width: '100%',
@@ -262,7 +284,36 @@ const MobileCartPage = () => {
               <Typography variant="caption" color="text.secondary" noWrap>
                 {item.kategorie}
               </Typography>
-              <Typography variant="body2" color="primary" fontWeight="bold">
+              
+              {/* Verfügbarkeitsstatus */}
+              {item.bestand && (
+                <Box sx={{ mt: 0.5 }}>
+                  {!item.isAvailable ? (
+                    <Chip 
+                      label="Nicht verfügbar" 
+                      color="error" 
+                      size="small" 
+                      sx={{ fontSize: '0.65rem', height: 20 }}
+                    />
+                  ) : !item.hasEnoughStock ? (
+                    <Chip 
+                      label={`Nur ${item.bestand?.menge || 0} verfügbar`} 
+                      color="warning" 
+                      size="small" 
+                      sx={{ fontSize: '0.65rem', height: 20 }}
+                    />
+                  ) : (
+                    <Chip 
+                      label="Verfügbar" 
+                      color="success" 
+                      size="small" 
+                      sx={{ fontSize: '0.65rem', height: 20 }}
+                    />
+                  )}
+                </Box>
+              )}
+              
+              <Typography variant="body2" color="primary" fontWeight="bold" sx={{ mt: 0.5 }}>
                 €{(item.preis || item.price).toFixed(2)}
               </Typography>
             </Grid>
@@ -273,7 +324,7 @@ const MobileCartPage = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <IconButton 
                     size="small"
-                    onClick={() => handleQuantityChange(item._id, item.quantity - 1)}
+                    onClick={() => handleQuantityChange(item.id || item.produktId, item.quantity - 1)}
                     disabled={item.quantity <= 1}
                     sx={{ width: 28, height: 28 }}
                   >
@@ -294,13 +345,27 @@ const MobileCartPage = () => {
                   
                   <IconButton 
                     size="small"
-                    onClick={() => handleQuantityChange(item._id, item.quantity + 1)}
-                    disabled={item.quantity >= 99}
+                    onClick={() => handleQuantityChange(item.id || item.produktId, item.quantity + 1)}
+                    disabled={
+                      item.quantity >= Math.min(item.bestand?.menge || 0, 99) || 
+                      !item.bestand?.verfuegbar
+                    }
                     sx={{ width: 28, height: 28 }}
                   >
                     <AddIcon fontSize="small" />
                   </IconButton>
                 </Box>
+                
+                {/* Bestandsanzeige bei Quantity Controls */}
+                {item.bestand?.verfuegbar && (
+                  <Typography 
+                    variant="caption" 
+                    color="text.secondary" 
+                    sx={{ fontSize: '0.7rem', textAlign: 'center', display: 'block' }}
+                  >
+                    max. {item.bestand.menge}
+                  </Typography>
+                )}
                 
                 <Typography variant="caption" fontWeight="bold">
                   €{((item.preis || item.price) * item.quantity).toFixed(2)}
@@ -363,8 +428,11 @@ const MobileCartPage = () => {
 
   // Sticky Bottom Bar
   const StickyBottomBar = () => {
+    const totalAll = getCartTotal();
+    const availableTotal = getAvailableTotal();
+    const availableCount = getAvailableItemsCount();
     const shippingInfo = getShippingInfo();
-    const total = getCartTotal() + shippingInfo.cost;
+    const finalTotal = availableTotal + shippingInfo.cost;
     
     return (
       <Paper 
@@ -381,16 +449,21 @@ const MobileCartPage = () => {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Box>
             <Typography variant="body2" color="text.secondary">
-              Zwischensumme: €{getCartTotal().toFixed(2)}
+              Verfügbar: €{availableTotal.toFixed(2)}
             </Typography>
-            {!shippingInfo.isFree && (
+            {totalAll !== availableTotal && (
+              <Typography variant="caption" color="warning.main">
+                Nicht verfügbar: €{(totalAll - availableTotal).toFixed(2)}
+              </Typography>
+            )}
+            {!shippingInfo.isFree && availableTotal > 0 && (
               <Typography variant="body2" color="text.secondary">
                 Versand: €{shippingInfo.cost.toFixed(2)}
               </Typography>
             )}
           </Box>
           <Typography variant="h6" fontWeight="bold">
-            €{total.toFixed(2)}
+            €{finalTotal.toFixed(2)}
           </Typography>
         </Box>
         
@@ -399,16 +472,22 @@ const MobileCartPage = () => {
           variant="contained"
           size="large"
           onClick={handleCheckout}
-          disabled={loading || items.length === 0}
+          disabled={loading || availableCount === 0}
           startIcon={loading ? <CircularProgress size={20} /> : <ShoppingBagIcon />}
           sx={{ minHeight: 48 }}
         >
-          {loading ? 'Laden...' : `Zur Kasse (${getCartItemsCount()} Artikel)`}
+          {loading ? 'Laden...' : `Zur Kasse (${availableCount} verfügbare Artikel)`}
         </Button>
         
         {!user && (
           <Typography variant="caption" color="text.secondary" sx={{ textAlign: 'center', display: 'block', mt: 1 }}>
             Anmeldung erforderlich für Checkout
+          </Typography>
+        )}
+        
+        {availableCount === 0 && items.length > 0 && (
+          <Typography variant="caption" color="warning.main" sx={{ textAlign: 'center', display: 'block', mt: 1 }}>
+            Keine verfügbaren Artikel im Warenkorb
           </Typography>
         )}
       </Paper>
@@ -481,7 +560,7 @@ const MobileCartPage = () => {
             {/* Cart Items */}
             <Box sx={{ mb: 2 }}>
               {items.map((item, index) => (
-                <MobileCartItem key={item._id} item={item} index={index} />
+                <MobileCartItem key={item.id || item.produktId || index} item={item} index={index} />
               ))}
             </Box>
           </>

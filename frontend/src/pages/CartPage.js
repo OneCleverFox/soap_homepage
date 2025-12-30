@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Container,
   Typography,
@@ -15,7 +16,8 @@ import {
   TextField,
   CircularProgress,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Chip
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -84,8 +86,23 @@ const CartPage = () => {
   };
 
   const handleQuantityChange = (productId, newQuantity) => {
-    if (newQuantity >= 1 && newQuantity <= 99) {
+    // Finde das entsprechende Item um verfügbare Menge zu prüfen
+    const item = items.find(item => item.id === productId);
+    const maxAvailable = item?.bestand?.menge || 0;
+    // Verbesserte Verfügbarkeitsprüfung: aktiv ist verfügbar wenn true oder undefined
+    const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
+    
+    // Prüfe Grenzen: mindestens 1, maximal verfügbare Menge
+    if (newQuantity >= 1 && newQuantity <= maxAvailable && isAvailable) {
       updateQuantity(productId, newQuantity);
+    } else if (newQuantity > maxAvailable && isAvailable) {
+      // Wenn Benutzer mehr als verfügbar eingeben will, setze auf Maximum
+      toast.info(`Nur ${maxAvailable} Stück verfügbar`);
+      updateQuantity(productId, maxAvailable);
+    } else if (!isAvailable) {
+      toast.error('Artikel ist nicht verfügbar');
+    } else {
+      toast.error('Mengenänderung nicht möglich');
     }
   };
 
@@ -98,6 +115,20 @@ const CartPage = () => {
       console.log('🛒 User exists, navigating to checkout');
       navigate('/checkout');
     }
+  };
+
+  // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
+  const getAvailableTotal = () => {
+    return items
+      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
+  };
+
+  // Berechne verfügbare Artikel-Anzahl
+  const getAvailableItemsCount = () => {
+    return items
+      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .reduce((sum, item) => sum + item.quantity, 0);
   };
 
   if (!user) {
@@ -172,7 +203,11 @@ const CartPage = () => {
                   sx={{ 
                     display: 'flex', 
                     mb: 2,
-                    flexDirection: isMobile ? 'column' : 'row'
+                    flexDirection: isMobile ? 'column' : 'row',
+                    // Visuell hervorheben wenn nicht verfügbar
+                    opacity: item.isAvailable ? 1 : 0.6,
+                    border: item.isAvailable ? 'none' : '2px dashed #f44336',
+                    backgroundColor: item.isAvailable ? 'transparent' : '#ffebee'
                   }}
                 >
                   {item.image && (
@@ -206,6 +241,39 @@ const CartPage = () => {
                       <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
                         {item.seife} • {item.gramm}g
                       </Typography>
+                      
+                      {/* Verfügbarkeitsstatus */}
+                      {item.bestand && (
+                        <Box sx={{ mt: 0.5 }}>
+                          {!item.isAvailable ? (
+                            <Chip 
+                              label="Nicht verfügbar" 
+                              color="error" 
+                              size="small" 
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          ) : !item.hasEnoughStock ? (
+                            <Chip 
+                              label={`Nur ${item.bestand?.menge || 0} verfügbar`} 
+                              color="warning" 
+                              size="small" 
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          ) : (
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <Chip 
+                                label="Verfügbar" 
+                                color="success" 
+                                size="small" 
+                                sx={{ fontSize: '0.75rem' }}
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                (max. {item.bestand?.menge || 0} {item.bestand?.einheit || 'Stück'})
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      )}
                     </Box>
                     
                     <Box sx={{ 
@@ -235,6 +303,7 @@ const CartPage = () => {
                         </IconButton>
                         <TextField
                           size={isMobile ? "medium" : "small"}
+                          type="number"
                           value={item.quantity}
                           onChange={(e) => {
                             const val = parseInt(e.target.value) || 1;
@@ -242,7 +311,7 @@ const CartPage = () => {
                           }}
                           inputProps={{
                             min: 1,
-                            max: 99,
+                            max: item.bestand?.menge || 99,
                             style: { textAlign: 'center', width: isMobile ? 60 : 50 }
                           }}
                           variant="standard"
@@ -251,7 +320,11 @@ const CartPage = () => {
                         <IconButton
                           size={isMobile ? "medium" : "small"}
                           onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                          disabled={item.quantity >= 99}
+                          disabled={
+                            item.quantity >= (item.bestand?.menge || 0) || 
+                            !item.aktiv || 
+                            (item.bestand?.menge || 0) <= 0
+                          }
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
                         </IconButton>
@@ -311,9 +384,20 @@ const CartPage = () => {
             <Divider sx={{ my: 2 }} />
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant={isMobile ? "body2" : "body1"}>Zwischensumme:</Typography>
-              <Typography variant={isMobile ? "body2" : "body1"}>€{getCartTotal().toFixed(2)}</Typography>
+              <Typography variant={isMobile ? "body2" : "body1"}>Verfügbare Artikel:</Typography>
+              <Typography variant={isMobile ? "body2" : "body1"}>€{getAvailableTotal().toFixed(2)}</Typography>
             </Box>
+            
+            {getCartTotal() !== getAvailableTotal() && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant={isMobile ? "caption" : "body2"} color="warning.main">
+                  Nicht verfügbare Artikel:
+                </Typography>
+                <Typography variant={isMobile ? "caption" : "body2"} color="warning.main">
+                  €{(getCartTotal() - getAvailableTotal()).toFixed(2)}
+                </Typography>
+              </Box>
+            )}
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
@@ -331,7 +415,7 @@ const CartPage = () => {
                 Gesamt:
               </Typography>
               <Typography variant={isMobile ? "body1" : "h6"} fontWeight="bold" color="primary">
-                €{(getCartTotal() + SHIPPING_COST).toFixed(2)}
+                €{(getAvailableTotal() + SHIPPING_COST).toFixed(2)}
               </Typography>
             </Box>
             
@@ -347,10 +431,17 @@ const CartPage = () => {
               fullWidth
               size={isMobile ? "large" : "medium"}
               onClick={handleCheckout}
+              disabled={getAvailableItemsCount() === 0}
               sx={{ mb: 2 }}
             >
-              Zur Kasse
+              Zur Kasse ({getAvailableItemsCount()} verfügbare Artikel)
             </Button>
+            
+            {getAvailableItemsCount() === 0 && items.length > 0 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Keine verfügbaren Artikel im Warenkorb
+              </Alert>
+            )}
             
             <Button
               variant="outlined"

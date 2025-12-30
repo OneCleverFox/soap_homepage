@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -11,6 +12,13 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 const DatenschutzPage = () => {
+  const { name, email, ceo } = useCompany();
+  const [expanded, setExpanded] = useState(false);
+  
+  const handleChange = (panel) => (event, isExpanded) => {
+    setExpanded(isExpanded ? panel : false);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -35,11 +43,11 @@ const DatenschutzPage = () => {
                 EU-Datenschutzgrundverordnung (DSGVO), ist:
               </Typography>
               <Typography variant="body2" paragraph>
-                <strong>Glücksmomente Manufaktur</strong><br />
-                Ralf Jacob<br />
+                <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
+                {ceo || 'Ralf Jacob'}<br />
                 [Straße und Hausnummer]<br />
                 68642 Bürstadt<br />
-                E-Mail: info@gluecksmomente-manufaktur.de
+                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
               </Typography>
             </AccordionDetails>
           </Accordion>

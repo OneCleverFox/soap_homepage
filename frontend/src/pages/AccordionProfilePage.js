@@ -17,34 +17,25 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Divider,
   FormGroup,
   FormControlLabel,
   Switch,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   useMediaQuery,
   useTheme,
   AppBar,
   Toolbar,
-  IconButton,
-  Fab
+  IconButton
 } from '@mui/material';
 import { 
   Person,
   Email,
   Phone,
-  Home,
   Edit,
   Save,
   Cancel,
   Delete,
   Warning,
-  CheckCircle,
   Security,
-  Notifications,
   AccountCircle,
   ExpandMore,
   ContactMail,
@@ -54,7 +45,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { API_URL } from '../services/api';
-import BestellungenAPI from '../services/bestellungenAPI';
+import { ordersAPI } from '../services/api';
 
 const AccordionProfilePage = () => {
   const navigate = useNavigate();
@@ -454,7 +445,7 @@ const AccordionProfilePage = () => {
   // Prüfe, ob Account gelöscht werden kann (alle Bestellungen zugestellt)
   const checkAccountDeletionEligibility = async () => {
     try {
-      const result = await BestellungenAPI.getBestellungen({
+      const result = await ordersAPI.getCustomerOrders({
         limit: 100, // Alle Bestellungen laden
         sortBy: 'bestelldatum',
         sortOrder: 'desc'

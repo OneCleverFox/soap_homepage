@@ -2,15 +2,15 @@
   "name": "gluecksmomente-backend",
   "version": "1.0.1",
   "description": "Backend für Gluecksmomente Homepage - Railway Deployment - PRODUKTIV",
-  "main": "src/server.js",
+  "main": "backend/src/server.js",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "build": "npm install --production",
+    "start": "node backend/src/server.js",
+    "dev": "nodemon backend/src/server.js",
+    "build": "npm install --omit=dev",
     "test": "echo \"No tests specified\""
   },
   "dependencies": {

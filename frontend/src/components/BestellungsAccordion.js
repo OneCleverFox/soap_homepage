@@ -20,7 +20,7 @@ import {
   Email,
   Home
 } from '@mui/icons-material';
-import BestellungenAPI from '../services/bestellungenAPI';
+import { ordersAPI } from '../services/api';
 
 const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
   const [expandedBestellung, setExpandedBestellung] = useState(null);
@@ -38,7 +38,7 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
       setLoading(true);
       
       try {
-        const response = await BestellungenAPI.getBestellung(bestellungId);
+        const response = await ordersAPI.getCustomerOrder(bestellungId);
         if (response.success) {
           setBestellungDetails(response.data);
         }
@@ -53,7 +53,7 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
   return (
     <Box>
       {bestellungen.map((bestellung) => {
-        const status = BestellungenAPI.formatStatus(bestellung.status);
+        const status = ordersAPI.formatStatus(bestellung.status);
         const isExpanded = expandedBestellung === bestellung._id;
         
         return (
@@ -70,7 +70,7 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
                     {bestellung.bestellnummer}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    {BestellungenAPI.formatDate(bestellung.bestelldatum)}
+                    {ordersAPI.formatDate(bestellung.bestelldatum)}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={3}>
@@ -90,7 +90,7 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
                 </Grid>
                 <Grid item xs={12} sm={3}>
                   <Typography variant="h6" color="primary" align="right">
-                    {BestellungenAPI.formatPrice(bestellung.preise?.gesamtsumme || bestellung.gesamt?.brutto)}
+                    {ordersAPI.formatPrice(bestellung.preise?.gesamtsumme || bestellung.gesamt?.brutto)}
                   </Typography>
                 </Grid>
               </Grid>
@@ -142,10 +142,10 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
                         <ListItem key={index} divider>
                           <ListItemText
                             primary={artikel.produktSnapshot?.name}
-                            secondary={`${artikel.menge}x à ${BestellungenAPI.formatPrice(artikel.einzelpreis)}`}
+                            secondary={`${artikel.menge}x à ${ordersAPI.formatPrice(artikel.einzelpreis)}`}
                           />
                           <Typography variant="body2" color="primary">
-                            {BestellungenAPI.formatPrice(artikel.gesamtpreis)}
+                            {ordersAPI.formatPrice(artikel.gesamtpreis)}
                           </Typography>
                         </ListItem>
                       ))}
@@ -158,26 +158,26 @@ const BestellungsAccordion = ({ bestellungen, onFetchDetails }) => {
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="body2">Zwischensumme:</Typography>
                         <Typography variant="body2">
-                          {BestellungenAPI.formatPrice(bestellungDetails.preise?.zwischensumme)}
+                          {ordersAPI.formatPrice(bestellungDetails.preise?.zwischensumme)}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="body2">Versandkosten:</Typography>
                         <Typography variant="body2">
-                          {BestellungenAPI.formatPrice(bestellungDetails.preise?.versandkosten)}
+                          {ordersAPI.formatPrice(bestellungDetails.preise?.versandkosten)}
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                         <Typography variant="body2">MwSt. ({bestellungDetails.preise?.mwst?.satz}%):</Typography>
                         <Typography variant="body2">
-                          {BestellungenAPI.formatPrice(bestellungDetails.preise?.mwst?.betrag)}
+                          {ordersAPI.formatPrice(bestellungDetails.preise?.mwst?.betrag)}
                         </Typography>
                       </Box>
                       <Divider />
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
                         <Typography variant="h6">Gesamtsumme:</Typography>
                         <Typography variant="h6" color="primary">
-                          {BestellungenAPI.formatPrice(bestellungDetails.preise?.gesamtsumme)}
+                          {ordersAPI.formatPrice(bestellungDetails.preise?.gesamtsumme)}
                         </Typography>
                       </Box>
                     </Box>

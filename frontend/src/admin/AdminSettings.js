@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Paper,
@@ -35,8 +36,14 @@ const AdminSettings = () => {
     inventoryTracking: true,
     debugMode: true
   });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    handleAsyncOperation
+  } = useAdminState();
 
   useEffect(() => {
     loadSettings();

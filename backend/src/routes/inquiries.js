@@ -4,6 +4,17 @@ const Inquiry = require('../models/Inquiry');
 const Order = require('../models/Order');
 const { auth, authenticateToken } = require('../middleware/auth');
 const PayPalService = require('../services/PayPalService');
+const { cacheManager } = require('../utils/cacheManager');
+
+// Hilfsfunktion zum Portfolio-Cache-Invalidieren
+function invalidatePortfolioCache() {
+  // Referenz auf den Portfolio-Cache aus der Portfolio-Route
+  // Da der Portfolio-Cache als lokale Variable in portfolio.js definiert ist,
+  // setzen wir eine globale Variable für die Cache-Invalidierung
+  global.portfolioCache = { data: null, timestamp: 0 };
+  cacheManager.invalidateProductCache();
+  console.log('🗑️ Portfolio cache invalidated due to inventory change');
+}
 
 // Middleware: Admin-Berechtigung prüfen
 const requireAdmin = (req, res, next) => {
@@ -17,15 +28,36 @@ const requireAdmin = (req, res, next) => {
 };
 
 // 📊 GET: Admin-Statistiken
-router.get('/admin/stats', auth, requireAdmin, async (req, res) => {
+router.get('/admin/stats', auth, async (req, res) => {
   try {
-    console.log('🔍 Anfrage stats für Admin abrufen...');
+    console.log('🔍 Anfrage stats für Admin abrufen... [VERSION: v2-totalValue]');
     
+    // Basis-Zählungen
     const totalInquiries = await Inquiry.countDocuments();
     const pendingInquiries = await Inquiry.countDocuments({ status: 'pending' });
     const acceptedInquiries = await Inquiry.countDocuments({ status: 'accepted' });
     const rejectedInquiries = await Inquiry.countDocuments({ status: 'rejected' });
     const convertedInquiries = await Inquiry.countDocuments({ status: 'converted_to_order' });
+    
+    // Gesamtwert aller Anfragen berechnen
+    console.log('🔍 Starte totalValue Aggregation...');
+    const totalValueResult = await Inquiry.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalValue: { $sum: '$total' }
+        }
+      }
+    ]);
+    
+    const totalValue = totalValueResult.length > 0 ? totalValueResult[0].totalValue : 0;
+    console.log('💰 TotalValue Aggregation Ergebnis:', { totalValueResult, totalValue });
+    
+    console.log('📊 Admin-Statistiken:', {
+      total: totalInquiries,
+      pending: pendingInquiries,
+      totalValue: totalValue
+    });
     
     res.json({
       success: true,
@@ -34,7 +66,8 @@ router.get('/admin/stats', auth, requireAdmin, async (req, res) => {
         pending: pendingInquiries || 0,
         accepted: acceptedInquiries || 0,
         rejected: rejectedInquiries || 0,
-        converted: convertedInquiries || 0
+        converted: convertedInquiries || 0,
+        totalValue: totalValue || 0
       }
     });
   } catch (error) {
@@ -225,6 +258,16 @@ router.post('/create', authenticateToken, async (req, res) => {
     
     console.log(`✅ Anfrage ${inquiryId} erstellt für Kunde ${kunde.email}`);
     
+    // Admin-E-Mail-Benachrichtigung senden
+    try {
+      const emailService = require('../services/emailService');
+      await emailService.sendAdminInquiryNotification(inquiry);
+      console.log('✅ Admin-Benachrichtigung für Anfrage gesendet');
+    } catch (emailError) {
+      console.error('❌ Fehler beim Senden der Admin-Benachrichtigung:', emailError);
+      // Anfrage trotzdem speichern, auch wenn E-Mail fehlschlägt
+    }
+
     res.status(201).json({
       success: true,
       message: 'Anfrage erfolgreich erstellt',
@@ -278,7 +321,13 @@ router.get('/admin/all', auth, async (req, res) => {
     
     const filter = {};
     if (status && status !== 'all') {
-      filter.status = status;
+      // Unterstütze mehrere Status durch Komma getrennt
+      const statusList = status.split(',').map(s => s.trim());
+      if (statusList.length > 1) {
+        filter.status = { $in: statusList };
+      } else {
+        filter.status = status;
+      }
     }
     
     const skip = (page - 1) * limit;
@@ -363,12 +412,12 @@ router.get('/admin/:inquiryId', auth, async (req, res) => {
 });
 
 // ✅ PUT: Anfrage annehmen (Admin)
-router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
+router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
   try {
     const { inquiryId } = req.params;
-    const { message, convertToOrder = true } = req.body;
+    const { message, convertToOrder } = req.body;
     
-    console.log(`✅ Anfrage ${inquiryId} annehmen...`);
+    console.log(`✅ Anfrage ${inquiryId} annehmen... Konvertieren: ${convertToOrder}`);
     
     const inquiry = await Inquiry.findOne({ inquiryId });
     
@@ -393,30 +442,95 @@ router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
       respondedAt: new Date()
     };
     
-    if (convertToOrder) {
-      // In Bestellung konvertieren
-      const orderId = `ORD-${Date.now()}`;
-      
-      // Prüfe, ob Kunde existiert
-      const Customer = require('../models/Kunde');
-      const customer = await Customer.findById(inquiry.customer.id);
-      if (!customer) {
-        throw new Error('Kunde nicht gefunden');
+    // ⚡ BESTAND IMMER REDUZIEREN beim Annehmen einer Anfrage
+    const Bestand = require('../models/Bestand');
+    
+    console.log('🔄 Bestandsreduzierung für angenommene Anfrage...');
+    for (const item of inquiry.items) {
+      try {
+        // Bestand finden und reduzieren - prüfe beide mögliche Typ-Bezeichnungen
+        let bestand = await Bestand.findOne({
+          artikelId: item.produktId || item.productId,
+          typ: 'Portfolio' // Korrekter Typ für Portfolio-Produkte
+        });
+        
+        // Falls nicht gefunden, versuche andere Typ-Bezeichnungen
+        if (!bestand) {
+          bestand = await Bestand.findOne({
+            artikelId: item.produktId || item.productId,
+            typ: 'produkt'
+          });
+        }
+        
+        if (!bestand) {
+          bestand = await Bestand.findOne({
+            artikelId: item.produktId || item.productId,
+            typ: 'portfolio'
+          });
+        }
+
+        if (bestand) {
+          const mengeZuReduzieren = item.quantity || item.menge;
+          if (bestand.menge >= mengeZuReduzieren) {
+            bestand.menge -= mengeZuReduzieren;
+            await bestand.save();
+            console.log(`📦 Bestand reduziert: ${item.name} (-${mengeZuReduzieren}), Restbestand: ${bestand.menge}`);
+          } else {
+            console.warn(`⚠️ Nicht genügend Bestand für: ${item.name} (verfügbar: ${bestand.menge}, benötigt: ${mengeZuReduzieren})`);
+          }
+        } else {
+          console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${item.name} (ID: ${item.produktId || item.productId})`);
+        }
+      } catch (bestandError) {
+        console.error('❌ Fehler beim Bestandsabgang:', bestandError);
       }
+    }
+    
+    // ✅ CACHE-INVALIDIERUNG: Portfolio-Cache nach Bestandsänderungen invalidieren
+    invalidatePortfolioCache();
+    console.log('🔄 Portfolio-Cache invalidiert nach Bestandsreduzierung');
+    
+    if (convertToOrder) {
+      // Direkt in Bestellung umwandeln (Bestand bereits reduziert)
+      const Order = require('../models/Order');
       
-      // Debug: Prüfe lieferadresse-Wert
-      console.log('🔍 Debug inquiry.lieferadresse:', inquiry.lieferadresse);
-      console.log('🔍 Debug typeof:', typeof inquiry.lieferadresse);
+      console.log('🔄 Konvertiere Anfrage zu Bestellung...');
       
-      // Sichere Lieferadresse-Behandlung
-      let lieferadresse;
-      if (inquiry.lieferadresse && 
-          typeof inquiry.lieferadresse === 'object' && 
-          inquiry.lieferadresse !== null &&
-          inquiry.lieferadresse.strasse) { // Prüfe, ob es echte Daten enthält
-        lieferadresse = inquiry.lieferadresse;
-      } else {
-        lieferadresse = {
+      // Artikel für Bestellung formatieren (ohne nochmalige Bestandsreduzierung)
+      const artikelMitBestand = [];
+      for (const item of inquiry.items) {
+        artikelMitBestand.push({
+          produktId: item.produktId || item.productId,
+          produktSnapshot: {
+            name: item.name,
+            beschreibung: item.description || '',
+            bild: item.image || ''
+          },
+          menge: item.quantity || item.menge,
+          einzelpreis: item.price || item.einzelpreis,
+          gesamtpreis: (item.quantity || item.menge) * (item.price || item.einzelpreis)
+        });
+      }
+
+      // Bestellung erstellen
+      const bestellnummer = `ORDER-${Date.now()}`;
+      const neueBestellung = new Order({
+        orderId: bestellnummer,
+        bestellnummer: bestellnummer,
+        besteller: {
+          vorname: inquiry.customer.name ? inquiry.customer.name.split(' ')[0] : 'Unbekannt',
+          nachname: inquiry.customer.name ? inquiry.customer.name.split(' ').slice(1).join(' ') : '',
+          email: inquiry.customer.email,
+          telefon: ''
+        },
+        rechnungsadresse: (inquiry.rechnungsadresse && inquiry.rechnungsadresse !== null) ? inquiry.rechnungsadresse : {
+          strasse: 'Unbekannt',
+          hausnummer: '0',
+          plz: '00000',
+          stadt: 'Unbekannt',
+          land: 'Deutschland'
+        },
+        lieferadresse: {
           verwendeRechnungsadresse: true,
           firma: '',
           strasse: '',
@@ -425,76 +539,11 @@ router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
           plz: '',
           stadt: '',
           land: 'Deutschland'
-        };
-      }
-      
-      console.log('🔍 Debug final lieferadresse:', lieferadresse);
-      
-      // Hole produktType für alle Items aus der Datenbank
-      const Product = require('../models/Product');
-      const Rohseife = require('../models/Rohseife');
-      const Duftoil = require('../models/Duftoil');
-      const Verpackung = require('../models/Verpackung');
-      
-      const artikelWithProductType = await Promise.all(
-        inquiry.items.map(async (item) => {
-          let produktType = item.produktType;
-          
-          // Falls produktType nicht vorhanden, aus Datenbank ermitteln
-          if (!produktType) {
-            try {
-              // Versuche alle Modelle
-              let product = await Product.findById(item.productId);
-              if (product) {
-                produktType = 'standard';
-              } else {
-                product = await Rohseife.findById(item.productId);
-                if (product) {
-                  produktType = 'rohseife';
-                } else {
-                  product = await Duftoil.findById(item.productId);
-                  if (product) {
-                    produktType = 'duftoil';
-                  } else {
-                    product = await Verpackung.findById(item.productId);
-                    if (product) {
-                      produktType = 'verpackung';
-                    } else {
-                      produktType = 'rohseife'; // Fallback
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              console.log(`⚠️ Warnung: produktType für Item ${item.productId} nicht ermittelbar, verwende Fallback`);
-              produktType = 'rohseife';
-            }
-          }
-          
-          return {
-            productId: item.productId,
-            produktType: produktType,
-            produktSnapshot: {
-              name: item.name,
-              bild: item.image
-            },
-            menge: item.quantity,
-            einzelpreis: item.price,
-            gesamtpreis: item.quantity * item.price
-          };
-        })
-      );
-      
-      const order = new Order({
-        orderId,
-        bestellnummer: orderId, // Für Frontend-Kompatibilität
-        // Kunde als ObjectId
-        kunde: inquiry.customer.id,
-        // Items von Anfrage-Format zu Bestellungs-Format konvertieren mit produktType
-        artikel: artikelWithProductType,
-        rechnungsadresse: inquiry.rechnungsadresse,
-        lieferadresse: lieferadresse,
-        // Preise korrekt strukturiert
+        },
+        artikel: artikelMitBestand.map(artikel => ({
+          ...artikel,
+          produktType: artikel.produktType || 'portfolio'
+        })),
         preise: {
           zwischensumme: inquiry.total,
           versandkosten: 0,
@@ -510,54 +559,71 @@ router.put('/admin/:inquiryId/accept', auth, async (req, res) => {
           },
           gesamtsumme: inquiry.total
         },
-        // Zahlungsinformationen
+        status: 'bestaetigt',
+        zahlungsart: 'rechnung',
         zahlung: {
-          methode: 'paypal', // Standard für Anfragen
-          status: 'ausstehend', // Korrekte Enum-Werte verwenden
-          transaktionId: '',
-          paypalOrderId: '',
-          bezahltAm: null,
-          betrag: inquiry.total
+          status: 'ausstehend',
+          methode: 'ueberweisung'
         },
-        // Besteller-Informationen
-        besteller: {
-          vorname: customer.vorname || customer.name?.split(' ')[0] || '',
-          nachname: customer.nachname || customer.name?.split(' ')[1] || customer.name || '',
-          email: customer.email,
-          telefon: customer.telefon || '',
-          kundennummer: customer.kundennummer // Wichtig für "Meine Bestellungen" API
-        },
-        status: 'neu', // Status 'neu' damit sie in "zu bearbeiten" erscheint
-        paymentStatus: 'pending',
         source: 'inquiry',
-        sourceInquiryId: inquiry.inquiryId,
-        customerNote: inquiry.customerNote
+        sourceInquiryId: inquiry._id
       });
-      
-      await order.save();
-      
+
+      await neueBestellung.save();
+      console.log(`✅ Bestellung ${bestellnummer} aus Anfrage erstellt`);
+
+      // ✅ Automatische Rechnungserstellung für konvertierte Bestellung
+      try {
+        const orderInvoiceService = require('../services/orderInvoiceService');
+        console.log('🧾 Erstelle Rechnung für konvertierte Bestellung:', neueBestellung._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(neueBestellung._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für konvertierte Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung für konvertierte Bestellung:', invoiceResult.error);
+          // Konvertierung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung für konvertierte Bestellung:', invoiceError);
+        // Konvertierung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
+
+      // Anfrage als konvertiert markieren
       inquiry.status = 'converted_to_order';
-      inquiry.convertedOrderId = order._id;
+      inquiry.convertedOrderId = neueBestellung._id;
       
-      console.log(`✅ Anfrage ${inquiryId} in Bestellung ${order._id} konvertiert`);
+      await inquiry.save();
+
+      res.json({
+        success: true,
+        message: 'Anfrage wurde angenommen und in Bestellung umgewandelt',
+        inquiry: inquiry,
+        order: {
+          orderId: neueBestellung._id,
+          bestellnummer: neueBestellung.bestellnummer
+        }
+      });
+
     } else {
+      // Nur annehmen, aber nicht konvertieren - Kunde muss erst bezahlen
       inquiry.status = 'accepted';
+      inquiry.acceptedAt = new Date();
+      
+      await inquiry.save();
+      
+      res.json({
+        success: true,
+        message: 'Anfrage wurde angenommen. Kunde wird über Zahlungsmöglichkeit informiert.',
+        inquiry: inquiry
+      });
     }
     
-    await inquiry.save();
-    
-    res.json({
-      success: true,
-      message: convertToOrder ? 'Anfrage angenommen und in Bestellung konvertiert' : 'Anfrage angenommen',
-      inquiry,
-      ...(convertToOrder && { orderId: inquiry.convertedOrderId })
-    });
-    
   } catch (error) {
-    console.error('❌ Fehler beim Annehmen der Anfrage:', error);
+    console.error('Fehler beim Annehmen der Anfrage:', error);
     res.status(500).json({
       success: false,
-      message: 'Anfrage konnte nicht angenommen werden'
+      message: 'Fehler beim Annehmen der Anfrage'
     });
   }
 });
@@ -619,7 +685,7 @@ router.put('/admin/:inquiryId/reject', auth, async (req, res) => {
 });
 
 // 📊 GET: Anfragen-Statistiken für Admin
-router.get('/admin/stats', auth, async (req, res) => {
+router.get('/admin/stats-DISABLED', auth, async (req, res) => {
   try {
     console.log('� Anfrage stats für Admin abrufen...');
     
@@ -805,15 +871,17 @@ router.post('/:inquiryId/create-payment', authenticateToken, async (req, res) =>
       });
     }
 
-    // Prüfen, ob Anfrage angenommen wurde
-    if (inquiry.status !== 'accepted' && inquiry.status !== 'converted_to_order') {
+    // Prüfen, ob Anfrage angenommen wurde oder Zahlung ausstehend ist
+    if (inquiry.status !== 'accepted' && 
+        inquiry.status !== 'converted_to_order' && 
+        inquiry.status !== 'payment_pending') {
       return res.status(400).json({
         success: false,
         message: 'Zahlung nur für angenommene Anfragen möglich'
       });
     }
 
-    // Prüfen, ob bereits bezahlt
+    // Prüfen, ob bereits erfolgreich bezahlt (nicht bei "pending" blockieren)
     if (inquiry.payment.status === 'completed') {
       return res.status(400).json({
         success: false,
@@ -950,8 +1018,10 @@ router.post('/:inquiryId/create-order-payment', authenticateToken, async (req, r
       });
     }
 
-    // Prüfen, ob Anfrage zu Bestellung konvertiert wurde
-    if (inquiry.status !== 'converted_to_order' || !inquiry.convertedOrderId) {
+    // Prüfen, ob Anfrage zu Bestellung konvertiert wurde (oder Zahlung ausstehend)
+    if ((inquiry.status !== 'converted_to_order' && 
+         inquiry.status !== 'payment_pending') || 
+        !inquiry.convertedOrderId) {
       return res.status(400).json({
         success: false,
         message: 'Zahlung nur für konvertierte Bestellungen möglich'
@@ -969,7 +1039,7 @@ router.post('/:inquiryId/create-order-payment', authenticateToken, async (req, r
       });
     }
 
-    // Prüfen, ob bereits bezahlt
+    // Prüfen, ob bereits erfolgreich bezahlt (nicht bei ausstehend blockieren)
     if (order.zahlung.status === 'bezahlt') {
       return res.status(400).json({
         success: false,
@@ -1082,6 +1152,23 @@ router.post('/:inquiryId/capture-order-payment', authenticateToken, async (req, 
       await inquiry.save();
 
       console.log(`✅ Zahlung für konvertierte Bestellung ${order.bestellnummer} abgeschlossen`);
+
+      // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+      try {
+        const orderInvoiceService = require('../services/orderInvoiceService');
+        console.log('🧾 Automatische Rechnungserstellung für bezahlte konvertierte Bestellung:', order._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für konvertierte Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung (konvertierte Bestellung):', invoiceResult.error);
+          // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung (konvertierte Bestellung):', invoiceError);
+        // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
 
       res.json({
         success: true,

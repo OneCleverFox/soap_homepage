@@ -1,14 +1,13 @@
 import React from 'react';
-import { Container, Typography } from '@mui/material';
+import { Navigate } from 'react-router-dom';
 
+/**
+ * @deprecated Diese Komponente ist veraltet.
+ * Verwende AdminLagerNew.js für Lagerverwaltung.
+ * Redirect zu neuer Lager-Komponente.
+ */
 const AdminInventory = () => {
-  return (
-    <Container maxWidth="lg">
-      <Typography variant="h2" component="h1" gutterBottom>
-        Lagerverwaltung
-      </Typography>
-    </Container>
-  );
+  return <Navigate to="/admin/lager" replace />;
 };
 
 export default AdminInventory;

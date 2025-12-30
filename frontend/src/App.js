@@ -1,52 +1,9 @@
-import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { Box } from '@mui/material';
+import React, { lazy, Suspense } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 
-// Public Pages
-import HomePage from './pages/HomePage';
-import ProductsPage from './pages/ProductsPage';
-import ProductDetailPage from './pages/ProductDetailPage';
-import CheckoutSuccessPage from './pages/CheckoutSuccessPage';
-import CheckoutCancelPage from './pages/CheckoutCancelPage';
-import InquirySuccessPage from './pages/InquirySuccessPage';
-import OrderTrackingPage from './pages/OrderTrackingPage';
-import AboutPage from './pages/AboutPage';
-import ContactPage from './pages/ContactPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import EmailVerificationPage from './pages/EmailVerificationPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import ResponsiveCartPage from './components/responsive/ResponsiveCartPage';
-import ResponsiveCheckoutPage from './components/responsive/ResponsiveCheckoutPage';
-import ResponsiveProfilePage from './components/responsive/ResponsiveProfilePage';
-import CustomerInquiries from './pages/CustomerInquiries';
-import MyOrdersPage from './pages/MyOrdersPage';
-import InquiryPaymentSuccess from './pages/InquiryPaymentSuccess';
-import InquiryPaymentCancel from './pages/InquiryPaymentCancel';
-import OrderPaymentSuccess from './pages/OrderPaymentSuccess';
-
-// Legal Pages
-import ImpressumPage from './pages/ImpressumPage';
-import DatenschutzPage from './pages/DatenschutzPage';
-import AGBPage from './pages/AGBPage';
-
-// Admin Pages
-import AdminPortfolio from './pages/AdminPortfolio';
-
-// Original Admin Pages
-import AdminDashboard from './admin/AdminDashboard';
-import AdminRohstoffe from './admin/AdminRohstoffe';
-import AdminOrdersManagement from './admin/AdminOrdersManagement';
-import AdminInquiries from './admin/AdminInquiries';
-import AdminCheckout from './admin/AdminCheckout';
-import AdminInventory from './admin/AdminInventory';
-import AdminUsers from './admin/AdminUsers';
-import AdminWarenberechnung from './admin/AdminWarenberechnung';
-import AdminLager from './admin/AdminLagerNew';
-import AdminCart from './admin/AdminCart';
-import AdminSettingsPanel from './admin/AdminSettingsPanel';
-import AdminInvoiceConfiguration from './admin/AdminInvoiceConfiguration';
+// Context Providers
+import { CompanyProvider } from './contexts/CompanyContext';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -55,11 +12,92 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import ScrollToTop from './components/common/ScrollToTop';
 import CookieConsent from './components/common/CookieConsent';
 
+// Lazy Loading für bessere Performance
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ProductsPage = lazy(() => import('./pages/ProductsPage'));
+const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
+const CheckoutSuccessPage = lazy(() => import('./pages/CheckoutSuccessPage'));
+const CheckoutCancelPage = lazy(() => import('./pages/CheckoutCancelPage'));
+const InquirySuccessPage = lazy(() => import('./pages/InquirySuccessPage'));
+const OrderTrackingPage = lazy(() => import('./pages/OrderTrackingPage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const EmailVerificationPage = lazy(() => import('./pages/EmailVerificationPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const ResponsiveCartPage = lazy(() => import('./components/responsive/ResponsiveCartPage'));
+const ResponsiveCheckoutPage = lazy(() => import('./components/responsive/ResponsiveCheckoutPage'));
+const ResponsiveProfilePage = lazy(() => import('./components/responsive/ResponsiveProfilePage'));
+const CustomerInquiries = lazy(() => import('./pages/CustomerInquiries'));
+const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
+const InquiryPaymentSuccess = lazy(() => import('./pages/InquiryPaymentSuccess'));
+const InquiryPaymentCancel = lazy(() => import('./pages/InquiryPaymentCancel'));
+const OrderPaymentSuccess = lazy(() => import('./pages/OrderPaymentSuccess'));
+
+// Legal Pages
+const ImpressumPage = lazy(() => import('./pages/ImpressumPage'));
+const DatenschutzPage = lazy(() => import('./pages/DatenschutzPage'));
+const AGBPage = lazy(() => import('./pages/AGBPage'));
+
+// Admin Pages - Lazy Loading für bessere Performance
+const AdminPortfolio = lazy(() => import('./admin/AdminPortfolio'));
+const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
+const AdminRohstoffe = lazy(() => import('./admin/AdminRohstoffe'));
+const AdminOrdersManagement = lazy(() => import('./admin/AdminOrdersManagement'));
+const AdminInquiries = lazy(() => import('./admin/AdminInquiries'));
+const AdminCheckout = lazy(() => import('./admin/AdminCheckout'));
+const AdminInventory = lazy(() => import('./admin/AdminInventory'));
+const AdminUsers = lazy(() => import('./admin/AdminUsers'));
+const AdminWarenberechnung = lazy(() => import('./admin/AdminWarenberechnung'));
+const AdminLager = lazy(() => import('./admin/AdminLagerNew'));
+const AdminCart = lazy(() => import('./admin/AdminCart'));
+const AdminSettingsPanel = lazy(() => import('./admin/AdminSettingsPanel'));
+const AdminInvoiceConfiguration = lazy(() => import('./admin/AdminInvoiceConfiguration'));
+const AdminEmailConfiguration = lazy(() => import('./admin/AdminEmailConfiguration'));
+const AdminInvoiceDesigner = lazy(() => import('./admin/AdminInvoiceDesigner'));
+const CreateInvoice = lazy(() => import('./admin/CreateInvoice'));
+const InvoiceList = lazy(() => import('./admin/InvoiceList'));
+
+// Hook um zu prüfen ob Footer angezeigt werden soll
+const useShowFooter = () => {
+  const location = useLocation();
+  const routesWithoutFooter = [
+    '/cart',
+    '/checkout', 
+    '/admin/portfolio',
+    '/inquiries',
+    '/my-orders'
+  ];
+  
+  return !routesWithoutFooter.some(route => location.pathname.startsWith(route));
+};
+
+// Komponente für Footer mit bedingter Anzeige
+const ConditionalFooter = () => {
+  const showFooter = useShowFooter();
+  return showFooter ? <Footer /> : null;
+};
+
+// Loading Komponente für Suspense
+const LoadingFallback = () => (
+  <Box 
+    display="flex" 
+    justifyContent="center" 
+    alignItems="center" 
+    minHeight="50vh"
+  >
+    <CircularProgress />
+  </Box>
+);
+
 function App() {
   return (
-    <>
+    <CompanyProvider>
       <ScrollToTop />
       <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <Suspense fallback={<LoadingFallback />}>
           <Routes>
             {/* Public Routes with Navbar and Footer */}
             <Route
@@ -120,7 +158,7 @@ function App() {
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Box>
-                <Footer />
+                <ConditionalFooter />
               </>
             }
           />
@@ -259,12 +297,57 @@ function App() {
               </>
             }
           />
-        </Routes>
+          <Route
+            path="/admin/rechnungs-designer"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminInvoiceDesigner />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/email-tests"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminEmailConfiguration />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/create-invoice"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <CreateInvoice />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/invoice-list"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <InvoiceList />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          </Routes>
+        </Suspense>
       </Box>
       
       {/* Cookie Consent Banner */}
       <CookieConsent />
-    </>
+    </CompanyProvider>
   );
 }
 

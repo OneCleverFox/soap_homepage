@@ -1,10 +1,10 @@
 # 🧼 Glücksmomente - E-Commerce Platform
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Eine moderne E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit dem MERN Stack (MongoDB, Express.js, React, Node.js) und optimiert für Produktion.
+Eine moderne, skalierbare E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit MERN Stack und optimiert für Performance, Wartbarkeit und Benutzerfreundlichkeit.
 
 ## 🚀 Live Demo
 
@@ -12,22 +12,327 @@ Eine moderne E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entw
 - 🔧 **Admin Panel**: https://gluecksmomente-manufaktur.vercel.app/admin
 - 📡 **Backend API**: https://soap-homepage-backend-production.up.railway.app/api
 
+---
+
 ## 📖 Inhaltsverzeichnis
 
 - [Features](#-features)
-- [Technologie Stack](#️-technologie-stack)
-- [Schnellstart](#-schnellstart)
+- [Technologie Stack](#-technologie-stack)
+- [Architektur](#-architektur)
+- [Installation](#-installation)
 - [Deployment](#-deployment)
 - [API Dokumentation](#-api-dokumentation)
+- [Development](#-development)
 - [Contributing](#-contributing)
+
+---
 
 ## ✨ Features
 
-### 🛒 E-Commerce Kern
-- 🛍️ **Produktkatalog** mit Kategorien und Suchfunktion
-- 🛒 **Warenkorb** mit Echtzeit-Synchronisation
-- 💳 **Sicherer Checkout** mit PayPal-Integration
-- 👤 **Benutzerkonten** mit Registrierung und Anmeldung
+### 🛒 E-Commerce Kernfunktionen
+- **Produktkatalog** mit erweiterten Kategorien und Filtern
+- **Intelligenter Warenkorb** mit Echtzeit-Synchronisation
+- **Multi-Payment Checkout** (PayPal, Kreditkarte)
+- **Benutzerverwaltung** mit E-Mail-Verifizierung
+- **Bestellverfolgung** mit automatischen Status-Updates
+
+### 🎨 Responsive Design
+- **Mobile-First** Progressive Web App (PWA)
+- **Adaptive UI** für alle Bildschirmgrößen
+- **Offline-Funktionalität** mit Service Worker
+- **Touch-optimierte** Bedienelemente
+
+### 🔧 Admin-Management
+- **Umfassendes Dashboard** mit Analytics
+- **Produktverwaltung** mit Batch-Operationen
+- **Lagerverwaltung** mit Bestandsalarmen
+- **Kundenverwaltung** mit Segmentierung
+- **Bestellabwicklung** mit automatisierten Workflows
+
+### 🚀 Performance & Security
+- **Lazy Loading** und Code-Splitting
+- **JWT-basierte Authentifizierung**
+- **Rate Limiting** und CORS-Schutz
+- **Bildoptimierung** und Caching
+- **SSL/HTTPS** End-to-End Verschlüsselung
+
+---
+
+## 🛠 Technologie Stack
+
+### Frontend
+- **React 18** mit Hooks und Context API
+- **Material-UI v5** für konsistentes Design
+- **React Router v6** für Navigation
+- **Axios** für HTTP-Requests
+- **Custom Hooks** für State Management
+
+### Backend
+- **Node.js** mit Express.js Framework
+- **MongoDB** mit Mongoose ODM
+- **JWT** für Authentifizierung
+- **Multer** für Datei-Uploads
+- **Nodemailer** für E-Mail-Versand
+
+### Development & Deployment
+- **React Scripts** als Build-Tool
+- **Railway** für Backend-Hosting
+- **Vercel** für Frontend-Deployment
+- **MongoDB Atlas** als Cloud-Datenbank
+
+---
+
+## 🏗 Architektur
+
+### Projekt-Struktur
+```
+soap_homepage/
+├── frontend/                 # React Client Application
+│   ├── src/
+│   │   ├── components/      # Wiederverwendbare UI-Komponenten
+│   │   ├── pages/           # Route-spezifische Seiten
+│   │   ├── hooks/           # Custom React Hooks
+│   │   ├── services/        # API-Services und Utilities
+│   │   ├── admin/           # Admin-spezifische Komponenten
+│   │   └── utils/           # Hilfsfunktionen
+│   └── public/              # Statische Assets
+├── backend/                 # Node.js Server Application
+│   ├── src/
+│   │   ├── controllers/     # Request Handler
+│   │   ├── models/          # Mongoose Data Models
+│   │   ├── routes/          # Express Route Definitionen
+│   │   ├── middleware/      # Custom Middleware
+│   │   └── services/        # Business Logic Services
+│   └── uploads/             # Datei-Upload Directory
+```
+
+### Hook-System (Frontend)
+```
+src/hooks/
+├── useAdminState.js         # Admin State Management (loading, error, success)
+├── useAdminSearch.js        # Search & Filter mit nested field support
+├── useAdminPagination.js    # Pagination, Sorting, erweiterte Filter
+├── useAdminDialog.js        # Dialog State Management + Confirmations
+├── useFormValidation.js     # Einheitliche Form Validation
+└── useResponsiveLayout.js   # Responsive Breakpoint Logic
+```
+
+### Komponentenbibliothek
+```
+src/components/
+├── AdminPageTemplate.js    # Base Template für Admin-Seiten
+├── AdminDialog.js          # Generische Dialog-Komponenten
+├── responsive/             # Factory-basierte Responsive Components
+└── common/                 # Gemeinsam genutzte UI-Komponenten
+```
+
+---
+
+## 🚀 Installation
+
+### Voraussetzungen
+- **Node.js** v16 oder höher
+- **npm** oder **yarn**
+- **MongoDB** (lokal oder Atlas)
+
+### 1. Repository klonen
+```bash
+git clone https://github.com/username/soap_homepage.git
+cd soap_homepage
+```
+
+### 2. Dependencies installieren
+```bash
+# Backend Dependencies
+cd backend && npm install
+
+# Frontend Dependencies
+cd ../frontend && npm install
+```
+
+### 3. Environment Variables
+```bash
+# Backend (.env)
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/gluecksmomente
+JWT_SECRET=your-jwt-secret
+PAYPAL_CLIENT_ID=your-paypal-client-id
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-email-password
+
+# Frontend (.env)
+REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_PAYPAL_CLIENT_ID=your-paypal-client-id
+```
+
+### 4. Anwendung starten
+```bash
+# Backend (Port 5000)
+cd backend && npm start
+
+# Frontend (Port 3000)
+cd frontend && npm start
+```
+
+---
+
+## 🌐 Deployment
+
+### Backend (Railway)
+```bash
+# Railway CLI Installation
+npm install -g @railway/cli
+
+# Deploy
+railway login
+railway deploy
+```
+
+### Frontend (Vercel)
+```bash
+# Vercel CLI Installation
+npm install -g vercel
+
+# Deploy
+vercel --prod
+```
+
+### Environment Production
+```bash
+# Production Environment Variables
+NODE_ENV=production
+MONGODB_URI=mongodb+srv://...
+CORS_ORIGIN=https://your-frontend-domain.com
+```
+
+---
+
+## 📚 API Dokumentation
+
+### Authentifizierung
+```javascript
+// Login
+POST /api/auth/login
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+
+// Registrierung
+POST /api/auth/register
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "firstName": "John",
+  "lastName": "Doe"
+}
+```
+
+### Produkte
+```javascript
+// Alle Produkte abrufen
+GET /api/products?page=1&limit=10&search=seife
+
+// Produkt erstellen (Admin)
+POST /api/admin/products
+Authorization: Bearer <token>
+{
+  "name": "Lavendel Seife",
+  "price": 8.99,
+  "description": "Handgemachte Naturseife",
+  "category": "seife"
+}
+```
+
+### Warenkorb
+```javascript
+// Warenkorb abrufen
+GET /api/cart
+Authorization: Bearer <token>
+
+// Artikel hinzufügen
+POST /api/cart/add
+{
+  "productId": "64f...",
+  "quantity": 2
+}
+```
+
+---
+
+## 🔧 Development
+
+### Code Style
+- **ESLint** für JavaScript Linting
+- **Prettier** für Code Formatting
+- **Husky** für Pre-commit Hooks
+
+### Testing
+```bash
+# Frontend Tests
+cd frontend && npm test
+
+# Backend Tests
+cd backend && npm test
+```
+
+### Custom Hooks Verwendung
+```javascript
+// Admin Component mit Standard Hooks
+const MyAdminComponent = () => {
+  const { loading, error, handleAsyncOperation } = useAdminState();
+  const { searchTerm, filteredItems } = useAdminSearch(data, ['name', 'email']);
+  const { openCreateDialog, dialogs } = useAdminDialog();
+  
+  return (
+    // Component JSX
+  );
+};
+```
+
+### Responsive Components
+```javascript
+// Factory Pattern für Responsive Components
+const ResponsiveComponent = createResponsivePage(DesktopComponent, MobileComponent);
+```
+
+---
+
+## 🤝 Contributing
+
+### Git Workflow
+1. **Fork** das Repository
+2. **Branch** für Feature erstellen (`git checkout -b feature/amazing-feature`)
+3. **Commit** Änderungen (`git commit -m 'Add amazing feature'`)
+4. **Push** zu Branch (`git push origin feature/amazing-feature`)
+5. **Pull Request** erstellen
+
+### Development Guidelines
+- **Komponenten** müssen wiederverwendbar sein
+- **Hooks** für repetitive Logik verwenden
+- **TypeScript** für neue Features bevorzugt
+- **Tests** für kritische Funktionen schreiben
+- **Performance** bei UI-Änderungen beachten
+
+---
+
+## 📝 Lizenz
+
+Dieses Projekt ist unter der [MIT Lizenz](LICENSE) lizenziert.
+
+---
+
+## 📞 Support
+
+- **Dokumentation**: [Wiki](https://github.com/username/soap_homepage/wiki)
+- **Issues**: [GitHub Issues](https://github.com/username/soap_homepage/issues)
+- **E-Mail**: developer@gluecksmomente-manufaktur.de
+
+---
+
+## 🎉 Danksagungen
+
+Vielen Dank an alle Mitwirkenden und die Open-Source-Community für die verwendeten Libraries und Tools.
 - 📦 **Bestellverfolgung** und Historie
 - 📱 **Mobile-optimiert** und barrierefrei
 

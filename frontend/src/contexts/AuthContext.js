@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }) => {
         // Fire custom event to notify CartContext
         window.dispatchEvent(new Event('userLoggedIn'));
         console.log('🔐 Login erfolgreich - userLoggedIn Event gefeuert');
-        console.log('👤 User Object:', data.user);
+        console.log('👤 Benutzer authentifiziert');
         
         return { success: true, user: data.user, token: data.token };
       } else {
