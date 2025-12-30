@@ -343,11 +343,32 @@ router.delete('/delete/:userId', async (req, res) => {
 
     if (orderCount > 0) {
       // Benutzer hat Bestellungen - anonymisieren statt löschen (DSGVO-konform)
+      
+      // WICHTIG: Sowohl User als auch Kunde anonymisieren
+      const User = require('../../models/User');
+      
+      // User anonymisieren (falls vorhanden)
+      await User.findOneAndUpdate(
+        { email: user.email },
+        {
+          $set: {
+            firstName: 'Gelöscht',
+            lastName: 'Gelöscht',
+            email: `deleted_user_${user._id}@deleted.local`,
+            phone: '',
+            status: 'deleted',
+            emailVerified: false
+          }
+        },
+        { runValidators: false }
+      );
+      
+      // Kunde anonymisieren
       await Kunde.findByIdAndUpdate(req.params.userId, {
         $set: {
           vorname: 'Gelöscht',
           nachname: 'Gelöscht',
-          email: `deleted_${user._id}@deleted.local`,
+          email: `deleted_kunde_${user._id}@deleted.local`,
           telefon: '',
           status: {
             aktiv: false,
@@ -381,6 +402,17 @@ router.delete('/delete/:userId', async (req, res) => {
       });
     } else {
       // Benutzer hat keine Bestellungen - kann sicher gelöscht werden
+      
+      // WICHTIG: Sowohl aus User als auch aus Kunde Collection löschen
+      const User = require('../../models/User');
+      
+      // User löschen (falls vorhanden)
+      const deletedUser = await User.findOneAndDelete({ email: user.email });
+      if (deletedUser) {
+        console.log(`🗑️ User ${user.email} aus User-Collection gelöscht`);
+      }
+      
+      // Kunde löschen
       await Kunde.findByIdAndDelete(req.params.userId);
       
       console.log(`✅ Benutzer ${user.email} wurde komplett gelöscht (keine Bestellungen)`);
