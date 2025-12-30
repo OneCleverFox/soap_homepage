@@ -231,6 +231,11 @@ const registerUser = async (req, res) => {
 
     console.log('📝 Registrierung-Versuch:', email);
 
+    // Admin-Einstellungen abrufen
+    const AdminSettings = require('../models/AdminSettings');
+    const adminSettings = await AdminSettings.getInstance();
+    const requireEmailVerification = adminSettings.userManagement?.requireEmailVerification ?? true;
+
     // Validierung der Pflichtfelder
     if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({
@@ -308,9 +313,14 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // E-Mail-Verifizierungs-Token generieren
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 Stunden
+    // E-Mail-Verifizierungs-Token generieren (falls erforderlich)
+    let verificationToken = null;
+    let verificationExpires = null;
+    
+    if (requireEmailVerification) {
+      verificationToken = crypto.randomBytes(32).toString('hex');
+      verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 Stunden
+    }
 
     // Neuen Benutzer erstellen
     const newUser = new User({
@@ -324,39 +334,46 @@ const registerUser = async (req, res) => {
       dateOfBirth,
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationExpires,
-      status: 'unverified',
-      emailVerified: false
+      status: requireEmailVerification ? 'unverified' : 'active',
+      emailVerified: !requireEmailVerification // Sofort verifiziert wenn nicht erforderlich
     });
 
     await newUser.save();
 
     console.log('✅ Benutzer erstellt:', newUser.email);
+    console.log(`📧 E-Mail-Verifikation: ${requireEmailVerification ? 'ERFORDERLICH' : 'ÜBERSPRUNGEN'}`);
 
-    // Verifizierungs-E-Mail senden
-    try {
-      const emailResult = await emailService.sendVerificationEmail(
-        newUser.email,
-        verificationToken,
-        newUser.firstName
-      );
+    // Verifizierungs-E-Mail senden (nur wenn erforderlich)
+    if (requireEmailVerification) {
+      try {
+        const emailResult = await emailService.sendVerificationEmail(
+          newUser.email,
+          verificationToken,
+          newUser.firstName
+        );
 
-      if (emailResult.success) {
-        console.log('📧 Verifizierungs-E-Mail gesendet');
-      } else {
-        console.error('❌ E-Mail-Versand fehlgeschlagen:', emailResult.error);
+        if (emailResult.success) {
+          console.log('📧 Verifizierungs-E-Mail gesendet');
+        } else {
+          console.error('❌ E-Mail-Versand fehlgeschlagen:', emailResult.error);
+        }
+      } catch (emailError) {
+        console.error('❌ E-Mail-Service-Fehler:', emailError);
       }
-    } catch (emailError) {
-      console.error('❌ E-Mail-Service-Fehler:', emailError);
     }
 
     res.status(201).json({
       success: true,
-      message: 'Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.',
+      message: requireEmailVerification 
+        ? 'Registrierung erfolgreich! Bitte überprüfen Sie Ihre E-Mail zur Bestätigung.'
+        : 'Registrierung erfolgreich! Ihr Account ist sofort aktiv.',
       data: {
         userId: newUser._id,
         email: newUser.email,
         firstName: newUser.firstName,
-        emailSent: true
+        emailSent: requireEmailVerification,
+        emailVerified: !requireEmailVerification,
+        status: newUser.status
       }
     });
 
