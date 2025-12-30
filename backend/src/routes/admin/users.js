@@ -169,6 +169,24 @@ router.get('/verification-settings', async (req, res) => {
   }
 });
 
+// E-Mail-Verifikationseinstellungen abrufen
+router.get('/verification-settings', async (req, res) => {
+  try {
+    const settings = await AdminSettings.getInstance();
+    
+    res.json({
+      success: true,
+      requireEmailVerification: settings.userManagement?.requireEmailVerification ?? true
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Abrufen der Verifikationseinstellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Einstellungen'
+    });
+  }
+});
+
 // E-Mail-Verifikationseinstellung ändern
 router.put('/verification-settings', async (req, res) => {
   try {
