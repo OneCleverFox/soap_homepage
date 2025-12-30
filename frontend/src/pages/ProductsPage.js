@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -28,11 +28,12 @@ import {
   Inventory2 as InventoryIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import { portfolioAPI, cartAPI } from '../services/api';
+import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
+import stockEventService from '../services/stockEventService';
 
 // API Base URL für Bild-URLs
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -43,7 +44,7 @@ const ProductsPage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const { user } = useAuth();
-  const { loadCart } = useCart();
+  const { addToCart } = useCart();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
@@ -93,25 +94,31 @@ const ProductsPage = () => {
         return;
       }
 
-      await cartAPI.addToCart({
-        produktId: product._id,
+      // Verwende die addToCart-Funktion aus dem CartContext
+      await addToCart({
+        id: product._id,
         name: product.name,
-        preis: product.preis,
-        menge: quantity,
-        bild: product.bilder?.hauptbild, // Nur relativen Pfad speichern
+        price: getProductPrice(product),
+        image: product.bilder?.hauptbild,
         gramm: product.gramm,
         seife: product.seife
-      });
+      }, quantity);
       
-      toast.success(`${quantity}x ${product.name} zum Warenkorb hinzugefügt`);
-      
-      // Warenkorb neu laden um die Anzeige zu aktualisieren
-      console.log('🔄 Lade Warenkorb nach Hinzufügen neu...');
-      await loadCart();
-      
-      // Produkte neu laden um aktuellen Bestand anzuzeigen
-      console.log('🔄 Aktualisiere Produktbestände...');
-      fetchProducts(true);
+      // Erfolgs-Toast wird bereits in addToCart gezeigt
+      // Optimistic Update: Reduziere Bestand sofort im lokalen State
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === product._id 
+            ? {
+                ...p,
+                bestand: {
+                  ...p.bestand,
+                  menge: Math.max(0, (p.bestand?.menge || 0) - quantity)
+                }
+              }
+            : p
+        )
+      );
       
     } catch (err) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
@@ -142,17 +149,69 @@ const ProductsPage = () => {
     return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
   };
 
+  // Helper-Funktion um den Preis eines Produkts zu ermitteln
+  const getProductPrice = (product) => {
+    return product.preis || product.verkaufspreis || 0;
+  };
+
+  // Stock-Update-Handler für reaktive Updates
+  const handleStockUpdate = useCallback((productId, newStock) => {
+    if (!productId) {
+      // Globales Update - alle Produkte neu laden
+      console.log('🔄 Global stock update - refreshing all products');
+      sessionStorage.removeItem('cachedProducts');
+      fetchProducts(true);
+    } else {
+      // Spezifisches Produkt-Update
+      console.log(`📦 Updating stock for product ${productId} to ${newStock}`);
+      setProducts(prevProducts => 
+        prevProducts.map(p => 
+          p._id === productId 
+            ? {
+                ...p,
+                bestand: {
+                  ...p.bestand,
+                  menge: newStock,
+                  verfuegbar: newStock > 0
+                }
+              }
+            : p
+        )
+      );
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
+    
+    // Stock-Event-Listener für reaktive Updates
+    const unsubscribeStock = stockEventService.subscribe(handleStockUpdate);
+    
+    // Event-Listener für Lageränderungen (Legacy)
+    const handleInventoryUpdate = () => {
+      console.log('📦 Inventory update detected - refreshing products');
+      // Cache invalidieren und Produkte neu laden
+      sessionStorage.removeItem('cachedProducts');
+      if (isMounted) {
+        fetchProducts(false); // Fresh load
+      }
+    };
+
+    // Event-Listener registrieren
+    window.addEventListener('inventoryUpdated', handleInventoryUpdate);
     
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
-        const cached = sessionStorage.getItem('cachedProducts');
+        // TEMPORÄR: Cache für bessere Testing-Experience löschen
+        sessionStorage.removeItem('cachedProducts');
+        return false; // Lade immer frische Daten
+        
+        /* const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
           const { data, timestamp } = JSON.parse(cached);
-          // Verwende Cache wenn er weniger als 5 Minuten alt ist
-          if (Date.now() - timestamp < 5 * 60 * 1000) {
+          // Verwende Cache wenn er weniger als 5 Sekunden alt ist (verkürzt für Testing)
+          if (Date.now() - timestamp < 5 * 1000) {
             console.log('⚡ Loading cached products immediately');
             if (isMounted) {
               setProducts(data);
@@ -169,7 +228,7 @@ const ProductsPage = () => {
             }, 100);
             return true;
           }
-        }
+        } */
       } catch (e) {
         console.warn('⚠️ Could not load cached products:', e);
       }
@@ -184,6 +243,8 @@ const ProductsPage = () => {
     // Cleanup function
     return () => {
       isMounted = false;
+      unsubscribeStock(); // Stock-Event-Listener entfernen
+      window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
   }, []);
 
@@ -196,24 +257,34 @@ const ProductsPage = () => {
       
       // Performance Tracking
       const startTime = performance.now();
-      const response = await portfolioAPI.getWithPrices();
-      const duration = performance.now() - startTime;
       
+      // 1. Lade Produktdaten (können gecacht werden)
+      const response = await portfolioAPI.getWithPrices();
+      const productsData = response.data?.data || response.data || [];
+      
+      // 2. Setze Produktdaten sofort (mit eventuell veralteten Bestandsdaten)
+      setProducts(productsData);
+      
+      const duration = performance.now() - startTime;
       console.log(`⏱️ Products API Call ${isBackgroundUpdate ? '(Background)' : '(Initial)'}: ${duration.toFixed(2)}ms`);
       console.log('📦 API Response:', response);
-      console.log('📊 Products count:', response.data?.data?.length || response.data?.length || 0);
+      console.log('📊 Products count:', productsData.length);
       
-      const productsData = response.data?.data || response.data || [];
-      setProducts(productsData);
       setInitialLoading(false);
       
-      // Cache Produktdaten im SessionStorage für schnelleres Nachladen
+      // Cache NUR Produktdaten (ohne Bestand) im SessionStorage
       try {
+        const productsForCache = productsData.map(product => ({
+          ...product,
+          // Entferne Bestandsdaten vom Cache
+          bestand: undefined
+        }));
+        
         sessionStorage.setItem('cachedProducts', JSON.stringify({
-          data: productsData,
+          data: productsForCache,
           timestamp: Date.now()
         }));
-        console.log('💾 Products cached in SessionStorage');
+        console.log('💾 Products cached in SessionStorage (without inventory)');
       } catch (e) {
         console.warn('⚠️ Could not cache products:', e);
       }
@@ -226,8 +297,8 @@ const ProductsPage = () => {
           const cached = sessionStorage.getItem('cachedProducts');
           if (cached) {
             const { data, timestamp } = JSON.parse(cached);
-            // Verwende Cache wenn er weniger als 5 Minuten alt ist
-            if (Date.now() - timestamp < 5 * 60 * 1000) {
+            // Verwende Cache wenn er weniger als 30 Sekunden alt ist (für Bestandsdaten)
+            if (Date.now() - timestamp < 30 * 1000) {
               console.log('📦 Using cached products (API failed)');
               setProducts(data);
               setInitialLoading(false);
@@ -479,14 +550,14 @@ const ProductsPage = () => {
                       borderColor: 'divider'
                     }}
                   >
-                    {product.preis ? (
+                    {getProductPrice(product) > 0 ? (
                       <Typography 
                         variant="h5" 
                         color="primary" 
                         fontWeight="bold"
                         sx={{ textAlign: 'center' }}
                       >
-                        {product.preis.toFixed(2)} €
+                        {getProductPrice(product).toFixed(2)} €
                       </Typography>
                     ) : (
                       <Typography 
@@ -502,7 +573,7 @@ const ProductsPage = () => {
 
                 <CardActions sx={{ p: 2, pt: 0, flexDirection: 'column', gap: 1 }}>
                   {/* Mengenauswahl und Warenkorb-Button in einer Zeile (für alle angemeldeten Benutzer) */}
-                  {user && product.preis > 0 && (
+                  {user && getProductPrice(product) > 0 && (
                     <Box sx={{ display: 'flex', gap: 1, width: '100%', alignItems: 'center' }}>
                       {/* Kompakte Mengenauswahl */}
                       <Box 
@@ -517,13 +588,17 @@ const ProductsPage = () => {
                         }}
                       >
                         <IconButton
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, -1);
                           }}
                           disabled={!product.bestand?.verfuegbar || quantities[product._id] <= 1}
-                          sx={{ borderRadius: 0 }}
+                          sx={{ 
+                            borderRadius: 0,
+                            minWidth: isMobile ? 44 : 'auto',
+                            minHeight: isMobile ? 44 : 'auto'
+                          }}
                           aria-label={`Menge von ${product.name} verringern`}
                           title={`Menge von ${product.name} verringern`}
                         >
@@ -543,13 +618,17 @@ const ProductsPage = () => {
                         </Typography>
                         
                         <IconButton
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleQuantityChange(product._id, 1);
                           }}
                           disabled={!product.bestand?.verfuegbar || (quantities[product._id] || 1) >= (product.bestand?.menge || 0)}
-                          sx={{ borderRadius: 0 }}
+                          sx={{ 
+                            borderRadius: 0,
+                            minWidth: isMobile ? 44 : 'auto',
+                            minHeight: isMobile ? 44 : 'auto'
+                          }}
                           aria-label={`Menge von ${product.name} erhöhen`}
                           title={`Menge von ${product.name} erhöhen`}
                         >

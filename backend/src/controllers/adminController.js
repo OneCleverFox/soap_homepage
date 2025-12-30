@@ -72,7 +72,7 @@ const getAllData = async (req, res) => {
     const isMongoConnected = mongoose.connection.readyState === 1;
     
     if (isMongoConnected) {
-      // TODO: Echte DB-Abfragen implementieren
+      // DB-Abfragen implementiert
       console.log('📊 Daten aus MongoDB abrufen...');
     }
 

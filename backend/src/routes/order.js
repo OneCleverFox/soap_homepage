@@ -8,6 +8,7 @@ const emailService = require('../services/emailService');
 const orderInvoiceService = require('../services/orderInvoiceService');
 const { validateCheckoutStatus, validatePayPalStatus } = require('../middleware/checkoutValidation');
 const { createInquiryFromOrder } = require('../utils/inquiryHelper');
+const { validateShippingData, generateTrackingUrl } = require('../utils/trackingValidation');
 
 // 🎯 PayPal-Erfolg: Bestellung finalisieren
 router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, async (req, res) => {
@@ -66,6 +67,22 @@ router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, asy
         
         await neueBestellung.save();
         console.log('✅ Bestellung nach PayPal-Erfolg gespeichert mit Status "bezahlt":', bestellungData.bestellnummer);
+        
+        // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+        try {
+          console.log('🧾 Automatische Rechnungserstellung für bezahlte Bestellung:', neueBestellung._id);
+          const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(neueBestellung._id);
+          
+          if (invoiceResult.success) {
+            console.log('✅ Rechnung automatisch erstellt:', invoiceResult.invoiceNumber);
+          } else {
+            console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceResult.error);
+            // Bestellung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+          }
+        } catch (invoiceError) {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceError);
+          // Bestellung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
         
         res.json({
           success: true,
@@ -666,7 +683,169 @@ router.get('/meine-bestellungen/:id', async (req, res) => {
   }
 });
 
-// 📋 Alle Bestellungen für einen Kunden abrufen
+// � Admin: Bestellungen abrufen mit Query-Parametern (für AdminOrdersManagement)
+router.get('/admin', async (req, res) => {
+  try {
+    const { status, sort = 'oldest', limit = 100 } = req.query;
+    
+    console.log('🔍 Admin orders request:', { status, sort, limit });
+    
+    // Filter für Status
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sort) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} Admin-Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// 👑 Admin: Alle Bestellungen abrufen (sortiert nach Datum)
+router.get('/admin/all', async (req, res) => {
+  try {
+    console.log('👑 Admin ruft alle Bestellungen ab');
+    
+    const orders = await Order.find({})
+      .sort({ bestelldatum: 1 }) // Älteste zuerst
+      .lean();
+    
+    console.log(`📦 ${orders.length} Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// 👑 Admin: Offene Bestellungen laden (nach Alter sortiert, arbeitsrelevant)
+router.get('/admin/pending', async (req, res) => {
+  try {
+    const { status, sortBy = 'oldest', limit = 50 } = req.query;
+    
+    console.log('🔍 Admin pending orders request:', { status, sortBy, limit });
+    
+    // Filter für zu bearbeitende Bestellungen (inkl. abgelehnt für Rückerstattung)
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'abgelehnt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Abgelehnte Bestellungen mit erfolgreich abgeschlossener Rückerstattung nur bei "zu bearbeiten" ausschließen
+    // Aber bei spezifischem "abgelehnt" Filter alle abgelehnten Bestellungen anzeigen
+    if (statusArray.includes('abgelehnt') && statusArray.length > 1) {
+      // Multi-Status Filter (z.B. "zu bearbeiten") - erledigte Rückerstattungen ausschließen
+      filter.$or = [
+        { status: { $in: statusArray.filter(s => s !== 'abgelehnt') } },
+        { 
+          status: 'abgelehnt', 
+          $or: [
+            { 'rueckerstattung.status': { $ne: 'erfolgreich' } },
+            { rueckerstattung: { $exists: false } },
+            { rueckerstattungErledigt: false } // Fallback für altes Format
+          ]
+        }
+      ];
+      delete filter.status; // Remove simple status filter as we use $or now
+    }
+    // Wenn nur "abgelehnt" Filter: alle abgelehnten Bestellungen anzeigen (auch erledigte)
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sortBy) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    // Abfrage ausführen
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} offene Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der offenen Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
+    });
+  }
+});
+
+// �📋 Alle Bestellungen für einen Kunden abrufen
 router.get('/customer/:kundennummer', async (req, res) => {
   try {
     const { kundennummer } = req.params;
@@ -717,6 +896,65 @@ router.get('/:bestellnummer', async (req, res) => {
       success: false,
       message: 'Fehler beim Laden der Bestellung',
       error: error.message
+    });
+  }
+});
+
+// 👑 Admin: Bestellungen abrufen mit Query-Parametern (für AdminOrdersManagement)
+router.get('/admin', async (req, res) => {
+  try {
+    const { status, sort = 'oldest', limit = 100 } = req.query;
+    
+    console.log('🔍 Admin orders request:', { status, sort, limit });
+    
+    // Filter für Status
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt']; // Default
+    
+    if (status) {
+      // Status kann ein comma-separated string oder einzelner wert sein
+      statusArray = status.includes(',') ? status.split(',') : [status];
+    }
+    
+    console.log('📊 Status Filter Array:', statusArray);
+    
+    const filter = {
+      status: { 
+        $in: statusArray 
+      }
+    };
+    
+    // Sortierung
+    let sortOrder = {};
+    switch (sort) {
+      case 'oldest':
+        sortOrder = { erstelltAm: 1 }; // Älteste zuerst
+        break;
+      case 'newest':
+        sortOrder = { erstelltAm: -1 }; // Neueste zuerst
+        break;
+      case 'value':
+        sortOrder = { 'preise.gesamtsumme': -1 }; // Höchster Wert zuerst
+        break;
+      default:
+        sortOrder = { erstelltAm: 1 }; // Default: älteste zuerst
+    }
+    
+    const orders = await Order.find(filter)
+      .sort(sortOrder)
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`📦 ${orders.length} Admin-Bestellungen gefunden`);
+    
+    res.json({
+      success: true,
+      orders: orders
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Admin-Bestellungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestellungen: ' + error.message
     });
   }
 });
@@ -877,12 +1115,24 @@ router.put('/:orderId/status', async (req, res) => {
       });
     }
     
-    // Für verschickt Status: Sendungsnummer erforderlich
-    if (status === 'verschickt' && (!versand || !versand.sendungsnummer)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Für den Status "Verschickt" ist eine Sendungsnummer erforderlich'
-      });
+    // Für verschickt Status: Sendungsnummer erforderlich und validieren
+    if (status === 'verschickt') {
+      if (!versand || !versand.sendungsnummer) {
+        return res.status(400).json({
+          success: false,
+          message: 'Für den Status "Verschickt" ist eine Sendungsnummer erforderlich'
+        });
+      }
+      
+      // Validiere Versanddaten
+      const shippingValidation = validateShippingData(versand);
+      if (!shippingValidation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültige Versanddaten',
+          errors: shippingValidation.errors
+        });
+      }
     }
     
     const order = await Order.findById(orderId);
@@ -920,10 +1170,29 @@ router.put('/:orderId/status', async (req, res) => {
       }
       
       // Versanddaten setzen
-      if (versand.sendungsnummer) order.versand.sendungsnummer = versand.sendungsnummer;
-      if (versand.anbieter) order.versand.anbieter = versand.anbieter;
-      if (versand.trackingUrl) order.versand.trackingUrl = versand.trackingUrl;
-      if (versand.versendetAm) order.versand.versendetAm = new Date(versand.versendetAm);
+      if (versand.sendungsnummer) {
+        order.versand.sendungsnummer = versand.sendungsnummer.replace(/[\s-]/g, ''); // Bereinige Tracking-Nummer
+      }
+      if (versand.anbieter) {
+        order.versand.anbieter = versand.anbieter;
+      }
+      
+      // Automatische Tracking-URL-Generierung
+      if (versand.anbieter && versand.sendungsnummer) {
+        const trackingUrl = generateTrackingUrl(versand.anbieter, versand.sendungsnummer);
+        if (trackingUrl) {
+          order.versand.trackingUrl = trackingUrl;
+        }
+      }
+      
+      // Manuelle Tracking-URL falls gewünscht
+      if (versand.trackingUrl) {
+        order.versand.trackingUrl = versand.trackingUrl;
+      }
+      
+      if (versand.versendetAm) {
+        order.versand.versendetAm = new Date(versand.versendetAm);
+      }
     }
     
     // Automatische Aktionen basierend auf Status
@@ -1701,19 +1970,6 @@ router.get('/admin/all', async (req, res) => {
   }
 });
 
-// �🔍 Hilfsfunktion: Tracking-URL generieren
-function generateTrackingUrl(anbieter, sendungsnummer) {
-  const trackingUrls = {
-    dhl: `https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?lang=de&idc=${sendungsnummer}`,
-    hermes: `https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#${sendungsnummer}`,
-    ups: `https://www.ups.com/track?tracknum=${sendungsnummer}`,
-    dpd: `https://tracking.dpd.de/status/de_DE/parcel/${sendungsnummer}`,
-    gls: `https://gls-group.eu/DE/de/paketverfolgung?match=${sendungsnummer}`
-  };
-  
-  return trackingUrls[anbieter] || '';
-}
-
 // 📄 NEUE RECHNUNGS-ROUTEN
 
 // Rechnung für Bestellung generieren
@@ -1888,6 +2144,22 @@ router.post('/payment/capture', async (req, res) => {
 
       console.log('✅ Bestellung als bezahlt markiert:', orderNumber);
 
+      // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
+      try {
+        console.log('🧾 Automatische Rechnungserstellung für bezahlte Bestellung:', order._id);
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
+        
+        if (invoiceResult.success) {
+          console.log('✅ Rechnung automatisch erstellt für bestehende Bestellung:', invoiceResult.invoiceNumber);
+        } else {
+          console.error('❌ Fehler bei automatischer Rechnungserstellung (bestehende Bestellung):', invoiceResult.error);
+          // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler bei automatischer Rechnungserstellung (bestehende Bestellung):', invoiceError);
+        // Zahlung trotzdem erfolgreich, nur Rechnung fehlgeschlagen
+      }
+
       res.json({
         success: true,
         message: 'Zahlung erfolgreich abgeschlossen',
@@ -1975,6 +2247,51 @@ router.post('/paypal-webhook', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Verarbeiten des PayPal-Webhooks: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/orders/validate-tracking
+// @desc    Validiert Tracking-Nummer für einen bestimmten Anbieter
+// @access  Private (Admin)
+router.post('/validate-tracking', async (req, res) => {
+  try {
+    const { anbieter, sendungsnummer } = req.body;
+    
+    if (!anbieter || !sendungsnummer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Anbieter und Sendungsnummer sind erforderlich'
+      });
+    }
+    
+    const validation = validateShippingData({ anbieter, sendungsnummer });
+    
+    if (validation.valid) {
+      const trackingUrl = generateTrackingUrl(anbieter, sendungsnummer);
+      
+      res.json({
+        success: true,
+        message: 'Tracking-Nummer ist gültig',
+        data: {
+          valid: true,
+          cleanedNumber: sendungsnummer.replace(/[\s-]/g, ''),
+          trackingUrl: trackingUrl
+        }
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Ungültige Tracking-Nummer',
+        errors: validation.errors
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Fehler bei Tracking-Validierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei der Validierung'
     });
   }
 });

@@ -18,7 +18,8 @@ const invoiceTemplateSchema = new mongoose.Schema({
     },
     address: {
       street: { type: String, default: 'Musterstraße 123' },
-      city: { type: String, default: '12345 Musterstadt' },
+      postalCode: { type: String, default: '64673' },
+      city: { type: String, default: 'Zwingenberg' },
       country: { type: String, default: 'Deutschland' }
     },
     contact: {
@@ -28,8 +29,26 @@ const invoiceTemplateSchema = new mongoose.Schema({
     },
     taxInfo: {
       taxNumber: { type: String, default: 'DE123456789' },
-      vatId: { type: String, default: 'USt-IdNr.: DE123456789' }
-    }
+      vatId: { type: String, default: 'USt-IdNr.: DE123456789' },
+      ceo: { type: String, default: '' },
+      legalForm: { type: String, default: '' },
+      taxOffice: { type: String, default: '' },
+      registrationCourt: { type: String, default: '' }
+    },
+    bankDetails: {
+      bankName: { type: String, default: '' },
+      iban: { type: String, default: '' },
+      bic: { type: String, default: '' }
+    },
+    logo: {
+      enabled: { type: Boolean, default: false },
+      url: { type: String, default: '' },
+      width: { type: Number, default: 120 },
+      height: { type: Number, default: 60 }
+    },
+    isSmallBusiness: { type: Boolean, default: false },
+    paymentMethod: { type: String, default: 'sofort' },
+    paymentTerms: { type: Number, default: 14 }
   },
   layout: {
     header: {
@@ -37,7 +56,22 @@ const invoiceTemplateSchema = new mongoose.Schema({
       logoPosition: { type: String, enum: ['left', 'center', 'right'], default: 'left' },
       logoSize: { type: String, enum: ['small', 'medium', 'large'], default: 'medium' },
       showCompanyInfo: { type: Boolean, default: true },
-      companyInfoPosition: { type: String, enum: ['left', 'right'], default: 'right' }
+      companyInfoPosition: { type: String, enum: ['left', 'right'], default: 'right' },
+      style: { type: String, enum: ['standard', 'compact', 'detailed'], default: 'standard' },
+      alignment: { type: String, enum: ['left', 'center', 'right'], default: 'left' },
+      height: { type: Number, default: 100 },
+      showBorder: { type: Boolean, default: false }
+    },
+    footer: {
+      layout: { type: String, enum: ['columns', 'rows', 'compact'], default: 'columns' },
+      columns: { type: Number, default: 3 },
+      showContactInfo: { type: Boolean, default: true },
+      showTaxInfo: { type: Boolean, default: true },
+      showBankDetails: { type: Boolean, default: false },
+      showLegalInfo: { type: Boolean, default: true },
+      height: { type: Number, default: 80 },
+      showBorder: { type: Boolean, default: true },
+      fontSize: { type: Number, default: 8 }
     },
     colors: {
       primary: { type: String, default: '#8b4a8b' },
@@ -120,7 +154,7 @@ const invoiceTemplateSchema = new mongoose.Schema({
     available: [{
       name: { type: String, required: true },
       description: { type: String, required: true },
-      category: { type: String, enum: ['company', 'customer', 'order', 'product', 'date'], required: true }
+      category: { type: String, enum: ['company', 'customer', 'order', 'product', 'date', 'invoice'], required: true }
     }]
   },
   createdAt: {

@@ -186,10 +186,9 @@ const userSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
-});
+});  
 
-// Index für schnellere Suche - email index wird automatisch durch unique: true erstellt
-userSchema.index({ username: 1 });
+// Index für schnellere Suche - email und username indices werden automatisch durch unique: true erstellt
 userSchema.index({ status: 1 });
 
 // Virtual für vollständigen Namen

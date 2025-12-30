@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Typography,
@@ -29,7 +30,12 @@ import {
   FormControlLabel,
   Switch,
   Tabs,
-  Tab
+  Tab,
+  useTheme,
+  useMediaQuery,
+  IconButton,
+  Stack,
+  Collapse
 } from '@mui/material';
 import {
   Email,
@@ -39,11 +45,26 @@ import {
   Refresh,
   TrendingUp,
   PendingActions,
-  Assignment
+  Assignment,
+  ExpandMore,
+  ExpandLess
 } from '@mui/icons-material';
 import api from '../services/api';
+import stockEventService from '../services/stockEventService';
 
 const AdminInquiries = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess,
+    snackbar, showSnackbar, hideSnackbar,
+    handleAsyncOperation
+  } = useAdminState();
+  
   const [inquiries, setInquiries] = useState([]);
   const [stats, setStats] = useState({
     totalInquiries: 0,
@@ -53,7 +74,6 @@ const AdminInquiries = () => {
     convertedCount: 0,
     totalValue: 0
   });
-  const [loading, setLoading] = useState(true);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionDialog, setActionDialog] = useState({ open: false, type: null });
@@ -61,70 +81,141 @@ const AdminInquiries = () => {
   const [convertToOrder, setConvertToOrder] = useState(true);
   const [currentTab, setCurrentTab] = useState(0);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [expandedCard, setExpandedCard] = useState(null);
 
-  // Anfragen laden
+  // Anfragen laden mit React Hook Pattern
   const loadInquiries = useCallback(async () => {
-    try {
-      setLoading(true);
+    await handleAsyncOperation(async () => {
       const response = await api.get(`/inquiries/admin/all?status=${statusFilter}&limit=50`);
       
       if (response.data.success) {
         setInquiries(response.data.inquiries);
-        setStats(response.data.stats);
+        // ⚠️ ENTFERNT: setStats(response.data.stats) - Das überschreibt die echten Stats!
+        // Stats werden nur von loadStats() gesetzt
+        setSuccess('Anfragen erfolgreich geladen');
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📋 Anfragen geladen:', response.data.inquiries.length);
+        }
       }
-    } catch (error) {
-      console.error('❌ Fehler beim Laden der Anfragen:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [statusFilter]);
+    }, 'Anfragen werden geladen...');
+  }, [statusFilter, handleAsyncOperation, setSuccess]);
 
-  // Statistiken laden
+  // Statistiken laden mit Anti-Race-Condition Pattern
   const loadStats = useCallback(async () => {
+    // Verhindere mehrfache gleichzeitige Ausführung
+    if (loadStats._isLoading) {
+      console.log('🚫 Stats Loading bereits aktiv, überspringe...');
+      return;
+    }
+    
+    loadStats._isLoading = true;
+    
     try {
       const response = await api.get('/inquiries/admin/stats');
       if (response.data.success) {
         const statsData = response.data.data;
-        setStats({
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔍 Backend Stats erhalten:', statsData);
+        }
+        
+        // Fallback: Berechne totalValue aus allen Anfragen wenn Backend 0 zurückgibt
+        let totalValue = statsData.totalValue || 0;
+        if (totalValue === 0) {
+          try {
+            const inquiriesResponse = await api.get('/inquiries/admin/all?limit=1000');
+            if (inquiriesResponse.data.success && inquiriesResponse.data.inquiries) {
+              totalValue = inquiriesResponse.data.inquiries.reduce((sum, inquiry) => {
+                return sum + (inquiry.total || 0);
+              }, 0);
+              
+              if (process.env.NODE_ENV === 'development') {
+                console.log('💰 Frontend TotalValue Fallback berechnet:', {
+                  anzahlAnfragen: inquiriesResponse.data.inquiries.length,
+                  calculatedTotalValue: totalValue,
+                  backendTotalValue: statsData.totalValue
+                });
+              }
+            }
+          } catch (error) {
+            console.warn('⚠️ Fallback totalValue Berechnung fehlgeschlagen:', error);
+          }
+        }
+        
+        const newStats = {
           pendingCount: statsData.pending || 0,
           acceptedCount: statsData.accepted || 0,
           rejectedCount: statsData.rejected || 0,
           convertedCount: statsData.converted || 0,
-          totalCount: statsData.total || 0
-        });
+          totalCount: statsData.total || 0,
+          totalValue: totalValue
+        };
+        
+        setStats(newStats);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📊 Frontend-Statistiken FINAL gesetzt:', {
+            ...newStats,
+            usedFallback: (statsData.totalValue === 0 && totalValue > 0)
+          });
+        }
       }
     } catch (error) {
       console.error('❌ Fehler beim Laden der Statistiken:', error);
-      // Behalte die Default-Stats bei 404 oder Auth-Fehlern
-      if (error.response?.status === 404) {
-        console.log('📊 Stats-Route nicht verfügbar, verwende Default-Werte');
-      } else if (error.response?.status === 401 || error.response?.status === 403) {
-        console.log('🔒 Authentifizierung für Stats fehlgeschlagen');
-      }
+    } finally {
+      loadStats._isLoading = false;
     }
   }, []);
 
   useEffect(() => {
     loadInquiries();
-    loadStats();
-  }, [loadInquiries, loadStats]);
+    // loadStats wird separat aufgerufen, um Race Conditions zu vermeiden
+    const timer = setTimeout(() => loadStats(), 100);
+    return () => clearTimeout(timer);
+  }, [loadInquiries]);
+  
+  // Separater Effect für Badge-Reset nur wenn wirklich Aktionen durchgeführt wurden
+  useEffect(() => {
+    const handleInquiryAction = () => {
+      // Badge erst nach tatsächlicher Aktion (Ansehen, Bearbeiten) zurücksetzen
+      window.dispatchEvent(new CustomEvent('adminInquiriesViewed'));
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('👑 Admin-Anfrage bearbeitet - Badge-Reset ausgelöst');
+      }
+    };
+    
+    // Event-Listener für Anfragen-Aktionen
+    window.addEventListener('inquiryViewed', handleInquiryAction);
+    window.addEventListener('inquiryActioned', handleInquiryAction);
+    
+    return () => {
+      window.removeEventListener('inquiryViewed', handleInquiryAction);
+      window.removeEventListener('inquiryActioned', handleInquiryAction);
+    };
+  }, []);
 
-  // Anfrage-Details anzeigen
-  const showInquiryDetails = async (inquiryId) => {
-    try {
+  // Anfrage-Details anzeigen mit React Hook Pattern
+  const showInquiryDetails = useCallback(async (inquiryId) => {
+    await handleAsyncOperation(async () => {
       const response = await api.get(`/inquiries/admin/${inquiryId}`);
       if (response.data.success) {
         setSelectedInquiry(response.data.inquiry);
         setDialogOpen(true);
+        showSnackbar('Details erfolgreich geladen', 'success');
+        
+        // Event senden - Anfrage wurde angesehen
+        window.dispatchEvent(new CustomEvent('inquiryViewed', {
+          detail: { inquiryId }
+        }));
       }
-    } catch (error) {
-      console.error('❌ Fehler beim Laden der Anfrage-Details:', error);
-    }
-  };
+    }, 'Details werden geladen...');
+  }, [handleAsyncOperation, showSnackbar]);
 
-  // Anfrage annehmen
-  const acceptInquiry = async () => {
-    try {
+  // Anfrage annehmen mit React Hook Pattern
+  const acceptInquiry = useCallback(async () => {
+    await handleAsyncOperation(async () => {
       const response = await api.put(`/inquiries/admin/${selectedInquiry.inquiryId}/accept`, {
         message: responseMessage,
         convertToOrder
@@ -136,15 +227,25 @@ const AdminInquiries = () => {
         setResponseMessage('');
         await loadInquiries();
         await loadStats();
+        showSnackbar('Anfrage erfolgreich angenommen', 'success');
+        
+        // Event senden - Anfrage wurde bearbeitet
+        window.dispatchEvent(new CustomEvent('inquiryActioned', {
+          detail: { action: 'accept', inquiryId: selectedInquiry.inquiryId }
+        }));
+        
+        // ✅ BESTAND-UPDATE: Benachrichtige über Bestandsänderungen
+        window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+        stockEventService.notifyGlobalStockUpdate();
+        
+        console.log('📦 Bestandsänderung durch Anfrage-Annahme - Events ausgelöst');
       }
-    } catch (error) {
-      console.error('❌ Fehler beim Annehmen der Anfrage:', error);
-    }
-  };
+    }, 'Anfrage wird angenommen...');
+  }, [handleAsyncOperation, selectedInquiry, responseMessage, convertToOrder, loadInquiries, loadStats, showSnackbar]);
 
-  // Anfrage ablehnen
-  const rejectInquiry = async () => {
-    try {
+  // Anfrage ablehnen mit React Hook Pattern
+  const rejectInquiry = useCallback(async () => {
+    await handleAsyncOperation(async () => {
       const response = await api.put(`/inquiries/admin/${selectedInquiry.inquiryId}/reject`, {
         message: responseMessage
       });
@@ -155,11 +256,13 @@ const AdminInquiries = () => {
         setResponseMessage('');
         await loadInquiries();
         await loadStats();
-      }
-    } catch (error) {
-      console.error('❌ Fehler beim Ablehnen der Anfrage:', error);
-    }
-  };
+        showSnackbar('Anfrage wurde abgelehnt', 'info');        
+        // Event senden - Anfrage wurde bearbeitet
+        window.dispatchEvent(new CustomEvent('inquiryActioned', {
+          detail: { action: 'reject', inquiryId: selectedInquiry.inquiryId }
+        }));      }
+    }, 'Anfrage wird abgelehnt...');
+  }, [handleAsyncOperation, selectedInquiry, responseMessage, loadInquiries, loadStats, showSnackbar]);
 
   const formatPrice = (price) => {
     // Sichere Konvertierung zu Number, falls undefined/null
@@ -200,23 +303,55 @@ const AdminInquiries = () => {
   });
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        <Email sx={{ mr: 2, verticalAlign: 'middle' }} />
+    <Container 
+      maxWidth="xl" 
+      sx={{ 
+        mt: isMobile ? 2 : 4, 
+        mb: isMobile ? 2 : 4, 
+        px: isMobile ? 1 : 3 
+      }}
+    >
+      {/* Header - Mobile optimiert */}
+      <Typography 
+        variant={isMobile ? "h5" : "h4"} 
+        component="h1" 
+        gutterBottom
+        sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          fontSize: isMobile ? '1.5rem' : '2.125rem',
+          flexWrap: 'wrap',
+          gap: 1
+        }}
+      >
+        <Email sx={{ mr: isMobile ? 1 : 2, verticalAlign: 'middle' }} />
         Anfragen-Verwaltung
       </Typography>
 
-      {/* Statistiken */}
+      {/* Loading und Error States */}
+      {loading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Statistiken - Mobile responsive */}
       {stats && (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Grid container spacing={isMobile ? 2 : 3} sx={{ mb: isMobile ? 3 : 4 }}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <PendingActions color="warning" sx={{ mr: 1 }} />
-                  <Box>
-                    <Typography variant="h6">{stats.pendingCount || 0}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
+                  <PendingActions color="warning" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
+                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
+                    <Typography variant={isMobile ? "h6" : "h5"}>{stats.pendingCount || 0}</Typography>
+                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
                       Ausstehend
                     </Typography>
                   </Box>
@@ -225,14 +360,14 @@ const AdminInquiries = () => {
             </Card>
           </Grid>
           
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <CheckCircle color="success" sx={{ mr: 1 }} />
-                  <Box>
-                    <Typography variant="h6">{(stats.acceptedCount || 0) + (stats.convertedCount || 0)}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
+                  <CheckCircle color="success" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
+                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
+                    <Typography variant={isMobile ? "h6" : "h5"}>{(stats.acceptedCount || 0) + (stats.convertedCount || 0)}</Typography>
+                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
                       Angenommen
                     </Typography>
                   </Box>
@@ -241,14 +376,14 @@ const AdminInquiries = () => {
             </Card>
           </Grid>
           
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={6} md={3}>
             <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <Assignment color="primary" sx={{ mr: 1 }} />
-                  <Box>
-                    <Typography variant="h6">{stats.totalCount || 0}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
+                  <Assignment color="primary" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
+                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
+                    <Typography variant={isMobile ? "h6" : "h5"}>{stats.totalCount || 0}</Typography>
+                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
                       Gesamt
                     </Typography>
                   </Box>

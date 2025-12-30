@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Typography,
@@ -48,10 +49,13 @@ const AdminCheckout = () => {
     land: 'Deutschland'
   });
   
-  // States für Bestellung
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  // States für Bestellung mit useAdminState Hook
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess
+  } = useAdminState();
+  
   const [activeStep, setActiveStep] = useState(0);
   const [useExistingCustomer, setUseExistingCustomer] = useState(true);
   

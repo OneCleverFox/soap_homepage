@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminState } from '../hooks/useAdminState';
 import {
   Container,
   Typography,
@@ -35,7 +36,11 @@ import {
   List,
   ListItem,
   ListItemText,
-  Tooltip
+  Tooltip,
+  useTheme,
+  useMediaQuery,
+  Stack,
+  Collapse
 } from '@mui/material';
 import {
   ExpandMore,
@@ -55,9 +60,17 @@ import {
 import adminOrdersService from '../services/adminOrdersService';
 
 const AdminOrders = () => {
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    error, setError,
+    success, setSuccess
+  } = useAdminState();
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [statusUpdateOpen, setStatusUpdateOpen] = useState(false);
   const [newStatus, setNewStatus] = useState('');
@@ -69,15 +82,20 @@ const AdminOrders = () => {
   });
 
   const fetchOrders = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError('');
-
+    await handleAsyncOperation(async () => {
       const data = await adminOrdersService.getOrders({
         status: filters.status,
         sortBy: filters.sortBy,
         sortOrder: filters.sortOrder,
         limit: 100
+      });
+      
+      if (data && Array.isArray(data)) {
+        setOrders(data);
+        setSuccess(`${data.length} Bestellungen geladen`);
+      }
+    }, 'Bestellungen werden geladen...');
+  }, [filters, handleAsyncOperation, setSuccess]);
       });
       
       setOrders(data.data);

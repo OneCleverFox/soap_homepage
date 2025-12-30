@@ -57,16 +57,27 @@ const optimizeImage = (maxWidth = 1200, quality = 85) => {
         })
         .toBuffer();
 
-      // Optimierte Datei zurückschreiben
+      // Optimierte Datei zurückschreiben (mit Timeout für Windows)
       const fs = require('fs');
-      fs.writeFileSync(req.file.path, optimizedBuffer);
+      
+      try {
+        // Datei schließen und kurz warten (Windows-spezifisch)
+        await new Promise(resolve => setTimeout(resolve, 100));
+        fs.writeFileSync(req.file.path, optimizedBuffer);
+        
+        // Dateigröße & MIME-Type aktualisieren
+        req.file.size = optimizedBuffer.length;
+        req.file.mimetype = 'image/webp';
 
-      // Dateigröße & MIME-Type aktualisieren
-      req.file.size = optimizedBuffer.length;
-      req.file.mimetype = 'image/webp';
-
-      console.log(`   ✅ Optimiert: ${(optimizedBuffer.length / 1024).toFixed(2)} KB`);
-      console.log(`   📊 Ersparnis: ${(((req.file.size - optimizedBuffer.length) / req.file.size) * 100).toFixed(1)}%`);
+        console.log(`   ✅ Optimiert: ${(optimizedBuffer.length / 1024).toFixed(2)} KB`);
+        
+        // Originalgrößee für Vergleich speichern
+        const originalSize = req.file.originalSize || req.file.size;
+        console.log(`   📊 Ersparnis: ${(((originalSize - optimizedBuffer.length) / originalSize) * 100).toFixed(1)}%`);
+      } catch (writeError) {
+        console.error('❌ Fehler beim Schreiben der optimierten Datei:', writeError);
+        // Bei Schreibfehler: Original beibehalten
+      }
 
       next();
     } catch (error) {
