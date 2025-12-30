@@ -400,4 +400,101 @@ router.delete('/delete/:userId', async (req, res) => {
   }
 });
 
+// Status-Migration für spezifischen User
+router.post('/migrate-status/:userId', async (req, res) => {
+  try {
+    console.log(`🔧 Status-Migration für User: ${req.params.userId}`);
+    
+    const user = await Kunde.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Benutzer nicht gefunden' 
+      });
+    }
+
+    console.log('👤 User vor Migration:', {
+      email: user.email,
+      status: user.status,
+      statusType: typeof user.status,
+      kundennummer: user.kundennummer,
+      vorname: user.vorname,
+      nachname: user.nachname
+    });
+
+    let migrationNeeded = false;
+    
+    // Status-Migration falls String
+    if (typeof user.status === 'string') {
+      const newStatus = {
+        aktiv: user.status === 'active' || user.status === 'verified',
+        emailVerifiziert: user.status === 'verified' || user.status === 'active',
+        telefonVerifiziert: false,
+        gesperrt: user.status === 'blocked' || user.status === 'suspended'
+      };
+      
+      user.status = newStatus;
+      migrationNeeded = true;
+      console.log('✅ Status migriert:', { old: req.body.oldStatus, new: newStatus });
+    }
+
+    // Kundennummer-Migration falls fehlt
+    if (!user.kundennummer) {
+      // Manuell generieren falls Pre-Save Hook versagt hat
+      const jetzt = new Date();
+      const jahr = jetzt.getFullYear().toString().slice(-2);
+      const monat = (jetzt.getMonth() + 1).toString().padStart(2, '0');
+      const zufallsZahl = Math.floor(1000 + Math.random() * 9000);
+      
+      let neueKundennummer = `KD${jahr}${monat}${zufallsZahl}`;
+      
+      // Eindeutigkeit prüfen
+      let existiert = await Kunde.findOne({ kundennummer: neueKundennummer });
+      let versuche = 0;
+      while (existiert && versuche < 10) {
+        zufallsZahl = Math.floor(1000 + Math.random() * 9000);
+        neueKundennummer = `KD${jahr}${monat}${zufallsZahl}`;
+        existiert = await Kunde.findOne({ kundennummer: neueKundennummer });
+        versuche++;
+      }
+      
+      user.kundennummer = neueKundennummer;
+      migrationNeeded = true;
+      console.log('✅ Kundennummer generiert:', neueKundennummer);
+    }
+
+    if (migrationNeeded) {
+      await user.save();
+      console.log('💾 User erfolgreich migriert und gespeichert');
+    }
+
+    console.log('👤 User nach Migration:', {
+      email: user.email,
+      status: user.status,
+      statusType: typeof user.status,
+      kundennummer: user.kundennummer,
+      vorname: user.vorname,
+      nachname: user.nachname
+    });
+
+    res.json({
+      success: true,
+      message: migrationNeeded ? 'User erfolgreich migriert' : 'Migration nicht erforderlich',
+      data: {
+        email: user.email,
+        kundennummer: user.kundennummer,
+        status: user.status,
+        migrationPerformed: migrationNeeded
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Fehler bei User-Migration:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler bei der Migration' 
+    });
+  }
+});
+
 module.exports = router;
