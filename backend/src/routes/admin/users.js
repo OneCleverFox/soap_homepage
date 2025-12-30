@@ -400,6 +400,43 @@ router.delete('/delete/:userId', async (req, res) => {
   }
 });
 
+// Debug: User-Status prüfen
+router.get('/debug-user/:email', async (req, res) => {
+  try {
+    const email = decodeURIComponent(req.params.email);
+    console.log(`🔍 Debug User-Status für: ${email}`);
+    
+    const user = await Kunde.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User nicht gefunden' 
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        email: user.email,
+        kundennummer: user.kundennummer,
+        status: user.status,
+        statusType: typeof user.status,
+        vorname: user.vorname,
+        nachname: user.nachname,
+        rolle: user.rolle,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Fehler bei User-Debug:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Debug-Fehler' 
+    });
+  }
+});
+
 // Status-Migration für spezifischen User
 router.post('/migrate-status/:userId', async (req, res) => {
   try {
