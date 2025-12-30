@@ -375,7 +375,7 @@ const registerUser = async (req, res) => {
     const newKunde = new Kunde({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
-      password,
+      passwort: password, // WICHTIG: Das Kunde-Model verwendet 'passwort', nicht 'password'
       vorname: firstName,
       nachname: lastName,
       telefon: phone || '',
@@ -399,7 +399,9 @@ const registerUser = async (req, res) => {
       }
     });
 
+    console.log('💾 Speichere neuen Kunden...');
     await newKunde.save();
+    console.log('✅ Kunde erfolgreich erstellt mit Kundennummer:', newKunde.kundennummer);
 
     // Neuen Benutzer erstellen (für erweiterte Funktionen)
     const newUser = new User({
@@ -450,6 +452,8 @@ const registerUser = async (req, res) => {
         : 'Registrierung erfolgreich! Ihr Account ist sofort aktiv.',
       data: {
         userId: newUser._id,
+        kundeId: newKunde._id,
+        kundennummer: newKunde.kundennummer,
         email: newUser.email,
         firstName: newUser.firstName,
         emailSent: requireEmailVerification,
