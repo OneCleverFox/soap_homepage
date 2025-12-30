@@ -60,6 +60,7 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { kundenAPI } from '../services/api';
+import { API_URL } from '../services/api';
 
 function AdminUsers() {
   const theme = useTheme();
@@ -179,7 +180,7 @@ function AdminUsers() {
       const token = localStorage.getItem('token');
       
       // Try the primary endpoint first
-      let response = await fetch('/api/admin/users/verification-settings', {
+      let response = await fetch(`${API_URL}/admin/users/verification-settings`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -191,7 +192,7 @@ function AdminUsers() {
         console.warn('Primary verification settings endpoint failed, trying alternative...');
         
         // Try to get from general admin settings
-        response = await fetch('/api/admin/settings', {
+        response = await fetch(`${API_URL}/admin/settings`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -224,7 +225,7 @@ function AdminUsers() {
       
       console.log('🔧 Toggle E-Mail-Verifikation:', { enabled, token: !!token });
       
-      const response = await fetch('/api/admin/users/verification-settings', {
+      const response = await fetch(`${API_URL}/admin/users/verification-settings`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -267,7 +268,7 @@ function AdminUsers() {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`/api/admin/users/verify/${userId}`, {
+      const response = await fetch(`${API_URL}/admin/users/verify/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -297,7 +298,7 @@ function AdminUsers() {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch('/api/admin/users/fix-missing-customer-numbers', {
+      const response = await fetch(`${API_URL}/admin/users/fix-missing-customer-numbers`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -394,7 +395,7 @@ function AdminUsers() {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`/api/admin/users/block/${user._id}`, {
+      const response = await fetch(`${API_URL}/admin/users/block/${user._id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -422,7 +423,7 @@ function AdminUsers() {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`/api/admin/users/unblock/${user._id}`, {
+      const response = await fetch(`${API_URL}/admin/users/unblock/${user._id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -451,7 +452,7 @@ function AdminUsers() {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`/api/admin/users/delete/${user._id}`, {
+      const response = await fetch(`${API_URL}/admin/users/delete/${user._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
