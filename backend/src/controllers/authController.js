@@ -154,7 +154,6 @@ const loginAdmin = async (req, res) => {
       };
       
       kunde.status = newStatus;
-      await kunde.save({ validateBeforeSave: false });
       statusFixed = true;
       
       console.log('✅ Status migriert:', { 
@@ -175,17 +174,22 @@ const loginAdmin = async (req, res) => {
           gesperrt: kunde.status.gesperrt || false
         };
         
-        await kunde.save({ validateBeforeSave: false });
         statusFixed = true;
         
         console.log('✅ Status repariert für:', email, kunde.status);
       }
     }
     
-    // Speichere Datenreparaturen falls nötig
-    if (dataFixed || statusFixed) {
+    // Speichere Status-Änderungen separat falls nötig (nur bei Migration/Reparatur)
+    if (statusFixed) {
       await kunde.save({ validateBeforeSave: false });
-      console.log('✅ Kunde-Daten gespeichert nach Reparatur');
+      console.log('✅ Status-Migration gespeichert');
+    }
+    
+    // Speichere Datenreparaturen separat falls nötig (nur bei Reparatur)
+    if (dataFixed) {
+      await kunde.save({ validateBeforeSave: false });
+      console.log('✅ Datenreparatur gespeichert');
     }
 
     // Admin-Einstellungen für E-Mail-Verifikation prüfen
@@ -228,7 +232,13 @@ const loginAdmin = async (req, res) => {
     const istPasswortKorrekt = await kunde.vergleichePasswort(password);
     if (!istPasswortKorrekt) {
       kunde.anmeldeversuche = (kunde.anmeldeversuche || 0) + 1;
-      await kunde.save({ validateBeforeSave: false });
+      
+      // Versuche normales Save, falls das fehlschlägt, dann ohne Validierung
+      try {
+        await kunde.save();
+      } catch (saveError) {
+        await kunde.save({ validateBeforeSave: false });
+      }
       
       console.log('❌ Falsches Passwort für Kunde:', email, {
         hatPasswort: !!kunde.passwort,
@@ -249,10 +259,18 @@ const loginAdmin = async (req, res) => {
       });
     }
 
-    // Erfolgreiche Kunden-Anmeldung
+    // Erfolgreiche Kunden-Anmeldung - normale Felder updaten
     kunde.letzteAnmeldung = new Date();
     kunde.anmeldeversuche = 0;
-    await kunde.save({ validateBeforeSave: false });
+    
+    // Normaler Save für Standard-Updates (letzteAnmeldung, anmeldeversuche)
+    try {
+      await kunde.save();
+    } catch (saveError) {
+      // Falls normal save fehlschlägt wegen Validierung, dann mit disabled validation
+      console.log('⚠️ Standard Save fehlgeschlagen, verwende validateBeforeSave: false');
+      await kunde.save({ validateBeforeSave: false });
+    }
 
     // JWT Token für Kunde erstellen
     const token = jwt.sign(
@@ -452,9 +470,18 @@ const registerUser = async (req, res) => {
       vorname: firstName,
       nachname: lastName,
       telefon: phone || '',
-      adresse: address || {
+      geschlecht: req.body.geschlecht || 'Keine Angabe',
+      adresse: address ? {
+        strasse: address.street || '',
+        hausnummer: address.houseNumber || '',
+        zusatz: address.zusatz || '',
+        plz: address.zipCode || '',
+        stadt: address.city || '',
+        land: address.country || 'Deutschland'
+      } : {
         strasse: '',
         hausnummer: '',
+        zusatz: '',
         plz: '',
         stadt: '',
         land: 'Deutschland'
@@ -473,8 +500,29 @@ const registerUser = async (req, res) => {
     });
 
     console.log('💾 Speichere neuen Kunden...');
-    await newKunde.save();
-    console.log('✅ Kunde erfolgreich erstellt mit Kundennummer:', newKunde.kundennummer);
+    
+    try {
+      await newKunde.save();
+      console.log('✅ Kunde erfolgreich erstellt mit Kundennummer:', newKunde.kundennummer);
+    } catch (kundeValidationError) {
+      console.error('❌ Kunde Validierungsfehler:', kundeValidationError);
+      
+      // Detaillierte Fehlermeldung für fehlende Felder
+      if (kundeValidationError.name === 'ValidationError') {
+        const missingFields = Object.keys(kundeValidationError.errors).map(field => {
+          return `${field}: ${kundeValidationError.errors[field].message}`;
+        });
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Validierungsfehler bei der Kundenerstellung',
+          details: missingFields,
+          error: 'KUNDE_VALIDATION_FAILED'
+        });
+      }
+      
+      throw kundeValidationError; // Anderen Fehler weiterwerfen
+    }
 
     // Neuen Benutzer erstellen (für erweiterte Funktionen)
     const newUser = new User({
