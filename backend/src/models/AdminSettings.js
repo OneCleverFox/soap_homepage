@@ -73,6 +73,23 @@ const adminSettingsSchema = new mongoose.Schema({
     }
   },
   
+  // User Management Einstellungen
+  userManagement: {
+    requireEmailVerification: {
+      type: Boolean,
+      default: true
+    },
+    allowSelfRegistration: {
+      type: Boolean,
+      default: true
+    },
+    defaultUserRole: {
+      type: String,
+      enum: ['user', 'customer'],
+      default: 'customer'
+    }
+  },
+  
   // Metadaten
   lastUpdated: {
     type: Date,

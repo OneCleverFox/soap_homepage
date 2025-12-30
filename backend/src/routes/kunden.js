@@ -738,8 +738,14 @@ router.get('/stats/overview', async (req, res) => {
           aktiveKunden: {
             $sum: { $cond: [{ $eq: ['$status.aktiv', true] }, 1, 0] }
           },
+          gesperrteKunden: {
+            $sum: { $cond: [{ $eq: ['$status.gesperrt', true] }, 1, 0] }
+          },
           verifiziertKunden: {
             $sum: { $cond: [{ $eq: ['$status.emailVerifiziert', true] }, 1, 0] }
+          },
+          adminKunden: {
+            $sum: { $cond: [{ $eq: ['$rolle', 'admin'] }, 1, 0] }
           },
           gesamtumsatz: { $sum: '$statistiken.gesamtumsatz' },
           durchschnittUmsatz: { $avg: '$statistiken.gesamtumsatz' }
