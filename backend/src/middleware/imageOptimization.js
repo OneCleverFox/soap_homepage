@@ -1,4 +1,17 @@
-const sharp = require('sharp');
+// Sharp mit Fallback für Cross-Platform-Kompatibilität
+let sharp = null;
+let sharpAvailable = false;
+
+try {
+  sharp = require('sharp');
+  sharpAvailable = true;
+  console.log('📸 Sharp erfolgreich geladen - Bildoptimierung verfügbar');
+} catch (error) {
+  console.warn('⚠️ Sharp konnte nicht geladen werden - Bildoptimierung deaktiviert');
+  console.warn('   Bilder werden ohne Optimierung durchgeleitet');
+  console.warn('   Fehler:', error.message);
+  sharpAvailable = false;
+}
 
 /**
  * Bildoptimierungs-Middleware
@@ -19,6 +32,12 @@ const optimizeImage = (maxWidth = 1200, quality = 85) => {
     try {
       // Wenn kein Bild hochgeladen wurde, weiter
       if (!req.file) {
+        return next();
+      }
+
+      // Wenn Sharp nicht verfügbar ist, Bild ohne Optimierung durchleiten
+      if (!sharpAvailable) {
+        console.log(`📸 Bild ohne Optimierung: ${req.file.originalname} (Sharp nicht verfügbar)`);
         return next();
       }
 
@@ -82,7 +101,8 @@ const optimizeImage = (maxWidth = 1200, quality = 85) => {
       next();
     } catch (error) {
       console.error('❌ Fehler bei Bildoptimierung:', error);
-      // Bei Fehler: Originalbild verwenden
+      console.log('📸 Fallback: Bild ohne Optimierung verwenden');
+      // Bei Fehler: Originalbild verwenden und trotzdem weiter
       next();
     }
   };
@@ -90,11 +110,13 @@ const optimizeImage = (maxWidth = 1200, quality = 85) => {
 
 /**
  * Bildoptimierung für Hauptbilder (max 1200px)
+ * Fallback: Kein Fehler wenn Sharp nicht verfügbar
  */
 const optimizeMainImage = optimizeImage(1200, 85);
 
 /**
  * Bildoptimierung für Galerie-Bilder (max 800px)
+ * Fallback: Kein Fehler wenn Sharp nicht verfügbar
  */
 const optimizeGalleryImage = optimizeImage(800, 85);
 
