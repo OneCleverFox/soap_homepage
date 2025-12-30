@@ -108,10 +108,31 @@ const loginAdmin = async (req, res) => {
       email: kunde.email, 
       name: `${kunde.vorname} ${kunde.nachname}`,
       status: kunde.status,
-      aktiv: kunde.status?.aktiv,
-      gesperrt: kunde.status?.gesperrt,
-      emailVerifiziert: kunde.status?.emailVerifiziert
+      statusType: typeof kunde.status
     });
+
+    // Status-Migration für ältere Kunden-Datensätze
+    let statusFixed = false;
+    if (typeof kunde.status === 'string') {
+      console.log('🔧 Status-Migration erforderlich für:', email);
+      
+      // String-Status in Objekt-Status konvertieren
+      const newStatus = {
+        aktiv: kunde.status === 'active' || kunde.status === 'verified',
+        emailVerifiziert: kunde.status === 'verified' || kunde.status === 'active',
+        telefonVerifiziert: false,
+        gesperrt: kunde.status === 'blocked' || kunde.status === 'suspended'
+      };
+      
+      kunde.status = newStatus;
+      await kunde.save();
+      statusFixed = true;
+      
+      console.log('✅ Status migriert:', { 
+        old: typeof kunde.status === 'string' ? kunde.status : 'object',
+        new: newStatus 
+      });
+    }
 
     // Admin-Einstellungen für E-Mail-Verifikation prüfen
     const AdminSettings = require('../models/AdminSettings');
@@ -120,10 +141,11 @@ const loginAdmin = async (req, res) => {
 
     console.log('📋 Admin-Einstellungen:', {
       requireEmailVerification,
-      kundeStatus: kunde.status
+      kundeStatus: kunde.status,
+      statusFixed
     });
 
-    // Account-Status prüfen
+    // Account-Status prüfen (nach Migration)
     if (!kunde.status.aktiv || kunde.status.gesperrt) {
       console.log('❌ Account inaktiv oder gesperrt:', email, kunde.status);
       return res.status(401).json({
