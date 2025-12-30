@@ -243,6 +243,14 @@ const orderSchema = new mongoose.Schema({
     default: 'neu'
   },
   
+  // Rechnung (gespeicherte Rechnungsdaten)
+  invoice: {
+    number: String,
+    html: String,
+    generatedAt: Date,
+    data: Object
+  },
+  
   // Rückerstattungsstatus für abgelehnte Bestellungen
   rueckerstattungErledigt: {
     type: Boolean,
@@ -337,7 +345,7 @@ const orderSchema = new mongoose.Schema({
     },
     anbieter: {
       type: String,
-      enum: ['dhl', 'hermes', 'ups', 'dpd', 'gls', 'selbstabholung'],
+      enum: ['dhl', 'hermes', 'ups', 'dpd', 'gls', 'fedex', 'selbstabholung'],
       default: 'dhl'
     },
     sendungsnummer: {

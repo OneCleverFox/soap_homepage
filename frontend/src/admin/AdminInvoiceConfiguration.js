@@ -41,6 +41,7 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { SketchPicker } from 'react-color';
+import { useAdminState } from '../hooks/useAdminState';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -65,24 +66,137 @@ const VariableChip = styled(Chip)(({ theme }) => ({
 }));
 
 const AdminInvoiceConfiguration = () => {
+  // Standardisierte Admin-States
+  const {
+    loading, setLoading,
+    snackbar, showSnackbar, hideSnackbar
+  } = useAdminState(true);
+
   const [currentTemplate, setCurrentTemplate] = useState(null);
-  // eslint-disable-next-line no-unused-vars
-  const [templates, setTemplates] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
   const [variablesDialog, setVariablesDialog] = useState(false);
   const [colorPickerOpen, setColorPickerOpen] = useState({});
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Verfügbare Variablen
   const [availableVariables, setAvailableVariables] = useState([]);
 
+  // Template-Struktur wird direkt in der Funktion definiert
+  const _createDefaultTemplate = () => ({
+    name: 'Neue Rechnungsvorlage',
+    isDefault: false,
+    companyInfo: {
+      name: 'Glücksmomente Manufaktur',
+      address: {
+        street: 'Musterstraße 123',
+        postalCode: '64673',
+        city: 'Zwingenberg',
+        country: 'Deutschland'
+      },
+      contact: {
+        phone: '+49 123 456789',
+        email: 'info@gluecksmomente-manufaktur.de',
+        website: 'www.gluecksmomente-manufaktur.de'
+      },
+      taxInfo: {
+        taxNumber: 'DE123456789',
+        vatId: 'USt-IdNr.: DE123456789',
+        ceo: 'Max Mustermann',
+        legalForm: 'Einzelunternehmen',
+        registrationCourt: 'Amtsgericht Musterstadt',
+        registrationNumber: 'HRB 123456'
+      },
+      bankDetails: {
+        bankName: 'Musterbank',
+        iban: 'DE89 3704 0044 0532 0130 00',
+        bic: 'COBADEFF'
+      },
+      logo: {
+        enabled: false,
+        url: ''
+      }
+    },
+    layout: {
+      header: {
+        showLogo: true,
+        logoPosition: 'left',
+        logoSize: 'medium',
+        showCompanyInfo: true,
+        companyInfoPosition: 'right'
+      },
+      colors: {
+        primary: '#8b4a8b',
+        secondary: '#f5f5f5',
+        text: '#333333',
+        accent: '#4caf50'
+      },
+      fonts: {
+        primary: 'Arial, sans-serif',
+        size: {
+          heading: 24,
+          subheading: 18,
+          body: 12,
+          small: 10
+        }
+      },
+      spacing: {
+        margin: 20,
+        lineHeight: 1.4
+      }
+    },
+    sections: {
+      invoiceInfo: {
+        enabled: true,
+        position: 1,
+        title: 'RECHNUNG',
+        showInvoiceNumber: true,
+        showInvoiceDate: true,
+        showDueDate: true,
+        showOrderNumber: true
+      },
+      customerInfo: {
+        enabled: true,
+        position: 2,
+        title: 'Rechnungsadresse',
+        showTitle: true
+      },
+      productTable: {
+        enabled: true,
+        position: 3,
+        columns: {
+          position: { enabled: true, width: 8 },
+          description: { enabled: true, width: 40 },
+          quantity: { enabled: true, width: 12 },
+          unitPrice: { enabled: true, width: 15 },
+          total: { enabled: true, width: 15 }
+        },
+        showHeaders: true,
+        alternateRowColors: true
+      },
+      totals: {
+        enabled: true,
+        position: 4,
+        showSubtotal: true,
+        showTax: true,
+        showShipping: true,
+        showTotal: true,
+        alignment: 'right'
+      },
+      footer: {
+        enabled: true,
+        position: 5,
+        customText: 'Vielen Dank für Ihren Einkauf bei Glücksmomente Manufaktur!',
+        showPaymentInfo: true,
+        showReturnPolicy: true
+      }
+    }
+  });
+
   // API-Aufrufe
-  const loadTemplates = useCallback(async () => {
+  const _loadTemplates = useCallback(async () => {
     try {
-      const response = await fetch('/api/invoice/templates', {
+      const response = await fetch('/api/admin/invoice/templates', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -90,12 +204,60 @@ const AdminInvoiceConfiguration = () => {
       const data = await response.json();
       
       if (data.success) {
-        setTemplates(data.data);
+        // Templates werden hier verarbeitet
         const defaultTemplate = data.data.find(t => t.isDefault);
-        if (defaultTemplate) {
-          setCurrentTemplate(defaultTemplate);
-        } else if (data.data.length > 0) {
-          setCurrentTemplate(data.data[0]);
+        let template = defaultTemplate || data.data[0];
+        
+        // Standard-Layout-Werte setzen falls nicht vorhanden
+        if (template) {
+          // Hilfsfunktion um Standard-Werte nur zu setzen wenn sie nicht bereits existieren
+          const setDefaultIfUndefined = (obj, defaults) => {
+            const result = { ...defaults };
+            if (obj) {
+              Object.keys(obj).forEach(key => {
+                if (obj[key] !== undefined && obj[key] !== null) {
+                  result[key] = obj[key];
+                }
+              });
+            }
+            return result;
+          };
+
+          template = {
+            ...template,
+            layout: {
+              ...template.layout,
+              header: setDefaultIfUndefined(template.layout?.header, {
+                style: 'standard',
+                alignment: 'left',
+                height: 100,
+                showBorder: false
+              }),
+              footer: setDefaultIfUndefined(template.layout?.footer, {
+                layout: 'columns',
+                columns: 3,
+                showContactInfo: true,
+                showTaxInfo: true,
+                showBankDetails: false, // Standard: aus
+                showLegalInfo: true,
+                height: 80,
+                showBorder: true,
+                fontSize: 8
+              })
+            },
+            companyInfo: {
+              ...template.companyInfo,
+              isSmallBusiness: template.companyInfo?.isSmallBusiness ?? false, // Nur setzen wenn undefined
+              paymentMethod: template.companyInfo?.paymentMethod || 'sofort',
+              logo: setDefaultIfUndefined(template.companyInfo?.logo, {
+                enabled: false, // Standard: aus
+                url: '',
+                width: 120,
+                height: 60
+              })
+            }
+          };
+          setCurrentTemplate(template);
         }
       }
     } catch (error) {
@@ -108,29 +270,89 @@ const AdminInvoiceConfiguration = () => {
 
   const loadVariables = useCallback(async () => {
     try {
-      const response = await fetch('/api/invoice/variables', {
+      const response = await fetch('/api/admin/invoice/variables', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       const data = await response.json();
       
-      if (data.success) {
+      if (data.success && Array.isArray(data.data)) {
         setAvailableVariables(data.data);
+      } else {
+        // Fallback: Setze leeres Array wenn API fehlschlägt
+        setAvailableVariables([]);
       }
     } catch (error) {
       console.error('Fehler beim Laden der Variablen:', error);
+      // Fallback: Setze leeres Array bei Fehler
+      setAvailableVariables([]);
     }
   }, []);
+
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validierung
+    if (!file.type.startsWith('image/')) {
+      showSnackbar('Bitte wählen Sie eine Bilddatei aus', 'error');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) { // 2MB Limit
+      showSnackbar('Die Datei ist zu groß (max. 2MB)', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    try {
+      const response = await fetch('/api/admin/invoice/upload-logo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        updateTemplate('companyInfo.logo.url', data.logoUrl);
+        updateTemplate('companyInfo.logo.enabled', true);
+        showSnackbar('Logo erfolgreich hochgeladen', 'success');
+      } else {
+        showSnackbar(data.message || 'Fehler beim Upload', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Logo-Upload:', error);
+      showSnackbar('Fehler beim Logo-Upload', 'error');
+    }
+  };
+
+  const removeLogo = () => {
+    updateTemplate('companyInfo.logo.enabled', false);
+    updateTemplate('companyInfo.logo.url', '');
+    showSnackbar('Logo entfernt', 'success');
+  };
 
   const saveTemplate = async () => {
     if (!currentTemplate) return;
 
     setSaving(true);
     try {
+      // Debug: Log was gespeichert wird
+      console.log('🔍 Speichere Template:', {
+        isSmallBusiness: currentTemplate.companyInfo?.isSmallBusiness,
+        showBankDetails: currentTemplate.layout?.footer?.showBankDetails,
+        logoEnabled: currentTemplate.companyInfo?.logo?.enabled
+      });
+      
       const url = currentTemplate._id 
-        ? `/api/invoice/templates/${currentTemplate._id}`
-        : '/api/invoice/templates';
+        ? `/api/admin/invoice/templates/${currentTemplate._id}`
+        : '/api/admin/invoice/templates';
       
       const method = currentTemplate._id ? 'PUT' : 'POST';
 
@@ -145,14 +367,22 @@ const AdminInvoiceConfiguration = () => {
 
       const data = await response.json();
       
-      if (data.success) {
+      if (response.ok && data.success) {
         showSnackbar('Template erfolgreich gespeichert', 'success');
         if (!currentTemplate._id) {
+          // Für neue Templates setze die Daten vom Server
           setCurrentTemplate(data.data);
+        } else {
+          // Für Updates behalte die aktuellen Daten, aktualisiere nur die updatedAt Zeit
+          setCurrentTemplate(prev => ({
+            ...prev,
+            updatedAt: data.data.updatedAt || new Date().toISOString()
+          }));
         }
-        loadTemplates();
+        // WICHTIG: _loadTemplates() NICHT aufrufen, da es die Werte überschreibt
       } else {
-        showSnackbar('Fehler beim Speichern', 'error');
+        console.error('Server error:', data);
+        showSnackbar(data.message || 'Fehler beim Speichern', 'error');
       }
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
@@ -167,7 +397,7 @@ const AdminInvoiceConfiguration = () => {
 
     setPreviewLoading(true);
     try {
-      const response = await fetch('/api/invoice/preview', {
+      const response = await fetch('/api/admin/invoice/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -191,10 +421,6 @@ const AdminInvoiceConfiguration = () => {
     }
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
   const updateTemplate = (path, value) => {
     setCurrentTemplate(prev => {
       const newTemplate = { ...prev };
@@ -211,10 +437,16 @@ const AdminInvoiceConfiguration = () => {
     });
   };
 
+  const _insertVariable = (variable, targetField) => {
+    const currentValue = targetField || '';
+    const newValue = currentValue + `{{${variable.name}}}`;
+    return newValue;
+  };
+
   useEffect(() => {
-    loadTemplates();
+    _loadTemplates();
     loadVariables();
-  }, [loadTemplates, loadVariables]);
+  }, [_loadTemplates, loadVariables]);
 
   if (loading) {
     return (
@@ -254,12 +486,23 @@ const AdminInvoiceConfiguration = () => {
               onChange={(e) => updateTemplate('companyInfo.address.street', e.target.value)}
             />
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={3}>
+            <TextField
+              fullWidth
+              label="Postleitzahl"
+              value={currentTemplate?.companyInfo?.address?.postalCode || ''}
+              onChange={(e) => updateTemplate('companyInfo.address.postalCode', e.target.value)}
+              inputProps={{ pattern: '[0-9]{5}', maxLength: 5 }}
+              placeholder="64673"
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
             <TextField
               fullWidth
               label="Stadt"
               value={currentTemplate?.companyInfo?.address?.city || ''}
               onChange={(e) => updateTemplate('companyInfo.address.city', e.target.value)}
+              placeholder="Zwingenberg"
             />
           </Grid>
           <Grid item xs={12} md={6}>
@@ -294,6 +537,162 @@ const AdminInvoiceConfiguration = () => {
               onChange={(e) => updateTemplate('companyInfo.taxInfo.vatId', e.target.value)}
             />
           </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Geschäftsführer/Inhaber"
+              value={currentTemplate?.companyInfo?.taxInfo?.ceo || ''}
+              onChange={(e) => updateTemplate('companyInfo.taxInfo.ceo', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Rechtsform"
+              value={currentTemplate?.companyInfo?.taxInfo?.legalForm || ''}
+              onChange={(e) => updateTemplate('companyInfo.taxInfo.legalForm', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Amtsgericht"
+              value={currentTemplate?.companyInfo?.taxInfo?.registrationCourt || ''}
+              onChange={(e) => updateTemplate('companyInfo.taxInfo.registrationCourt', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Finanzamt"
+              value={currentTemplate?.companyInfo?.taxInfo?.taxOffice || ''}
+              onChange={(e) => updateTemplate('companyInfo.taxInfo.taxOffice', e.target.value)}
+              placeholder="z.B. Bensheim"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+              Bankverbindung (optional - nur für Notfall)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Hauptsächlich Bar- oder PayPal-Zahlung. Bankdaten nur als Backup.
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="Bank"
+              value={currentTemplate?.companyInfo?.bankDetails?.bankName || ''}
+              onChange={(e) => updateTemplate('companyInfo.bankDetails.bankName', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="IBAN"
+              value={currentTemplate?.companyInfo?.bankDetails?.iban || ''}
+              onChange={(e) => updateTemplate('companyInfo.bankDetails.iban', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <TextField
+              fullWidth
+              label="BIC"
+              value={currentTemplate?.companyInfo?.bankDetails?.bic || ''}
+              onChange={(e) => updateTemplate('companyInfo.bankDetails.bic', e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+              Zahlungskonditionen
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth>
+              <InputLabel>Zahlungsart</InputLabel>
+              <Select
+                value={currentTemplate?.companyInfo?.paymentMethod || 'sofort'}
+                onChange={(e) => updateTemplate('companyInfo.paymentMethod', e.target.value)}
+              >
+                <MenuItem value="sofort">Sofortige Zahlung (Bar/PayPal)</MenuItem>
+                <MenuItem value="bank">Überweisung (Notfall)</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={currentTemplate?.companyInfo?.isSmallBusiness || false}
+                  onChange={(e) => updateTemplate('companyInfo.isSmallBusiness', e.target.checked)}
+                />
+              }
+              label="Kleinunternehmer (§ 19 UStG) - keine USt ausweisen"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <Typography variant="h6" sx={{ mt: 3, mb: 2 }}>
+              Logo-Einstellungen
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={currentTemplate?.companyInfo?.logo?.enabled || false}
+                  onChange={(e) => updateTemplate('companyInfo.logo.enabled', e.target.checked)}
+                />
+              }
+              label="Logo aktivieren"
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleLogoUpload}
+              style={{ display: 'none' }}
+              id="logo-upload"
+            />
+            <label htmlFor="logo-upload">
+              <Button
+                variant="outlined"
+                component="span"
+                disabled={!currentTemplate?.companyInfo?.logo?.enabled}
+                sx={{ mr: 2 }}
+              >
+                Logo hochladen
+              </Button>
+            </label>
+            {currentTemplate?.companyInfo?.logo?.url && (
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={removeLogo}
+                size="small"
+              >
+                Entfernen
+              </Button>
+            )}
+          </Grid>
+          {currentTemplate?.companyInfo?.logo?.enabled && currentTemplate?.companyInfo?.logo?.url && (
+            <Grid item xs={12}>
+              <Box sx={{ mt: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                <Typography variant="body2" gutterBottom>Logo-Vorschau:</Typography>
+                <img 
+                  src={currentTemplate.companyInfo.logo.url} 
+                  alt="Logo" 
+                  style={{ 
+                    maxWidth: '200px', 
+                    maxHeight: '100px', 
+                    objectFit: 'contain',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px'
+                  }} 
+                />
+              </Box>
+            </Grid>
+          )}
         </Grid>
       )
     },
@@ -637,6 +1036,223 @@ const AdminInvoiceConfiguration = () => {
           ))}
         </Box>
       )
+    },
+    {
+      label: 'Header & Footer Layout',
+      icon: <InvoiceIcon />,
+      content: (
+        <Grid container spacing={3}>
+          {/* Header Layout-Konfiguration */}
+          <Grid item xs={12}>
+            <Card>
+              <CardHeader 
+                title="Header Layout-Einstellungen" 
+                subheader="Anzeige und Positionierung der Firmeninformationen im Header"
+              />
+              <CardContent>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Header-Stil</InputLabel>
+                      <Select
+                        value={currentTemplate?.layout?.header?.style || 'standard'}
+                        onChange={(e) => updateTemplate('layout.header.style', e.target.value)}
+                      >
+                        <MenuItem value="standard">Standard</MenuItem>
+                        <MenuItem value="compact">Kompakt</MenuItem>
+                        <MenuItem value="detailed">Detailliert</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Text-Ausrichtung</InputLabel>
+                      <Select
+                        value={currentTemplate?.layout?.header?.alignment || 'left'}
+                        onChange={(e) => updateTemplate('layout.header.alignment', e.target.value)}
+                      >
+                        <MenuItem value="left">Linksbündig</MenuItem>
+                        <MenuItem value="center">Zentriert</MenuItem>
+                        <MenuItem value="right">Rechtsbündig</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12}>
+                    <Typography gutterBottom>Header-Größe</Typography>
+                    <Slider
+                      value={currentTemplate?.layout?.header?.height || 100}
+                      onChange={(e, value) => updateTemplate('layout.header.height', value)}
+                      min={60}
+                      max={150}
+                      marks={[
+                        { value: 60, label: 'Klein' },
+                        { value: 100, label: 'Normal' },
+                        { value: 150, label: 'Groß' }
+                      ]}
+                      valueLabelDisplay="auto"
+                      valueLabelFormat={(value) => `${value}px`}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.header?.showBorder || false}
+                          onChange={(e) => updateTemplate('layout.header.showBorder', e.target.checked)}
+                        />
+                      }
+                      label="Untere Trennlinie anzeigen"
+                    />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Footer Layout-Konfiguration */}
+          <Grid item xs={12}>
+            <Card>
+              <CardHeader 
+                title="Footer Layout-Einstellungen (§ 14 UStG)" 
+                subheader="Anzeige und Anordnung der rechtspflichtigen Informationen"
+              />
+              <CardContent>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Footer-Layout</InputLabel>
+                      <Select
+                        value={currentTemplate?.layout?.footer?.layout || 'columns'}
+                        onChange={(e) => updateTemplate('layout.footer.layout', e.target.value)}
+                      >
+                        <MenuItem value="columns">Mehrspaltig</MenuItem>
+                        <MenuItem value="rows">Zeilenweise</MenuItem>
+                        <MenuItem value="compact">Kompakt</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Anzahl Spalten</InputLabel>
+                      <Select
+                        value={currentTemplate?.layout?.footer?.columns || 3}
+                        onChange={(e) => updateTemplate('layout.footer.columns', parseInt(e.target.value))}
+                        disabled={currentTemplate?.layout?.footer?.layout !== 'columns'}
+                      >
+                        <MenuItem value={2}>2 Spalten</MenuItem>
+                        <MenuItem value={3}>3 Spalten</MenuItem>
+                        <MenuItem value={4}>4 Spalten</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  
+                  {/* Anzeige-Optionen für Footer-Bereiche */}
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                      Anzuzeigende Bereiche
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.footer?.showContactInfo !== false}
+                          onChange={(e) => updateTemplate('layout.footer.showContactInfo', e.target.checked)}
+                        />
+                      }
+                      label="Kontaktinformationen anzeigen"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.footer?.showTaxInfo !== false}
+                          onChange={(e) => updateTemplate('layout.footer.showTaxInfo', e.target.checked)}
+                        />
+                      }
+                      label="Steuerliche Angaben anzeigen"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.footer?.showBankDetails || false}
+                          onChange={(e) => updateTemplate('layout.footer.showBankDetails', e.target.checked)}
+                        />
+                      }
+                      label="Bankverbindung anzeigen (optional)"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.footer?.showLegalInfo !== false}
+                          onChange={(e) => updateTemplate('layout.footer.showLegalInfo', e.target.checked)}
+                        />
+                      }
+                      label="Rechtliche Angaben anzeigen"
+                    />
+                  </Grid>
+                  
+                  {/* Footer-Position und Größe */}
+                  <Grid item xs={12}>
+                    <Typography gutterBottom sx={{ mt: 2 }}>Footer-Größe</Typography>
+                    <Slider
+                      value={currentTemplate?.layout?.footer?.height || 80}
+                      onChange={(e, value) => updateTemplate('layout.footer.height', value)}
+                      min={60}
+                      max={120}
+                      marks={[
+                        { value: 60, label: 'Kompakt' },
+                        { value: 80, label: 'Normal' },
+                        { value: 120, label: 'Ausführlich' }
+                      ]}
+                      valueLabelDisplay="auto"
+                      valueLabelFormat={(value) => `${value}px`}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} md={6}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={currentTemplate?.layout?.footer?.showBorder !== false}
+                          onChange={(e) => updateTemplate('layout.footer.showBorder', e.target.checked)}
+                        />
+                      }
+                      label="Obere Trennlinie anzeigen"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      label="Schriftgröße Footer"
+                      type="number"
+                      value={currentTemplate?.layout?.footer?.fontSize || 8}
+                      onChange={(e) => updateTemplate('layout.footer.fontSize', parseInt(e.target.value))}
+                      inputProps={{ min: 6, max: 12 }}
+                      helperText="Schriftgröße in pt"
+                    />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+          
+          {/* Hinweis */}
+          <Grid item xs={12}>
+            <Alert severity="info">
+              <Typography variant="body2">
+                <strong>Hinweis:</strong> Die Daten für Header und Footer werden im Tab "Firmeninformationen" gepflegt. 
+                Hier können Sie nur die Anzeige und das Layout konfigurieren.
+              </Typography>
+            </Alert>
+          </Grid>
+        </Grid>
+      )
     }
   ];
 
@@ -751,8 +1367,8 @@ const AdminInvoiceConfiguration = () => {
                    category === 'product' ? 'Produkt-Variablen' : 'Datums-Variablen'}
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1}>
-                  {availableVariables
-                    .filter(variable => variable.category === category)
+                  {(Array.isArray(availableVariables) ? availableVariables : [])
+                    .filter(variable => variable && variable.category === category)
                     .map((variable) => (
                       <VariableChip
                         key={variable.name}
@@ -778,10 +1394,10 @@ const AdminInvoiceConfiguration = () => {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        onClose={hideSnackbar}
       >
         <Alert
-          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          onClose={hideSnackbar}
           severity={snackbar.severity}
           sx={{ width: '100%' }}
         >

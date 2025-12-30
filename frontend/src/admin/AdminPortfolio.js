@@ -67,8 +67,16 @@ const AdminPortfolio = () => {
     zusatz: '',
     optional: '',
     verpackung: '',
-    aktiv: true,
-    reihenfolge: 0
+    aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
+    reihenfolge: 0, // Wird beim Öffnen des Dialogs automatisch gesetzt
+    // Beschreibungsfelder
+    beschreibung: {
+      kurz: '',
+      lang: '',
+      inhaltsstoffe: '',
+      anwendung: '',
+      besonderheiten: ''
+    }
   });
 
   // State für dynamische Optionen
@@ -280,6 +288,17 @@ const AdminPortfolio = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  // Funktion zur Berechnung der nächsten verfügbaren Reihenfolge-Nummer
+  const getNextAvailableOrder = () => {
+    if (products.length === 0) {
+      return 0; // Erstes Produkt bekommt Reihenfolge 0
+    }
+    
+    // Finde die höchste Reihenfolge-Nummer und addiere 1
+    const maxOrder = Math.max(...products.map(p => p.reihenfolge || 0));
+    return maxOrder + 1;
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -290,8 +309,16 @@ const AdminPortfolio = () => {
       zusatz: '',
       optional: '',
       verpackung: '',
-      aktiv: true,
-      reihenfolge: 0
+      aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
+      reihenfolge: getNextAvailableOrder(), // ✅ Automatisch nächste verfügbare Nummer
+      // Beschreibungsfelder
+      beschreibung: {
+        kurz: '',
+        lang: '',
+        inhaltsstoffe: '',
+        anwendung: '',
+        besonderheiten: ''
+      }
     });
     setEditingProduct(null);
   };
@@ -322,11 +349,41 @@ const AdminPortfolio = () => {
         optional: product.optional || '',
         verpackung: product.verpackung,
         aktiv: product.aktiv,
-        reihenfolge: product.reihenfolge.toString()
+        reihenfolge: product.reihenfolge.toString(),
+        // Beschreibungsfelder laden
+        beschreibung: {
+          kurz: product.beschreibung?.kurz || '',
+          lang: product.beschreibung?.lang || '',
+          inhaltsstoffe: product.beschreibung?.inhaltsstoffe || '',
+          anwendung: product.beschreibung?.anwendung || '',
+          besonderheiten: product.beschreibung?.besonderheiten || ''
+        }
       });
       setEditingProduct(product);
     } else {
-      resetForm();
+      // Für neue Produkte: automatisch nächste Reihenfolge setzen
+      const nextOrder = getNextAvailableOrder();
+      setFormData({
+        name: '',
+        seife: '',
+        gramm: '',
+        aroma: '',
+        seifenform: '',
+        zusatz: '',
+        optional: '',
+        verpackung: '',
+        aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
+        reihenfolge: nextOrder.toString(), // ✅ Automatisch nächste verfügbare Nummer
+        // Beschreibungsfelder
+        beschreibung: {
+          kurz: '',
+          lang: '',
+          inhaltsstoffe: '',
+          anwendung: '',
+          besonderheiten: ''
+        }
+      });
+      setEditingProduct(null);
     }
     setOpenDialog(true);
   };
@@ -345,10 +402,22 @@ const AdminPortfolio = () => {
       return;
     }
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    // Prüfen, ob es sich um ein Beschreibungsfeld handelt
+    if (name.startsWith('beschreibung.')) {
+      const fieldName = name.split('.')[1]; // z.B. 'kurz' aus 'beschreibung.kurz'
+      setFormData(prev => ({
+        ...prev,
+        beschreibung: {
+          ...prev.beschreibung,
+          [fieldName]: value
+        }
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+    }
   };
 
   // Navigation zu entsprechender Admin-Seite für neuen Eintrag
@@ -617,7 +686,7 @@ const AdminPortfolio = () => {
             <Card>
               <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
                 <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Ohne
+                  Ohne Bilder
                 </Typography>
                 <Typography variant={isMobile ? "h6" : "h5"} color="warning.main">
                   {stats.productsWithoutImages}
@@ -939,6 +1008,78 @@ const AdminPortfolio = () => {
                 onChange={handleInputChange}
               />
             </Grid>
+            
+            {/* Produktbeschreibung Sektion */}
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                📝 Produktbeschreibung
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Kurze Beschreibung"
+                name="beschreibung.kurz"
+                value={formData.beschreibung.kurz}
+                onChange={handleInputChange}
+                multiline
+                rows={2}
+                inputProps={{ maxLength: 200 }}
+                helperText={`${formData.beschreibung.kurz.length}/200 Zeichen - Wird auf Produktkarten angezeigt`}
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Ausführliche Beschreibung"
+                name="beschreibung.lang"
+                value={formData.beschreibung.lang}
+                onChange={handleInputChange}
+                multiline
+                rows={4}
+                helperText="Detaillierte Produktbeschreibung für die Produktdetailseite"
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Inhaltsstoffe"
+                name="beschreibung.inhaltsstoffe"
+                value={formData.beschreibung.inhaltsstoffe}
+                onChange={handleInputChange}
+                multiline
+                rows={3}
+                helperText="Alle verwendeten Inhaltsstoffe auflisten"
+              />
+            </Grid>
+            
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Anwendung"
+                name="beschreibung.anwendung"
+                value={formData.beschreibung.anwendung}
+                onChange={handleInputChange}
+                multiline
+                rows={3}
+                helperText="Anwendungshinweise für das Produkt"
+              />
+            </Grid>
+            
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Besonderheiten"
+                name="beschreibung.besonderheiten"
+                value={formData.beschreibung.besonderheiten}
+                onChange={handleInputChange}
+                helperText="Besondere Eigenschaften (z.B. Vegan, Handmade, Ohne Palmöl)"
+              />
+            </Grid>
+            
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth

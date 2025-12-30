@@ -1,5 +1,7 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { cartAPI } from '../services/api';
+import { useAuth } from './AuthContext';
+import stockEventService from '../services/stockEventService';
 import toast from 'react-hot-toast';
 
 const CartContext = createContext();
@@ -16,39 +18,129 @@ export const CartProvider = ({ children }) => {
   const [items, setItems] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [lastLoadTime, setLastLoadTime] = useState(0);
+  const { user } = useAuth();
 
-  // Load cart from backend when user logs in
-  const loadCart = async () => {
+  // Load cart from backend when user logs in (with caching)
+  const loadCart = useCallback(async (force = false) => {
     const token = localStorage.getItem('token');
     if (!token) {
       setItems([]);
       return;
     }
 
+    // Cache-Logik: Nur neu laden wenn mehr als 30 Sekunden vergangen sind
+    const now = Date.now();
+    const cacheTimeout = 30000; // 30 Sekunden
+    
+    if (!force && lastLoadTime && (now - lastLoadTime) < cacheTimeout) {
+      console.log('📦 Warenkorb-Cache noch gültig, überspringe Anfrage');
+      return;
+    }
+
     try {
       setLoading(true);
-      const response = await cartAPI.getCart();
-      console.log('📦 Raw Cart Data:', response.data.data);
       
-      const cartItems = response.data.data.items.map(item => {
+      // Verwende Admin-Cart-API für Admin-User
+      const response = user?.role === 'admin' 
+        ? await cartAPI.getAdminCart()
+        : await cartAPI.getCart();
+        
+      console.log('📦 Raw Cart Data:', response.data);
+      
+      setLastLoadTime(now); // Cache-Zeit aktualisieren
+      
+      const cartItems = (response.data.data?.items || []).map(item => {
         console.log('📦 Cart Item:', {
           name: item.name,
-          bildUrl: item.bild,
-          produktId: item.produktId
+          bildUrl: item.bildUrl || item.bild,
+          produktId: item.produktId,
+          bestand: item.bestand,
+          aktiv: item.aktiv,
+          menge: item.menge,
+          quantity: item.quantity,
+          fullItem: item
         });
-        return {
+        
+        // Normalisiere Quantity-Feld (Admin-Cart verwendet 'menge', normale Cart 'quantity')
+        const itemQuantity = item.menge || item.quantity || 0;
+        
+        // Verfügbarkeitsprüfung basierend auf aktiv Status und Bestandsmenge
+        // aktiv ist verfügbar wenn true oder undefined (Fallback für alte Daten)
+        const isAvailable = (item.aktiv !== false) && (item.bestand?.menge || 0) > 0;
+        
+        // Automatische Mengenkorrektur bei Bestandsüberschreitung
+        let correctedQuantity = itemQuantity;
+        let needsBackendUpdate = false;
+        let shouldRemoveItem = false;
+        
+        if (!isAvailable) {
+          // Artikel nicht verfügbar - NICHT entfernen, sondern als nicht verfügbar markieren
+          console.log(`📦 Artikel nicht verfügbar, bleibt im Warenkorb: ${item.name}`);
+          // Menge auf 0 setzen für Berechnungen, aber Item behalten
+          correctedQuantity = 0;
+        } else if (itemQuantity > (item.bestand?.menge || 0)) {
+          // Bestandsüberschreitung - Menge korrigieren
+          correctedQuantity = item.bestand.menge;
+          needsBackendUpdate = true;
+          console.log(`📦 Automatische Mengenkorrektur für ${item.name}: ${item.menge} → ${correctedQuantity}`);
+        }
+        
+        const cartItem = {
           id: item.produktId,
+          produktId: item.produktId, // Für Backend-Calls
           name: item.name,
-          price: item.preis,
-          quantity: item.menge,
+          price: item.preis, // Einheitlicher Preisname
+          preis: item.preis, // Backup für Kompatibilität
+          quantity: correctedQuantity, // Korrigierte Menge verwenden
           image: item.bild,
           gramm: item.gramm,
-          seife: item.seife
+          seife: item.seife,
+          // Verfügbarkeitsinformationen hinzufügen
+          bestand: item.bestand,
+          isAvailable: isAvailable,
+          hasEnoughStock: isAvailable && correctedQuantity <= (item.bestand?.menge || 0),
+          needsBackendUpdate: needsBackendUpdate,
+          shouldRemoveItem: shouldRemoveItem
         };
+        
+        return cartItem;
       });
       
       console.log('📦 Mapped Cart Items:', cartItems);
+      
+      // Prüfe auf nicht verfügbare Artikel und zeige Warnung
+      const unavailableItems = cartItems.filter(item => !item.isAvailable);
+      
+      if (unavailableItems.length > 0) {
+        console.log('📦 Nicht verfügbare Artikel im Warenkorb:', unavailableItems.map(item => item.name));
+        toast(`⚠️ ${unavailableItems.length} Artikel sind nicht mehr verfügbar`, {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
+      }
+      
+      // Alle Artikel im Warenkorb behalten (auch nicht verfügbare)
       setItems(cartItems);
+      
+      // Backend-Updates für korrigierte Mengen (nur für verfügbare Artikel)
+      const itemsNeedingUpdate = cartItems.filter(item => item.needsBackendUpdate && item.isAvailable);
+      if (itemsNeedingUpdate.length > 0) {
+        console.log('📦 Führe Backend-Updates für korrigierte Mengen durch...');
+        
+        for (const item of itemsNeedingUpdate) {
+          try {
+            await cartAPI.updateQuantity(item.produktId, item.quantity);
+            console.log(`✅ Backend-Update erfolgreich für ${item.name}`);
+          } catch (updateError) {
+            console.error(`❌ Fehler bei Backend-Update für ${item.name}:`, updateError);
+          }
+        }
+      }
     } catch (error) {
       console.error('❌ Fehler beim Laden des Warenkorbs:', error);
       console.error('Error details:', {
@@ -68,7 +160,7 @@ export const CartProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [lastLoadTime, user?.role]);
 
   // Load cart on component mount if user is logged in
   useEffect(() => {
@@ -84,11 +176,48 @@ export const CartProvider = ({ children }) => {
       console.log('⚠️ Kein Token - Warenkorb wird nicht geladen');
     }
 
+    // Registriere Stock Event Listener für reaktive Updates
+    const unsubscribe = stockEventService.subscribe((productId, newStock) => {
+      console.log('🛒 Customer Cart received stock update:', { productId, newStock });
+      
+      if (productId === null) {
+        // Globales Update - kompletten Warenkorb neu laden
+        const currentToken = localStorage.getItem('token');
+        if (currentToken) {
+          loadCart();
+        }
+      } else {
+        // Spezifisches Produkt - Benachrichtigung über Bestandsänderung
+        setItems(currentItems => {
+          const affectedItem = currentItems.find(item => item.id === productId);
+          if (affectedItem) {
+            const isStillAvailable = (affectedItem.aktiv !== false) && (newStock?.menge || 0) >= affectedItem.quantity;
+            
+            if (!isStillAvailable) {
+              toast(`${affectedItem.name}: Bestand geändert - bitte Warenkorb prüfen`, {
+                icon: '⚠️',
+                style: {
+                  background: '#fff3cd',
+                  border: '1px solid #ffeaa7',
+                  color: '#856404',
+                },
+              });
+            }
+            
+            // Warenkorb neu laden für aktuelle Verfügbarkeitsdaten
+            loadCart(true); // Force reload für Stock-Updates
+          }
+          return currentItems;
+        });
+      }
+    });
+
     // Cleanup function für StrictMode
     return () => {
       isMounted = false;
+      unsubscribe();
     };
-  }, []); // Nur einmal beim Mount laden
+  }, [loadCart]); // loadCart als Abhängigkeit hinzufügen
 
   // Listen for custom login event (wird gefeuert wenn User sich einloggt)
   useEffect(() => {
@@ -104,14 +233,12 @@ export const CartProvider = ({ children }) => {
 
     window.addEventListener('userLoggedIn', handleLogin);
     window.addEventListener('userLoggedOut', handleLogout);
-    
+
     return () => {
       window.removeEventListener('userLoggedIn', handleLogin);
       window.removeEventListener('userLoggedOut', handleLogout);
     };
-  }, []);
-
-  // Listen for storage changes (login/logout events from other tabs)
+  }, [loadCart]);  // Listen for storage changes (login/logout events from other tabs)
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'token') {
@@ -129,7 +256,7 @@ export const CartProvider = ({ children }) => {
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
+  }, [loadCart]);
 
   const addToCart = async (product, quantity = 1) => {
     const token = localStorage.getItem('token');
@@ -149,20 +276,43 @@ export const CartProvider = ({ children }) => {
         seife: product.seife
       };
 
-      const response = await cartAPI.addToCart(cartItem);
-      const cartItems = response.data.data.items.map(item => ({
-        id: item.produktId,
-        name: item.name,
-        price: item.preis,
-        quantity: item.menge,
-        image: item.bild,
-        gramm: item.gramm,
-        seife: item.seife
-      }));
-      setItems(cartItems);
+      // Optimistische UI-Update - sofort zum lokalen State hinzufügen/aktualisieren
+      setItems(prevItems => {
+        const existingItemIndex = prevItems.findIndex(item => item.id === product.id);
+        
+        if (existingItemIndex >= 0) {
+          // Item bereits vorhanden - Menge erhöhen
+          return prevItems.map((item, index) => 
+            index === existingItemIndex 
+              ? { ...item, quantity: item.quantity + quantity }
+              : item
+          );
+        } else {
+          // Neues Item hinzufügen
+          return [...prevItems, {
+            id: product.id,
+            name: product.name,
+            price: product.price,
+            quantity: quantity,
+            image: product.image || '',
+            gramm: product.gramm,
+            seife: product.seife
+          }];
+        }
+      });
+
+      // Backend-Update
+      await cartAPI.addToCart(cartItem);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(product.id, null);
+      
+      toast.success('Artikel hinzugefügt');
     } catch (error) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', error);
       toast.error('Fehler beim Hinzufügen zum Warenkorb');
+      // Bei Fehler: Warenkorb neu laden
+      loadCart();
     }
   };
 
@@ -173,20 +323,34 @@ export const CartProvider = ({ children }) => {
     }
 
     try {
-      const response = await cartAPI.removeItem(productId);
-      const cartItems = response.data.data.items.map(item => ({
-        id: item.produktId,
-        name: item.name,
-        price: item.preis,
-        quantity: item.menge,
-        image: item.bild,
-        gramm: item.gramm,
-        seife: item.seife
-      }));
-      setItems(cartItems);
+      // Finde das Item um die korrekte produktId zu bekommen
+      // Suche sowohl nach item.id als auch item.produktId
+      const item = items.find(item => item.id === productId || item.produktId === productId);
+      const backendProduktId = item?.produktId || productId;
+
+      console.log('🗑️ Removing item:', {
+        frontendId: productId,
+        backendProduktId: backendProduktId,
+        foundItem: !!item
+      });
+
+      // Optimistische UI-Update - sofort aus lokalem State entfernen
+      setItems(prevItems => prevItems.filter(item => 
+        item.id !== productId && item.produktId !== productId
+      ));
+      
+      // Backend-Update mit korrekter produktId
+      await cartAPI.removeItem(backendProduktId);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(backendProduktId, null);
+      
+      toast.success('Artikel entfernt');
     } catch (error) {
       console.error('Fehler beim Entfernen aus Warenkorb:', error);
       toast.error('Fehler beim Entfernen aus Warenkorb');
+      // Bei Fehler: Warenkorb neu laden
+      loadCart();
     }
   };
 
@@ -196,21 +360,71 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
+    if (quantity <= 0) {
+      removeFromCart(productId);
+      return;
+    }
+
     try {
-      const response = await cartAPI.updateQuantity(productId, quantity);
-      const cartItems = response.data.data.items.map(item => ({
-        id: item.produktId,
-        name: item.name,
-        price: item.preis,
-        quantity: item.menge,
-        image: item.bild,
-        gramm: item.gramm,
-        seife: item.seife
-      }));
-      setItems(cartItems);
+      // Finde das Item um die korrekte produktId zu bekommen
+      // Suche sowohl nach item.id als auch item.produktId
+      const item = items.find(item => item.id === productId || item.produktId === productId);
+      const backendProduktId = item?.produktId || productId;
+
+      // Bestandsprüfung
+      const maxAvailable = item?.bestand?.menge || 0;
+      const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
+      
+      if (!isAvailable) {
+        toast('⚠️ Artikel ist nicht mehr verfügbar', {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
+        return;
+      }
+      
+      if (quantity > maxAvailable) {
+        toast(`⚠️ Nur ${maxAvailable} Stück verfügbar`, {
+          icon: '⚠️',
+          style: {
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            color: '#856404',
+          },
+        });
+        quantity = maxAvailable; // Auf verfügbare Menge begrenzen
+      }
+
+      console.log('🔄 Updating quantity:', {
+        frontendId: productId,
+        backendProduktId: backendProduktId,
+        quantity: quantity,
+        maxAvailable: maxAvailable,
+        foundItem: !!item
+      });
+
+      // Optimistische UI-Update - sofort lokales State aktualisieren
+      setItems(prevItems => prevItems.map(item => 
+        (item.id === productId || item.produktId === productId)
+          ? { ...item, quantity: quantity }
+          : item
+      ));
+      
+      // Backend-Update mit korrekter produktId
+      await cartAPI.updateQuantity(backendProduktId, quantity);
+      
+      // Stock-Update für UI-Reaktivität
+      stockEventService.notifyStockChange(backendProduktId, null);
+      
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Warenkorbs:', error);
       toast.error('Fehler beim Aktualisieren des Warenkorbs');
+      // Bei Fehler: Warenkorb neu laden
+      loadCart();
     }
   };
 
@@ -222,23 +436,70 @@ export const CartProvider = ({ children }) => {
     }
 
     try {
-      await cartAPI.clearCart();
+      // Optimistische UI-Update - sofort leeren
       setItems([]);
+      
+      // Backend-Update
+      await cartAPI.clearCart();
+      toast.success('Warenkorb geleert');
     } catch (error) {
       console.error('Fehler beim Leeren des Warenkorbs:', error);
       toast.error('Fehler beim Leeren des Warenkorbs');
+      // Bei Fehler: Warenkorb neu laden
+      loadCart();
     }
   };
 
   const getCartTotal = () => {
     return items.reduce((total, item) => {
+      // Debugging für Preisprobleme
       const itemPrice = item.price || item.preis || 0;
+      console.log('💰 Preisberechnung:', {
+        name: item.name,
+        price: item.price,
+        preis: item.preis,
+        finalPrice: itemPrice,
+        quantity: item.quantity,
+        subtotal: itemPrice * item.quantity
+      });
+      
       return total + (itemPrice * item.quantity);
     }, 0);
   };
 
   const getCartItemsCount = () => {
     return items.reduce((total, item) => total + item.quantity, 0);
+  };
+
+  // Berechne nur verfügbare Items
+  const getAvailableCartTotal = () => {
+    return items
+      .filter(item => item.isAvailable && item.hasEnoughStock)
+      .reduce((total, item) => {
+        const itemPrice = item.price || item.preis || 0;
+        return total + (itemPrice * item.quantity);
+      }, 0);
+  };
+
+  // Funktion zum Entfernen nur der verfügbaren (bestellbaren) Artikel
+  const clearAvailableItems = async () => {
+    try {
+      const availableItemIds = items
+        .filter(item => item.hasEnoughStock === true)
+        .map(item => item.id);
+      
+      console.log('🛒 Clearing available items:', availableItemIds);
+      
+      // Entferne verfügbare Artikel einzeln
+      for (const itemId of availableItemIds) {
+        await removeFromCart(itemId);
+      }
+      
+      console.log('✅ Available items cleared from cart');
+    } catch (error) {
+      console.error('❌ Error clearing available items:', error);
+      toast.error('Fehler beim Leeren der bestellten Artikel');
+    }
   };
 
   const toggleCart = () => {
@@ -251,7 +512,9 @@ export const CartProvider = ({ children }) => {
     removeFromCart,
     updateQuantity,
     clearCart,
+    clearAvailableItems,
     getCartTotal,
+    getAvailableCartTotal,
     getCartItemsCount,
     isOpen,
     toggleCart,

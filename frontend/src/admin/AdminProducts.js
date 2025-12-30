@@ -1,14 +1,13 @@
 import React from 'react';
-import { Container, Typography } from '@mui/material';
+import { Navigate } from 'react-router-dom';
 
+/**
+ * @deprecated Diese Komponente ist veraltet.
+ * Verwende AdminPortfolio.js für Produktverwaltung.
+ * Redirect zu Portfolio-Komponente.
+ */
 const AdminProducts = () => {
-  return (
-    <Container maxWidth="lg">
-      <Typography variant="h2" component="h1" gutterBottom>
-        Produktverwaltung
-      </Typography>
-    </Container>
-  );
+  return <Navigate to="/admin/portfolio" replace />;
 };
 
 export default AdminProducts;

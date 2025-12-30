@@ -1,4 +1,5 @@
 import React from 'react';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -15,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import ShopStatusAlert from '../components/common/ShopStatusAlert';
 
 const HomePage = () => {
+  const { name } = useCompany();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -31,9 +33,9 @@ const HomePage = () => {
       description: 'Jedes Produkt wird mit Sorgfalt und Leidenschaft handgefertigt'
     },
     {
-      icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.info.main }}>🚚</span>,
-      title: 'Schneller Versand',
-      description: 'Schnelle und sichere Lieferung direkt zu Ihnen nach Hause'
+      icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.info.main }}>🎨</span>,
+      title: 'Kreative Familienarbeit',
+      description: 'Von Seifen über Schmuck bis hin zu Gips-Kunstwerken - vielfältige Kreativität'
     }
   ];
 
@@ -63,7 +65,7 @@ const HomePage = () => {
               mb: { xs: 2, md: 3 }
             }}
           >
-            Willkommen bei Glücksmomente
+            Willkommen bei {name || 'Glücksmomente'}
           </Typography>
           <Typography 
             variant={isMobile ? "h6" : "h5"} 

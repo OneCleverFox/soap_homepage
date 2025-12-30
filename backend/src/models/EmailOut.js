@@ -23,7 +23,8 @@ const emailOutSchema = new mongoose.Schema({
       'order_status_update',
       'newsletter',
       'promotional',
-      'system_notification'
+      'system_notification',
+      'invoice'
     ],
     index: true
   },

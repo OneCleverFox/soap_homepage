@@ -26,7 +26,7 @@ import {
   Warning
 } from '@mui/icons-material';
 import { AuthContext } from '../contexts/AuthContext';
-import BestellungenAPI from '../services/bestellungenAPI';
+import { ordersAPI } from '../services/api';
 import BestellStatusBar from './BestellStatusBar';
 import api from '../services/api';
 
@@ -183,7 +183,17 @@ const OrderHistory = () => {
 
     try {
       setLoading(true);
-      const result = await BestellungenAPI.getBestellungen({
+      
+      // Markiere als "besucht" für Badge-System - nur für Kunden
+      const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
+      if (!isAdmin) {
+        window.dispatchEvent(new CustomEvent('ordersViewed'));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📦 Kunden-Bestellungen-Seite besucht - Badge-Reset ausgelöst');
+        }
+      }
+      
+      const result = await ordersAPI.getCustomerOrders({
         limit: 50,
         sortBy: 'bestelldatum',
         sortOrder: 'desc'
