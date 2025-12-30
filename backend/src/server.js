@@ -235,6 +235,30 @@ app.use('/api/auth/', authLimiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Ensure upload directories exist
+const ensureUploadDirectories = () => {
+  const fs = require('fs');
+  const uploadsPath = path.resolve(__dirname, 'uploads');
+  const productsPath = path.resolve(__dirname, 'uploads/products');
+  
+  try {
+    if (!fs.existsSync(uploadsPath)) {
+      fs.mkdirSync(uploadsPath, { recursive: true });
+      console.log('✅ Created uploads directory:', uploadsPath);
+    }
+    if (!fs.existsSync(productsPath)) {
+      fs.mkdirSync(productsPath, { recursive: true });
+      console.log('✅ Created products directory:', productsPath);
+    }
+    console.log('✅ Upload directories ready');
+  } catch (error) {
+    console.warn('⚠️ Could not create upload directories:', error.message);
+  }
+};
+
+// Create upload directories
+ensureUploadDirectories();
+
 // Static Files (für Produktbilder etc.)
 app.use('/uploads', express.static('uploads'));
 

@@ -8,12 +8,13 @@
     "npm": ">=8.0.0"
   },
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node src/startup.js",
+    "start:direct": "node src/server.js",
     "dev": "nodemon src/server.js",
     "dev:local": "NODE_ENV=development node src/server.js",
     "dev:prod": "NODE_ENV=production node src/server.js",
     "test": "echo \"No tests specified - Backend running\" && exit 0",
-    "postinstall": "npm rebuild sharp",
+    "postinstall": "npm rebuild sharp --platform=linux --arch=x64 || npm install sharp --platform=linux --arch=x64 || echo 'Sharp installation failed - continuing without image optimization'",
     "setup:optimizations": "node scripts/setupOptimizations.js",
     "logs:view": "tail -f logs/combined.log",
     "logs:errors": "tail -f logs/error.log",
