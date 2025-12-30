@@ -103,14 +103,41 @@ const loginAdmin = async (req, res) => {
       });
     }
     
-    console.log('✅ Kunde gefunden:', { id: kunde._id, email: kunde.email, name: `${kunde.vorname} ${kunde.nachname}` });
+    console.log('✅ Kunde gefunden:', { 
+      id: kunde._id, 
+      email: kunde.email, 
+      name: `${kunde.vorname} ${kunde.nachname}`,
+      status: kunde.status,
+      aktiv: kunde.status?.aktiv,
+      gesperrt: kunde.status?.gesperrt,
+      emailVerifiziert: kunde.status?.emailVerifiziert
+    });
+
+    // Admin-Einstellungen für E-Mail-Verifikation prüfen
+    const AdminSettings = require('../models/AdminSettings');
+    const adminSettings = await AdminSettings.getInstance();
+    const requireEmailVerification = adminSettings.userManagement?.requireEmailVerification ?? true;
+
+    console.log('📋 Admin-Einstellungen:', {
+      requireEmailVerification,
+      kundeStatus: kunde.status
+    });
 
     // Account-Status prüfen
     if (!kunde.status.aktiv || kunde.status.gesperrt) {
-      console.log('❌ Account inaktiv oder gesperrt:', email);
+      console.log('❌ Account inaktiv oder gesperrt:', email, kunde.status);
       return res.status(401).json({
         success: false,
         message: 'Account ist deaktiviert oder gesperrt'
+      });
+    }
+
+    // E-Mail-Verifikation prüfen (nur wenn in Admin-Einstellungen aktiviert)
+    if (requireEmailVerification && !kunde.status.emailVerifiziert) {
+      console.log('❌ E-Mail nicht verifiziert:', email);
+      return res.status(401).json({
+        success: false,
+        message: 'Bitte verifizieren Sie zuerst Ihre E-Mail-Adresse'
       });
     }
 
@@ -322,7 +349,38 @@ const registerUser = async (req, res) => {
       verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 Stunden
     }
 
-    // Neuen Benutzer erstellen
+    // Neuen Kunden erstellen (parallell zum User für die Bestellsystem-Kompatibilität)
+    const Kunde = require('../models/Kunde');
+    const newKunde = new Kunde({
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
+      password,
+      vorname: firstName,
+      nachname: lastName,
+      telefon: phone || '',
+      adresse: address || {
+        strasse: '',
+        hausnummer: '',
+        plz: '',
+        stadt: '',
+        land: 'Deutschland'
+      },
+      status: {
+        aktiv: !requireEmailVerification, // Aktiv wenn keine E-Mail-Verifikation erforderlich
+        emailVerifiziert: !requireEmailVerification,
+        telefonVerifiziert: false,
+        gesperrt: false
+      },
+      rolle: 'kunde',
+      kommunikation: communicationPreferences || {
+        newsletter: false,
+        sms: false
+      }
+    });
+
+    await newKunde.save();
+
+    // Neuen Benutzer erstellen (für erweiterte Funktionen)
     const newUser = new User({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
@@ -335,12 +393,14 @@ const registerUser = async (req, res) => {
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationExpires,
       status: requireEmailVerification ? 'unverified' : 'active',
-      emailVerified: !requireEmailVerification // Sofort verifiziert wenn nicht erforderlich
+      emailVerified: !requireEmailVerification, // Sofort verifiziert wenn nicht erforderlich
+      kundeId: newKunde._id // Referenz zum Kunden-Datensatz
     });
 
     await newUser.save();
 
     console.log('✅ Benutzer erstellt:', newUser.email);
+    console.log('✅ Kunde erstellt:', newKunde.email);
     console.log(`📧 E-Mail-Verifikation: ${requireEmailVerification ? 'ERFORDERLICH' : 'ÜBERSPRUNGEN'}`);
 
     // Verifizierungs-E-Mail senden (nur wenn erforderlich)
