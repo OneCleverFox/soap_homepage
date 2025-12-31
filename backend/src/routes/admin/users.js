@@ -1,5 +1,6 @@
 const express = require('express');
 const Kunde = require('../../models/Kunde'); // Use Kunde model instead of User
+const User = require('../../models/User'); // Add User model
 const AdminSettings = require('../../models/AdminSettings');
 
 const router = express.Router();
@@ -562,6 +563,74 @@ router.post('/migrate-status/:userId', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Fehler bei der Migration' 
+    });
+  }
+});
+
+// Debug-Route: E-Mail in beiden Collections prüfen und optional löschen
+router.post('/debug-email/:email', async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    const { action } = req.body; // 'check' oder 'delete'
+    
+    console.log(`🔍 Debug E-Mail: ${email}, Aktion: ${action}`);
+    
+    // Prüfe User Collection
+    const userInUserCollection = await User.findOne({ email });
+    
+    // Prüfe Kunde Collection  
+    const userInKundeCollection = await Kunde.findOne({ email });
+    
+    const result = {
+      email,
+      userCollection: {
+        exists: !!userInUserCollection,
+        id: userInUserCollection?._id,
+        username: userInUserCollection?.username,
+        status: userInUserCollection?.status
+      },
+      kundeCollection: {
+        exists: !!userInKundeCollection,
+        id: userInKundeCollection?._id,
+        kundennummer: userInKundeCollection?.kundennummer,
+        status: userInKundeCollection?.status
+      }
+    };
+    
+    if (action === 'delete') {
+      const deleteResults = {
+        userDeleted: false,
+        kundeDeleted: false
+      };
+      
+      // User aus User-Collection löschen
+      if (userInUserCollection) {
+        await User.findByIdAndDelete(userInUserCollection._id);
+        deleteResults.userDeleted = true;
+        console.log(`🗑️ User ${email} aus User-Collection gelöscht`);
+      }
+      
+      // Kunde aus Kunde-Collection löschen
+      if (userInKundeCollection) {
+        await Kunde.findByIdAndDelete(userInKundeCollection._id);
+        deleteResults.kundeDeleted = true;
+        console.log(`🗑️ Kunde ${email} aus Kunde-Collection gelöscht`);
+      }
+      
+      result.deleteResults = deleteResults;
+    }
+    
+    res.json({
+      success: true,
+      debug: result
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug E-Mail Fehler:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler bei Debug-Abfrage',
+      error: error.message
     });
   }
 });
