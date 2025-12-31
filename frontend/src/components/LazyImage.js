@@ -61,7 +61,7 @@ const LazyImage = ({
         });
       },
       {
-        rootMargin: '100px', // Lade 100px bevor sichtbar (erhöht von 50px)
+        rootMargin: '200px', // Lade 200px bevor sichtbar für mobile Performance
         threshold: 0.01
       }
     );

@@ -38,7 +38,7 @@ import stockEventService from '../services/stockEventService';
 // API Base URL für Bild-URLs
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const ProductsPage = () => {
+const ProductsPage = React.memo(() => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -203,9 +203,30 @@ const ProductsPage = () => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
-        // TEMPORÄR: Cache für bessere Testing-Experience löschen
-        sessionStorage.removeItem('cachedProducts');
-        return false; // Lade immer frische Daten
+        // Cache aktiviert für bessere Performance
+        const cached = sessionStorage.getItem('cachedProducts');
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          // Verwende Cache wenn er weniger als 2 Minuten alt ist
+          if (Date.now() - timestamp < 2 * 60 * 1000) {
+            console.log('⚡ Loading cached products immediately');
+            if (isMounted) {
+              setProducts(data);
+              setInitialLoading(false); // Zeige Content statt Skeleton
+              setLoading(false);
+            }
+            
+            // Lade frische Daten im Hintergrund nach 5 Sekunden
+            setTimeout(() => {
+              if (isMounted) {
+                console.log('🔄 Refreshing products in background');
+                fetchProducts(true); // true = background update
+              }
+            }, 5000);
+            return true;
+          }
+        }
+        return false; // Kein gültiger Cache gefunden
         
         /* const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
@@ -710,6 +731,6 @@ const ProductsPage = () => {
       )}
     </Container>
   );
-};
+});
 
 export default ProductsPage;
