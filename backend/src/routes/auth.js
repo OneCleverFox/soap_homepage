@@ -1,5 +1,5 @@
 const express = require('express');
-const { loginAdmin, validateToken, logout, registerUser, verifyEmail, resendVerification, forgotPassword, resetPassword, getProfile, updateProfile, deleteAccount } = require('../controllers/authController');
+const { loginAdmin, validateToken, logout, registerUser, debugRegister, verifyEmail, resendVerification, forgotPassword, resetPassword, getProfile, updateProfile, deleteAccount } = require('../controllers/authController');
 const { auth, authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -13,6 +13,11 @@ router.post('/login', loginAdmin);
 // @desc    Neuen Benutzer registrieren
 // @access  Public
 router.post('/register', registerUser);
+
+// @route   POST /api/auth/debug-register
+// @desc    Debug-Route für Registrierung
+// @access  Public
+router.post('/debug-register', debugRegister);
 
 // @route   GET /api/auth/verify-email/:token
 // @desc    E-Mail-Adresse verifizieren
