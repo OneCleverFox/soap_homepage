@@ -298,7 +298,32 @@ const RegisterPage = () => {
 
     } catch (err) {
       console.error('❌ Registrierungs-Fehler:', err);
-      setError(err.response?.data?.message || err.message);
+      console.error('📋 Fehler-Details:', {
+        message: err.message,
+        responseData: err.response?.data,
+        responseStatus: err.response?.status,
+        responseHeaders: err.response?.headers,
+        requestData: formData
+      });
+      
+      let errorMessage = 'Unbekannter Fehler bei der Registrierung';
+      
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = `Fehler: ${err.response.data.error}`;
+      } else if (err.response?.status) {
+        errorMessage = `Server-Fehler ${err.response.status}: ${err.response.statusText || 'Unbekannt'}`;
+      } else {
+        errorMessage = err.message;
+      }
+      
+      // Zusätzliche Debug-Info für Entwicklung
+      if (err.response?.data?.validationErrors) {
+        errorMessage += '\nValidierung: ' + err.response.data.validationErrors.map(e => e.message).join(', ');
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
