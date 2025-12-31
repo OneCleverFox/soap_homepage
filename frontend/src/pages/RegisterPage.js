@@ -306,6 +306,11 @@ const RegisterPage = () => {
         requestData: formData
       });
       
+      // WICHTIG: Vollständige responseData ausgeben
+      if (err.response?.data) {
+        console.error('🔍 Vollständige Response-Data:', JSON.stringify(err.response.data, null, 2));
+      }
+      
       let errorMessage = 'Unbekannter Fehler bei der Registrierung';
       
       if (err.response?.data?.message) {
@@ -321,6 +326,11 @@ const RegisterPage = () => {
       // Zusätzliche Debug-Info für Entwicklung
       if (err.response?.data?.validationErrors) {
         errorMessage += '\nValidierung: ' + err.response.data.validationErrors.map(e => e.message).join(', ');
+      }
+      
+      // Details für Entwicklung hinzufügen
+      if (err.response?.data?.details) {
+        errorMessage += '\nDetails: ' + err.response.data.details.join(', ');
       }
       
       setError(errorMessage);
