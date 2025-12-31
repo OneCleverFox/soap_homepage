@@ -10,12 +10,17 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { useCompany } from '../../contexts/CompanyContext';
+import { useCompanyInfo } from '../../hooks/useCompanyInfo';
 
 const Footer = () => {
-  const { name, email, phone } = useCompany();
+  const { companyInfo, loading } = useCompanyInfo();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Fallback-Daten falls API noch lädt oder fehlschlägt
+  const name = companyInfo.name || 'Glücksmomente Manufaktur';
+  const email = companyInfo.contact?.email || 'info@gluecksmomente-manufaktur.de';
+  const phone = companyInfo.contact?.phone || '+49 123 456789';
   
   const footerLinks = {
     shop: [
