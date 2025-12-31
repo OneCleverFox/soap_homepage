@@ -1181,7 +1181,7 @@ const getProfile = async (req, res) => {
           phone: user.telefon,
           dateOfBirth: user.geburtsdatum,
           geschlecht: user.geschlecht,
-          address: {
+          addressDetails: {
             street: user.adresse?.strasse || '',
             houseNumber: user.adresse?.hausnummer || '',
             zusatz: user.adresse?.zusatz || '',
@@ -1189,7 +1189,7 @@ const getProfile = async (req, res) => {
             city: user.adresse?.stadt || '',
             country: user.adresse?.land || 'Deutschland'
           },
-          lieferadresse: {
+          lieferadresseDetails: {
             verwendet: user.lieferadresse?.verwendet || false,
             firmenname: user.lieferadresse?.firmenname || '',
             vorname: user.lieferadresse?.vorname || '',
@@ -1215,10 +1215,10 @@ const getProfile = async (req, res) => {
         };
         
         console.log('✅ Profile Daten gesendet:', {
-          hasAddress: !!profileData.address,
-          addressDetails: profileData.address,
-          hasLieferadresse: !!profileData.lieferadresse,
-          lieferadresseDetails: profileData.lieferadresse
+          hasAddress: !!profileData.addressDetails,
+          addressDetails: profileData.addressDetails,
+          hasLieferadresse: !!profileData.lieferadresseDetails,
+          lieferadresseDetails: profileData.lieferadresseDetails
         });
         
         return res.status(200).json({
@@ -1315,23 +1315,44 @@ const updateProfile = async (req, res) => {
     const updateData = {};
     
     if (firstName !== undefined) {
-      updateData.firstName = firstName.trim();
-      if (user.firstName !== firstName.trim()) {
-        changes.push(`Vorname: "${user.firstName || ''}" → "${firstName.trim()}"`);
+      if (isKunde) {
+        updateData.vorname = firstName.trim();
+        if (user.vorname !== firstName.trim()) {
+          changes.push(`Vorname: "${user.vorname || ''}" → "${firstName.trim()}"`);
+        }
+      } else {
+        updateData.firstName = firstName.trim();
+        if (user.firstName !== firstName.trim()) {
+          changes.push(`Vorname: "${user.firstName || ''}" → "${firstName.trim()}"`);
+        }
       }
     }
     
     if (lastName !== undefined) {
-      updateData.lastName = lastName.trim();
-      if (user.lastName !== lastName.trim()) {
-        changes.push(`Nachname: "${user.lastName || ''}" → "${lastName.trim()}"`);
+      if (isKunde) {
+        updateData.nachname = lastName.trim();
+        if (user.nachname !== lastName.trim()) {
+          changes.push(`Nachname: "${user.nachname || ''}" → "${lastName.trim()}"`);
+        }
+      } else {
+        updateData.lastName = lastName.trim();
+        if (user.lastName !== lastName.trim()) {
+          changes.push(`Nachname: "${user.lastName || ''}" → "${lastName.trim()}"`);
+        }
       }
     }
     
     if (phone !== undefined) {
-      updateData.phone = phone.trim();
-      if (user.phone !== phone.trim()) {
-        changes.push(`Telefon: "${user.phone || 'nicht angegeben'}" → "${phone.trim() || 'nicht angegeben'}"`);
+      if (isKunde) {
+        updateData.telefon = phone.trim();
+        if (user.telefon !== phone.trim()) {
+          changes.push(`Telefon: "${user.telefon || 'nicht angegeben'}" → "${phone.trim() || 'nicht angegeben'}"`);
+        }
+      } else {
+        updateData.phone = phone.trim();
+        if (user.phone !== phone.trim()) {
+          changes.push(`Telefon: "${user.phone || 'nicht angegeben'}" → "${phone.trim() || 'nicht angegeben'}"`);
+        }
       }
     }
     
@@ -1344,34 +1365,33 @@ const updateProfile = async (req, res) => {
     
     if (address !== undefined) {
       if (isKunde) {
-        // Für Kunde Collection - verwende rechnungsadresse
-        updateData.rechnungsadresse = { 
-          ...user.rechnungsadresse, 
-          ...address,
-          street: address.street || '',
-          houseNumber: address.houseNumber || '',
+        // Für Kunde Collection - verwende deutsche Feldnamen
+        updateData.adresse = { 
+          ...user.adresse, 
+          strasse: address.street || '',
+          hausnummer: address.houseNumber || '',
           zusatz: address.zusatz || '',
-          zipCode: address.zipCode || '',
-          city: address.city || '',
-          country: address.country || 'Deutschland'
+          plz: address.zipCode || '',
+          stadt: address.city || '',
+          land: address.country || 'Deutschland'
         };
         
         // Adressänderungen verfolgen
-        const oldAddr = user.rechnungsadresse || {};
-        if (address.street && oldAddr.street !== address.street) {
-          changes.push(`Straße: "${oldAddr.street || ''}" → "${address.street}"`);
+        const oldAddr = user.adresse || {};
+        if (address.street && oldAddr.strasse !== address.street) {
+          changes.push(`Straße: "${oldAddr.strasse || ''}" → "${address.street}"`);
         }
-        if (address.houseNumber && oldAddr.houseNumber !== address.houseNumber) {
-          changes.push(`Hausnummer: "${oldAddr.houseNumber || ''}" → "${address.houseNumber}"`);
+        if (address.houseNumber && oldAddr.hausnummer !== address.houseNumber) {
+          changes.push(`Hausnummer: "${oldAddr.hausnummer || ''}" → "${address.houseNumber}"`);
         }
-        if (address.zipCode && oldAddr.zipCode !== address.zipCode) {
-          changes.push(`PLZ: "${oldAddr.zipCode || ''}" → "${address.zipCode}"`);
+        if (address.zipCode && oldAddr.plz !== address.zipCode) {
+          changes.push(`PLZ: "${oldAddr.plz || ''}" → "${address.zipCode}"`);
         }
-        if (address.city && oldAddr.city !== address.city) {
-          changes.push(`Stadt: "${oldAddr.city || ''}" → "${address.city}"`);
+        if (address.city && oldAddr.stadt !== address.city) {
+          changes.push(`Stadt: "${oldAddr.stadt || ''}" → "${address.city}"`);
         }
       } else {
-        // Für User Collection - verwende address
+        // Für User Collection - verwende englische Feldnamen
         updateData.address = { ...user.address, ...address };
         const oldAddr = user.address || {};
         if (address.street && oldAddr.street !== address.street) {
@@ -1383,17 +1403,16 @@ const updateProfile = async (req, res) => {
     if (lieferadresse !== undefined && isKunde) {
       updateData.lieferadresse = { 
         ...user.lieferadresse, 
-        ...lieferadresse,
         verwendet: lieferadresse.verwendet || false,
         firmenname: lieferadresse.firmenname || '',
         vorname: lieferadresse.vorname || '',
         nachname: lieferadresse.nachname || '',
-        street: lieferadresse.street || '',
-        houseNumber: lieferadresse.houseNumber || '',
+        strasse: lieferadresse.street || '',
+        hausnummer: lieferadresse.houseNumber || '',
         zusatz: lieferadresse.zusatz || '',
-        zipCode: lieferadresse.zipCode || '',
-        city: lieferadresse.city || '',
-        country: lieferadresse.country || 'Deutschland'
+        plz: lieferadresse.zipCode || '',
+        stadt: lieferadresse.city || '',
+        land: lieferadresse.country || 'Deutschland'
       };
       
       if (lieferadresse.verwendet !== user.lieferadresse?.verwendet) {
@@ -1412,24 +1431,22 @@ const updateProfile = async (req, res) => {
     
     if (communicationPreferences !== undefined) {
       if (isKunde) {
-        // Für Kunde - mehrere Felder aktualisieren
-        if (communicationPreferences.newsletter !== undefined) {
-          updateData.newsletter = communicationPreferences.newsletter;
-          if (user.newsletter !== communicationPreferences.newsletter) {
-            changes.push(`Newsletter: ${user.newsletter ? 'ja' : 'nein'} → ${communicationPreferences.newsletter ? 'ja' : 'nein'}`);
-          }
+        // Für Kunde - deutsche Feldnamen in praeferenzen
+        updateData.praeferenzen = { 
+          ...user.praeferenzen, 
+          newsletter: communicationPreferences.newsletter !== undefined ? communicationPreferences.newsletter : user.praeferenzen?.newsletter,
+          sms: communicationPreferences.sms !== undefined ? communicationPreferences.sms : user.praeferenzen?.sms,
+          werbung: communicationPreferences.werbung !== undefined ? communicationPreferences.werbung : user.praeferenzen?.werbung
+        };
+        
+        if (communicationPreferences.newsletter !== undefined && user.praeferenzen?.newsletter !== communicationPreferences.newsletter) {
+          changes.push(`Newsletter: ${user.praeferenzen?.newsletter ? 'ja' : 'nein'} → ${communicationPreferences.newsletter ? 'ja' : 'nein'}`);
         }
-        if (communicationPreferences.sms !== undefined) {
-          updateData.smsErlaubnis = communicationPreferences.sms;
-          if (user.smsErlaubnis !== communicationPreferences.sms) {
-            changes.push(`SMS: ${user.smsErlaubnis ? 'ja' : 'nein'} → ${communicationPreferences.sms ? 'ja' : 'nein'}`);
-          }
+        if (communicationPreferences.sms !== undefined && user.praeferenzen?.sms !== communicationPreferences.sms) {
+          changes.push(`SMS: ${user.praeferenzen?.sms ? 'ja' : 'nein'} → ${communicationPreferences.sms ? 'ja' : 'nein'}`);
         }
-        if (communicationPreferences.werbung !== undefined) {
-          updateData.werbungErlaubnis = communicationPreferences.werbung;
-          if (user.werbungErlaubnis !== communicationPreferences.werbung) {
-            changes.push(`Werbung: ${user.werbungErlaubnis ? 'ja' : 'nein'} → ${communicationPreferences.werbung ? 'ja' : 'nein'}`);
-          }
+        if (communicationPreferences.werbung !== undefined && user.praeferenzen?.werbung !== communicationPreferences.werbung) {
+          changes.push(`Werbung: ${user.praeferenzen?.werbung ? 'ja' : 'nein'} → ${communicationPreferences.werbung ? 'ja' : 'nein'}`);
         }
       } else {
         // Für User Collection
