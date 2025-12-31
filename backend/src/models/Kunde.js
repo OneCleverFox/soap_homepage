@@ -28,7 +28,14 @@ const kundenSchema = new mongoose.Schema({
   telefon: {
     type: String,
     trim: true,
-    match: [/^[\d\s\-\+\(\)\/]{10,20}$/, 'Bitte geben Sie eine gültige Telefonnummer ein']
+    validate: {
+      validator: function(v) {
+        // Nur validieren wenn Telefon tatsächlich angegeben wurde
+        if (!v || v === '') return true;
+        return /^[\d\s\-\+\(\)\/]{10,20}$/.test(v);
+      },
+      message: 'Bitte geben Sie eine gültige Telefonnummer ein'
+    }
   },
   passwort: {
     type: String,
