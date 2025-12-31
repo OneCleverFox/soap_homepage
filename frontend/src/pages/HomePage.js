@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompanyInfo } from '../hooks/useCompanyInfo';
 import { 
   Container, 
   Typography, 
@@ -16,7 +16,8 @@ import { useNavigate } from 'react-router-dom';
 import ShopStatusAlert from '../components/common/ShopStatusAlert';
 
 const HomePage = () => {
-  const { name } = useCompany();
+  const { companyInfo } = useCompanyInfo();
+  const name = companyInfo.name || 'Glücksmomente Manufaktur';
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));

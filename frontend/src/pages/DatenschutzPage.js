@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompanyInfo } from '../hooks/useCompanyInfo';
 import { 
   Container, 
   Typography, 
@@ -12,12 +12,21 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 const DatenschutzPage = () => {
-  const { name, email, ceo } = useCompany();
+  const { companyInfo } = useCompanyInfo();
   const [expanded, setExpanded] = useState(false);
   
   const handleChange = (panel) => (event, isExpanded) => {
     setExpanded(isExpanded ? panel : false);
   };
+
+  // Daten aus companyInfo extrahieren mit Fallback-Werten
+  const name = companyInfo.name || 'Glücksmomente Manufaktur Ralf Jacob';
+  const email = companyInfo.contact?.email || 'info@gluecksmomente-manufaktur.de';
+  const ceo = companyInfo.taxInfo?.ceo || 'Ralf Jacob';
+  const address = companyInfo.address || {};
+  const street = address.street || 'Wasserverkstraße 15';
+  const postalCode = address.postalCode || '68642';
+  const city = address.city || 'Bürstadt';
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -43,11 +52,11 @@ const DatenschutzPage = () => {
                 EU-Datenschutzgrundverordnung (DSGVO), ist:
               </Typography>
               <Typography variant="body2" paragraph>
-                <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
-                {ceo || 'Ralf Jacob'}<br />
-                [Straße und Hausnummer]<br />
-                68642 Bürstadt<br />
-                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
+                <strong>{name}</strong><br />
+                {ceo}<br />
+                {street}<br />
+                {postalCode} {city}<br />
+                E-Mail: {email}
               </Typography>
             </AccordionDetails>
           </Accordion>

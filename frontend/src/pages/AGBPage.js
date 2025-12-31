@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompanyInfo } from '../hooks/useCompanyInfo';
 import { 
   Container, 
   Typography, 
@@ -9,7 +9,8 @@ import {
 } from '@mui/material';
 
 const AGBPage = () => {
-  const { name } = useCompany();
+  const { companyInfo } = useCompanyInfo();
+  const name = companyInfo.name || 'Glücksmomente Manufaktur';
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
