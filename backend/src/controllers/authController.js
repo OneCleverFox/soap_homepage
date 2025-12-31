@@ -642,6 +642,30 @@ const registerUser = async (req, res) => {
         stadt: '',
         land: 'Deutschland'
       },
+      // Standard-Lieferadresse = Rechnungsadresse bei Registrierung
+      lieferadresse: address ? {
+        verwendet: true,
+        firmenname: '',
+        vorname: firstName,
+        nachname: lastName,
+        strasse: address.street || '',
+        hausnummer: address.houseNumber || '',
+        zusatz: address.zusatz || '',
+        plz: address.zipCode || '',
+        stadt: address.city || '',
+        land: address.country || 'Deutschland'
+      } : {
+        verwendet: false,
+        firmenname: '',
+        vorname: '',
+        nachname: '',
+        strasse: '',
+        hausnummer: '',
+        zusatz: '',
+        plz: '',
+        stadt: '',
+        land: 'Deutschland'
+      },
       status: {
         aktiv: !requireEmailVerification, // Aktiv wenn keine E-Mail-Verifikation erforderlich
         emailVerifiziert: !requireEmailVerification,
@@ -1137,19 +1161,63 @@ const resetPassword = async (req, res) => {
 // @access  Private
 const getProfile = async (req, res) => {
   try {
+    console.log('🔍 Profile-Request für User ID:', req.user.id);
     let user;
     
-    // Versuche zuerst mit ObjectId (neue User)
+    // Zuerst versuchen in Kunde Collection zu finden (primäre Collection)
+    if (req.user.id && req.user.id.match(/^[0-9a-fA-F]{24}$/)) {
+      const Kunde = require('../models/Kunde');
+      user = await Kunde.findById(req.user.id).select('-passwort -__v');
+      console.log('🔍 Kunde gefunden:', !!user);
+      
+      if (user) {
+        // Kunde-Daten in User-Format umwandeln für Frontend-Kompatibilität
+        const profileData = {
+          _id: user._id,
+          username: user.username || `${user.vorname?.toLowerCase()}.${user.nachname?.toLowerCase()}`,
+          email: user.email,
+          firstName: user.vorname,
+          lastName: user.nachname,
+          phone: user.telefon,
+          dateOfBirth: user.geburtsdatum,
+          address: {
+            street: user.adresse?.strasse,
+            houseNumber: user.adresse?.hausnummer,
+            zusatz: user.adresse?.zusatz,
+            zipCode: user.adresse?.plz,
+            city: user.adresse?.stadt,
+            country: user.adresse?.land
+          },
+          lieferadresse: user.lieferadresse,
+          status: user.status,
+          kundennummer: user.kundennummer,
+          rolle: user.rolle,
+          emailVerified: user.status?.emailVerifiziert,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt
+        };
+        
+        return res.status(200).json({
+          success: true,
+          data: profileData
+        });
+      }
+    }
+    
+    // Fallback: Versuche in User Collection (für Admin-Accounts)
     if (req.user.id && req.user.id.match(/^[0-9a-fA-F]{24}$/)) {
       user = await User.findById(req.user.id).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken');
+      console.log('🔍 User gefunden:', !!user);
     }
     
     // Falls nicht gefunden, versuche mit username (Legacy-User wie admin-ralf)
     if (!user && req.user.id) {
       user = await User.findOne({ username: req.user.id }).select('-password -passwordResetToken -passwordResetExpires -emailVerificationToken');
+      console.log('🔍 Legacy User gefunden:', !!user);
     }
     
     if (!user) {
+      console.log('❌ Kein Benutzer gefunden für ID:', req.user.id);
       return res.status(404).json({
         success: false,
         message: 'Benutzer nicht gefunden'
