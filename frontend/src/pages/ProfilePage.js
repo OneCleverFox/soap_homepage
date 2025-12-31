@@ -122,13 +122,16 @@ const ProfilePage = () => {
       console.log('📋 Profile Response Status:', response.status);
       
       const data = await response.json();
-      console.log('📋 Profile Response Data:', JSON.stringify(data, null, 2));
+      console.log('📋 RAW Backend Response:', JSON.stringify(data, null, 2));
       
       if (data.success) {
         console.log('✅ Profile erfolgreich geladen');
         console.log('🔍 Response Data:', data.data);
         console.log('🔍 AddressDetails in Response:', data.data.addressDetails);
         console.log('🔍 LieferadresseDetails in Response:', data.data.lieferadresseDetails);
+        console.log('🔍 FirstName in Response:', data.data.firstName);
+        console.log('🔍 LastName in Response:', data.data.lastName);
+        console.log('🔍 Geschlecht in Response:', data.data.geschlecht);
         
         setProfileData(prev => ({
           ...prev,
