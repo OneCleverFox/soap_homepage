@@ -352,6 +352,80 @@ const logout = async (req, res) => {
   }
 };
 
+// @desc    Debug-Route für Registrierung
+// @route   POST /api/auth/debug-register
+// @access  Public
+const debugRegister = async (req, res) => {
+  try {
+    console.log('🔍 DEBUG Registrierung-Versuch für:', req.body.email);
+    console.log('📋 Vollständige Request-Body:', JSON.stringify(req.body, null, 2));
+    
+    const { email, firstName, lastName, password } = req.body;
+    
+    // Alle Validierungen durchlaufen
+    const checks = {
+      hasEmail: !!email,
+      hasPassword: !!password,
+      hasFirstName: !!firstName,
+      hasLastName: !!lastName,
+      emailFormat: email ? /^\S+@\S+\.\S+$/.test(email) : false
+    };
+    
+    console.log('✅ Basis-Validierung:', checks);
+    
+    // Check User Collection
+    const User = require('../models/User');
+    const existingUser = await User.findOne({ email: email?.toLowerCase() });
+    console.log('👤 User in User-Collection:', existingUser ? 'GEFUNDEN' : 'NICHT GEFUNDEN');
+    
+    // Check Kunde Collection
+    const Kunde = require('../models/Kunde');
+    const existingKunde = await Kunde.findOne({ email: email?.toLowerCase() });
+    console.log('🛒 Kunde in Kunde-Collection:', existingKunde ? 'GEFUNDEN' : 'NICHT GEFUNDEN');
+    
+    // Password Validation Test
+    let passwordValidation = null;
+    if (password && firstName && lastName) {
+      try {
+        passwordValidation = PasswordValidator.validatePassword(password, {
+          firstName,
+          lastName,
+          email
+        });
+        console.log('🔐 Passwort-Validierung:', passwordValidation.isValid ? 'OK' : 'FEHLER');
+        if (!passwordValidation.isValid) {
+          console.log('📝 Passwort-Feedback:', passwordValidation.feedback);
+        }
+      } catch (pwErr) {
+        console.log('❌ Passwort-Validierung-Fehler:', pwErr.message);
+      }
+    }
+    
+    res.status(200).json({
+      success: true,
+      debug: {
+        receivedData: req.body,
+        validationChecks: checks,
+        existingUser: !!existingUser,
+        existingKunde: !!existingKunde,
+        passwordValidation: passwordValidation ? {
+          isValid: passwordValidation.isValid,
+          score: passwordValidation.score,
+          feedback: passwordValidation.feedback
+        } : 'NICHT GETESTET'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ DEBUG Registrierung-Fehler:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+};
+
 // @desc    Benutzer registrieren
 // @route   POST /api/auth/register
 // @access  Public
@@ -1287,6 +1361,7 @@ module.exports = {
   loginAdmin,
   validateToken,
   logout,
+  debugRegister,
   registerUser,
   verifyEmail,
   resendVerification,
