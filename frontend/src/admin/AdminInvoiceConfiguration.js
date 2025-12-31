@@ -310,7 +310,7 @@ const AdminInvoiceConfiguration = () => {
     formData.append('logo', file);
 
     try {
-      const response = await fetch('/api/admin/invoice/upload-logo', {
+      const response = await fetch(`${API_URL}/admin/invoice/upload-logo`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -337,6 +337,61 @@ const AdminInvoiceConfiguration = () => {
     updateTemplate('companyInfo.logo.enabled', false);
     updateTemplate('companyInfo.logo.url', '');
     showSnackbar('Logo entfernt', 'success');
+  };
+
+  const setDefaultLogo = async () => {
+    try {
+      // SVG-Logo aus favicon.svg
+      const svgString = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <circle cx="50" cy="50" r="48" fill="#f8f5f0" stroke="#d4a574" stroke-width="2"/>
+  <rect x="48" y="60" width="4" height="25" fill="#4a7c59" rx="2"/>
+  <ellipse cx="42" cy="70" rx="8" ry="4" fill="#5a8b67" transform="rotate(-30 42 70)"/>
+  <ellipse cx="58" cy="75" rx="6" ry="3" fill="#5a8b67" transform="rotate(45 58 75)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(0 50 50)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(60 50 50)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(120 50 50)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(180 50 50)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(240 50 50)"/>
+  <ellipse cx="50" cy="35" rx="6" ry="12" fill="#e8a5c4" transform="rotate(300 50 50)"/>
+  <circle cx="50" cy="50" r="8" fill="#f9e79f"/>
+  <circle cx="50" cy="50" r="5" fill="#f4d03f"/>
+  <circle cx="47" cy="47" r="1.5" fill="#e67e22"/>
+  <circle cx="53" cy="52" r="1.5" fill="#e67e22"/>
+  <circle cx="50" cy="50" r="1" fill="#d35400"/>
+</svg>`;
+      
+      // SVG zu Canvas konvertieren
+      const canvas = document.createElement('canvas');
+      canvas.width = 200;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      
+      // Weißer Hintergrund
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const img = new Image();
+      const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(svgBlob);
+      
+      img.onload = function() {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/png');
+        
+        // Logo als Data URL setzen
+        updateTemplate('companyInfo.logo.url', dataUrl);
+        updateTemplate('companyInfo.logo.enabled', true);
+        showSnackbar('Standard-Logo gesetzt', 'success');
+        
+        URL.revokeObjectURL(url);
+      };
+      
+      img.src = url;
+      
+    } catch (error) {
+      console.error('Fehler beim Setzen des Standard-Logos:', error);
+      showSnackbar('Fehler beim Setzen des Logos', 'error');
+    }
   };
 
   const saveTemplate = async () => {
@@ -398,7 +453,7 @@ const AdminInvoiceConfiguration = () => {
 
     setPreviewLoading(true);
     try {
-      const response = await fetch('/api/admin/invoice/preview', {
+      const response = await fetch(`${API_URL}/admin/invoice/preview`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -665,6 +720,15 @@ const AdminInvoiceConfiguration = () => {
                 Logo hochladen
               </Button>
             </label>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={setDefaultLogo}
+              size="small"
+              sx={{ mr: 1 }}
+            >
+              Standard-Logo setzen
+            </Button>
             {currentTemplate?.companyInfo?.logo?.url && (
               <Button
                 variant="outlined"
