@@ -407,21 +407,64 @@ router.delete('/delete/:userId', async (req, res) => {
       // WICHTIG: Sowohl aus User als auch aus Kunde Collection löschen
       const User = require('../../models/User');
       
-      // User löschen (falls vorhanden)
-      const deletedUser = await User.findOneAndDelete({ email: user.email });
-      if (deletedUser) {
-        console.log(`🗑️ User ${user.email} aus User-Collection gelöscht`);
+      console.log(`🔄 Starte vollständige Löschung für ${user.email}...`);
+      
+      // User löschen (falls vorhanden) - mehrere Varianten prüfen
+      let deletedUserCount = 0;
+      const userVariants = [
+        { email: user.email },
+        { email: user.email.toLowerCase() },
+        { email: user.email.toUpperCase() }
+      ];
+      
+      for (const variant of userVariants) {
+        try {
+          const deletedUser = await User.findOneAndDelete(variant);
+          if (deletedUser) {
+            deletedUserCount++;
+            console.log(`🗑️ User ${deletedUser.email} aus User-Collection gelöscht (Variante: ${JSON.stringify(variant)})`);
+          }
+        } catch (userDeleteError) {
+          console.log(`⚠️ User-Löschung fehlgeschlagen für ${JSON.stringify(variant)}:`, userDeleteError.message);
+        }
       }
       
       // Kunde löschen
-      await Kunde.findByIdAndDelete(req.params.userId);
+      const deletedKunde = await Kunde.findByIdAndDelete(req.params.userId);
+      console.log(`🗑️ Kunde ${deletedKunde ? deletedKunde.email : 'unbekannt'} aus Kunde-Collection gelöscht`);
       
-      console.log(`✅ Benutzer ${user.email} wurde komplett gelöscht (keine Bestellungen)`);
+      // Zusätzlich nach E-Mail in Kunde-Collection suchen und löschen
+      let deletedKundeCount = 0;
+      const kundeVariants = [
+        { email: user.email },
+        { email: user.email.toLowerCase() },
+        { email: user.email.toUpperCase() },
+        { _id: { $ne: req.params.userId }, email: user.email } // Falls es mehrere Einträge gibt
+      ];
+      
+      for (const variant of kundeVariants) {
+        try {
+          const deletedKundeByEmail = await Kunde.findOneAndDelete(variant);
+          if (deletedKundeByEmail) {
+            deletedKundeCount++;
+            console.log(`🗑️ Zusätzlicher Kunde ${deletedKundeByEmail.email} gelöscht (Variante: ${JSON.stringify(variant)})`);
+          }
+        } catch (kundeDeleteError) {
+          console.log(`⚠️ Kunde-Löschung fehlgeschlagen für ${JSON.stringify(variant)}:`, kundeDeleteError.message);
+        }
+      }
+      
+      console.log(`✅ Benutzer ${user.email} wurde komplett gelöscht`);
+      console.log(`📊 Löschstatistik: ${deletedUserCount} User-Einträge, ${deletedKundeCount + 1} Kunde-Einträge`);
       
       res.json({
         success: true,
         message: `Benutzer wurde erfolgreich gelöscht`,
-        deleted: true
+        deleted: true,
+        details: {
+          userEntriesDeleted: deletedUserCount,
+          kundeEntriesDeleted: deletedKundeCount + 1
+        }
       });
     }
   } catch (error) {
