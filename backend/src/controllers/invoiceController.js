@@ -1328,47 +1328,57 @@ class InvoiceController {
   // Firmenangaben aus Standard-Template abrufen (für Frontend)
   async getCompanyInfo(req, res) {
     try {
+      console.log('🏢 Frontend fragt Firmenangaben ab...');
+      
       let template = await InvoiceTemplate.findOne({ isDefault: true });
+      console.log('📄 Gefundenes Standard-Template:', template ? 'Ja' : 'Nein');
       
       if (!template) {
+        console.log('🔧 Erstelle Standard-Template da keins existiert...');
         // Erstelle Standard-Template falls keins existiert
         template = await this.createDefaultTemplate();
+        console.log('✅ Standard-Template erstellt:', template ? 'Ja' : 'Fehler');
       }
 
       const companyInfo = template.companyInfo || {};
+      console.log('📋 CompanyInfo aus Template:', JSON.stringify(companyInfo, null, 2));
+
+      const responseData = {
+        name: companyInfo.name || 'Glücksmomente Manufaktur',
+        address: {
+          street: companyInfo.address?.street || '',
+          postalCode: companyInfo.address?.postalCode || '',
+          city: companyInfo.address?.city || '',
+          country: companyInfo.address?.country || 'Deutschland'
+        },
+        contact: {
+          phone: companyInfo.contact?.phone || '',
+          email: companyInfo.contact?.email || '',
+          website: companyInfo.contact?.website || ''
+        },
+        taxInfo: {
+          taxNumber: companyInfo.taxInfo?.taxNumber || '',
+          vatId: companyInfo.taxInfo?.vatId || '',
+          ceo: companyInfo.taxInfo?.ceo || '',
+          legalForm: companyInfo.taxInfo?.legalForm || '',
+          taxOffice: companyInfo.taxInfo?.taxOffice || '',
+          registrationCourt: companyInfo.taxInfo?.registrationCourt || ''
+        },
+        bankDetails: {
+          bankName: companyInfo.bankDetails?.bankName || '',
+          iban: companyInfo.bankDetails?.iban || '',
+          bic: companyInfo.bankDetails?.bic || ''
+        }
+      };
+
+      console.log('📤 Sende Antwort an Frontend:', JSON.stringify(responseData, null, 2));
 
       res.json({
         success: true,
-        data: {
-          name: companyInfo.name || 'Glücksmomente Manufaktur',
-          address: {
-            street: companyInfo.address?.street || '',
-            postalCode: companyInfo.address?.postalCode || '',
-            city: companyInfo.address?.city || '',
-            country: companyInfo.address?.country || 'Deutschland'
-          },
-          contact: {
-            phone: companyInfo.contact?.phone || '',
-            email: companyInfo.contact?.email || '',
-            website: companyInfo.contact?.website || ''
-          },
-          taxInfo: {
-            taxNumber: companyInfo.taxInfo?.taxNumber || '',
-            vatId: companyInfo.taxInfo?.vatId || '',
-            ceo: companyInfo.taxInfo?.ceo || '',
-            legalForm: companyInfo.taxInfo?.legalForm || '',
-            taxOffice: companyInfo.taxInfo?.taxOffice || '',
-            registrationCourt: companyInfo.taxInfo?.registrationCourt || ''
-          },
-          bankDetails: {
-            bankName: companyInfo.bankDetails?.bankName || '',
-            iban: companyInfo.bankDetails?.iban || '',
-            bic: companyInfo.bankDetails?.bic || ''
-          }
-        }
+        data: responseData
       });
     } catch (error) {
-      console.error('Fehler beim Abrufen der Firmenangaben:', error);
+      console.error('❌ Fehler beim Abrufen der Firmenangaben:', error);
       res.status(500).json({
         success: false,
         message: 'Fehler beim Abrufen der Firmenangaben',
