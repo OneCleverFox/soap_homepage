@@ -126,15 +126,46 @@ const ProfilePage = () => {
       
       if (data.success) {
         console.log('✅ Profile erfolgreich geladen');
-        console.log('🔍 Adresse in Response:', data.data.address);
-        console.log('🔍 Lieferadresse in Response:', data.data.lieferadresse);
+        console.log('🔍 Response Data:', data.data);
+        console.log('🔍 AddressDetails in Response:', data.data.addressDetails);
+        console.log('🔍 LieferadresseDetails in Response:', data.data.lieferadresseDetails);
         
         setProfileData(prev => ({
           ...prev,
-          ...data.data,
-          address: { ...prev.address, ...data.data.address },
-          lieferadresse: data.data.lieferadresse,
-          communicationPreferences: { ...prev.communicationPreferences, ...data.data.communicationPreferences }
+          username: data.data.username || '',
+          email: data.data.email || '',
+          firstName: data.data.firstName || '',
+          lastName: data.data.lastName || '',
+          phone: data.data.phone || '',
+          geschlecht: data.data.geschlecht || '',
+          dateOfBirth: data.data.dateOfBirth ? data.data.dateOfBirth.split('T')[0] : '',
+          // Backend sendet addressDetails - mappen zu address
+          address: {
+            street: data.data.addressDetails?.street || '',
+            houseNumber: data.data.addressDetails?.houseNumber || '',
+            zusatz: data.data.addressDetails?.zusatz || '',
+            zipCode: data.data.addressDetails?.zipCode || '',
+            city: data.data.addressDetails?.city || '',
+            country: data.data.addressDetails?.country || 'Deutschland'
+          },
+          // Backend sendet lieferadresseDetails - mappen zu lieferadresse
+          lieferadresse: {
+            verwendet: data.data.lieferadresseDetails?.verwendet || false,
+            firmenname: data.data.lieferadresseDetails?.firmenname || '',
+            vorname: data.data.lieferadresseDetails?.vorname || '',
+            nachname: data.data.lieferadresseDetails?.nachname || '',
+            street: data.data.lieferadresseDetails?.street || '',
+            houseNumber: data.data.lieferadresseDetails?.houseNumber || '',
+            zusatz: data.data.lieferadresseDetails?.zusatz || '',
+            zipCode: data.data.lieferadresseDetails?.zipCode || '',
+            city: data.data.lieferadresseDetails?.city || '',
+            country: data.data.lieferadresseDetails?.country || 'Deutschland'
+          },
+          communicationPreferences: {
+            newsletter: data.data.communicationPreferences?.newsletter || false,
+            sms: data.data.communicationPreferences?.sms || false,
+            werbung: data.data.communicationPreferences?.werbung || false
+          }
         }));
       } else {
         console.error('❌ Profile Fehler:', data.message);
