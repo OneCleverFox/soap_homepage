@@ -19,6 +19,55 @@ router.post('/register', registerUser);
 // @access  Public
 router.post('/debug-register', debugRegister);
 
+// @route   POST /api/auth/cleanup-email/:email
+// @desc    E-Mail aus beiden Collections bereinigen
+// @access  Public (temporär für Debugging)
+router.post('/cleanup-email/:email', async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    console.log(`🧹 Cleanup für E-Mail: ${email}`);
+    
+    const User = require('../models/User');
+    const Kunde = require('../models/Kunde');
+    
+    // Prüfe und lösche aus User Collection
+    const userInUserCollection = await User.findOne({ email });
+    let userDeleted = false;
+    if (userInUserCollection) {
+      await User.findByIdAndDelete(userInUserCollection._id);
+      userDeleted = true;
+      console.log(`🗑️ User ${email} aus User-Collection gelöscht`);
+    }
+    
+    // Prüfe und lösche aus Kunde Collection
+    const userInKundeCollection = await Kunde.findOne({ email });
+    let kundeDeleted = false;
+    if (userInKundeCollection) {
+      await Kunde.findByIdAndDelete(userInKundeCollection._id);
+      kundeDeleted = true;
+      console.log(`🗑️ Kunde ${email} aus Kunde-Collection gelöscht`);
+    }
+    
+    res.json({
+      success: true,
+      message: `E-Mail ${email} bereinigt`,
+      cleaned: {
+        userDeleted,
+        kundeDeleted,
+        email
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Cleanup-Fehler:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler bei E-Mail-Bereinigung',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/auth/verify-email/:token
 // @desc    E-Mail-Adresse verifizieren
 // @access  Public
