@@ -35,16 +35,25 @@ export const useCompanyInfo = () => {
   useEffect(() => {
     const loadCompanyInfo = async () => {
       try {
+        console.log('🔍 Lade Firmenangaben von:', `${API_URL}/invoice/company-info`);
         const response = await fetch(`${API_URL}/invoice/company-info`);
+        
+        console.log('📡 API Response Status:', response.status, response.statusText);
         
         if (response.ok) {
           const data = await response.json();
+          console.log('📦 API Response Data:', data);
+          
           if (data.success && data.data) {
             setCompanyInfo(data.data);
-            console.log('🏢 Firmenangaben geladen:', data.data);
+            console.log('✅ Firmenangaben erfolgreich geladen:', data.data);
+          } else {
+            console.warn('⚠️ API Response nicht erfolgreich:', data);
           }
         } else {
-          console.warn('⚠️ Firmenangaben konnten nicht geladen werden, verwende Fallback-Daten');
+          console.warn('⚠️ API Request fehlgeschlagen:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.warn('🔍 Response Body:', errorText);
         }
       } catch (error) {
         console.error('❌ Fehler beim Laden der Firmenangaben:', error);
