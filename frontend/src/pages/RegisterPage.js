@@ -292,14 +292,20 @@ const RegisterPage = () => {
 
       if (response.data.success) {
         console.log('✅ Registrierung erfolgreich');
+        console.log('🔍 Response Data:', JSON.stringify(response.data, null, 2));
         setSuccess(true);
         
         // Store registration data for success page
         setRegistrationData(response.data);
         
         // If email verification is not required, redirect to login after 3 seconds
+        console.log('🔍 Email verified status:', response.data.data?.emailVerified);
+        console.log('🔍 Email sent status:', response.data.data?.emailSent);
+        
         if (response.data.data?.emailVerified === true) {
+          console.log('🚀 Konto ist sofort aktiv - starte Weiterleitung in 3 Sekunden');
           setTimeout(() => {
+            console.log('🚀 Weiterleitung zur Login-Seite...');
             navigate('/login', { 
               state: { 
                 message: 'Registrierung erfolgreich! Sie können sich jetzt anmelden.',
@@ -360,6 +366,11 @@ const RegisterPage = () => {
   };
 
   if (success) {
+    // Debug logging
+    console.log('🔍 Success page - registrationData:', registrationData);
+    console.log('🔍 emailVerified:', registrationData?.data?.emailVerified);
+    console.log('🔍 emailSent:', registrationData?.data?.emailSent);
+    
     return (
       <Container maxWidth="sm" sx={{ mt: 8, mb: 4 }}>
         <Fade in={true}>
@@ -374,6 +385,12 @@ const RegisterPage = () => {
               ? '2px solid #4caf50'
               : '2px solid #2196f3'
           }}>
+            {/* Debug info - remove after testing */}
+            <Box sx={{ mb: 2, p: 1, bgcolor: '#f5f5f5', fontSize: '0.8rem' }}>
+              emailVerified: {String(registrationData?.data?.emailVerified)} | 
+              emailSent: {String(registrationData?.data?.emailSent)}
+            </Box>
+            
             <CheckCircleOutlined 
               sx={{ 
                 fontSize: 72, 
