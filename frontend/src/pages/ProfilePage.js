@@ -20,6 +20,10 @@ import {
   Chip,
   FormGroup,
   FormControlLabel,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Switch,
   List,
   ListItem,
@@ -39,7 +43,8 @@ import {
   CheckCircle,
   Security,
   Notifications,
-  AccountCircle
+  AccountCircle,
+  LocalShipping
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -62,18 +67,32 @@ const ProfilePage = () => {
     firstName: '',
     lastName: '',
     phone: '',
+    geschlecht: '',
     address: {
       street: '',
       houseNumber: '',
+      zusatz: '',
+      zipCode: '',
+      city: '',
+      country: 'Deutschland'
+    },
+    lieferadresse: {
+      verwendet: false,
+      firmenname: '',
+      vorname: '',
+      nachname: '',
+      street: '',
+      houseNumber: '',
+      zusatz: '',
       zipCode: '',
       city: '',
       country: 'Deutschland'
     },
     dateOfBirth: '',
     communicationPreferences: {
-      newsletter: true,
-      orderUpdates: true,
-      promotions: false
+      newsletter: false,
+      sms: false,
+      werbung: false
     }
   });
   const [deleteConfirmation, setDeleteConfirmation] = useState({
@@ -346,6 +365,22 @@ const ProfilePage = () => {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
+                <FormControl fullWidth variant="outlined" disabled={!editMode}>
+                  <InputLabel>Geschlecht</InputLabel>
+                  <Select
+                    name="geschlecht"
+                    value={profileData.geschlecht}
+                    onChange={handleInputChange}
+                    label="Geschlecht"
+                  >
+                    <MenuItem value=""><em>Bitte wählen</em></MenuItem>
+                    <MenuItem value="herr">Herr</MenuItem>
+                    <MenuItem value="frau">Frau</MenuItem>
+                    <MenuItem value="divers">Divers</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Geburtsdatum"
@@ -393,6 +428,17 @@ const ProfilePage = () => {
                   variant="outlined"
                 />
               </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Adresszusatz"
+                  name="address.zusatz"
+                  value={profileData.address.zusatz}
+                  onChange={handleInputChange}
+                  disabled={!editMode}
+                  variant="outlined"
+                />
+              </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
@@ -430,6 +476,136 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
 
+        {/* Lieferadresse */}
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <LocalShipping sx={{ mr: 1, color: 'primary.main' }} />
+              <Typography variant="h6">Lieferadresse</Typography>
+            </Box>
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={profileData.lieferadresse.verwendet}
+                      onChange={handleInputChange}
+                      name="lieferadresse.verwendet"
+                      disabled={!editMode}
+                    />
+                  }
+                  label="Abweichende Lieferadresse verwenden"
+                />
+              </Grid>
+              
+              {profileData.lieferadresse.verwendet && (
+                <>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Firmenname (optional)"
+                      name="lieferadresse.firmenname"
+                      value={profileData.lieferadresse.firmenname}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Vorname"
+                      name="lieferadresse.vorname"
+                      value={profileData.lieferadresse.vorname}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Nachname"
+                      name="lieferadresse.nachname"
+                      value={profileData.lieferadresse.nachname}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={8}>
+                    <TextField
+                      fullWidth
+                      label="Straße"
+                      name="lieferadresse.street"
+                      value={profileData.lieferadresse.street}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="Hausnummer"
+                      name="lieferadresse.houseNumber"
+                      value={profileData.lieferadresse.houseNumber}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Adresszusatz"
+                      name="lieferadresse.zusatz"
+                      value={profileData.lieferadresse.zusatz}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      fullWidth
+                      label="PLZ"
+                      name="lieferadresse.zipCode"
+                      value={profileData.lieferadresse.zipCode}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={8}>
+                    <TextField
+                      fullWidth
+                      label="Stadt"
+                      name="lieferadresse.city"
+                      value={profileData.lieferadresse.city}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="Land"
+                      name="lieferadresse.country"
+                      value={profileData.lieferadresse.country}
+                      onChange={handleInputChange}
+                      disabled={!editMode}
+                      variant="outlined"
+                    />
+                  </Grid>
+                </>
+              )}
+            </Grid>
+          </CardContent>
+        </Card>
+
         {/* Kommunikationseinstellungen */}
         <Card sx={{ mb: 3 }}>
           <CardContent>
@@ -453,24 +629,24 @@ const ProfilePage = () => {
               <FormControlLabel
                 control={
                   <Switch
-                    checked={profileData.communicationPreferences.orderUpdates}
+                    checked={profileData.communicationPreferences.sms}
                     onChange={handleInputChange}
-                    name="communicationPreferences.orderUpdates"
+                    name="communicationPreferences.sms"
                     disabled={!editMode}
                   />
                 }
-                label="Bestellungs-Updates erhalten"
+                label="SMS-Benachrichtigungen erhalten"
               />
               <FormControlLabel
                 control={
                   <Switch
-                    checked={profileData.communicationPreferences.promotions}
+                    checked={profileData.communicationPreferences.werbung}
                     onChange={handleInputChange}
-                    name="communicationPreferences.promotions"
+                    name="communicationPreferences.werbung"
                     disabled={!editMode}
                   />
                 }
-                label="Werbe-E-Mails erhalten"
+                label="Werbung per E-Mail erhalten"
               />
             </FormGroup>
           </CardContent>
