@@ -68,6 +68,65 @@ router.post('/cleanup-email/:email', async (req, res) => {
   }
 });
 
+// @route   POST /api/auth/fix-lieferadresse/:email
+// @desc    Fehlende Lieferadresse aus Rechnungsadresse ergänzen
+// @access  Public (temporär für Fix)
+router.post('/fix-lieferadresse/:email', async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    console.log(`🔧 Fix Lieferadresse für: ${email}`);
+    
+    const Kunde = require('../models/Kunde');
+    
+    const kunde = await Kunde.findOne({ email });
+    if (!kunde) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kunde nicht gefunden'
+      });
+    }
+    
+    // Prüfe, ob Lieferadresse bereits korrekt gesetzt ist
+    if (kunde.lieferadresse?.verwendet && kunde.lieferadresse?.strasse) {
+      return res.json({
+        success: true,
+        message: 'Lieferadresse ist bereits korrekt gesetzt'
+      });
+    }
+    
+    // Setze Lieferadresse basierend auf Rechnungsadresse
+    kunde.lieferadresse = {
+      verwendet: true,
+      firmenname: '',
+      vorname: kunde.vorname,
+      nachname: kunde.nachname,
+      strasse: kunde.adresse?.strasse || '',
+      hausnummer: kunde.adresse?.hausnummer || '',
+      zusatz: kunde.adresse?.zusatz || '',
+      plz: kunde.adresse?.plz || '',
+      stadt: kunde.adresse?.stadt || '',
+      land: kunde.adresse?.land || 'Deutschland'
+    };
+    
+    await kunde.save();
+    
+    console.log(`✅ Lieferadresse für ${email} ergänzt`);
+    
+    res.json({
+      success: true,
+      message: 'Lieferadresse erfolgreich ergänzt',
+      lieferadresse: kunde.lieferadresse
+    });
+
+  } catch (error) {
+    console.error('❌ Fix-Lieferadresse-Fehler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Fix der Lieferadresse'
+    });
+  }
+});
+
 // @route   GET /api/auth/verify-email/:token
 // @desc    E-Mail-Adresse verifizieren
 // @access  Public
