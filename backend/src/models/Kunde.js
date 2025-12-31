@@ -366,4 +366,4 @@ kundenSchema.index({ 'adresse.plz': 1 });
 kundenSchema.index({ 'statistiken.gesamtumsatz': -1 });
 kundenSchema.index({ createdAt: -1 });
 
-module.exports = mongoose.model('Kunde', kundenSchema);
+module.exports = mongoose.model('Kunde', kundenSchema, 'kundendaten');
