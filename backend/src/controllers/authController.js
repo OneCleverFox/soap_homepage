@@ -127,7 +127,7 @@ const loginAdmin = async (req, res) => {
         const random = Math.floor(Math.random() * 9999).toString().padStart(4, '0');
         kunde.kundennummer = `KD${jahr}${monat}${random}`;
       }
-      if (!kunde.geschlecht) kunde.geschlecht = 'Keine Angabe';
+      if (!kunde.geschlecht) kunde.geschlecht = 'keine Angabe';
       
       // Adresse reparieren
       if (!kunde.adresse) kunde.adresse = {};
@@ -619,7 +619,7 @@ const registerUser = async (req, res) => {
       vorname: firstName,
       nachname: lastName,
       telefon: phone || '',
-      geschlecht: req.body.geschlecht || 'Keine Angabe',
+      geschlecht: req.body.geschlecht || 'keine Angabe',
       adresse: address ? {
         strasse: address.street || '',
         hausnummer: address.houseNumber || '',
