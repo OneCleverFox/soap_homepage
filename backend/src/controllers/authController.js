@@ -537,7 +537,14 @@ const registerUser = async (req, res) => {
     let username;
     try {
       username = await UsernameGenerator.createUsernameForRegistration(firstName, lastName);
-      console.log(`✅ Automatisch generierter Benutzername: ${username}`);
+      
+      // Zusätzliche Eindeutigkeit durch Zeitstempel
+      const timestamp = Date.now().toString().slice(-4);
+      const uniqueUsername = `${username}${timestamp}`;
+      
+      console.log(`✅ Automatisch generierter Benutzername: ${username} → ${uniqueUsername}`);
+      username = uniqueUsername;
+      
     } catch (usernameError) {
       console.error('❌ Benutzername-Generierung Fehler:', usernameError);
       return res.status(400).json({
