@@ -26,12 +26,12 @@ const HomePage = () => {
     {
       icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.primary.main }}>🌿</span>,
       title: 'Natürlich & Nachhaltig',
-      description: 'Alle Produkte aus natürlichen Zutaten, umweltfreundlich hergestellt'
+      description: 'Natürliche Seifen, nachhaltiger Schmuck und umweltfreundliche Materialien'
     },
     {
       icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.secondary.main }}>💝</span>,
       title: 'Handgemacht mit Liebe',
-      description: 'Jedes Produkt wird mit Sorgfalt und Leidenschaft handgefertigt'
+      description: 'Jedes Produkt wird mit Sorgfalt und Leidenschaft in unserer kleinen Manufaktur hergestellt'
     },
     {
       icon: <span style={{ fontSize: isMobile ? 40 : 48, color: theme.palette.info.main }}>🎨</span>,
@@ -87,7 +87,7 @@ const HomePage = () => {
               mx: 'auto'
             }}
           >
-            Entdecken Sie unsere liebevoll hergestellten Seifen aus natürlichen Zutaten.
+            Entdecken Sie unsere vielfältige Welt handgemachter Glücksmomente: Von natürlichen Seifen und individuellem Schmuck bis hin zu kreativen Gips-Kunstwerken und personalisierten Plotter-Designs. Jedes Stück wird mit Liebe und Leidenschaft in unserer kleinen Manufaktur gefertigt.
           </Typography>
           
           <Button
