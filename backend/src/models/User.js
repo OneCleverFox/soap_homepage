@@ -24,9 +24,9 @@ const userSchema = new mongoose.Schema({
     validate: {
       validator: function(password) {
         // Passwort-Sicherheitsvalidierung nach BSI/NIST Standards
-        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password);
+        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/.test(password);
       },
-      message: 'Passwort muss mindestens 8 Zeichen enthalten: Großbuchstabe, Kleinbuchstabe, Zahl und Sonderzeichen (@$!%*?&)'
+      message: 'Passwort muss mindestens 8 Zeichen enthalten: Großbuchstabe, Kleinbuchstabe, Zahl und Sonderzeichen (@$!%*?&#)'
     },
     alias: 'passwort'
   },
