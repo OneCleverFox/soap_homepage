@@ -22,26 +22,28 @@ import {
   Person 
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompanyInfo } from '../hooks/useCompanyInfo';
 
 const ContactPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
-  const { 
-    loading, 
-    error,
-    name,
-    address,
-    contact,
-    vatId,
-    ceo,
-    legalForm,
-    fullAddress,
-    phone,
-    email,
-    website
-  } = useCompany();
+  const { companyInfo, loading, error } = useCompanyInfo();
+  
+  // Daten aus companyInfo extrahieren mit Fallback-Werten
+  const name = companyInfo.name || 'Glücksmomente Manufaktur Ralf Jacob';
+  const address = companyInfo.address || {};
+  const contact = companyInfo.contact || {};
+  const taxInfo = companyInfo.taxInfo || {};
+  
+  const phone = contact.phone || '+49 123 456789';
+  const email = contact.email || 'info@gluecksmomente-manufaktur.de';
+  const website = contact.website || 'https://gluecksmomente-manufaktur.vercel.app/';
+  const vatId = taxInfo.vatId || 'DE1234567890000';
+  const ceo = taxInfo.ceo || 'Ralf Jacob';
+  const legalForm = taxInfo.legalForm || 'Einzelunternehmen';
+  
+  const fullAddress = `${address.street || 'Wasserverkstraße 15'}, ${address.postalCode || '68642'} ${address.city || 'Bürstadt'}, ${address.country || 'Deutschland'}`;
 
   if (loading) {
     return (

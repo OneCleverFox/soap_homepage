@@ -65,6 +65,11 @@ router.post('/preview', (req, res) => invoiceController.generatePreview(req, res
 // @access  Private (Admin)
 router.get('/variables', (req, res) => invoiceController.getAvailableVariables(req, res));
 
+// @route   GET /api/admin/invoice/company-info
+// @desc    Get company information from default template
+// @access  Public
+router.get('/company-info', (req, res) => invoiceController.getCompanyInfo(req, res));
+
 // @route   POST /api/admin/invoice/upload-logo
 // @desc    Upload company logo
 // @access  Private (Admin)
