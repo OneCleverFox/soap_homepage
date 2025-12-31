@@ -697,7 +697,38 @@ const registerUser = async (req, res) => {
       kundeId: newKunde._id // Referenz zum Kunden-Datensatz
     });
 
-    await newUser.save();
+    console.log('💾 Speichere neuen User...');
+    
+    try {
+      await newUser.save();
+      console.log('✅ User erfolgreich erstellt:', newUser.email);
+    } catch (userSaveError) {
+      console.error('❌ User Speicherfehler:', userSaveError);
+      
+      // Falls User-Speicherung fehlschlägt, müssen wir den bereits erstellten Kunde löschen
+      try {
+        await Kunde.findByIdAndDelete(newKunde._id);
+        console.log('🗑️ Kunde aufgrund User-Fehler wieder gelöscht');
+      } catch (cleanupError) {
+        console.error('❌ Cleanup-Fehler:', cleanupError);
+      }
+      
+      // Spezifische Fehlerbehandlung für Duplicate Key
+      if (userSaveError.code === 11000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ein Benutzer mit dieser E-Mail-Adresse existiert bereits',
+          error: 'DUPLICATE_KEY',
+          field: 'email'
+        });
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Fehler beim Erstellen des Benutzerkontos',
+        error: 'USER_SAVE_FAILED'
+      });
+    }
 
     console.log('✅ Benutzer erstellt:', newUser.email);
     console.log('✅ Kunde erstellt:', newKunde.email);
