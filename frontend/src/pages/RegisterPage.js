@@ -60,6 +60,7 @@ const RegisterPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [registrationData, setRegistrationData] = useState(null);
   const [emailCheckLoading, setEmailCheckLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordValidation, setPasswordValidation] = useState({
@@ -292,6 +293,21 @@ const RegisterPage = () => {
       if (response.data.success) {
         console.log('✅ Registrierung erfolgreich');
         setSuccess(true);
+        
+        // Store registration data for success page
+        setRegistrationData(response.data);
+        
+        // If email verification is not required, redirect to login after 3 seconds
+        if (response.data.data?.emailVerified === true) {
+          setTimeout(() => {
+            navigate('/login', { 
+              state: { 
+                message: 'Registrierung erfolgreich! Sie können sich jetzt anmelden.',
+                registrationSuccess: true 
+              }
+            });
+          }, 3000);
+        }
       } else {
         throw new Error(response.data.message || 'Registrierung fehlgeschlagen');
       }
@@ -347,48 +363,121 @@ const RegisterPage = () => {
     return (
       <Container maxWidth="sm" sx={{ mt: 8, mb: 4 }}>
         <Fade in={true}>
-          <Paper elevation={6} sx={{ p: 4, borderRadius: 3, textAlign: 'center' }}>
+          <Paper elevation={6} sx={{ 
+            p: 4, 
+            borderRadius: 3, 
+            textAlign: 'center',
+            background: registrationData?.data?.emailVerified 
+              ? 'linear-gradient(135deg, #e8f5e8 0%, #f1f9f1 100%)'
+              : 'linear-gradient(135deg, #e3f2fd 0%, #f1f9ff 100%)',
+            border: registrationData?.data?.emailVerified 
+              ? '2px solid #4caf50'
+              : '2px solid #2196f3'
+          }}>
             <CheckCircleOutlined 
               sx={{ 
                 fontSize: 72, 
-                color: 'success.main', 
+                color: registrationData?.data?.emailVerified ? '#4caf50' : '#2196f3', 
                 mb: 2 
               }} 
             />
-            <Typography variant="h4" component="h1" gutterBottom color="success.main">
-              🎉 Registrierung erfolgreich!
+            <Typography variant="h4" component="h1" gutterBottom 
+              sx={{ 
+                color: registrationData?.data?.emailVerified ? '#2e7d32' : '#1565c0',
+                fontWeight: 'bold'
+              }}
+            >
+              🎉 {registrationData?.data?.emailVerified 
+                ? 'Willkommen bei Glücksmomente!' 
+                : 'Registrierung erfolgreich!'}
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Vielen Dank für Ihre Registrierung! Wir haben Ihnen eine E-Mail mit einem 
-              Bestätigungslink gesendet. Bitte überprüfen Sie Ihr Postfach und klicken 
-              Sie auf den Link, um Ihr Konto zu aktivieren.
-            </Typography>
-            <Box sx={{ 
-              p: 2, 
-              bgcolor: 'info.light', 
-              borderRadius: 2, 
-              mb: 3,
-              border: '1px solid',
-              borderColor: 'info.main'
-            }}>
-              <Typography variant="body2" color="info.main">
-                💌 <strong>E-Mail-Adresse:</strong> {formData.email}
-              </Typography>
-              <Typography variant="body2" color="info.main" sx={{ mt: 1 }}>
-                📧 Bitte überprüfen Sie auch Ihren Spam-Ordner
-              </Typography>
-            </Box>
+            
+            {registrationData?.data?.emailVerified ? (
+              <>
+                <Typography variant="body1" sx={{ 
+                  mb: 3, 
+                  color: '#2e7d32',
+                  fontSize: '1.1rem',
+                  fontWeight: 500
+                }}>
+                  Herzlichen Dank für Ihre Registrierung! Wir freuen uns sehr, 
+                  Sie als neuen Kunden begrüßen zu dürfen. Ihr Konto ist sofort 
+                  aktiv und Sie können sich jetzt anmelden.
+                </Typography>
+                <Box sx={{ 
+                  p: 3, 
+                  bgcolor: '#f1f9f1', 
+                  borderRadius: 2, 
+                  mb: 3,
+                  border: '1px solid #4caf50'
+                }}>
+                  <Typography variant="body1" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                    ✨ Kundennummer: {registrationData?.data?.kundennummer}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#388e3c', mt: 1 }}>
+                    💌 E-Mail: {registrationData?.data?.email}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#388e3c', mt: 1 }}>
+                    🚀 Sie werden in wenigen Sekunden zur Anmeldung weitergeleitet...
+                  </Typography>
+                </Box>
+              </>
+            ) : (
+              <>
+                <Typography variant="body1" sx={{ 
+                  mb: 3, 
+                  color: '#1565c0',
+                  fontSize: '1.1rem'
+                }}>
+                  Vielen Dank für Ihre Registrierung! Wir haben Ihnen eine E-Mail mit einem 
+                  Bestätigungslink gesendet. Bitte überprüfen Sie Ihr Postfach und klicken 
+                  Sie auf den Link, um Ihr Konto zu aktivieren.
+                </Typography>
+                <Box sx={{ 
+                  p: 3, 
+                  bgcolor: '#e3f2fd', 
+                  borderRadius: 2, 
+                  mb: 3,
+                  border: '1px solid #2196f3'
+                }}>
+                  <Typography variant="body2" sx={{ color: '#1565c0', fontWeight: 'bold' }}>
+                    💌 E-Mail-Adresse: {formData.email}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#1976d2', mt: 1 }}>
+                    📧 Bitte überprüfen Sie auch Ihren Spam-Ordner
+                  </Typography>
+                </Box>
+              </>
+            )}
+            
             <Button
               variant="contained"
               startIcon={<ArrowBackOutlined />}
               onClick={() => navigate('/login')}
-              sx={{ mr: 2 }}
+              sx={{ 
+                mr: 2,
+                bgcolor: registrationData?.data?.emailVerified ? '#4caf50' : '#2196f3',
+                '&:hover': {
+                  bgcolor: registrationData?.data?.emailVerified ? '#388e3c' : '#1976d2'
+                },
+                fontSize: '1.1rem',
+                px: 3,
+                py: 1.5
+              }}
             >
               Zur Anmeldung
             </Button>
             <Button
               variant="outlined"
               onClick={() => window.location.reload()}
+              sx={{
+                borderColor: registrationData?.data?.emailVerified ? '#4caf50' : '#2196f3',
+                color: registrationData?.data?.emailVerified ? '#4caf50' : '#2196f3',
+                '&:hover': {
+                  borderColor: registrationData?.data?.emailVerified ? '#388e3c' : '#1976d2',
+                  bgcolor: registrationData?.data?.emailVerified ? '#f1f9f1' : '#e3f2fd'
+                }
+              }}
             >
               Neue Registrierung
             </Button>
