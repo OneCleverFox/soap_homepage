@@ -91,6 +91,8 @@ const ProfilePage = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
+      console.log('🔍 Profile laden - Token vorhanden:', !!token);
+      
       const response = await fetch(`${API_URL}/auth/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -98,20 +100,29 @@ const ProfilePage = () => {
         }
       });
 
+      console.log('📋 Profile Response Status:', response.status);
+      
       const data = await response.json();
+      console.log('📋 Profile Response Data:', JSON.stringify(data, null, 2));
       
       if (data.success) {
+        console.log('✅ Profile erfolgreich geladen');
+        console.log('🔍 Adresse in Response:', data.data.address);
+        console.log('🔍 Lieferadresse in Response:', data.data.lieferadresse);
+        
         setProfileData(prev => ({
           ...prev,
           ...data.data,
           address: { ...prev.address, ...data.data.address },
+          lieferadresse: data.data.lieferadresse,
           communicationPreferences: { ...prev.communicationPreferences, ...data.data.communicationPreferences }
         }));
       } else {
+        console.error('❌ Profile Fehler:', data.message);
         setError(data.message || 'Fehler beim Laden der Profil-Daten');
       }
     } catch (error) {
-      console.error('Fehler beim Laden des Profils:', error);
+      console.error('❌ Fehler beim Laden des Profils:', error);
       setError('Verbindungsfehler beim Laden der Profil-Daten');
     } finally {
       setLoading(false);
