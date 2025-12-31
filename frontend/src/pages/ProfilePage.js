@@ -110,7 +110,8 @@ const ProfilePage = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      console.log('🔍 Profile laden - Token vorhanden:', !!token);
+      console.log('🔍 FRONTEND: Profile laden - Token vorhanden:', !!token);
+      console.log('🔍 FRONTEND: API_URL:', API_URL);
       
       const response = await fetch(`${API_URL}/auth/profile`, {
         headers: {
@@ -119,19 +120,27 @@ const ProfilePage = () => {
         }
       });
 
-      console.log('📋 Profile Response Status:', response.status);
+      console.log('📋 FRONTEND: Profile Response Status:', response.status);
+      console.log('📋 FRONTEND: Response OK:', response.ok);
+      
+      if (!response.ok) {
+        console.error('❌ FRONTEND: Response nicht OK:', response.status, response.statusText);
+        setError(`HTTP Error: ${response.status}`);
+        setLoading(false);
+        return;
+      }
       
       const data = await response.json();
-      console.log('📋 RAW Backend Response:', JSON.stringify(data, null, 2));
+      console.log('📋 FRONTEND: RAW Backend Response:', JSON.stringify(data, null, 2));
       
       if (data.success) {
-        console.log('✅ Profile erfolgreich geladen');
-        console.log('🔍 Response Data:', data.data);
-        console.log('🔍 AddressDetails in Response:', data.data.addressDetails);
-        console.log('🔍 LieferadresseDetails in Response:', data.data.lieferadresseDetails);
-        console.log('🔍 FirstName in Response:', data.data.firstName);
-        console.log('🔍 LastName in Response:', data.data.lastName);
-        console.log('🔍 Geschlecht in Response:', data.data.geschlecht);
+        console.log('✅ FRONTEND: Profile erfolgreich geladen');
+        console.log('🔍 FRONTEND: Response Data:', data.data);
+        console.log('🔍 FRONTEND: AddressDetails in Response:', data.data.addressDetails);
+        console.log('🔍 FRONTEND: LieferadresseDetails in Response:', data.data.lieferadresseDetails);
+        console.log('🔍 FRONTEND: FirstName in Response:', data.data.firstName);
+        console.log('🔍 FRONTEND: LastName in Response:', data.data.lastName);
+        console.log('🔍 FRONTEND: Geschlecht in Response:', data.data.geschlecht);
         
         setProfileData(prev => ({
           ...prev,
