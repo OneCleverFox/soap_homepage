@@ -489,12 +489,28 @@ const registerUser = async (req, res) => {
     }
 
     // Erweiterte Passwort-Validierung nach aktuellen Sicherheitsstandards
-    const passwordValidation = PasswordValidator.validatePassword(password, {
-      firstName,
-      lastName,
-      username: providedUsername,
-      email
-    });
+    console.log('🔐 Starte Passwort-Validierung...');
+    let passwordValidation;
+    try {
+      passwordValidation = PasswordValidator.validatePassword(password, {
+        firstName,
+        lastName,
+        username: providedUsername,
+        email
+      });
+      console.log('✅ Passwort-Validierung erfolgreich:', {
+        isValid: passwordValidation.isValid,
+        score: passwordValidation.score
+      });
+    } catch (passwordError) {
+      console.error('❌ Passwort-Validierung Fehler:', passwordError);
+      return res.status(400).json({
+        success: false,
+        message: 'Fehler bei der Passwort-Validierung',
+        error: 'PASSWORD_VALIDATION_ERROR',
+        details: passwordError.message
+      });
+    }
 
     if (!passwordValidation.isValid) {
       return res.status(400).json({
@@ -517,16 +533,40 @@ const registerUser = async (req, res) => {
     }
 
     // Automatischen Benutzernamen generieren
-    const username = await UsernameGenerator.createUsernameForRegistration(firstName, lastName);
-    console.log(`✅ Automatisch generierter Benutzername: ${username}`);
+    console.log('🔄 Starte Benutzername-Generierung...');
+    let username;
+    try {
+      username = await UsernameGenerator.createUsernameForRegistration(firstName, lastName);
+      console.log(`✅ Automatisch generierter Benutzername: ${username}`);
+    } catch (usernameError) {
+      console.error('❌ Benutzername-Generierung Fehler:', usernameError);
+      return res.status(400).json({
+        success: false,
+        message: 'Fehler bei der Benutzername-Generierung',
+        error: 'USERNAME_GENERATION_ERROR',
+        details: usernameError.message
+      });
+    }
 
     // Prüfen ob Benutzer bereits existiert (in User-Collection)
-    const existingUser = await User.findOne({
-      $or: [
-        { email: email.toLowerCase() },
-        { username: username.toLowerCase() }
-      ]
-    });
+    console.log('🔍 Prüfe User-Collection...');
+    let existingUser;
+    try {
+      existingUser = await User.findOne({
+        $or: [
+          { email: email.toLowerCase() },
+          { username: username.toLowerCase() }
+        ]
+      });
+      console.log('✅ User-Collection geprüft:', existingUser ? 'BENUTZER GEFUNDEN' : 'KEIN BENUTZER');
+    } catch (userCheckError) {
+      console.error('❌ User-Collection Fehler:', userCheckError);
+      return res.status(500).json({
+        success: false,
+        message: 'Fehler bei der Benutzerprüfung',
+        error: 'USER_CHECK_ERROR'
+      });
+    }
 
     if (existingUser) {
       return res.status(400).json({
@@ -538,8 +578,20 @@ const registerUser = async (req, res) => {
     }
 
     // Zusätzlich prüfen ob E-Mail bereits in Kunden-Collection existiert
-    const Kunde = require('../models/Kunde');
-    const existingKunde = await Kunde.findOne({ email: email.toLowerCase() });
+    console.log('🔍 Prüfe Kunde-Collection...');
+    let existingKunde;
+    try {
+      const Kunde = require('../models/Kunde');
+      existingKunde = await Kunde.findOne({ email: email.toLowerCase() });
+      console.log('✅ Kunde-Collection geprüft:', existingKunde ? 'KUNDE GEFUNDEN' : 'KEIN KUNDE');
+    } catch (kundeCheckError) {
+      console.error('❌ Kunde-Collection Fehler:', kundeCheckError);
+      return res.status(500).json({
+        success: false,
+        message: 'Fehler bei der Kundenprüfung',
+        error: 'KUNDE_CHECK_ERROR'
+      });
+    }
     
     if (existingKunde) {
       console.log('❌ E-Mail bereits in Kunde-Collection:', email);
