@@ -30,6 +30,7 @@ import {
   useTheme,
   useMediaQuery
 } from '@mui/material';
+import { API_URL } from '../services/api';
 import {
   ExpandMore as ExpandMoreIcon,
   Preview as PreviewIcon,
@@ -167,7 +168,7 @@ function AdminInvoiceDesigner() {
 
   const loadDefaultTemplate = async () => {
     try {
-      const response = await fetch('/api/invoice/templates/default');
+      const response = await fetch(`${API_URL}/invoice/templates/default`);
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -307,7 +308,7 @@ function AdminInvoiceDesigner() {
   const saveTemplate = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/invoice/templates', {
+      const response = await fetch(`${API_URL}/invoice/templates`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

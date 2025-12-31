@@ -42,6 +42,7 @@ import {
 import { styled } from '@mui/material/styles';
 import { SketchPicker } from 'react-color';
 import { useAdminState } from '../hooks/useAdminState';
+import { API_URL } from '../services/api';
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
@@ -196,7 +197,7 @@ const AdminInvoiceConfiguration = () => {
   // API-Aufrufe
   const _loadTemplates = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/invoice/templates', {
+      const response = await fetch(`${API_URL}/admin/invoice/templates`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -270,7 +271,7 @@ const AdminInvoiceConfiguration = () => {
 
   const loadVariables = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/invoice/variables', {
+      const response = await fetch(`${API_URL}/admin/invoice/variables`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -351,8 +352,8 @@ const AdminInvoiceConfiguration = () => {
       });
       
       const url = currentTemplate._id 
-        ? `/api/admin/invoice/templates/${currentTemplate._id}`
-        : '/api/admin/invoice/templates';
+        ? `${API_URL}/admin/invoice/templates/${currentTemplate._id}`
+        : `${API_URL}/admin/invoice/templates`;
       
       const method = currentTemplate._id ? 'PUT' : 'POST';
 
