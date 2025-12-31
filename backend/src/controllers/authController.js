@@ -1416,13 +1416,21 @@ const updateProfile = async (req, res) => {
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user.id;
-    const kundennummer = req.user.kundennummer;
-    const { password, email, reason } = req.body;
+    const { password, confirmEmail, reason } = req.body;
 
-    console.log('🗑️ Account-Löschung angefordert für User:', userId, 'Kundennummer:', kundennummer);
+    console.log('🗑️ Account-Löschung angefordert für User:', userId);
 
-    // Benutzer abrufen
-    const user = await User.findById(userId);
+    // Versuche zuerst Kunde zu finden
+    const Kunde = require('../models/Kunde');
+    let user = await Kunde.findById(userId);
+    let isKunde = true;
+    
+    // Falls nicht in Kunde Collection, versuche User Collection
+    if (!user) {
+      user = await User.findById(userId);
+      isKunde = false;
+    }
+    
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -1430,8 +1438,10 @@ const deleteAccount = async (req, res) => {
       });
     }
 
+    console.log(`🔍 User gefunden in ${isKunde ? 'Kunde' : 'User'} Collection`);
+
     // Email-Bestätigung prüfen
-    if (email !== user.email) {
+    if (confirmEmail !== user.email) {
       return res.status(400).json({
         success: false,
         message: 'Zur Bestätigung muss die E-Mail-Adresse korrekt eingegeben werden'
@@ -1439,7 +1449,8 @@ const deleteAccount = async (req, res) => {
     }
 
     // Passwort prüfen
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const passwordField = isKunde ? user.passwort : user.password;
+    const isPasswordValid = await bcrypt.compare(password, passwordField);
     if (!isPasswordValid) {
       return res.status(400).json({
         success: false,
@@ -1447,11 +1458,15 @@ const deleteAccount = async (req, res) => {
       });
     }
 
-    // Prüfung auf unzugestellte Bestellungen
-    if (kundennummer) {
+    // Prüfung auf unzugestellte Bestellungen (nur für Kunden)
+    if (isKunde && user.kundennummer) {
       const Order = require('../models/Order');
       const undeliveredOrders = await Order.find({
-        'besteller.kundennummer': kundennummer,
+        $or: [
+          { 'besteller.kundennummer': user.kundennummer },
+          { 'besteller.kundeId': user._id },
+          { kundeId: user._id }
+        ],
         status: { 
           $nin: ['zugestellt', 'storniert', 'rueckerstattung'] 
         }
@@ -1473,44 +1488,49 @@ const deleteAccount = async (req, res) => {
       console.log('✅ Alle Bestellungen sind zugestellt - Account kann gelöscht werden');
     }
 
-    // Benutzer-Daten für Email-Benachrichtigung sichern
+    // Benutzer-Daten für Logging sichern
     const userData = {
       email: user.email,
-      firstName: user.name || user.username,
-      username: user.username,
-      registrationDate: user.createdAt,
-      kundennummer: kundennummer
+      firstName: isKunde ? user.vorname : user.firstName,
+      lastName: isKunde ? user.nachname : user.lastName,
+      username: isKunde ? `${user.vorname}.${user.nachname}` : user.username,
+      kundennummer: isKunde ? user.kundennummer : null,
+      registrationDate: user.createdAt
     };
 
-    // Account löschen
-    await User.findByIdAndDelete(userId);
+    // Account aus beiden Collections löschen
+    if (isKunde) {
+      await Kunde.findByIdAndDelete(userId);
+      console.log('🗑️ Kunde aus Kunde-Collection gelöscht');
+      
+      // Auch aus User Collection löschen falls vorhanden
+      const userInUserCollection = await User.findOne({ email: user.email });
+      if (userInUserCollection) {
+        await User.findByIdAndDelete(userInUserCollection._id);
+        console.log('🗑️ User aus User-Collection gelöscht');
+      }
+    } else {
+      await User.findByIdAndDelete(userId);
+      console.log('🗑️ User aus User-Collection gelöscht');
+    }
 
     console.log('✅ Account erfolgreich gelöscht:', user.email);
 
-    // Bestätigungs-E-Mail senden
-    const emailSent = await emailService.sendAccountDeletionConfirmation(
-      userData.email,
-      userData.firstName,
-      userData.username,
-      reason || 'Keine Angabe'
-    );
-
-    if (emailSent.success) {
-      console.log('✅ Account-Löschungs-Bestätigung gesendet');
-    } else {
-      console.log('⚠️ Account-Löschungs-E-Mail konnte nicht gesendet werden');
-    }
-
     res.status(200).json({
       success: true,
-      message: 'Ihr Account wurde erfolgreich gelöscht. Eine Bestätigungsmail wurde an Ihre E-Mail-Adresse gesendet.'
+      message: 'Ihr Account wurde erfolgreich gelöscht. Vielen Dank für Ihr Vertrauen.',
+      deletedUser: {
+        email: userData.email,
+        deletedAt: new Date(),
+        reason: reason || 'Kunde-initiierte Löschung'
+      }
     });
 
   } catch (error) {
-    console.error('❌ Delete-Account-Fehler:', error);
+    console.error('❌ Account-Löschung-Fehler:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Löschen des Accounts'
+      message: 'Interner Serverfehler beim Löschen des Accounts'
     });
   }
 };
