@@ -38,6 +38,7 @@ router.delete('/templates/:id', (req, res) => invoiceController.deleteTemplate(r
 // Vorschau und Variablen (öffentlich für Designer-Tool)
 router.post('/preview', (req, res) => invoiceController.generatePreview(req, res));
 router.get('/variables', (req, res) => invoiceController.getAvailableVariables(req, res));
+router.get('/company-info', (req, res) => invoiceController.getCompanyInfo(req, res));
 
 // 🎨 Neue Designer-spezifische Routen
 router.get('/sample-data', (req, res) => {

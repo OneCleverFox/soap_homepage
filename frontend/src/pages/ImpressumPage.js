@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCompany } from '../contexts/CompanyContext';
+import { useCompanyInfo } from '../hooks/useCompanyInfo';
 import { 
   Container, 
   Typography, 
@@ -10,7 +10,16 @@ import {
 } from '@mui/material';
 
 const ImpressumPage = () => {
-  const { name, email, ceo } = useCompany();
+  const { companyInfo } = useCompanyInfo();
+  
+  // Daten mit Fallback-Werten
+  const name = companyInfo.name || 'Glücksmomente Manufaktur';
+  const email = companyInfo.contact?.email || 'info@gluecksmomente-manufaktur.de';
+  const ceo = companyInfo.taxInfo?.ceo || 'Ralf Jacob';
+  const address = companyInfo.address || {};
+  const taxInfo = companyInfo.taxInfo || {};
+  const phone = companyInfo.contact?.phone || '+49 123 456789';
+  
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -28,16 +37,19 @@ const ImpressumPage = () => {
             
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" paragraph>
-                <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
-                {ceo || 'Ralf Jacob'}<br />                
-                68642 Bürstadt
+                <strong>{name}</strong><br />
+                {ceo}<br />
+                {address.street || 'Wasserverkstraße 15'}<br />
+                {address.postalCode || '68642'} {address.city || 'Bürstadt'}<br />
+                {address.country || 'Deutschland'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
                 Kontakt
               </Typography>
-              <Typography variant="body1" paragraph>                
-                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
+              <Typography variant="body1" paragraph>
+                Telefon: {phone}<br />
+                E-Mail: {email}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
@@ -45,7 +57,14 @@ const ImpressumPage = () => {
               </Typography>
               <Typography variant="body1" paragraph>
                 Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-                [Ihre USt-IdNr.]
+                {taxInfo.vatId || 'DE1234567890000'}
+              </Typography>
+              
+              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+                Rechtsform
+              </Typography>
+              <Typography variant="body1" paragraph>
+                {taxInfo.legalForm || 'Einzelunternehmen'}
               </Typography>
             </Box>
           </Grid>
