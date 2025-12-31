@@ -10,7 +10,8 @@ router.use((req, res, next) => {
   const publicRoutes = [
     { path: '/preview', method: 'POST' },
     { path: '/sample-data', method: 'GET' },
-    { path: '/variables', method: 'GET' }
+    { path: '/variables', method: 'GET' },
+    { path: '/company-info', method: 'GET' }
   ];
   
   const isPublicRoute = publicRoutes.some(route => 
