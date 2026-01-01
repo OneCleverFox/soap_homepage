@@ -24,7 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import api from '../../services/api';
 import { ordersAPI } from '../../services/api';
-import { cookieManager } from '../../utils/cookieManager';
+import cookieManager from '../../utils/cookieManager';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);

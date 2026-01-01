@@ -21,6 +21,7 @@ import {
   Chip
 } from '@mui/material';
 import { Close, ExpandMore, Settings, Info } from '@mui/icons-material';
+import cookieManager from '../../utils/cookieManager';
 
 const CookieConsent = () => {
   const [showBanner, setShowBanner] = useState(false);
