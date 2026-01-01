@@ -24,6 +24,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import api from '../../services/api';
 import { ordersAPI } from '../../services/api';
+import { cookieManager } from '../../utils/cookieManager';
 
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -59,7 +60,7 @@ const Navbar = () => {
         if (isAdmin) {
           // Admin: Zähle neue, unbearbeitete Anfragen mit lastViewed-System
           const lastViewedKey = 'admin_inquiries_last_viewed';
-          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
           const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
           
           // Nur Anfragen zählen, die nach dem letzten Besuch eingegangen sind
@@ -77,7 +78,7 @@ const Navbar = () => {
         } else {
           // Kunde: Zähle Antworten auf eigene Anfragen
           const lastViewedKey = `inquiries_last_viewed_${user.id || user.userId}`;
-          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
           const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
           
           // Ungesehene Benachrichtigungen zählen - erweiterte Status-Liste
@@ -143,7 +144,7 @@ const Navbar = () => {
         } else {
           // Kunde: Bestellungs-Updates seit letztem Besuch
           const lastViewedKey = `orders_last_viewed_${user.id || user.userId}`;
-          const lastViewed = localStorage.getItem(lastViewedKey);
+          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
           const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
           
           const updatedOrders = result.data.bestellungen.filter(order => {
@@ -214,7 +215,7 @@ const Navbar = () => {
     const handleInquiryAction = () => {
       if (user && (user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin'))) {
         const lastViewedKey = 'admin_inquiries_last_viewed';
-        localStorage.setItem(lastViewedKey, new Date().toISOString());
+        cookieManager.setItem(lastViewedKey, new Date().toISOString(), 'optional');
         loadPendingInquiries();
         
         if (process.env.NODE_ENV === 'development') {
@@ -227,7 +228,7 @@ const Navbar = () => {
     const handleOrdersViewed = () => {
       if (user && !(user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin'))) {
         const lastViewedKey = `orders_last_viewed_${user.id || user.userId}`;
-        localStorage.setItem(lastViewedKey, new Date().toISOString());
+        cookieManager.setItem(lastViewedKey, new Date().toISOString(), 'optional');
         loadPendingOrders(); // Badges neu laden
         
         if (process.env.NODE_ENV === 'development') {
