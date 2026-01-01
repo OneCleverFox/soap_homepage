@@ -10,7 +10,41 @@ import {
 } from '@mui/material';
 
 const ImpressumPage = () => {
-  const { name, email, ceo } = useCompany();
+  const { 
+    name, 
+    address, 
+    contact, 
+    vatId, 
+    ceo, 
+    legalForm,
+    fullAddress,
+    email,
+    phone,
+    loading,
+    error
+  } = useCompany();
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Typography variant="h6">Lade Impressum...</Typography>
+        </Paper>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Typography variant="h6" color="error">
+            Fehler beim Laden der Unternehmensdaten: {error}
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -29,15 +63,23 @@ const ImpressumPage = () => {
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" paragraph>
                 <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
-                {ceo || 'Ralf Jacob'}<br />                
-                68642 Bürstadt
+                {ceo && `Inhaber: ${ceo}`}{ceo && <br />}
+                {legalForm && `Rechtsform: ${legalForm}`}{legalForm && <br />}
+                {address?.street && address?.houseNumber ? `${address.street} ${address.houseNumber}` : address?.street || ''}<br />
+                {address?.postalCode && address?.city ? `${address.postalCode} ${address.city}` : '68642 Bürstadt'}<br />
+                {address?.country || 'Deutschland'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
                 Kontakt
               </Typography>
-              <Typography variant="body1" paragraph>                
-                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
+              <Typography variant="body1" paragraph>
+                {phone && (
+                  <>
+                    Telefon: {phone}<br />
+                  </>
+                )}
+                E-Mail: {email || contact?.email || 'info@gluecksmomente-manufaktur.de'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
@@ -45,7 +87,7 @@ const ImpressumPage = () => {
               </Typography>
               <Typography variant="body1" paragraph>
                 Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-                [Ihre USt-IdNr.]
+                <strong>{vatId || '[Keine USt-IdNr. hinterlegt]'}</strong>
               </Typography>
             </Box>
           </Grid>
@@ -59,8 +101,10 @@ const ImpressumPage = () => {
               Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
             </Typography>
             <Typography variant="body1" paragraph>
-              Ralf Jacob<br />
-              68642 Bürstadt
+              {ceo || 'Ralf Jacob'}<br />
+              {address?.street && address?.houseNumber ? `${address.street} ${address.houseNumber}` : address?.street || ''}<br />
+              {address?.postalCode && address?.city ? `${address.postalCode} ${address.city}` : '68642 Bürstadt'}<br />
+              {address?.country || 'Deutschland'}
             </Typography>
             
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
