@@ -12,12 +12,34 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 const DatenschutzPage = () => {
-  const { name, email, ceo } = useCompany();
+  const { 
+    name, 
+    address, 
+    contact, 
+    vatId, 
+    ceo, 
+    legalForm,
+    fullAddress,
+    email,
+    phone,
+    loading,
+    error 
+  } = useCompany();
   const [expanded, setExpanded] = useState(false);
   
   const handleChange = (panel) => (event, isExpanded) => {
     setExpanded(isExpanded ? panel : false);
   };
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Typography variant="h6">Lade Datenschutzerklärung...</Typography>
+        </Paper>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -44,10 +66,22 @@ const DatenschutzPage = () => {
               </Typography>
               <Typography variant="body2" paragraph>
                 <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
-                {ceo || 'Ralf Jacob'}<br />
-                [Straße und Hausnummer]<br />
-                68642 Bürstadt<br />
-                E-Mail: {email || 'info@gluecksmomente-manufaktur.de'}
+                {ceo && `Inhaber: ${ceo}`}{ceo && <br />}
+                {legalForm && `Rechtsform: ${legalForm}`}{legalForm && <br />}
+                {address?.street && address?.houseNumber ? `${address.street} ${address.houseNumber}` : address?.street || '[Straße wird in Admin-Konfiguration ergänzt]'}<br />
+                {address?.postalCode && address?.city ? `${address.postalCode} ${address.city}` : '68642 Bürstadt'}<br />
+                {address?.country || 'Deutschland'}<br /><br />
+                {phone && (
+                  <>
+                    Telefon: {phone}<br />
+                  </>
+                )}
+                E-Mail: {email || contact?.email || 'info@gluecksmomente-manufaktur.de'}
+                {vatId && (
+                  <>
+                    <br />USt-IdNr.: {vatId}
+                  </>
+                )}
               </Typography>
             </AccordionDetails>
           </Accordion>
@@ -164,7 +198,7 @@ const DatenschutzPage = () => {
         </Box>
         
         <Typography variant="body2" sx={{ mt: 4, fontStyle: 'italic' }}>
-          Stand: Oktober 2025
+          Stand: Januar 2026
         </Typography>
       </Paper>
     </Container>
