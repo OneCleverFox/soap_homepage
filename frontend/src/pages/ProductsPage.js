@@ -31,8 +31,10 @@ import {
 import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
+import NetworkAwareLoader from '../components/NetworkAwareLoader';
 import stockEventService from '../services/stockEventService';
 
 // API Base URL für Bild-URLs
@@ -45,11 +47,83 @@ const ProductsPage = React.memo(() => {
   
   const { user } = useAuth();
   const { addToCart } = useCart();
+  const { isOnline, isSlowConnection } = useNetworkStatus();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
   const [error, setError] = useState('');
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
+  const [retryCount, setRetryCount] = useState(0); // Für Retry-Logik
+
+  // Optimierte fetchProducts Funktion mit Retry-Mechanismus
+  const fetchProducts = useCallback(async (isBackgroundUpdate = false, retryAttempt = 0) => {
+    try {
+      if (!isBackgroundUpdate) {
+        setLoading(true);
+      }
+      setError('');
+      
+      console.log(`🔄 Fetching products... ${isBackgroundUpdate ? '(Background)' : '(Initial)'} - Attempt: ${retryAttempt + 1}`);
+      
+      // Performance Tracking
+      const startTime = performance.now();
+      
+      const response = await portfolioAPI.getWithPrices();
+      const productsData = response.data?.data || response.data || [];
+      
+      const duration = performance.now() - startTime;
+      console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length}`);
+      
+      setProducts(productsData);
+      setInitialLoading(false);
+      setRetryCount(0); // Reset retry count on success
+      
+      // Cache für bessere Performance
+      try {
+        sessionStorage.setItem('cachedProducts', JSON.stringify({
+          data: productsData,
+          timestamp: Date.now()
+        }));
+      } catch (cacheError) {
+        console.warn('⚠️ Could not cache products:', cacheError);
+      }
+      
+    } catch (err) {
+      console.error(`❌ Products fetch failed (Attempt ${retryAttempt + 1}):`, err.message);
+      
+      // Intelligente Retry-Logik
+      const maxRetries = 3;
+      const shouldRetry = retryAttempt < maxRetries && (
+        err.code === 'NETWORK_ERROR' ||
+        err.code === 'ECONNABORTED' ||
+        !err.response ||
+        err.response?.status >= 500
+      );
+      
+      if (shouldRetry) {
+        const delay = Math.pow(2, retryAttempt) * 1000; // Exponential backoff
+        console.log(`🔄 Retrying in ${delay}ms... (${retryAttempt + 1}/${maxRetries})`);
+        
+        setTimeout(() => {
+          fetchProducts(isBackgroundUpdate, retryAttempt + 1);
+        }, delay);
+        return;
+      }
+      
+      // Zeige nur bei initialer Ladung oder kritischen Fehlern Error-Message
+      if (!isBackgroundUpdate) {
+        setError(`Produkte konnten nicht geladen werden. ${err.response?.status === 503 ? 'Server ist momentan überlastet.' : 'Bitte versuchen Sie es später erneut.'}`);
+      } else {
+        console.warn('Background update failed, keeping existing products');
+      }
+      
+      setRetryCount(retryAttempt + 1);
+    } finally {
+      if (!isBackgroundUpdate) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   // Mengenauswahl für jedes Produkt initialisieren
   useEffect(() => {
@@ -267,9 +341,9 @@ const ProductsPage = React.memo(() => {
       unsubscribeStock(); // Stock-Event-Listener entfernen
       window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
-  }, []);
+  }, []); // Empty deps - useCallback handles fetchProducts deps
 
-  const fetchProducts = async (isBackgroundUpdate = false) => {
+  // Aktualisierter Cache-Loading-Mechanismus (nutzt die neue fetchProducts Funktion)
     try {
       if (!isBackgroundUpdate) {
         setLoading(true);

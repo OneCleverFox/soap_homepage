@@ -422,6 +422,13 @@ router.get('/with-prices', async (req, res) => {
   console.log('🚀 Portfolio with-prices request started');
   
   try {
+    // Cache-Control Headers für Browser-Caching
+    res.set({
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=600', // 5 Min Cache, 10 Min stale
+      'ETag': `portfolio-${Date.now()}`,
+      'Last-Modified': new Date().toUTCString()
+    });
+    
     // Cache-Check
     const now = Date.now();
     if (portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
@@ -600,10 +607,30 @@ router.get('/with-prices', async (req, res) => {
     });
   } catch (error) {
     console.error('Portfolio with Prices Fetch Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Abrufen der Portfolio-Daten mit Preisen'
-    });
+    
+    // Unterschiedliche Error-Behandlung je nach Fehlertyp
+    if (error.name === 'MongoNetworkError' || error.name === 'MongoTimeoutError') {
+      res.status(503).json({
+        success: false,
+        error: 'DATABASE_UNAVAILABLE',
+        message: 'Datenbank ist momentan nicht erreichbar. Bitte versuchen Sie es in wenigen Momenten erneut.',
+        retryAfter: 30
+      });
+    } else if (error.name === 'MongoServerError') {
+      res.status(503).json({
+        success: false,
+        error: 'DATABASE_ERROR',
+        message: 'Datenbankfehler. Unser Team wurde benachrichtigt.',
+        retryAfter: 60
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Fehler beim Abrufen der Portfolio-Daten. Bitte versuchen Sie es erneut.',
+        retryAfter: 15
+      });
+    }
   }
 });
 
