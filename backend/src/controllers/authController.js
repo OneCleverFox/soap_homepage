@@ -705,6 +705,16 @@ const registerUser = async (req, res) => {
     }
 
     // Neuen Benutzer erstellen (für erweiterte Funktionen)
+    console.log('🐛 DEBUG - Empfangene Daten:', {
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
+      firstName,
+      lastName,
+      phone,
+      dateOfBirth,
+      address
+    });
+
     const newUser = new User({
       username: username.toLowerCase(),
       email: email.toLowerCase(),
@@ -713,7 +723,7 @@ const registerUser = async (req, res) => {
       lastName,
       phone,
       address,
-      dateOfBirth,
+      dateOfBirth: dateOfBirth || undefined, // Explizit undefined wenn null
       emailVerificationToken: verificationToken,
       emailVerificationExpires: verificationExpires,
       status: requireEmailVerification ? 'unverified' : 'active',

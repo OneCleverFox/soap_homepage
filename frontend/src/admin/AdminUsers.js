@@ -1009,6 +1009,8 @@ function AdminUsers() {
                           <Typography variant="caption" color="textSecondary">
                             {user.geschlecht && `${user.geschlecht}`}
                             {user.geburtsdatum && ` • ${new Date(user.geburtsdatum).getFullYear()}`}
+                            {user.dateOfBirth && ` • ${new Date(user.dateOfBirth).getFullYear()}`}
+                            {!user.geburtsdatum && !user.dateOfBirth && ' • Kein Geburtsdatum'}
                           </Typography>
                         </Box>
                       </Box>
