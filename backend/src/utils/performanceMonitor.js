@@ -1,4 +1,5 @@
 const logger = require('./logger');
+const { IPAnonymizer } = require('./ipAnonymizer');
 
 // Performance Monitoring nur in Development
 class PerformanceMonitor {
@@ -60,7 +61,8 @@ class PerformanceMonitor {
           route,
           duration,
           statusCode,
-          ip: req.ip
+          // DSGVO-konforme IP-Anonymisierung für Logs
+          ip: IPAnonymizer.anonymizeIP(req.ip, true)
         });
       }
     });
