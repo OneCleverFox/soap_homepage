@@ -3,7 +3,7 @@ import { cartAPI } from '../services/api';
 import { useAuth } from './AuthContext';
 import stockEventService from '../services/stockEventService';
 import toast from 'react-hot-toast';
-import { cookieManager } from '../utils/cookieManager';
+import cookieManager from '../utils/cookieManager';
 
 const CartContext = createContext();
 
