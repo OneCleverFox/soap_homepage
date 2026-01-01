@@ -160,7 +160,10 @@ const emailOutSchema = new mongoose.Schema({
   
   // System Informationen
   system: {
+    // DSGVO-HINWEIS: IP-Adressen dürfen nur anonymisiert gespeichert werden!
+    // Verwende IPAnonymizer.anonymizeIP() vor dem Speichern
     ipAddress: String,
+    // DSGVO-HINWEIS: User-Agent kann zur Profilierung verwendet werden - nur wenn notwendig speichern
     userAgent: String,
     sourceApplication: {
       type: String,

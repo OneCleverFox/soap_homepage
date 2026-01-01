@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
+const { IPAnonymizer } = require('../utils/ipAnonymizer');
 const { AuthenticationError, AuthorizationError } = require('./errorHandler');
 
 // Generische Authentifizierung für alle eingeloggten Benutzer
@@ -37,7 +38,11 @@ const authenticateToken = async (req, res, next) => {
     next();
 
   } catch (error) {
-    logger.warning('Auth Error:', { message: error.message, ip: req.ip });
+    logger.warning('Auth Error:', { 
+      message: error.message, 
+      // DSGVO-konforme IP-Anonymisierung für Auth-Logs
+      ip: IPAnonymizer.anonymizeIP(req.ip, true) 
+    });
     return res.status(401).json({
       success: false,
       message: 'Token ungültig',
