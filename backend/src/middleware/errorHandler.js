@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const { IPAnonymizer } = require('../utils/ipAnonymizer');
 
 // Zentralisiertes Error Handling
 class ErrorHandler extends Error {
@@ -54,8 +55,9 @@ const globalErrorHandler = (err, req, res, next) => {
     stack: err.stack,
     url: req.url,
     method: req.method,
-    ip: req.ip,
-    userAgent: req.get('User-Agent'),
+    // DSGVO-konforme IP-Anonymisierung für Error-Logs  
+    ip: IPAnonymizer.anonymizeIP(req.ip, true),
+    userAgent: '[REMOVED-FOR-PRIVACY]', // User-Agent entfernt da personenbezogen
     timestamp: new Date().toISOString()
   });
 
