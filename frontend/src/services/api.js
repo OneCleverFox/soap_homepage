@@ -17,13 +17,31 @@ if (process.env.NODE_ENV === 'development') {
   console.log('🔧 REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
 }
 
+// Retry-Hilfsfunktion
+const shouldRetry = (error) => {
+  // Nicht bei 4xx Fehlern (Client-Fehler) außer 408 (Timeout) und 429 (Rate Limit)
+  if (error.response) {
+    const status = error.response.status;
+    return status >= 500 || status === 408 || status === 429;
+  }
+  // Bei Netzwerkfehlern oder Timeouts
+  return error.code === 'ECONNABORTED' || error.code === 'NETWORK_ERROR' || !error.response;
+};
+
 // Axios Instance erstellen
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000, // 15 Sekunden Timeout (erhöht für Railway)
+  timeout: 30000, // 30 Sekunden Timeout für mobile Verbindungen
   headers: {
     'Content-Type': 'application/json',
   },
+  // Retry-Konfiguration
+  retry: 3,
+  retryDelay: 1000,
+  retryCondition: (error) => {
+    // Retry bei Netzwerkfehlern oder 5xx Serverfehler
+    return !error.response || error.response.status >= 500;
+  }
 });
 
 // Request Interceptor für Token und Performance-Monitoring
@@ -36,6 +54,9 @@ api.interceptors.request.use(
     
     // Performance-Tracking
     config.metadata = { startTime: performance.now() };
+    
+    // Retry-Konfiguration hinzufügen
+    config.retryCount = config.retryCount || 0;
     
     return config;
   },
@@ -66,6 +87,25 @@ api.interceptors.response.use(
     if (error.config && error.config.metadata) {
       const duration = performance.now() - error.config.metadata.startTime;
       console.error(`❌ Failed API call: ${error.config.url} after ${Math.round(duration)}ms`);
+    }
+    
+    // Retry-Logik
+    const { config } = error;
+    if (config && shouldRetry(error)) {
+      config.retryCount = (config.retryCount || 0) + 1;
+      
+      if (config.retryCount <= (config.retry || 3)) {
+        console.log(`🔄 Retry attempt ${config.retryCount} for ${config.url}`);
+        
+        // Exponential backoff
+        const delay = Math.pow(2, config.retryCount - 1) * (config.retryDelay || 1000);
+        
+        return new Promise(resolve => {
+          setTimeout(() => {
+            resolve(api(config));
+          }, delay);
+        });
+      }
     }
     
     const { response } = error;
@@ -116,9 +156,21 @@ api.interceptors.response.use(
           toast.error(response.data?.message || 'Ein Fehler ist aufgetreten.');
       }
     } else if (error.code === 'ECONNABORTED') {
-      toast.error('Anfrage-Timeout. Bitte überprüfen Sie Ihre Internetverbindung.');
+      // Bei Timeout: Freundlichere Nachricht ohne sofortigen Error-Toast
+      console.warn('Request timeout:', error.config?.url);
+      // Zeige nur bei kritischen Endpunkten Toast
+      if (error.config?.url?.includes('/auth/') || error.config?.url?.includes('/cart/')) {
+        toast.error('Verbindung dauert länger als erwartet. Bitte warten Sie einen Moment.');
+      }
+    } else if (error.code === 'NETWORK_ERROR' || !error.response) {
+      // Bei Netzwerkfehlern: Sanfteres Handling
+      console.warn('Network error:', error.message);
+      // Zeige nur bei kritischen Aktionen Toast
+      if (error.config?.method === 'POST' || error.config?.method === 'PUT') {
+        toast.error('Bitte überprüfen Sie Ihre Internetverbindung und versuchen es erneut.');
+      }
     } else {
-      toast.error('Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.');
+      toast.error('Ein unerwarteter Fehler ist aufgetreten.');
     }
     
     return Promise.reject(error);
