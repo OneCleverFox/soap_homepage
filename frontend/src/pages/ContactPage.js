@@ -330,7 +330,7 @@ const ContactPage = () => {
             sx={{ maxWidth: 800, mx: 'auto', lineHeight: 1.8 }}
           >
             Wir sind eine kleine Manufaktur, die mit Leidenschaft und Hingabe 
-            handgemachte Naturkosmetik-Produkte herstellt. 
+            handgemachte Glücksmomente herstellt. 
             Jedes Produkt wird mit Liebe zum Detail und höchsten Qualitätsansprüchen gefertigt.
           </Typography>
           
