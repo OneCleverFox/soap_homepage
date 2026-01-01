@@ -12,11 +12,11 @@ const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// Cache für Portfolio-Daten (5 Minuten TTL)
+// Cache für Portfolio-Daten (15 Minuten TTL)
 let portfolioCache = global.portfolioCache || {
   data: null,
   timestamp: 0,
-  ttl: 5 * 60 * 1000 // 5 Minuten
+  ttl: 15 * 60 * 1000 // 15 Minuten für bessere Performance
 };
 
 // Synchronisiere mit globalem Cache
@@ -588,8 +588,9 @@ router.get('/with-prices', async (req, res) => {
     // Cache aktualisieren
     portfolioCache.data = portfolioWithPrices;
     portfolioCache.timestamp = Date.now();
-    console.log('💾 Portfolio data cached for 5 minutes');
+    console.log('💾 Portfolio data cached for 15 minutes');
 
+    res.set('Cache-Control', 'public, max-age=120'); // 2 Minuten Browser-Cache
     res.status(200).json({
       success: true,
       count: portfolioWithPrices.length,

@@ -287,6 +287,10 @@ const RegisterPage = () => {
 
     try {
       console.log('📝 Registrierungs-Versuch:', formData.email);
+      console.log('🐛 DEBUG - Gesendete Daten:', {
+        ...formData,
+        password: '***hidden***'
+      });
 
       const response = await authAPI.register(formData);
 
