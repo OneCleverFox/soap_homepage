@@ -142,11 +142,22 @@ const AdminPortfolio = () => {
       if (verpackungData.success) {
         const verpackungList = verpackungData.data.map(item => item.bezeichnung);
         
-        // Bestehende Verpackungen aus Produkten hinzufügen (falls nicht in DB)
-        const existingVerpackungen = [...new Set(products.map(p => p.verpackung).filter(Boolean))];
-        const filteredExisting = existingVerpackungen.filter(v => !verpackungList.includes(v));
+        // ⚠️ DATENBANK-KONSISTENZ: Nur DB-Verpackungen als primäre Optionen
+        const primaryOptions = verpackungList;
         
-        setVerpackungOptions([...new Set([...verpackungList, ...filteredExisting])]);
+        // Bestehende Verpackungen aus Produkten prüfen (für Datenbereinigung)
+        const existingVerpackungen = [...new Set(products.map(p => p.verpackung).filter(Boolean))];
+        const orphanedVerpackungen = existingVerpackungen.filter(v => !verpackungList.includes(v));
+        
+        // Warnung wenn veraltete Verpackungen gefunden werden
+        if (orphanedVerpackungen.length > 0) {
+          console.warn('⚠️ Veraltete Verpackungen in Portfolio gefunden:', orphanedVerpackungen);
+          console.warn('Diese sollten in der Verpackungen-Verwaltung angelegt oder Produkte aktualisiert werden.');
+        }
+        
+        // Primäre DB-Optionen + veraltete (für Bearbeitung bestehender Produkte)
+        const allOptions = [...primaryOptions, ...orphanedVerpackungen.map(v => `${v} (VERALTET)`)];
+        setVerpackungOptions([...new Set(allOptions)]);
       }
 
       // Nur echte Duftöle laden (nicht gemischte Rohstoffe)  
@@ -474,6 +485,32 @@ const AdminPortfolio = () => {
 
   const handleSubmit = async () => {
     try {
+      // 🔍 VALIDIERUNG: Prüfe Verpackung vor Speicherung
+      const verpackungName = formData.verpackung;
+      
+      // Prüfe ob Verpackung als "VERALTET" markiert ist
+      if (verpackungName && verpackungName.includes('(VERALTET)')) {
+        const confirmed = window.confirm(
+          `⚠️ Sie verwenden eine veraltete Verpackung: "${verpackungName}"\n\n` +
+          'Diese Verpackung existiert nicht mehr in der Verpackungen-Verwaltung und kann Probleme ' +
+          'in der Warenberechnung verursachen.\n\n' +
+          'Möchten Sie trotzdem speichern?\n\n' +
+          '💡 Empfehlung: Wählen Sie eine aktuelle Verpackung aus oder legen Sie die Verpackung ' +
+          'in der Verpackungen-Verwaltung an.'
+        );
+        
+        if (!confirmed) {
+          return;
+        }
+      }
+      
+      // Prüfe ob Verpackung in verfügbaren Optionen ist (ohne VERALTET-Markierung)
+      const verfuegbareVerpackungen = verpackungOptions.filter(v => !v.includes('(VERALTET)'));
+      if (verpackungName && !verfuegbareVerpackungen.includes(verpackungName) && !verpackungName.includes('(VERALTET)')) {
+        showSnackbar('⚠️ Bitte wählen Sie eine verfügbare Verpackung aus.', 'error');
+        return;
+      }
+      
       const url = editingProduct 
         ? `${API_BASE}/admin/portfolio/${editingProduct._id}`
         : `${API_BASE}/admin/portfolio`;

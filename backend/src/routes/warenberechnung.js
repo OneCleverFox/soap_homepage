@@ -45,12 +45,24 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
         duftoil = duftoilList.find(d => d.bezeichnung === portfolio.aroma);
       }
       
-      const verpackungList = await Verpackung.find();
+      // ✅ KONSISTENTE DATENQUELLE: Nur verfügbare Verpackungen laden
+      const verpackungList = await Verpackung.find({ verfuegbar: true });
       const verpackung = verpackungList.find(v => v.bezeichnung === portfolio.verpackung);
       
-      // Kosten berechnen
+      // ⚠️ Warnung wenn Verpackung nicht gefunden
+      if (!verpackung && portfolio.verpackung) {
+        console.warn(`⚠️ Verpackung "${portfolio.verpackung}" für Portfolio "${portfolio.name}" nicht in DB gefunden`);
+        console.warn('Portfolio sollte aktualisiert oder Verpackung in Verpackungen-Verwaltung angelegt werden.');
+      }
+      
+      // Kosten berechnen mit verbessertem Logging
       const gewichtInGramm = portfolio.gramm || 50;
       const rohseifeKosten = rohseife ? (gewichtInGramm * rohseife.preisProGramm) : 0;
+      
+      // Logging für Nachvollziehbarkeit
+      if (!rohseife && portfolio.seife) {
+        console.warn(`⚠️ Rohseife "${portfolio.seife}" für Portfolio "${portfolio.name}" nicht gefunden`);
+      }
       
       let duftoelKosten = 0;
       if (duftoil) {
