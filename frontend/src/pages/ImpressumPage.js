@@ -1,5 +1,5 @@
 import React from 'react';
-import { useCompanyInfo } from '../hooks/useCompanyInfo';
+import { useCompany } from '../contexts/CompanyContext';
 import { 
   Container, 
   Typography, 
@@ -10,16 +10,41 @@ import {
 } from '@mui/material';
 
 const ImpressumPage = () => {
-  const { companyInfo } = useCompanyInfo();
-  
-  // Daten mit Fallback-Werten
-  const name = companyInfo.name || 'Glücksmomente Manufaktur';
-  const email = companyInfo.contact?.email || 'info@gluecksmomente-manufaktur.de';
-  const ceo = companyInfo.taxInfo?.ceo || 'Ralf Jacob';
-  const address = companyInfo.address || {};
-  const taxInfo = companyInfo.taxInfo || {};
-  const phone = companyInfo.contact?.phone || '+49 123 456789';
-  
+  const { 
+    name, 
+    address, 
+    contact, 
+    vatId, 
+    ceo, 
+    legalForm,
+    fullAddress,
+    email,
+    phone,
+    loading,
+    error
+  } = useCompany();
+
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Typography variant="h6">Lade Impressum...</Typography>
+        </Paper>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Paper elevation={1} sx={{ p: 4 }}>
+          <Typography variant="h6" color="error">
+            Fehler beim Laden der Unternehmensdaten: {error}
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
@@ -37,19 +62,24 @@ const ImpressumPage = () => {
             
             <Box sx={{ mt: 2 }}>
               <Typography variant="body1" paragraph>
-                <strong>{name}</strong><br />
-                {ceo}<br />
-                {address.street || 'Wasserverkstraße 15'}<br />
-                {address.postalCode || '68642'} {address.city || 'Bürstadt'}<br />
-                {address.country || 'Deutschland'}
+                <strong>{name || 'Glücksmomente Manufaktur'}</strong><br />
+                {ceo && `Inhaber: ${ceo}`}{ceo && <br />}
+                {legalForm && `Rechtsform: ${legalForm}`}{legalForm && <br />}
+                {address?.street && address?.houseNumber ? `${address.street} ${address.houseNumber}` : address?.street || ''}<br />
+                {address?.postalCode && address?.city ? `${address.postalCode} ${address.city}` : '68642 Bürstadt'}<br />
+                {address?.country || 'Deutschland'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
                 Kontakt
               </Typography>
               <Typography variant="body1" paragraph>
-                Telefon: {phone}<br />
-                E-Mail: {email}
+                {phone && (
+                  <>
+                    Telefon: {phone}<br />
+                  </>
+                )}
+                E-Mail: {email || contact?.email || 'info@gluecksmomente-manufaktur.de'}
               </Typography>
               
               <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
@@ -57,14 +87,7 @@ const ImpressumPage = () => {
               </Typography>
               <Typography variant="body1" paragraph>
                 Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:<br />
-                {taxInfo.vatId || 'DE1234567890000'}
-              </Typography>
-              
-              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-                Rechtsform
-              </Typography>
-              <Typography variant="body1" paragraph>
-                {taxInfo.legalForm || 'Einzelunternehmen'}
+                <strong>{vatId || '[Keine USt-IdNr. hinterlegt]'}</strong>
               </Typography>
             </Box>
           </Grid>
@@ -78,8 +101,10 @@ const ImpressumPage = () => {
               Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
             </Typography>
             <Typography variant="body1" paragraph>
-              Ralf Jacob<br />
-              68642 Bürstadt
+              {ceo || 'Ralf Jacob'}<br />
+              {address?.street && address?.houseNumber ? `${address.street} ${address.houseNumber}` : address?.street || ''}<br />
+              {address?.postalCode && address?.city ? `${address.postalCode} ${address.city}` : '68642 Bürstadt'}<br />
+              {address?.country || 'Deutschland'}
             </Typography>
             
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>

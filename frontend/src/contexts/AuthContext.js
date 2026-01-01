@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import cookieManager from '../utils/cookieManager';
 
 const AuthContext = createContext();
 
@@ -14,6 +15,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  // DSGVO-KONFORM: Token ist notwendig für Login-Funktionalität
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
@@ -45,6 +47,7 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (response.ok) {
+        // DSGVO: Token und User-Daten sind notwendig für Authentifizierung
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
         
@@ -94,6 +97,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // DSGVO: Logout-Bereinigung ist notwendig
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setToken(null);
@@ -106,6 +110,7 @@ export const AuthProvider = ({ children }) => {
 
   // Neue Funktion für direktes Login mit Benutzerdaten (für Admin-Login)
   const loginWithUserData = (userData, userToken) => {
+    // DSGVO: Admin-Login Daten sind notwendig
     localStorage.setItem('token', userToken);
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(userToken);

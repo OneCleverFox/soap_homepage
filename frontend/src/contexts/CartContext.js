@@ -3,6 +3,7 @@ import { cartAPI } from '../services/api';
 import { useAuth } from './AuthContext';
 import stockEventService from '../services/stockEventService';
 import toast from 'react-hot-toast';
+import cookieManager from '../utils/cookieManager';
 
 const CartContext = createContext();
 
@@ -23,7 +24,7 @@ export const CartProvider = ({ children }) => {
 
   // Load cart from backend when user logs in (with caching)
   const loadCart = useCallback(async (force = false) => {
-    const token = localStorage.getItem('token');
+    const token = cookieManager.getItem('token', 'necessary');
     if (!token) {
       setItems([]);
       return;
@@ -166,17 +167,10 @@ export const CartProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
     
-    const token = localStorage.getItem('token');
-    const sessionToken = sessionStorage.getItem('token');
-    const finalToken = token || sessionToken;
+    const token = cookieManager.getItem('token', 'necessary');
+    console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
     
-    console.log('🔑 Token Check:', {
-      localStorage: token ? 'VORHANDEN' : 'NICHT VORHANDEN',
-      sessionStorage: sessionToken ? 'VORHANDEN' : 'NICHT VORHANDEN', 
-      final: finalToken ? 'VORHANDEN' : 'NICHT VORHANDEN'
-    });
-    
-    if (finalToken && isMounted) {
+    if (token && isMounted) {
       console.log('📦 Lade Warenkorb beim Mount...');
       loadCart();
     } else {
@@ -190,7 +184,7 @@ export const CartProvider = ({ children }) => {
       
       if (productId === null) {
         // Globales Update - kompletten Warenkorb neu laden
-        const currentToken = localStorage.getItem('token');
+        const currentToken = cookieManager.getItem('token', 'necessary');
         if (currentToken) {
           loadCart();
         }
@@ -267,7 +261,7 @@ export const CartProvider = ({ children }) => {
   }, [loadCart]);
 
   const addToCart = async (product, quantity = 1) => {
-    const token = localStorage.getItem('token');
+    const token = cookieManager.getItem('token', 'necessary');
     if (!token) {
       toast.error('Bitte melden Sie sich an, um Produkte in den Warenkorb zu legen');
       return;
@@ -325,7 +319,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeFromCart = async (productId) => {
-    const token = localStorage.getItem('token');
+    const token = cookieManager.getItem('token', 'necessary');
     if (!token) {
       return;
     }
@@ -363,7 +357,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const updateQuantity = async (productId, quantity) => {
-    const token = localStorage.getItem('token');
+    const token = cookieManager.getItem('token', 'necessary');
     if (!token) {
       return;
     }
@@ -437,7 +431,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const clearCart = async () => {
-    const token = localStorage.getItem('token');
+    const token = cookieManager.getItem('token', 'necessary');
     if (!token) {
       setItems([]);
       return;

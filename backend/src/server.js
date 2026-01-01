@@ -12,6 +12,7 @@ const DatabaseDebugger = require('./utils/databaseDebugger');
 const { cacheManager } = require('./utils/cacheManager');
 const { globalErrorHandler, notFoundHandler, asyncHandler } = require('./middleware/errorHandler');
 const { performanceMonitor, trackRequest } = require('./utils/performanceMonitor');
+const { IPAnonymizer } = require('./utils/ipAnonymizer');
 
 // VERSION MARKER - Railway Deployment Check
 const APP_VERSION = '2.0.0-optimized';
@@ -472,7 +473,8 @@ app.get('/api/health', (req, res) => {
       isConnected: dbStatus === 1
     },
     timestamp: new Date().toISOString(),
-    ipAddress: req.ip || 'unknown'
+    // DSGVO-konforme IP-Anonymisierung - keine Vollspeicherung von IPs
+    ipAddress: IPAnonymizer.anonymizeIP(req.ip || 'unknown')
   });
 });
 
