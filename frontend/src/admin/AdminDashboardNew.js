@@ -25,7 +25,8 @@ import {
   Button,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Stack
 } from '@mui/material';
 import { 
   Warning as WarningIcon,
@@ -387,63 +388,148 @@ const AdminDashboard = () => {
                 Basierend auf Bestand und Verkaufshäufigkeit der letzten 90 Tage
               </Typography>
               
-              <TableContainer component={Paper} variant=\"outlined\">
-                <Table size=\"small\">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><strong>Produkt</strong></TableCell>
-                      <TableCell align=\"center\"><strong>Aktueller Bestand</strong></TableCell>
-                      <TableCell align=\"center\"><strong>Verkäufe (90T)</strong></TableCell>
-                      <TableCell align=\"center\"><strong>Reichweite (Tage)</strong></TableCell>
-                      <TableCell align=\"center\"><strong>Priorität</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {produktion.produkteZurProduktion.map((product, index) => (
-                      <TableRow key={product._id || index}>
-                        <TableCell>
-                          <Typography variant=\"body2\" sx={{ fontWeight: 'bold' }}>
-                            {product.produktName || product.portfolio?.name || 'Unbekannt'}
-                          </Typography>
-                          {product.portfolio?.seife && (
-                            <Typography variant=\"caption\" color=\"text.secondary\">
-                              {product.portfolio.seife} • {product.portfolio.aroma}
+              {/* Mobile kompakte Tabelle */}
+              <Box sx={{ display: { xs: 'block', sm: 'none' } }}>
+                <TableContainer component={Paper} variant=\"outlined\" sx={{ overflow: 'visible' }}>
+                  <Table size=\"small\" sx={{ tableLayout: 'fixed' }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ width: '50%', fontSize: '0.75rem', p: 1 }}><strong>Produkt</strong></TableCell>
+                        <TableCell align=\"center\" sx={{ width: '25%', fontSize: '0.75rem', p: 1 }}><strong>Bestand</strong></TableCell>
+                        <TableCell align=\"center\" sx={{ width: '25%', fontSize: '0.75rem', p: 1 }}><strong>Score</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {produktion.produkteZurProduktion.map((product, index) => (
+                        <TableRow key={product._id || index}>
+                          <TableCell sx={{ p: 1 }}>
+                            <Typography variant=\"body2\" sx={{ fontWeight: 'bold', fontSize: '0.75rem', lineHeight: 1.2 }}>
+                              {product.produktName || product.portfolio?.name || 'Unbekannt'}
                             </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align=\"center\">
-                          <Chip 
-                            label={product.aktuellerBestand}
-                            color={product.aktuellerBestand <= product.mindestbestand ? 'error' : 'default'}
-                            size=\"small\"
-                          />
-                        </TableCell>
-                        <TableCell align=\"center\">{product.verkaufteMenge90Tage}</TableCell>
-                        <TableCell align=\"center\">
-                          <Chip 
-                            label={product.voraussichtlicheReichweite > 999 ? '∞' : `${product.voraussichtlicheReichweite}d`}
-                            color={product.voraussichtlicheReichweite < 30 ? 'error' : product.voraussichtlicheReichweite < 60 ? 'warning' : 'success'}
-                            size=\"small\"
-                          />
-                        </TableCell>
-                        <TableCell align=\"center\">
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Typography variant=\"body2\" sx={{ mr: 1 }}>
+                            <Typography variant=\"caption\" color=\"text.secondary\" sx={{ fontSize: '0.65rem', display: 'block' }}>
+                              {product.verkaufteMenge90Tage}x verkauft
+                            </Typography>
+                          </TableCell>
+                          <TableCell align=\"center\" sx={{ p: 1 }}>
+                            <Chip 
+                              label={product.aktuellerBestand}
+                              color={product.aktuellerBestand <= product.mindestbestand ? 'error' : 'default'}
+                              size=\"small\"
+                              sx={{ fontSize: '0.65rem', height: '18px', minWidth: '24px' }}
+                            />
+                          </TableCell>
+                          <TableCell align=\"center\" sx={{ p: 1 }}>
+                            <Typography variant=\"caption\" sx={{ fontWeight: 'bold', fontSize: '0.7rem', display: 'block' }}>
                               {product.prioritaetsScore}
                             </Typography>
-                            <LinearProgress 
-                              variant=\"determinate\" 
-                              value={Math.min(product.prioritaetsScore * 2, 100)} 
-                              sx={{ width: 40, height: 4 }}
-                              color={product.prioritaetsScore > 20 ? 'error' : product.prioritaetsScore > 10 ? 'warning' : 'info'}
-                            />
-                          </Box>
-                        </TableCell>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              {/* Tablet Tabelle */}
+              <Box sx={{ display: { xs: 'none', sm: 'block', md: 'none' } }}>
+                <TableContainer component={Paper} variant=\"outlined\">
+                  <Table size=\"small\">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Produkt</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Bestand</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Verkäufe</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Priorität</strong></TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                    </TableHead>
+                    <TableBody>
+                      {produktion.produkteZurProduktion.map((product, index) => (
+                        <TableRow key={product._id || index}>
+                          <TableCell>
+                            <Typography variant=\"body2\" sx={{ fontWeight: 'bold' }}>
+                              {product.produktName || product.portfolio?.name || 'Unbekannt'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align=\"center\">
+                            <Chip 
+                              label={product.aktuellerBestand}
+                              color={product.aktuellerBestand <= product.mindestbestand ? 'error' : 'default'}
+                              size=\"small\"
+                            />
+                          </TableCell>
+                          <TableCell align=\"center\">{product.verkaufteMenge90Tage}</TableCell>
+                          <TableCell align=\"center\">
+                            <Typography variant=\"body2\">
+                              {product.prioritaetsScore}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              {/* Desktop Tabelle */}
+              <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+                <TableContainer component={Paper} variant=\"outlined\">
+                  <Table size=\"small\">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Produkt</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Aktueller Bestand</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Verkäufe (90T)</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Reichweite (Tage)</strong></TableCell>
+                        <TableCell align=\"center\"><strong>Priorität</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {produktion.produkteZurProduktion.map((product, index) => (
+                        <TableRow key={product._id || index}>
+                          <TableCell>
+                            <Typography variant=\"body2\" sx={{ fontWeight: 'bold' }}>
+                              {product.produktName || product.portfolio?.name || 'Unbekannt'}
+                            </Typography>
+                            {product.portfolio?.seife && (
+                              <Typography variant=\"caption\" color=\"text.secondary\">
+                                {product.portfolio.seife} • {product.portfolio.aroma}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align=\"center\">
+                            <Chip 
+                              label={product.aktuellerBestand}
+                              color={product.aktuellerBestand <= product.mindestbestand ? 'error' : 'default'}
+                              size=\"small\"
+                            />
+                          </TableCell>
+                          <TableCell align=\"center\">{product.verkaufteMenge90Tage}</TableCell>
+                          <TableCell align=\"center\">
+                            <Chip 
+                              label={product.voraussichtlicheReichweite > 999 ? '∞' : `${product.voraussichtlicheReichweite}d`}
+                              color={product.voraussichtlicheReichweite < 30 ? 'error' : product.voraussichtlicheReichweite < 60 ? 'warning' : 'success'}
+                              size=\"small\"
+                            />
+                          </TableCell>
+                          <TableCell align=\"center\">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <Typography variant=\"body2\" sx={{ mr: 1 }}>
+                                {product.prioritaetsScore}
+                              </Typography>
+                              <LinearProgress 
+                                variant=\"determinate\" 
+                                value={Math.min(product.prioritaetsScore * 2, 100)} 
+                                sx={{ width: 40, height: 4 }}
+                                color={product.prioritaetsScore > 20 ? 'error' : product.prioritaetsScore > 10 ? 'warning' : 'info'}
+                              />
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
