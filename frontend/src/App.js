@@ -40,6 +40,7 @@ const OrderPaymentSuccess = lazy(() => import('./pages/OrderPaymentSuccess'));
 const ImpressumPage = lazy(() => import('./pages/ImpressumPage'));
 const DatenschutzPage = lazy(() => import('./pages/DatenschutzPage'));
 const AGBPage = lazy(() => import('./pages/AGBPage'));
+const WiderrufsrechtPage = lazy(() => import('./pages/WiderrufsrechtPage'));
 
 // Admin Pages - Lazy Loading für bessere Performance
 const AdminPortfolio = lazy(() => import('./admin/AdminPortfolio'));
@@ -145,6 +146,7 @@ function App() {
                       <Route path="/impressum" element={<ImpressumPage />} />
                       <Route path="/datenschutz" element={<DatenschutzPage />} />
                       <Route path="/agb" element={<AGBPage />} />
+                      <Route path="/widerrufsrecht" element={<WiderrufsrechtPage />} />
                       
                       {/* Legacy Routes (German) */}
                     <Route path="/produkte" element={<Navigate to="/products" replace />} />
