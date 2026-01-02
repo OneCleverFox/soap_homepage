@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 
 const AGBPage = () => {
-  const { name, email } = useCompany();
+  const { name, email } = useCompanyInfo();
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Paper elevation={1} sx={{ p: 4 }}>
