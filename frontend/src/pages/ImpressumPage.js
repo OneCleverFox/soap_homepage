@@ -137,8 +137,35 @@ const ImpressumPage = () => {
               Verbreitung und jede Art der Verwertung außerhalb der Grenzen des Urheberrechtes 
               bedürfen der schriftlichen Zustimmung des jeweiligen Autors bzw. Erstellers.
             </Typography>
+            
+            <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+              EU-Streitschlichtung
+            </Typography>
+            <Typography variant="body2" paragraph>
+              Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit:<br />
+              <a href="https://ec.europa.eu/consumers/odr/" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
+                https://ec.europa.eu/consumers/odr/
+              </a><br />
+              Unsere E-Mail-Adresse finden Sie oben im Impressum.
+            </Typography>
+            
+            <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
+              Verbraucherstreitbeilegung/Universalschlichtungsstelle
+            </Typography>
+            <Typography variant="body2" paragraph>
+              Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer 
+              Verbraucherschlichtungsstelle teilzunehmen.
+            </Typography>
           </Grid>
         </Grid>
+        
+        <Divider sx={{ my: 3 }} />
+        
+        <Typography variant="body2" sx={{ color: 'text.secondary', textAlign: 'center' }}>
+          Quelle: <a href="https://www.e-recht24.de" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
+            https://www.e-recht24.de
+          </a>
+        </Typography>
       </Paper>
     </Container>
   );
