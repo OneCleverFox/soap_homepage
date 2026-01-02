@@ -506,7 +506,7 @@ const ProductsPage = React.memo(() => {
                 <CardContent sx={{ flexGrow: 1, p: 3 }}>
                   {/* Produktname */}
                   <Typography 
-                    variant="h5" 
+                    variant="h2" 
                     gutterBottom 
                     fontWeight="bold"
                     sx={{ mb: 2 }}

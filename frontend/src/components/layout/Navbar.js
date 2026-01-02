@@ -299,7 +299,8 @@ const Navbar = () => {
   const legalNavItems = [
     { label: 'Impressum', path: '/impressum', icon: '📄' },
     { label: 'Datenschutz', path: '/datenschutz', icon: '🔒' },
-    { label: 'AGB', path: '/agb', icon: '⚖️' }
+    { label: 'AGB', path: '/agb', icon: '⚖️' },
+    { label: 'Widerrufsrecht', path: '/widerrufsrecht', icon: '↩️' }
   ];
 
   const adminNavItems = [
