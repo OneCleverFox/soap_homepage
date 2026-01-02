@@ -64,6 +64,7 @@ const AdminLager = () => {
   
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [showInactiveItems, setShowInactiveItems] = useState(false);
   
   // Dialog States
   const [inventurDialog, setInventurDialog] = useState(false);
@@ -102,10 +103,26 @@ const AdminLager = () => {
     verpackungen: []
   });
 
-  // Search Hook für die aktuelle Tab-Daten
+  // Search Hook für die aktuelle Tab-Daten mit Filter für aktive/inaktive Items
   const getCurrentTabData = () => {
     const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen'];
-    return data[tabNames[activeTab]] || [];
+    const rawData = data[tabNames[activeTab]] || [];
+    
+    // Filter für aktive/inaktive Items anwenden
+    const filteredData = rawData.filter(item => {
+      const isActive = activeTab === 0 ? item.aktiv : item.verfuegbar;
+      return showInactiveItems ? !isActive : isActive;
+    });
+    
+    // Debug-Log
+    if (activeTab === 0) { // Nur für Fertigprodukte
+      console.log(`🔍 Filter Debug - Tab: ${tabNames[activeTab]}, Show Inactive: ${showInactiveItems}`);
+      console.log(`📊 Raw Data: ${rawData.length}, Filtered: ${filteredData.length}`);
+      console.log(`✅ Active items: ${rawData.filter(item => item.aktiv).length}`);
+      console.log(`❌ Inactive items: ${rawData.filter(item => !item.aktiv).length}`);
+    }
+    
+    return filteredData;
   };
 
   const {
@@ -158,7 +175,7 @@ const AdminLager = () => {
       setLoading(true);
       
       const endpoints = [
-        { key: 'fertigprodukte', url: '/portfolio' },
+        { key: 'fertigprodukte', url: '/portfolio?includeUnavailable=true' },
         { key: 'rohseifen', url: '/rohseife?includeUnavailable=true' },
         { key: 'duftoele', url: '/duftoele?includeUnavailable=true' },
         { key: 'verpackungen', url: '/verpackungen?includeUnavailable=true' }
@@ -174,6 +191,13 @@ const AdminLager = () => {
           
           if (result && result.success) {
             newData[endpoint.key] = result.data || [];
+            // Debug-Log für Fertigprodukte
+            if (endpoint.key === 'fertigprodukte') {
+              const total = result.data?.length || 0;
+              const active = result.data?.filter(item => item.aktiv).length || 0;
+              const inactive = total - active;
+              console.log(`🧼 Fertigprodukte geladen: ${total} total (${active} aktiv, ${inactive} inaktiv)`);
+            }
           } else {
             console.error(`Fehler beim Laden von ${endpoint.key}:`, result?.message || 'Unbekannter Fehler');
             newData[endpoint.key] = [];
@@ -937,7 +961,7 @@ const AdminLager = () => {
   ];
 
   const currentTab = tabs[activeTab];
-  const currentData = filterItems(data[currentTab.key] || [], searchTerm);
+  const currentData = filterItems(getCurrentTabData(), searchTerm);
 
   // Render-Funktionen für verschiedene Zellentypen
   const renderCell = (item, column) => {
@@ -1178,7 +1202,11 @@ const AdminLager = () => {
       <Paper sx={{ mb: 3 }}>
         <Tabs
           value={activeTab}
-          onChange={(e, newValue) => setActiveTab(newValue)}
+          onChange={(e, newValue) => {
+            setActiveTab(newValue);
+            setShowInactiveItems(false); // Reset Filter beim Tabwechsel
+            setSearchTerm(''); // Reset Suche beim Tabwechsel
+          }}
           variant={isMobile ? "fullWidth" : "fullWidth"}
           sx={{
             '& .MuiTab-root': {
@@ -1299,6 +1327,43 @@ const AdminLager = () => {
                 )
               }}
             />
+            
+            {/* Filter für aktive/inaktive Items */}
+            <Box sx={{ 
+              display: 'flex', 
+              gap: 1, 
+              alignItems: 'center', 
+              flexWrap: 'wrap',
+              flexDirection: isMobile ? 'column' : 'row'
+            }}>
+              <Button
+                variant={showInactiveItems ? "contained" : "outlined"}
+                color={showInactiveItems ? "warning" : "primary"}
+                size={isMobile ? "medium" : "small"}
+                startIcon={showInactiveItems ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                onClick={() => setShowInactiveItems(!showInactiveItems)}
+                sx={{ 
+                  width: isMobile ? '100%' : 'auto',
+                  justifyContent: isMobile ? 'center' : 'flex-start'
+                }}
+              >
+                {showInactiveItems 
+                  ? (activeTab === 0 ? 'Inaktive Produkte' : 'Nicht verfügbare Items')
+                  : (activeTab === 0 ? 'Aktive Produkte' : 'Verfügbare Items')
+                }
+              </Button>
+              
+              <Chip
+                size={isMobile ? "medium" : "small"}
+                label={`${currentData.length} von ${data[currentTab.key]?.length || 0} Items`}
+                color="primary"
+                variant="outlined"
+                sx={{ 
+                  width: isMobile ? '100%' : 'auto',
+                  justifyContent: isMobile ? 'center' : 'flex-start'
+                }}
+              />
+            </Box>
             
             {searchTerm && (
               <Box sx={{ 
@@ -1559,8 +1624,8 @@ const AdminLager = () => {
         }}>
           <Typography variant="body2" color="text.secondary">
             {searchTerm ? 
-              `${currentData.length} von ${data[currentTab.key]?.length || 0} ${currentTab.label} angezeigt` :
-              `${currentData.length} ${currentTab.label} angezeigt`
+              `${currentData.length} von ${getCurrentTabData().length} ${currentTab.label} angezeigt` :
+              `${currentData.length} ${showInactiveItems ? 'inaktive' : 'aktive'} ${currentTab.label} angezeigt`
             }
           </Typography>
           
@@ -1568,14 +1633,14 @@ const AdminLager = () => {
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Chip
                 icon={<CheckCircleIcon />}
-                label={`Aktiv: ${currentData.filter(item => item.aktiv).length}`}
+                label={`Gesamt aktiv: ${data[currentTab.key]?.filter(item => item.aktiv).length || 0}`}
                 color="success"
                 size="small"
                 variant="outlined"
               />
               <Chip
                 icon={<CancelIcon />}
-                label={`Inaktiv: ${currentData.filter(item => !item.aktiv).length}`}
+                label={`Gesamt inaktiv: ${data[currentTab.key]?.filter(item => !item.aktiv).length || 0}`}
                 color="error"
                 size="small"
                 variant="outlined"

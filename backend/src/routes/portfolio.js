@@ -253,14 +253,31 @@ async function calculatePortfolioPrice(portfolioItem) {
 // @access  Public (aktive), Admin (alle mit includeInactive=true)
 router.get('/', async (req, res) => {
   try {
-    const { includeInactive } = req.query;
+    const { includeInactive, includeUnavailable } = req.query;
+    
+    // Unterstütze beide Parameter für Konsistenz
+    const shouldIncludeInactive = includeInactive === 'true' || includeUnavailable === 'true';
     
     // Filter-Query basierend auf Parameter
     let filter = {};
-    if (includeInactive !== 'true') {
+    if (!shouldIncludeInactive) {
       filter.aktiv = true; // Nur aktive Produkte für normale Benutzer
     }
-    // Wenn includeInactive=true, werden alle Produkte (aktiv + inaktiv) geladen
+    // Wenn includeInactive=true oder includeUnavailable=true, werden alle Produkte (aktiv + inaktiv) geladen
+    
+    // Migration: Aktualisiere alle Portfolio-Items ohne aktiv-Feld (einmalig)
+    const itemsWithoutActivField = await Portfolio.countDocuments({ 
+      aktiv: { $exists: false } 
+    });
+    
+    if (itemsWithoutActivField > 0) {
+      logger.info(`🔧 Migration: Setze aktiv=false für ${itemsWithoutActivField} Portfolio-Items`);
+      await Portfolio.updateMany(
+        { aktiv: { $exists: false } },
+        { $set: { aktiv: false } }
+      );
+      logger.info('✅ Migration abgeschlossen');
+    }
     
     const portfolioItems = await Portfolio.find(filter)
       .sort({ aktiv: -1, reihenfolge: 1, name: 1 }); // Aktive zuerst, dann Sortierung
@@ -274,6 +291,11 @@ router.get('/', async (req, res) => {
         });
         
         const itemObj = item.toObject();
+        
+        // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
+        if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
+          itemObj.aktiv = false; // Default für undefined/null Werte
+        }
         
         // Füge Bestand-Informationen im erwarteten Format hinzu
         if (bestand) {
@@ -298,6 +320,12 @@ router.get('/', async (req, res) => {
         return itemObj;
       })
     );
+
+    // Debug-Log für die Antwort
+    const activeCount = portfolioWithBestand.filter(item => item.aktiv === true).length;
+    const inactiveCount = portfolioWithBestand.filter(item => item.aktiv === false).length;
+    
+    logger.info(`📊 Portfolio Response: ${portfolioWithBestand.length} total (${activeCount} aktiv, ${inactiveCount} inaktiv) - includeInactive: ${shouldIncludeInactive}`);
 
     res.status(200).json({
       success: true,
