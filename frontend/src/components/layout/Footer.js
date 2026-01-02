@@ -35,7 +35,8 @@ const Footer = () => {
     legal: [
       { label: 'Impressum', path: '/impressum' },
       { label: 'Datenschutz', path: '/datenschutz' },
-      { label: 'AGB', path: '/agb' }
+      { label: 'AGB', path: '/agb' },
+      { label: 'Widerrufsrecht', path: '/widerrufsrecht' }
     ]
   };
 

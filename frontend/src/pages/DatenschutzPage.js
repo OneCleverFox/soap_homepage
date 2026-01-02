@@ -88,34 +88,78 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">2. Erhebung und Speicherung personenbezogener Daten</Typography>
+              <Typography variant="h6">2. Server-Logfiles</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
-                <strong>Beim Besuch der Website:</strong><br />
-                Beim Aufrufen unserer Website werden durch den auf Ihrem Endgerät zum Einsatz 
-                kommenden Browser automatisch Informationen an den Server unserer Website gesendet. 
-                Diese Informationen werden temporär in einem sog. Logfile gespeichert.
+                Sie können unsere Webseiten besuchen, ohne Angaben zu Ihrer Person zu machen.
               </Typography>
               <Typography variant="body2" paragraph>
-                Folgende Informationen werden dabei ohne Ihr Zutun erfasst und bis zur 
-                automatisierten Löschung gespeichert:
+                Bei jedem Zugriff auf unsere Website werden an uns oder unseren Webhoster / IT-Dienstleister 
+                Nutzungsdaten durch Ihren Internet Browser übermittelt und in Protokolldaten (sog. Server-Logfiles) 
+                gespeichert. Zu diesen gespeicherten Daten gehören z.B.:
               </Typography>
               <Typography component="div" variant="body2">
                 <ul>
+                  <li>Name der aufgerufenen Seite</li>
+                  <li>Datum und Uhrzeit des Abrufs</li>
                   <li>IP-Adresse des anfragenden Rechners</li>
-                  <li>Datum und Uhrzeit des Zugriffs</li>
-                  <li>Name und URL der abgerufenen Datei</li>
-                  <li>Website, von der aus der Zugriff erfolgt (Referrer-URL)</li>
+                  <li>Übertragene Datenmenge</li>
+                  <li>Anfragender Provider</li>
                   <li>Verwendeter Browser und ggf. das Betriebssystem</li>
+                  <li>Website, von der aus der Zugriff erfolgt (Referrer-URL)</li>
                 </ul>
+              </Typography>
+              <Typography variant="body2" paragraph>
+                <strong>Rechtsgrundlage:</strong> Art. 6 Abs. 1 lit. f DSGVO aus unserem überwiegenden 
+                berechtigten Interesse an der Gewährleistung eines störungsfreien Betriebs unserer 
+                Website sowie zur Verbesserung unseres Angebotes.
               </Typography>
             </AccordionDetails>
           </Accordion>
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">3. Verwendung von Cookies</Typography>
+              <Typography variant="h6">3. Kontaktaufnahme</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" paragraph>
+                <strong>Kontaktaufnahme per E-Mail:</strong><br />
+                Wenn Sie per E-Mail initiativ mit uns in Geschäftskontakt treten, erheben wir Ihre 
+                personenbezogenen Daten (Name, E-Mail-Adresse, Nachrichtentext) nur in dem von Ihnen 
+                zur Verfügung gestellten Umfang. Die Datenverarbeitung dient der Bearbeitung und 
+                Beantwortung Ihrer Kontaktanfrage.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Wenn die Kontaktaufnahme der Durchführung vorvertraglicher Maßnahmen (z.B. Beratung 
+                bei Kaufinteresse, Angebotserstellung) dient oder einen bereits zwischen Ihnen und uns 
+                geschlossenen Vertrag betrifft, erfolgt diese Datenverarbeitung auf Grundlage des 
+                <strong>Art. 6 Abs. 1 lit. b DSGVO</strong>.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Erfolgt die Kontaktaufnahme aus anderen Gründen, erfolgt diese Datenverarbeitung auf 
+                Grundlage des <strong>Art. 6 Abs. 1 lit. f DSGVO</strong> aus unserem überwiegenden 
+                berechtigten Interesse an der Bearbeitung und Beantwortung Ihrer Anfrage. In diesem Fall 
+                haben Sie das Recht, aus Gründen, die sich aus Ihrer besonderen Situation ergeben, 
+                jederzeit dieser Verarbeitung zu widersprechen.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                <strong>Kontaktformular:</strong><br />
+                Bei der Nutzung unseres Kontaktformulars erheben wir Ihre personenbezogenen Daten 
+                (Name, E-Mail-Adresse, Nachrichtentext) nur in dem von Ihnen zur Verfügung gestellten 
+                Umfang. Die Rechtsgrundlagen entsprechen denen der E-Mail-Kontaktaufnahme.
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Ihre E-Mail-Adresse nutzen wir nur zur Bearbeitung Ihrer Anfrage. Ihre Daten werden 
+                anschließend unter Beachtung gesetzlicher Aufbewahrungsfristen gelöscht, sofern Sie 
+                der weitergehenden Verarbeitung und Nutzung nicht zugestimmt haben.
+              </Typography>
+            </AccordionDetails>
+          </Accordion>
+
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="h6">4. Verwendung von Cookies</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -134,7 +178,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">4. Registrierung und Bestellvorgang</Typography>
+              <Typography variant="h6">5. Registrierung und Bestellvorgang</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -163,7 +207,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">5. PayPal-Zahlungsabwicklung</Typography>
+              <Typography variant="h6">6. PayPal-Zahlungsabwicklung</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -200,7 +244,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">6. Drittanbieter-Services</Typography>
+              <Typography variant="h6">7. Drittanbieter-Services</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -240,7 +284,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">7. Aufbewahrungsfristen</Typography>
+              <Typography variant="h6">8. Aufbewahrungsfristen</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -267,7 +311,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">8. Ihre Rechte</Typography>
+              <Typography variant="h6">9. Ihre Rechte</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
@@ -292,7 +336,7 @@ const DatenschutzPage = () => {
 
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">9. Datensicherheit</Typography>
+              <Typography variant="h6">10. Datensicherheit</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" paragraph>
