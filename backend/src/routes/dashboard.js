@@ -884,7 +884,7 @@ function getRevenueRelevantInvoicesFilter() {
 }
 
 // GET /api/dashboard/production-capacity - Produktionskapazitäts-Analyse
-router.get('/production-capacity', auth, async (req, res) => {
+router.get('/production-capacity', authenticateToken, requireAdmin, async (req, res) => {
   try {
     console.log('📊 Starte Produktionskapazitäts-Analyse...');
     const kapazitaetsAnalyse = await getProduktionsKapazitaetsAnalyse();
