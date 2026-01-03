@@ -49,6 +49,7 @@ const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 const AdminRohstoffe = lazy(() => import('./admin/AdminRohstoffe'));
 const AdminOrdersManagement = lazy(() => import('./admin/AdminOrdersManagement'));
 const AdminInquiries = lazy(() => import('./admin/AdminInquiries'));
+const TokenDebugger = lazy(() => import('./TokenDebugger'));
 const AdminCheckout = lazy(() => import('./admin/AdminCheckout'));
 const AdminInventory = lazy(() => import('./admin/AdminInventory'));
 const AdminUsers = lazy(() => import('./admin/AdminUsers'));
@@ -174,9 +175,18 @@ function App() {
             element={
               <>
                 <Navbar />
-                <ProtectedRoute requiredRole="employee">
+                <ProtectedRoute requiredRole="admin">
                   <AdminDashboard />
                 </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/debug-token"
+            element={
+              <>
+                <Navbar />
+                <TokenDebugger />
               </>
             }
           />

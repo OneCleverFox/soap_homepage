@@ -1,5 +1,9 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 {"last_found_secrets": [{"match": "f89d2213f96ee2615e3ddcad8b860488de9395f475c86c583fc4088e09f4245b", "name": "Generic Password - c:\\Users\\rj18401\\CODE\\soap_homepage\\backend\\src\\controllers\\authController.js"}]}
 =======
 {"last_found_secrets": [{"name": "MongoDB URI - c:\\Users\\rj18401\\CODE\\soap_homepage\\backend\\scripts\\checkPortfolioVerpackungKonsistenz.js", "match": "57caa6c64c1f08b79a896d72af15aef34dc13b923c53ddb1ce81f1c51a8d1e7d"}]}
+>>>>>>> quality
+=======
+{"last_found_secrets": [{"match": "662942399a0fb1708ad0151c3be4295a916824021d42ac906391739601599845", "name": "MongoDB URI - c:\\Users\\rj18401\\CODE\\soap_homepage\\backend\\debug-rohstoffe.js"}]}
 >>>>>>> quality
