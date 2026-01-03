@@ -920,18 +920,30 @@ async function getProduktionsKapazitaetsAnalyse() {
   
   console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen`);
   
-  // 3. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
+  // 3. Bestände der Fertigprodukte abrufen
+  const bestandsAbfrage = await Bestand.find({ typ: 'produkt' });
+  const bestandsMap = new Map();
+  bestandsAbfrage.forEach(bestand => {
+    if (bestand.artikelId) {
+      bestandsMap.set(bestand.artikelId.toString(), bestand.menge || 0);
+    }
+  });
+  console.log(`📊 ${bestandsMap.size} Bestandseinträge geladen`);
+  
+  // 4. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
   const produktionsAnalyse = [];
   
   for (const produkt of portfolioProdukte) {
     const analyse = await analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen);
+    // Aktuellen Fertigproduktbestand hinzufügen
+    analyse.aktuellerBestand = bestandsMap.get(produkt._id.toString()) || 0;
     produktionsAnalyse.push(analyse);
   }
   
-  // 4. Nach limitierendem Faktor sortieren (niedrigste Produktionsmenge zuerst)
+  // 5. Nach limitierendem Faktor sortieren (niedrigste Produktionsmenge zuerst)
   produktionsAnalyse.sort((a, b) => a.maxProduktion - b.maxProduktion);
   
-  // 5. Zusammenfassung erstellen
+  // 6. Zusammenfassung erstellen
   const zusammenfassung = erstelleProduktionsZusammenfassung(produktionsAnalyse);
   
   console.log('✅ Produktionskapazitäts-Analyse abgeschlossen');
