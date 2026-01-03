@@ -297,7 +297,7 @@ async function getMeistverkaufteProdukte() {
   const verkaufsDaten = await Invoice.aggregate([
     {
       $match: {
-        status: { $in: ['sent', 'paid', 'pending'] }, // Erweitert um mehr Status
+        ...getRevenueRelevantInvoicesFilter(),
         'dates.invoiceDate': {
           $gte: new Date(lastYear, 0, 1),
           $lte: new Date(currentYear, 11, 31, 23, 59, 59)
@@ -384,7 +384,7 @@ async function getProdukteZurProduktion() {
   const verkaufsDataInvoices = await Invoice.aggregate([
     {
       $match: {
-        status: { $in: ['sent', 'paid', 'pending'] },
+        ...getRevenueRelevantInvoicesFilter(),
         'dates.invoiceDate': { $gte: last90Days }
       }
     },
@@ -535,7 +535,7 @@ async function getRechnungsStatistiken() {
           {
             $match: {
               'dates.invoiceDate': { $gte: einMonatZurueck },
-              status: { $in: ['sent', 'paid'] }
+              ...getRevenueRelevantInvoicesFilter()
             }
           },
           {
@@ -749,6 +749,25 @@ async function getFertigprodukteNiedrigerBestand() {
   });
   
   return produkteMitBestand;
+}
+
+// Hilfsfunktion: Ermittelt alle relevanten Rechnungen für Umsatz-Berechnungen
+// Berücksichtigt: sent, paid, pending und bezahlte Entwürfe
+function getRevenueRelevantInvoicesFilter() {
+  return {
+    $or: [
+      // Reguläre Rechnungen (sent, paid, pending)
+      { status: { $in: ['sent', 'paid', 'pending'] } },
+      // Bezahlte Entwürfe
+      { 
+        status: 'draft', 
+        $or: [
+          { 'payment.paidAmount': { $gt: 0 } },
+          { 'payment.paidDate': { $exists: true } }
+        ]
+      }
+    ]
+  };
 }
 
 module.exports = router;
