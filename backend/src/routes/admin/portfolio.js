@@ -199,6 +199,20 @@ router.put('/:id', async (req, res) => {
       };
     }
 
+    // Rohseifen-Konfiguration separat handhaben
+    if (updateData.rohseifenKonfiguration) {
+      console.log('🔧 PORTFOLIO UPDATE - Erhalte Rohseifen-Konfiguration:', updateData.rohseifenKonfiguration);
+      product.rohseifenKonfiguration = {
+        verwendeZweiRohseifen: updateData.rohseifenKonfiguration.verwendeZweiRohseifen || false,
+        seife2: updateData.rohseifenKonfiguration.seife2 || '',
+        gewichtVerteilung: {
+          seife1Prozent: updateData.rohseifenKonfiguration.gewichtVerteilung?.seife1Prozent || 100,
+          seife2Prozent: updateData.rohseifenKonfiguration.gewichtVerteilung?.seife2Prozent || 0
+        }
+      };
+      console.log('🔧 PORTFOLIO UPDATE - Setze Rohseifen-Konfiguration:', product.rohseifenKonfiguration);
+    }
+
     const updatedProduct = await product.save();
 
     res.json({
@@ -451,44 +465,72 @@ router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
   }
 });
 
-// @route   GET /api/admin/portfolio/stats
-// @desc    Portfolio-Statistiken abrufen
+// @route   GET /api/admin/portfolio/stats  
+// @desc    Portfolio-Statistiken abrufen (optimiert)
 // @access  Private (Admin only)
 router.get('/stats', async (req, res) => {
   try {
-    const totalProducts = await Portfolio.countDocuments();
-    const activeProducts = await Portfolio.countDocuments({ aktiv: true });
-    const inactiveProducts = await Portfolio.countDocuments({ aktiv: false });
+    console.log('📊 Loading portfolio stats...');
+    const startTime = Date.now();
     
-    const seifenTypes = await Portfolio.aggregate([
-      { $group: { _id: '$seife', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
+    // 🚀 PERFORMANCE: Alle Stats in einer einzigen Aggregation
+    const stats = await Portfolio.aggregate([
+      {
+        $facet: {
+          // Grundzählungen
+          counts: [
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                active: { $sum: { $cond: [{ $eq: ['$aktiv', true] }, 1, 0] } },
+                inactive: { $sum: { $cond: [{ $eq: ['$aktiv', false] }, 1, 0] } },
+                withImages: {
+                  $sum: {
+                    $cond: [
+                      {
+                        $or: [
+                          { $and: [{ $ne: ['$bilder.hauptbild', null] }, { $ne: ['$bilder.hauptbild', ''] }] },
+                          { $gt: [{ $size: { $ifNull: ['$bilder.galerie', []] } }, 0] }
+                        ]
+                      },
+                      1, 0
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          // Seifentypen
+          seifenTypes: [
+            { $group: { _id: '$seife', count: { $sum: 1 } } },
+            { $sort: { count: -1 } }
+          ],
+          // Aromatypen
+          aromaTypes: [
+            { $group: { _id: '$aroma', count: { $sum: 1 } } },
+            { $sort: { count: -1 } }
+          ]
+        }
+      }
     ]);
-
-    const aromaTypes = await Portfolio.aggregate([
-      { $group: { _id: '$aroma', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-
-    const productsWithImages = await Portfolio.countDocuments({
-      $or: [
-        { 'bilder.hauptbild': { $ne: '', $exists: true } },
-        { 'bilder.galerie.0': { $exists: true } }
-      ]
-    });
-
-    const productsWithoutImages = totalProducts - productsWithImages;
+    
+    const result = stats[0];
+    const counts = result.counts[0] || { total: 0, active: 0, inactive: 0, withImages: 0 };
+    
+    const duration = Date.now() - startTime;
+    console.log(`📊 Portfolio stats loaded in ${duration}ms`);
 
     res.json({
       success: true,
       data: {
-        totalProducts,
-        activeProducts,
-        inactiveProducts,
-        productsWithImages,
-        productsWithoutImages,
-        seifenTypes,
-        aromaTypes
+        totalProducts: counts.total,
+        activeProducts: counts.active,  
+        inactiveProducts: counts.inactive,
+        productsWithImages: counts.withImages,
+        productsWithoutImages: counts.total - counts.withImages,
+        seifenTypes: result.seifenTypes,
+        aromaTypes: result.aromaTypes
       }
     });
   } catch (error) {
@@ -496,6 +538,71 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Portfolio-Statistiken'
+    });
+  }
+});
+
+// @route   GET /api/admin/portfolio/options
+// @desc    Alle Optionen für Portfolio-Verwaltung (Rohseifen, Verpackungen, Duftoele)
+// @access  Private (Admin only)  
+router.get('/options', async (req, res) => {
+  try {
+    console.log('📋 Loading portfolio options...');
+    const startTime = Date.now();
+    
+    // Alle Optionen parallel laden
+    const [rohseifeData, verpackungData, duftoelData] = await Promise.all([
+      require('../../models/Rohseife').find({}),
+      require('../../models/Verpackung').find({}),
+      require('../../models/Duftoil').find({})
+    ]);
+    
+    const duration = Date.now() - startTime;
+    console.log(`📋 Portfolio options loaded in ${duration}ms`);
+    
+    res.json({
+      success: true,
+      data: {
+        rohseifen: rohseifeData,
+        verpackungen: verpackungData,
+        duftoele: duftoelData
+      }
+    });
+  } catch (error) {
+    console.error('Admin Portfolio Options Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Portfolio-Optionen'
+    });
+  }
+});
+
+// @route   GET /api/admin/portfolio/:id
+// @desc    Einzelnes Portfolio-Produkt abrufen
+// @access  Private (Admin only)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('🔍 Loading single portfolio item:', id);
+    
+    const product = await Portfolio.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Produkt nicht gefunden'
+      });
+    }
+    
+    console.log('✅ Portfolio item loaded:', product.name);
+    res.json({
+      success: true,
+      data: product
+    });
+  } catch (error) {
+    console.error('Admin Portfolio Item Load Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Portfolio-Produkts'
     });
   }
 });
