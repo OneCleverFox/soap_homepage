@@ -279,47 +279,142 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
             const rohstoffFehler = [];
             
             try {
-              // 1. ROHSEIFE subtrahieren
+              // 1. ROHSEIFE(N) subtrahieren
+              // Prüfung auf zweite Rohseife in rohseifenKonfiguration
+              const verwendeZweiRohseifen = artikel.rohseifenKonfiguration?.verwendeZweiRohseifen || false;
+              
               if (artikel.seife && artikel.gramm) {
-                const rohseifeDoc = await Rohseife.findOne({ bezeichnung: artikel.seife });
-                if (rohseifeDoc) {
-                  const benoetigt = artikel.gramm * buchungsAnzahl; // in Gramm
+                if (verwendeZweiRohseifen) {
+                  // === ZWEI ROHSEIFEN MODUS ===
+                  console.log(`  🔄 ZWEI ROHSEIFEN MODUS für ${artikel.name}`);
+                  console.log(`  📊 Gewichtverteilung: Seife 1 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}%, Seife 2 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}%`);
                   
-                  if (rohseifeDoc.aktuellVorrat >= benoetigt) {
-                    const rohseifeVorher = rohseifeDoc.aktuellVorrat;
-                    rohseifeDoc.aktuellVorrat -= benoetigt;
-                    await rohseifeDoc.save();
+                  // Erste Rohseife
+                  const rohseife1 = await Rohseife.findOne({ bezeichnung: artikel.seife });
+                  if (rohseife1) {
+                    const gewicht1 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife1 / 100));
+                    const benoetigt1 = gewicht1 * buchungsAnzahl;
                     
-                    // Bewegung protokollieren
-                    rohstoffBewegungen.push({
-                      typ: 'produktion',
-                      artikel: {
-                        typ: 'rohseife',
-                        artikelId: rohseifeDoc._id,
-                        name: rohseifeDoc.bezeichnung
-                      },
-                      menge: -benoetigt,
-                      einheit: 'g',
-                      bestandVorher: rohseifeVorher,
-                      bestandNachher: rohseifeDoc.aktuellVorrat,
-                      grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
-                      notizen: `Fertigprodukt-Inventur (ID: ${artikelId})`,
-                      referenz: {
-                        typ: 'fertigprodukt-inventur',
-                        produktId: artikel._id,
-                        produktName: artikel.name,
-                        anzahl: buchungsAnzahl
-                      }
-                    });
-                    
-                    console.log(`  ✅ Rohseife ${rohseifeDoc.bezeichnung}: -${benoetigt}g`);
+                    if (rohseife1.aktuellVorrat >= benoetigt1) {
+                      const vorher1 = rohseife1.aktuellVorrat;
+                      rohseife1.aktuellVorrat -= benoetigt1;
+                      await rohseife1.save();
+                      
+                      rohstoffBewegungen.push({
+                        typ: 'produktion',
+                        artikel: {
+                          typ: 'rohseife',
+                          artikelId: rohseife1._id,
+                          name: rohseife1.bezeichnung
+                        },
+                        menge: -benoetigt1,
+                        einheit: 'g',
+                        bestandVorher: vorher1,
+                        bestandNachher: rohseife1.aktuellVorrat,
+                        grund: `Automatische Rohstoff-Subtraktion (Seife 1): ${buchungsAnzahl}x ${artikel.name}`,
+                        notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}% (${gewicht1}g)`,
+                        referenz: {
+                          typ: 'fertigprodukt-inventur',
+                          produktId: artikel._id,
+                          produktName: artikel.name,
+                          anzahl: buchungsAnzahl
+                        }
+                      });
+                      
+                      console.log(`  ✅ Rohseife 1 ${rohseife1.bezeichnung}: -${benoetigt1}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}%)`);
+                    } else {
+                      rohstoffFehler.push(`Nicht genug ${rohseife1.bezeichnung} (Seife 1): benötigt ${benoetigt1}g, verfügbar ${rohseife1.aktuellVorrat}g`);
+                    }
                   } else {
-                    rohstoffFehler.push(`Nicht genug ${artikel.seife}: benötigt ${benoetigt}g, verfügbar ${rohseifeDoc.aktuellVorrat}g`);
+                    rohstoffFehler.push(`Rohseife 1 "${artikel.seife}" nicht gefunden`);
+                  }
+                  
+                  // Zweite Rohseife
+                  if (artikel.rohseifenKonfiguration?.seife2) {
+                    const rohseife2 = await Rohseife.findOne({ bezeichnung: artikel.rohseifenKonfiguration.seife2 });
+                    if (rohseife2) {
+                      const gewicht2 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife2 / 100));
+                      const benoetigt2 = gewicht2 * buchungsAnzahl;
+                      
+                      if (rohseife2.aktuellVorrat >= benoetigt2) {
+                        const vorher2 = rohseife2.aktuellVorrat;
+                        rohseife2.aktuellVorrat -= benoetigt2;
+                        await rohseife2.save();
+                        
+                        rohstoffBewegungen.push({
+                          typ: 'produktion',
+                          artikel: {
+                            typ: 'rohseife',
+                            artikelId: rohseife2._id,
+                            name: rohseife2.bezeichnung
+                          },
+                          menge: -benoetigt2,
+                          einheit: 'g',
+                          bestandVorher: vorher2,
+                          bestandNachher: rohseife2.aktuellVorrat,
+                          grund: `Automatische Rohstoff-Subtraktion (Seife 2): ${buchungsAnzahl}x ${artikel.name}`,
+                          notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}% (${gewicht2}g)`,
+                          referenz: {
+                            typ: 'fertigprodukt-inventur',
+                            produktId: artikel._id,
+                            produktName: artikel.name,
+                            anzahl: buchungsAnzahl
+                          }
+                        });
+                        
+                        console.log(`  ✅ Rohseife 2 ${rohseife2.bezeichnung}: -${benoetigt2}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}%)`);
+                      } else {
+                        rohstoffFehler.push(`Nicht genug ${rohseife2.bezeichnung} (Seife 2): benötigt ${benoetigt2}g, verfügbar ${rohseife2.aktuellVorrat}g`);
+                      }
+                    } else {
+                      rohstoffFehler.push(`Rohseife 2 "${artikel.rohseifenKonfiguration.seife2}" nicht gefunden`);
+                    }
+                  } else {
+                    rohstoffFehler.push('Zweite Rohseife ist nicht konfiguriert, obwohl "verwendeZweiRohseifen" aktiviert ist');
                   }
                 } else {
-                  rohstoffFehler.push(`Rohseife "${artikel.seife}" nicht gefunden`);
+                  // === EIN ROHSEIFE MODUS (bestehende Logik) ===
+                  const rohseifeDoc = await Rohseife.findOne({ bezeichnung: artikel.seife });
+                  if (rohseifeDoc) {
+                    const benoetigt = artikel.gramm * buchungsAnzahl; // in Gramm
+                    
+                    if (rohseifeDoc.aktuellVorrat >= benoetigt) {
+                      const rohseifeVorher = rohseifeDoc.aktuellVorrat;
+                      rohseifeDoc.aktuellVorrat -= benoetigt;
+                      await rohseifeDoc.save();
+                      
+                      // Bewegung protokollieren
+                      rohstoffBewegungen.push({
+                        typ: 'produktion',
+                        artikel: {
+                          typ: 'rohseife',
+                          artikelId: rohseifeDoc._id,
+                          name: rohseifeDoc.bezeichnung
+                        },
+                        menge: -benoetigt,
+                        einheit: 'g',
+                        bestandVorher: rohseifeVorher,
+                        bestandNachher: rohseifeDoc.aktuellVorrat,
+                        grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                        notizen: `Fertigprodukt-Inventur (ID: ${artikelId})`,
+                        referenz: {
+                          typ: 'fertigprodukt-inventur',
+                          produktId: artikel._id,
+                          produktName: artikel.name,
+                          anzahl: buchungsAnzahl
+                        }
+                      });
+                      
+                      console.log(`  ✅ Rohseife ${rohseifeDoc.bezeichnung}: -${benoetigt}g`);
+                    } else {
+                      rohstoffFehler.push(`Nicht genug ${artikel.seife}: benötigt ${benoetigt}g, verfügbar ${rohseifeDoc.aktuellVorrat}g`);
+                    }
+                  } else {
+                    rohstoffFehler.push(`Rohseife "${artikel.seife}" nicht gefunden`);
+                  }
                 }
               }
+              
               
               // 2. DUFTÖL subtrahieren  
               if (artikel.aroma && artikel.aroma !== 'Keine' && artikel.aroma !== '-' && artikel.aroma !== 'Neutral') {
