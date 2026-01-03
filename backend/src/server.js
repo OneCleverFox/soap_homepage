@@ -72,6 +72,8 @@ const invoiceRoutes = require('./routes/invoice');
 const invoicesRoutes = require('./routes/invoices');
 const inquiriesRoutes = require('./routes/inquiries');
 const companyInfoRoutes = require('./routes/companyInfo');
+const dashboardRoutes = require('./routes/dashboard');
+const debugRoutes = require('./routes/debug');
 
 const app = express();
 
@@ -431,6 +433,8 @@ app.use('/api/inventory', checkDatabaseConnection, inventoryRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin-settings', adminSettingsRoutes);
 app.use('/api/inquiries', checkDatabaseConnection, inquiriesRoutes);
+app.use('/api/dashboard', checkDatabaseConnection, dashboardRoutes);
+app.use('/api/debug', checkDatabaseConnection, debugRoutes);
 app.use('/api/portfolio', checkDatabaseConnection, portfolioRoutes);
 app.use('/api/rohseife', checkDatabaseConnection, rohseifeRoutes);
 app.use('/api/duftoele', checkDatabaseConnection, duftoeleRoutes);
