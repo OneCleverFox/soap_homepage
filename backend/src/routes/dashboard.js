@@ -758,12 +758,13 @@ function getRevenueRelevantInvoicesFilter() {
     $or: [
       // Reguläre Rechnungen (sent, paid, pending)
       { status: { $in: ['sent', 'paid', 'pending'] } },
-      // Bezahlte Entwürfe
+      // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
       { 
         status: 'draft', 
         $or: [
           { 'payment.paidAmount': { $gt: 0 } },
-          { 'payment.paidDate': { $exists: true } }
+          { 'payment.paidDate': { $exists: true } },
+          { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
         ]
       }
     ]
