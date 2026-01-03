@@ -79,6 +79,8 @@ const InvoiceList = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [actionMenuInvoice, setActionMenuInvoice] = useState(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Stats State
@@ -228,12 +230,16 @@ const InvoiceList = () => {
   };
 
   const deleteInvoice = async (invoiceId) => {
-    if (!window.confirm('Sind Sie sicher, dass Sie diese Rechnung löschen möchten?')) {
-      return;
-    }
+    const invoice = invoices.find(inv => inv._id === invoiceId);
+    setInvoiceToDelete(invoice);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!invoiceToDelete) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceId}`, {
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceToDelete._id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -242,7 +248,7 @@ const InvoiceList = () => {
 
       const data = await response.json();
       if (data.success) {
-        showSnackbar('Rechnung erfolgreich gelöscht', 'success');
+        showSnackbar(data.message || 'Rechnung erfolgreich gelöscht', 'success');
         loadInvoices(); // Reload list
         loadStats(); // Reload stats
       } else {
@@ -251,7 +257,15 @@ const InvoiceList = () => {
     } catch (error) {
       console.error('Löschen Fehler:', error);
       showSnackbar('Fehler beim Löschen der Rechnung', 'error');
+    } finally {
+      setDeleteDialogOpen(false);
+      setInvoiceToDelete(null);
     }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setInvoiceToDelete(null);
   };
 
   const generatePDF = async (invoiceId) => {
@@ -919,6 +933,56 @@ const InvoiceList = () => {
               Schließen
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Lösch-Bestätigungsdialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Rechnung löschen
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Sind Sie sicher, dass Sie die folgende Rechnung löschen möchten?
+          </Typography>
+          {invoiceToDelete && (
+            <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
+              <Typography><strong>Rechnungsnummer:</strong> {invoiceToDelete.invoiceNumber}</Typography>
+              <Typography><strong>Kunde:</strong> {invoiceToDelete.customer.name}</Typography>
+              <Typography><strong>Betrag:</strong> {invoiceToDelete.amounts.total.toFixed(2)}€</Typography>
+              <Typography><strong>Status:</strong> 
+                <Chip
+                  label={getStatusText(invoiceToDelete.status)}
+                  color={getStatusColor(invoiceToDelete.status)}
+                  size="small"
+                  sx={{ ml: 1 }}
+                />
+              </Typography>
+              {invoiceToDelete.status !== 'draft' && (
+                <Typography color="warning.main" sx={{ mt: 1 }}>
+                  <strong>⚠️ Warnung:</strong> Diese Rechnung ist kein Entwurf mehr. Das Löschen kann rechtliche Auswirkungen haben.
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>
+            Abbrechen
+          </Button>
+          <Button 
+            onClick={handleDeleteConfirm} 
+            color="error" 
+            variant="contained"
+            startIcon={<DeleteIcon />}
+          >
+            Löschen
+          </Button>
         </DialogActions>
       </Dialog>
 
