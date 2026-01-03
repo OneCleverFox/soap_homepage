@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { dashboardAPI } from '../services/api';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -55,6 +56,7 @@ const AdminDashboard = () => {
 
   // State Management
   const [dashboardData, setDashboardData] = useState(null);
+  const [produktionsKapazitaet, setProduktionsKapazitaet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
@@ -77,6 +79,14 @@ const AdminDashboard = () => {
       if (response.data.success) {
         setDashboardData(response.data.data);
         setLastRefresh(new Date());
+        
+        // Produktionskapazität parallel laden
+        try {
+          const produktionsResponse = await dashboardAPI.getProductionCapacity();
+          setProduktionsKapazitaet(produktionsResponse.data);
+        } catch (prodError) {
+          console.warn('Produktionskapazität konnte nicht geladen werden:', prodError);
+        }
       } else {
         throw new Error('Dashboard-Daten konnten nicht geladen werden');
       }
@@ -353,6 +363,110 @@ const AdminDashboard = () => {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Rohstoffe: {lager.rohstoffe.gesamtRohstoffe} ({lager.rohstoffe.unterMindestbestand} unter Mindestbestand)
               </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Produktionskapazität */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                <ProductionIcon sx={{ mr: 1, color: 'primary.main' }} />
+                Produktionskapazität
+              </Typography>
+              
+              {produktionsKapazitaet ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 2, textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
+                        {produktionsKapazitaet.zusammenfassung.uebersicht.produzierbar}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white' }}>
+                        Produzierbare Produkte
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
+                        von {produktionsKapazitaet.zusammenfassung.uebersicht.gesamtProdukte} gesamt
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ p: 2, bgcolor: 'warning.light', borderRadius: 2, textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
+                        {produktionsKapazitaet.zusammenfassung.kritischeProdukte.length}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white' }}>
+                        Kritische Produkte
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
+                        ≤5 Stück produzierbar
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 2, textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
+                        {produktionsKapazitaet.zusammenfassung.uebersicht.produktionsrate}%
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white' }}>
+                        Produktionsrate
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
+                        Anteil produzierbar
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ p: 2, bgcolor: 'info.light', borderRadius: 2, textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
+                        {produktionsKapazitaet.zusammenfassung.topProduktion.length > 0 
+                          ? produktionsKapazitaet.zusammenfassung.topProduktion[0].maxProduktion
+                          : '0'
+                        }
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white' }}>
+                        Höchste Kapazität
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
+                        {produktionsKapazitaet.zusammenfassung.topProduktion.length > 0
+                          ? produktionsKapazitaet.zusammenfassung.topProduktion[0].name.split(' ').slice(0, 2).join(' ')
+                          : 'Kein Produkt'
+                        }
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  {/* Limitierende Faktoren */}
+                  {Object.keys(produktionsKapazitaet.zusammenfassung.limitierungen).length > 0 && (
+                    <Grid item xs={12}>
+                      <Alert severity="info" sx={{ mt: 1 }}>
+                        <strong>Hauptlimitierung:</strong> {
+                          Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
+                            .sort(([,a], [,b]) => b - a)[0][0] === 'rohseife' ? 'Rohseife' :
+                          Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
+                            .sort(([,a], [,b]) => b - a)[0][0] === 'duftoel' ? 'Duftöle' : 'Verpackungen'
+                        } ({Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
+                            .sort(([,a], [,b]) => b - a)[0][1]} Produkte betroffen)
+                        <Button 
+                          size="small" 
+                          onClick={() => navigate('/admin/produktionsanalyse')}
+                          sx={{ ml: 2 }}
+                        >
+                          Details anzeigen
+                        </Button>
+                      </Alert>
+                    </Grid>
+                  )}
+                </Grid>
+              ) : (
+                <Alert severity="info">
+                  Produktionskapazität wird geladen...
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </Grid>
