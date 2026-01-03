@@ -39,6 +39,12 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       const rohseifeList = await Rohseife.find();
       const rohseife = rohseifeList.find(r => r.bezeichnung === portfolio.seife);
       
+      // Zweite Rohseife laden falls konfiguriert
+      let rohseife2 = null;
+      if (portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen && portfolio.rohseifenKonfiguration.seife2) {
+        rohseife2 = rohseifeList.find(r => r.bezeichnung === portfolio.rohseifenKonfiguration.seife2);
+      }
+      
       let duftoil = null;
       if (portfolio.aroma && portfolio.aroma !== 'Neutral' && portfolio.aroma !== '') {
         const duftoilList = await Duftoil.find();
@@ -57,7 +63,25 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       
       // Kosten berechnen mit verbessertem Logging
       const gewichtInGramm = portfolio.gramm || 50;
-      const rohseifeKosten = rohseife ? (gewichtInGramm * rohseife.preisProGramm) : 0;
+      
+      // Gewichtsverteilung für Rohseifen berechnen
+      let rohseife1Gramm = gewichtInGramm;
+      let rohseife2Gramm = 0;
+      let rohseife2Kosten = 0;
+      
+      if (portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen) {
+        const seife1Prozent = portfolio.rohseifenKonfiguration.gewichtVerteilung?.seife1Prozent || 50;
+        const seife2Prozent = portfolio.rohseifenKonfiguration.gewichtVerteilung?.seife2Prozent || 50;
+        
+        rohseife1Gramm = Math.round(gewichtInGramm * (seife1Prozent / 100));
+        rohseife2Gramm = Math.round(gewichtInGramm * (seife2Prozent / 100));
+        
+        rohseife2Kosten = rohseife2 ? (rohseife2Gramm * rohseife2.preisProGramm) : 0;
+        
+        console.log(`🧮 Gewichtsverteilung: Seife1=${rohseife1Gramm}g (${seife1Prozent}%), Seife2=${rohseife2Gramm}g (${seife2Prozent}%)`);
+      }
+      
+      const rohseifeKosten = rohseife ? (rohseife1Gramm * rohseife.preisProGramm) : 0;
       
       // Logging für Nachvollziehbarkeit
       if (!rohseife && portfolio.seife) {
@@ -77,10 +101,19 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
         portfolioProdukt: portfolio._id,
         produktName: portfolio.name,
         rohseifeName: portfolio.seife,
+        rohseifenKonfiguration: {
+          verwendeZweiRohseifen: portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
+          rohseife2Name: portfolio.rohseifenKonfiguration?.seife2 || '',
+          gewichtVerteilung: {
+            rohseife1Gramm: rohseife1Gramm,
+            rohseife2Gramm: rohseife2Gramm
+          }
+        },
         duftoelName: portfolio.aroma || '',
         verpackungName: portfolio.verpackung,
         gewichtInGramm,
         rohseifeKosten,
+        rohseife2Kosten,
         duftoelKosten,
         verpackungKosten,
         energieKosten: 0,

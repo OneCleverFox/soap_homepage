@@ -183,6 +183,13 @@ const Navbar = () => {
 
   // Badges laden wenn User eingeloggt ist
   useEffect(() => {
+    // 🚀 PERFORMANCE: Keine Badge-Loads auf Admin-Seiten für bessere Performance
+    const isAdminPage = window.location.pathname.startsWith('/admin');
+    if (isAdminPage) {
+      console.log('🚀 Admin-Seite erkannt - überspringe Badge-Load für bessere Performance');
+      return;
+    }
+    
     if (user) {
       loadPendingInquiries();
       loadPendingOrders();

@@ -189,7 +189,30 @@ async function calculatePortfolioPrice(portfolioItem) {
     });
     
     if (rohseife) {
-      details.rohseife = rohseife.preisProGramm * portfolioItem.gramm;
+      // Prüfe ob zwei Rohseifen verwendet werden
+      if (portfolioItem.rohseifenKonfiguration?.verwendeZweiRohseifen) {
+        const seife1Prozent = portfolioItem.rohseifenKonfiguration.gewichtVerteilung?.seife1Prozent || 50;
+        const rohseife1Gramm = Math.round(portfolioItem.gramm * (seife1Prozent / 100));
+        
+        details.rohseife = rohseife.preisProGramm * rohseife1Gramm;
+        
+        // Zweite Rohseife laden und berechnen
+        if (portfolioItem.rohseifenKonfiguration.seife2) {
+          const rohseife2 = await Rohseife.findOne({ 
+            bezeichnung: { $regex: new RegExp(portfolioItem.rohseifenKonfiguration.seife2, 'i') }
+          });
+          
+          if (rohseife2) {
+            const seife2Prozent = portfolioItem.rohseifenKonfiguration.gewichtVerteilung?.seife2Prozent || 50;
+            const rohseife2Gramm = Math.round(portfolioItem.gramm * (seife2Prozent / 100));
+            
+            details.rohseife += rohseife2.preisProGramm * rohseife2Gramm;
+          }
+        }
+      } else {
+        // Standard: Eine Rohseife
+        details.rohseife = rohseife.preisProGramm * portfolioItem.gramm;
+      }
     } else {
       // Fallback: Schätzpreis basierend auf Durchschnittswerten
       details.rohseife = portfolioItem.gramm * 0.05; // 5 Cent pro Gramm
@@ -783,6 +806,10 @@ router.post('/', auth, async (req, res) => {
 // @access  Private (Admin only)
 router.put('/:id', auth, async (req, res) => {
   try {
+    // 🔍 DEBUG: Zeige Request-Body vor dem Speichern
+    console.log('🔍 PORTFOLIO UPDATE - Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 PORTFOLIO UPDATE - Rohseifen-Konfiguration:', req.body.rohseifenKonfiguration);
+    
     const portfolioItem = await Portfolio.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -795,6 +822,10 @@ router.put('/:id', auth, async (req, res) => {
         message: 'Portfolio-Eintrag nicht gefunden'
       });
     }
+
+    // 🔍 DEBUG: Zeige gespeicherte Daten
+    console.log('🔍 PORTFOLIO UPDATE - Gespeicherte Daten:', JSON.stringify(portfolioItem.toObject(), null, 2));
+    console.log('🔍 PORTFOLIO UPDATE - Gespeicherte Rohseifen-Konfiguration:', portfolioItem.rohseifenKonfiguration);
 
     // Cache invalidieren nach erfolgreichem Update
     invalidatePortfolioCache();
