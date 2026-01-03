@@ -611,6 +611,15 @@ async function getRechnungsStatistiken() {
   const heute = new Date();
   const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
   
+  // DEBUG: Zeige alle Rechnungen der letzten 30 Tage
+  const allRecentInvoices = await Invoice.find({
+    'dates.invoiceDate': { $gte: einMonatZurueck }
+  });
+  console.log(`📊 DEBUG: ${allRecentInvoices.length} Rechnungen der letzten 30 Tage:`);
+  allRecentInvoices.forEach(inv => {
+    console.log(`   ${inv.invoiceNumber}: Status=${inv.status}, Payment=${JSON.stringify(inv.payment)}, Betrag=${inv.amounts.total}€`);
+  });
+  
   const stats = await Invoice.aggregate([
     {
       $facet: {
@@ -644,7 +653,8 @@ async function getRechnungsStatistiken() {
                   $or: [
                     { 'payment.paidAmount': { $gt: 0 } },
                     { 'payment.paidDate': { $exists: true } },
-                    { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+                    { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } },
+                    { 'payment.status': 'paid' }
                   ]
                 }
               ]
@@ -864,19 +874,21 @@ async function getFertigprodukteNiedrigerBestand() {
 }
 
 // Hilfsfunktion: Ermittelt alle relevanten Rechnungen für Umsatz-Berechnungen
-// Berücksichtigt: sent, paid, pending und bezahlte Entwürfe
+// Berücksichtigt: sent, paid, pending und alle Entwürfe mit "Bezahlt"-Status
 function getRevenueRelevantInvoicesFilter() {
   return {
     $or: [
       // Reguläre Rechnungen (sent, paid, pending)
       { status: { $in: ['sent', 'paid', 'pending'] } },
-      // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+      // Entwürfe, die als bezahlt markiert sind oder Zahlungsdetails haben
       { 
         status: 'draft', 
         $or: [
           { 'payment.paidAmount': { $gt: 0 } },
           { 'payment.paidDate': { $exists: true } },
-          { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+          { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } },
+          // Neue Bedingung: Entwürfe mit Bezahlstatus "Bezahlt"
+          { 'payment.status': 'paid' }
         ]
       }
     ]
