@@ -642,7 +642,7 @@ class InvoiceService {
     }
   }
 
-  // Rechnung löschen (nur Drafts)
+  // Rechnung löschen (Admin-Berechtigung erforderlich)
   async deleteInvoice(req, res) {
     try {
       const { id } = req.params;
@@ -655,19 +655,18 @@ class InvoiceService {
         });
       }
 
-      // Nur Entwürfe können gelöscht werden
+      // Admin kann alle Rechnungen löschen
+      // Warnung für bereits versendete Rechnungen
+      let warningMessage = '';
       if (invoice.status !== 'draft') {
-        return res.status(400).json({
-          success: false,
-          message: 'Nur Entwürfe können gelöscht werden'
-        });
+        warningMessage = ' (Achtung: Diese Rechnung war bereits versendet!)';
       }
 
       await Invoice.findByIdAndDelete(id);
 
       res.json({
         success: true,
-        message: 'Rechnung erfolgreich gelöscht'
+        message: `Rechnung erfolgreich gelöscht${warningMessage}`
       });
 
     } catch (error) {
