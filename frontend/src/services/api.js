@@ -348,6 +348,13 @@ export const analyticsAPI = {
   getCustomerAnalytics: (params = {}) => api.get('/analytics/customers', { params }),
 };
 
+// Dashboard API 
+export const dashboardAPI = {
+  getStats: () => api.get('/dashboard'),
+  getProductionCapacity: () => api.get('/dashboard/production-capacity'),
+  debugInvoices: () => api.get('/dashboard/debug-invoices'),
+};
+
 // Portfolio API
 export const portfolioAPI = {
   getAll: () => api.get('/portfolio'),

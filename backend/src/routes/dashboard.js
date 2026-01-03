@@ -98,6 +98,82 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// DEBUG ROUTE - Invoice Filter Test
+router.get('/debug-invoices', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('🔍 DEBUG: Analysiere Rechnungen für Dashboard...');
+    
+    const heute = new Date();
+    const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Alle Rechnungen abrufen
+    const alleRechnungen = await Invoice.find({}).sort({ 'dates.invoiceDate': -1 });
+    
+    console.log('\n=== ALLE RECHNUNGEN ===');
+    const rechnungsDetails = alleRechnungen.map(inv => {
+      const invoiceDate = inv.dates.invoiceDate;
+      const isInLast30Days = invoiceDate >= einMonatZurueck;
+      
+      const details = {
+        nummer: inv.invoiceNumber,
+        betrag: inv.amounts.total,
+        status: inv.status,
+        datum: invoiceDate.toISOString().split('T')[0],
+        inLetzten30Tagen: isInLast30Days,
+        paymentMethod: inv.payment?.method || 'none',
+        paidAmount: inv.payment?.paidAmount || 0,
+        paidDate: inv.payment?.paidDate || null
+      };
+      
+      console.log(`${details.nummer}: ${details.betrag}€ - Status: ${details.status} - In 30d: ${details.inLetzten30Tagen}`);
+      return details;
+    });
+    
+    // Dashboard-Filter testen
+    const umsatzFilter = {
+      'dates.invoiceDate': { $gte: einMonatZurueck },
+      ...getRevenueRelevantInvoicesFilter()
+    };
+    
+    const umsatzRechnungen = await Invoice.find(umsatzFilter);
+    
+    console.log('\n=== RECHNUNGEN IM UMSATZ-FILTER ===');
+    let gesamtUmsatz = 0;
+    const erfassteRechnungen = umsatzRechnungen.map(inv => {
+      console.log(`${inv.invoiceNumber}: ${inv.amounts.total}€ (Status: ${inv.status})`);
+      gesamtUmsatz += inv.amounts.total;
+      return {
+        nummer: inv.invoiceNumber,
+        betrag: inv.amounts.total,
+        status: inv.status
+      };
+    });
+    
+    console.log(`\nGESAMTUMSATZ: ${gesamtUmsatz}€`);
+    
+    res.json({
+      success: true,
+      data: {
+        alleRechnungen: rechnungsDetails,
+        erfassteRechnungen: erfassteRechnungen,
+        gesamtUmsatz: gesamtUmsatz,
+        filter: {
+          zeitraum: '30 Tage',
+          stichtag: einMonatZurueck.toISOString().split('T')[0]
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug Invoices Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Debug der Rechnungen',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/dashboard/fertigprodukte-ohne-bestand
 // @desc    Fertigprodukte mit 0 Bestand
 // @access  Private (Admin only)
@@ -297,7 +373,19 @@ async function getMeistverkaufteProdukte() {
   const verkaufsDaten = await Invoice.aggregate([
     {
       $match: {
-        ...getRevenueRelevantInvoicesFilter(),
+        $or: [
+          // Reguläre Rechnungen (sent, paid, pending)
+          { status: { $in: ['sent', 'paid', 'pending'] } },
+          // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+          { 
+            status: 'draft', 
+            $or: [
+              { 'payment.paidAmount': { $gt: 0 } },
+              { 'payment.paidDate': { $exists: true } },
+              { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+            ]
+          }
+        ],
         'dates.invoiceDate': {
           $gte: new Date(lastYear, 0, 1),
           $lte: new Date(currentYear, 11, 31, 23, 59, 59)
@@ -384,7 +472,19 @@ async function getProdukteZurProduktion() {
   const verkaufsDataInvoices = await Invoice.aggregate([
     {
       $match: {
-        ...getRevenueRelevantInvoicesFilter(),
+        $or: [
+          // Reguläre Rechnungen (sent, paid, pending)
+          { status: { $in: ['sent', 'paid', 'pending'] } },
+          // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+          { 
+            status: 'draft', 
+            $or: [
+              { 'payment.paidAmount': { $gt: 0 } },
+              { 'payment.paidDate': { $exists: true } },
+              { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+            ]
+          }
+        ],
         'dates.invoiceDate': { $gte: last90Days }
       }
     },
@@ -535,7 +635,19 @@ async function getRechnungsStatistiken() {
           {
             $match: {
               'dates.invoiceDate': { $gte: einMonatZurueck },
-              ...getRevenueRelevantInvoicesFilter()
+              $or: [
+                // Reguläre Rechnungen (sent, paid, pending)
+                { status: { $in: ['sent', 'paid', 'pending'] } },
+                // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+                { 
+                  status: 'draft', 
+                  $or: [
+                    { 'payment.paidAmount': { $gt: 0 } },
+                    { 'payment.paidDate': { $exists: true } },
+                    { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+                  ]
+                }
+              ]
             }
           },
           {
@@ -768,6 +880,234 @@ function getRevenueRelevantInvoicesFilter() {
         ]
       }
     ]
+  };
+}
+
+// GET /api/dashboard/production-capacity - Produktionskapazitäts-Analyse
+router.get('/production-capacity', auth, async (req, res) => {
+  try {
+    console.log('📊 Starte Produktionskapazitäts-Analyse...');
+    const kapazitaetsAnalyse = await getProduktionsKapazitaetsAnalyse();
+    
+    res.json({
+      success: true,
+      data: kapazitaetsAnalyse
+    });
+  } catch (error) {
+    console.error('❌ Fehler bei Produktionskapazitäts-Analyse:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Fehler bei der Produktionskapazitäts-Analyse',
+      error: error.message 
+    });
+  }
+});
+
+// Hauptfunktion für Produktionskapazitäts-Analyse
+async function getProduktionsKapazitaetsAnalyse() {
+  console.log('🔍 Analysiere Produktionskapazität basierend auf Rohstoffen...');
+  
+  // 1. Alle aktiven Portfolio-Produkte laden
+  const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } }).lean();
+  console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
+  
+  // 2. Alle Rohstoffe laden
+  const [rohseifen, duftoele, verpackungen] = await Promise.all([
+    Rohseife.find({ verfuegbar: true }).lean(),
+    Duftoil.find({ verfuegbar: true }).lean(),
+    Verpackung.find({ verfuegbar: true }).lean()
+  ]);
+  
+  console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen`);
+  
+  // 3. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
+  const produktionsAnalyse = [];
+  
+  for (const produkt of portfolioProdukte) {
+    const analyse = await analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen);
+    produktionsAnalyse.push(analyse);
+  }
+  
+  // 4. Nach limitierendem Faktor sortieren (niedrigste Produktionsmenge zuerst)
+  produktionsAnalyse.sort((a, b) => a.maxProduktion - b.maxProduktion);
+  
+  // 5. Zusammenfassung erstellen
+  const zusammenfassung = erstelleProduktionsZusammenfassung(produktionsAnalyse);
+  
+  console.log('✅ Produktionskapazitäts-Analyse abgeschlossen');
+  
+  return {
+    produkte: produktionsAnalyse,
+    zusammenfassung: zusammenfassung,
+    generiert: new Date()
+  };
+}
+
+// Analysiert die Produktionskapazität für ein einzelnes Produkt
+async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen) {
+  const analyse = {
+    produktId: produkt._id,
+    produktName: produkt.name,
+    seife: produkt.seife,
+    aroma: produkt.aroma,
+    verpackung: produkt.verpackung,
+    grammProEinheit: produkt.gramm,
+    rohstoffBedarf: [],
+    limitierenderFaktor: null,
+    maxProduktion: 0,
+    probleme: []
+  };
+  
+  let minProduktion = Infinity;
+  
+  // 1. Rohseife analysieren
+  const rohseife = rohseifen.find(r => 
+    r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
+    r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
+    produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
+  );
+  
+  if (rohseife) {
+    const benoetigt = produkt.gramm; // Gramm pro Produkt
+    const verfuegbar = rohseife.aktuellVorrat;
+    const maxProduktionRohseife = Math.floor(verfuegbar / benoetigt);
+    
+    analyse.rohstoffBedarf.push({
+      typ: 'rohseife',
+      name: rohseife.bezeichnung,
+      benoetigt: benoetigt,
+      einheit: 'g',
+      verfuegbar: verfuegbar,
+      maxProduktion: maxProduktionRohseife,
+      ausreichend: verfuegbar >= benoetigt
+    });
+    
+    if (maxProduktionRohseife < minProduktion) {
+      minProduktion = maxProduktionRohseife;
+      analyse.limitierenderFaktor = 'rohseife';
+    }
+  } else {
+    analyse.probleme.push(`Rohseife "${produkt.seife}" nicht gefunden`);
+    minProduktion = 0;
+  }
+  
+  // 2. Duftöl analysieren (falls erforderlich)
+  if (produkt.aroma && produkt.aroma !== 'Neutral' && produkt.aroma !== '' && produkt.aroma !== 'Keine') {
+    const duftoel = duftoele.find(d => 
+      d.bezeichnung.toLowerCase() === produkt.aroma.toLowerCase() ||
+      d.bezeichnung.toLowerCase().includes(produkt.aroma.toLowerCase()) ||
+      produkt.aroma.toLowerCase().includes(d.bezeichnung.toLowerCase())
+    );
+    
+    if (duftoel) {
+      // Dosierung: 1 Tropfen pro 50g Seife
+      const tropfenProEinheit = Math.ceil(produkt.gramm / 50);
+      const verfuegbareTropfen = duftoel.aktuellVorrat;
+      const maxProduktionDuftoel = Math.floor(verfuegbareTropfen / tropfenProEinheit);
+      
+      analyse.rohstoffBedarf.push({
+        typ: 'duftoel',
+        name: duftoel.bezeichnung,
+        benoetigt: tropfenProEinheit,
+        einheit: 'Tropfen',
+        verfuegbar: verfuegbareTropfen,
+        maxProduktion: maxProduktionDuftoel,
+        ausreichend: verfuegbareTropfen >= tropfenProEinheit,
+        dosierung: '1 Tropfen pro 50g'
+      });
+      
+      if (maxProduktionDuftoel < minProduktion) {
+        minProduktion = maxProduktionDuftoel;
+        analyse.limitierenderFaktor = 'duftoel';
+      }
+    } else {
+      analyse.probleme.push(`Duftöl "${produkt.aroma}" nicht gefunden`);
+      // Duftöl ist optional - setze minProduktion nur auf 0 wenn bereits 0
+      if (minProduktion === Infinity) minProduktion = 0;
+    }
+  }
+  
+  // 3. Verpackung analysieren
+  const verpackung = verpackungen.find(v => 
+    v.bezeichnung.toLowerCase() === produkt.verpackung.toLowerCase() ||
+    v.bezeichnung.toLowerCase().includes(produkt.verpackung.toLowerCase()) ||
+    produkt.verpackung.toLowerCase().includes(v.bezeichnung.toLowerCase())
+  );
+  
+  if (verpackung) {
+    const verfuegbareVerpackungen = verpackung.aktuellVorrat;
+    const maxProduktionVerpackung = verfuegbareVerpackungen; // 1 Verpackung pro Produkt
+    
+    analyse.rohstoffBedarf.push({
+      typ: 'verpackung',
+      name: verpackung.bezeichnung,
+      benoetigt: 1,
+      einheit: 'Stück',
+      verfuegbar: verfuegbareVerpackungen,
+      maxProduktion: maxProduktionVerpackung,
+      ausreichend: verfuegbareVerpackungen >= 1
+    });
+    
+    if (maxProduktionVerpackung < minProduktion) {
+      minProduktion = maxProduktionVerpackung;
+      analyse.limitierenderFaktor = 'verpackung';
+    }
+  } else {
+    analyse.probleme.push(`Verpackung "${produkt.verpackung}" nicht gefunden`);
+    minProduktion = 0;
+  }
+  
+  // Endgültige maximale Produktion setzen
+  analyse.maxProduktion = minProduktion === Infinity ? 0 : minProduktion;
+  
+  return analyse;
+}
+
+// Erstellt eine Zusammenfassung der Produktionsanalyse
+function erstelleProduktionsZusammenfassung(produktionsAnalyse) {
+  const gesamt = produktionsAnalyse.length;
+  const produzierbar = produktionsAnalyse.filter(p => p.maxProduktion > 0).length;
+  const nichtProduzierbar = gesamt - produzierbar;
+  
+  // Limitierende Faktoren zählen
+  const limitierungGruende = {};
+  produktionsAnalyse.forEach(p => {
+    if (p.limitierenderFaktor) {
+      limitierungGruende[p.limitierenderFaktor] = (limitierungGruende[p.limitierenderFaktor] || 0) + 1;
+    }
+  });
+  
+  // Top 5 Produkte mit höchster Produktionskapazität
+  const topProduktion = produktionsAnalyse
+    .filter(p => p.maxProduktion > 0)
+    .sort((a, b) => b.maxProduktion - a.maxProduktion)
+    .slice(0, 5)
+    .map(p => ({
+      name: p.produktName,
+      maxProduktion: p.maxProduktion,
+      limitierenderFaktor: p.limitierenderFaktor
+    }));
+  
+  // Kritische Produkte (nicht produzierbar oder sehr niedrige Kapazität)
+  const kritisch = produktionsAnalyse
+    .filter(p => p.maxProduktion <= 5)
+    .map(p => ({
+      name: p.produktName,
+      maxProduktion: p.maxProduktion,
+      probleme: p.probleme,
+      limitierenderFaktor: p.limitierenderFaktor
+    }));
+  
+  return {
+    uebersicht: {
+      gesamtProdukte: gesamt,
+      produzierbar: produzierbar,
+      nichtProduzierbar: nichtProduzierbar,
+      produktionsrate: Math.round((produzierbar / gesamt) * 100)
+    },
+    limitierungen: limitierungGruende,
+    topProduktion: topProduktion,
+    kritischeProdukte: kritisch
   };
 }
 
