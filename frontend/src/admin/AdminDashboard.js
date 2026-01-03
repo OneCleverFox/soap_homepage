@@ -26,7 +26,15 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import { 
   Warning as WarningIcon,
@@ -38,7 +46,10 @@ import {
   LocalShipping as ShippingIcon,
   Email as EmailIcon,
   Refresh as RefreshIcon,
-  Analytics as AnalyticsIcon
+  Analytics as AnalyticsIcon,
+  Info as InfoIcon,
+  Schedule as ScheduleIcon,
+  Star as StarIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -57,11 +68,13 @@ const AdminDashboard = () => {
   // State Management
   const [dashboardData, setDashboardData] = useState(null);
   const [produktionsKapazitaet, setProduktionsKapazitaet] = useState(null);
+  const [produktionsFilter, setProduktionsFilter] = useState('alle'); // Filter für Produktionskapazität
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [rohstoffFilter, setRohstoffFilter] = useState('alle'); // 'alle', 'rohseife', 'duftoil', 'verpackung'
   const [verkaufJahr, setVerkaufJahr] = useState(new Date().getFullYear()); // Jahr für Verkaufsfilter
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false); // Info-Dialog für Kennzahlen-Erklärung
 
   // Dashboard Data laden
   const loadDashboardData = async () => {
@@ -83,9 +96,13 @@ const AdminDashboard = () => {
         // Produktionskapazität parallel laden
         try {
           const produktionsResponse = await dashboardAPI.getProductionCapacity();
-          setProduktionsKapazitaet(produktionsResponse.data);
+          console.log('🏭 Produktionskapazität geladen:', produktionsResponse.data);
+          console.log('📊 Zusammenfassung:', produktionsResponse.data?.data?.zusammenfassung);
+          console.log('📦 Produkte:', produktionsResponse.data?.data?.produkte);
+          setProduktionsKapazitaet(produktionsResponse.data?.data);
         } catch (prodError) {
-          console.warn('Produktionskapazität konnte nicht geladen werden:', prodError);
+          console.warn('⚠️ Produktionskapazität konnte nicht geladen werden:', prodError);
+          setProduktionsKapazitaet(null);
         }
       } else {
         throw new Error('Dashboard-Daten konnten nicht geladen werden');
@@ -152,12 +169,46 @@ const AdminDashboard = () => {
     lager
   } = dashboardData;
 
-  // Formatierung für Währung
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('de-DE', { 
       style: 'currency', 
       currency: 'EUR' 
     }).format(amount || 0);
+  };
+
+  // Produktionskapazitäts-Filter
+  const getFilteredProdukte = () => {
+    if (!produktionsKapazitaet || !produktionsKapazitaet.produkte) return [];
+    
+    const alleProdukte = [...produktionsKapazitaet.produkte].sort((a, b) => b.maxProduktion - a.maxProduktion);
+    
+    switch (produktionsFilter) {
+      case 'produzierbar':
+        return alleProdukte.filter(p => p.maxProduktion > 5);
+      case 'kritisch':
+        return alleProdukte.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5);
+      case 'hoechste':
+        return alleProdukte.filter(p => p.maxProduktion > 0).slice(0, 3);
+      case 'nicht-produzierbar':
+        return alleProdukte.filter(p => p.maxProduktion === 0);
+      default:
+        return alleProdukte.slice(0, 10);
+    }
+  };
+
+  const getFilterTitle = () => {
+    switch (produktionsFilter) {
+      case 'produzierbar':
+        return '✅ Gut produzierbare Produkte (>5 Stück):';
+      case 'kritisch':
+        return '⚠️ Kritische Produkte (≤5 Stück):';
+      case 'hoechste':
+        return '🏆 Top 3 Produktionskapazitäten:';
+      case 'nicht-produzierbar':
+        return '🚫 Nicht produzierbare Produkte:';
+      default:
+        return '📦 Produzierbare Mengen pro Produkt:';
+    }
   };
 
   // KPI-Karten Daten
@@ -227,7 +278,7 @@ const AdminDashboard = () => {
       {/* KPI Übersicht */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {kpiCards.map((kpi, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
+          <Grid item xs={6} sm={6} md={3} key={index}>
             <Card 
               sx={{ 
                 height: '100%',
@@ -371,77 +422,294 @@ const AdminDashboard = () => {
         <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                <ProductionIcon sx={{ mr: 1, color: 'primary.main' }} />
+              <Typography variant="h6" sx={{ mb: { xs: 1, sm: 2 }, display: 'flex', alignItems: 'center', fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                <ProductionIcon sx={{ mr: 1, color: 'primary.main', fontSize: { xs: '1.2rem', sm: '1.5rem' } }} />
                 Produktionskapazität
               </Typography>
               
-              {produktionsKapazitaet ? (
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 2, textAlign: 'center' }}>
-                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
-                        {produktionsKapazitaet.zusammenfassung.uebersicht.produzierbar}
+              {produktionsKapazitaet && produktionsKapazitaet.zusammenfassung ? (
+                <Grid container spacing={1}>
+                  <Grid item xs={6} sm={6} md={6}>
+                    <Box 
+                      sx={{ 
+                        p: { xs: 1, sm: 2 }, 
+                        bgcolor: produktionsFilter === 'produzierbar' ? 'primary.main' : 'primary.light', 
+                        borderRadius: 2, 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        minHeight: { xs: 80, sm: 120 },
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: 4
+                        },
+                        border: produktionsFilter === 'produzierbar' ? '2px solid' : 'none',
+                        borderColor: 'primary.dark'
+                      }}
+                      onClick={() => setProduktionsFilter(produktionsFilter === 'produzierbar' ? 'alle' : 'produzierbar')}
+                    >
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+                        {produktionsKapazitaet.zusammenfassung.uebersicht.produzierbar || 0}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: 'white' }}>
-                        Produzierbare Produkte
+                      <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                        Produzierbar
                       </Typography>
-                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
-                        von {produktionsKapazitaet.zusammenfassung.uebersicht.gesamtProdukte} gesamt
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2, bgcolor: 'warning.light', borderRadius: 2, textAlign: 'center' }}>
-                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
-                        {produktionsKapazitaet.zusammenfassung.kritischeProdukte.length}
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: 'white' }}>
-                        Kritische Produkte
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
-                        ≤5 Stück produzierbar
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 2, textAlign: 'center' }}>
-                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
-                        {produktionsKapazitaet.zusammenfassung.uebersicht.produktionsrate}%
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: 'white' }}>
-                        Produktionsrate
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
-                        Anteil produzierbar
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8, fontSize: { xs: '0.6rem', sm: '0.75rem' }, display: { xs: 'none', sm: 'block' } }}>
+                        von {produktionsKapazitaet.zusammenfassung.uebersicht.gesamtProdukte || 0} gesamt
                       </Typography>
                     </Box>
                   </Grid>
                   
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ p: 2, bgcolor: 'info.light', borderRadius: 2, textAlign: 'center' }}>
-                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold' }}>
-                        {produktionsKapazitaet.zusammenfassung.topProduktion.length > 0 
-                          ? produktionsKapazitaet.zusammenfassung.topProduktion[0].maxProduktion
-                          : '0'
-                        }
+                  <Grid item xs={6} sm={6} md={6}>
+                    <Box 
+                      sx={{ 
+                        p: { xs: 1, sm: 2 }, 
+                        bgcolor: produktionsFilter === 'kritisch' ? 'warning.main' : 'warning.light', 
+                        borderRadius: 2, 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        minHeight: { xs: 80, sm: 120 },
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: 4
+                        },
+                        border: produktionsFilter === 'kritisch' ? '2px solid' : 'none',
+                        borderColor: 'warning.dark'
+                      }}
+                      onClick={() => setProduktionsFilter(produktionsFilter === 'kritisch' ? 'alle' : 'kritisch')}
+                    >
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+                        {produktionsKapazitaet.zusammenfassung.kritischeProdukte?.length || 0}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: 'white' }}>
-                        Höchste Kapazität
+                      <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                        Kritisch
                       </Typography>
-                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8 }}>
-                        {produktionsKapazitaet.zusammenfassung.topProduktion.length > 0
-                          ? produktionsKapazitaet.zusammenfassung.topProduktion[0].name.split(' ').slice(0, 2).join(' ')
-                          : 'Kein Produkt'
-                        }
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8, fontSize: { xs: '0.6rem', sm: '0.75rem' }, display: { xs: 'none', sm: 'block' } }}>
+                        ≤5 Stück
                       </Typography>
                     </Box>
+                  </Grid>
+                  
+                  {/* Produktliste mit konkreten Mengen */}
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {getFilterTitle()}
+                      </Typography>
+                      {produktionsFilter !== 'alle' && (
+                        <Button 
+                          size="small" 
+                          onClick={() => setProduktionsFilter('alle')}
+                          startIcon={<RefreshIcon />}
+                        >
+                          Alle anzeigen
+                        </Button>
+                      )}
+                    </Box>
+                    {/* Mobile-optimierte Karten-Ansicht für kleine Bildschirme */}
+                    <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+                      <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                        {getFilteredProdukte().map((produkt, index) => (
+                          <Card key={produkt.produktId || index} variant="outlined" sx={{ mb: 1, p: 1.5 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                              <Box sx={{ flex: 1, mr: 1 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>
+                                  {produkt.produktName.length > 25 ? `${produkt.produktName.substring(0, 25)}...` : produkt.produktName}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+                                  {produkt.grammProEinheit}g • {produkt.seife}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ mr: 1, fontSize: '0.7rem' }}>
+                                    Limit:
+                                  </Typography>
+                                  <Chip 
+                                    label={
+                                      produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
+                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' : 'Verpackung'
+                                    }
+                                    size="small"
+                                    sx={{ 
+                                      fontSize: '0.65rem',
+                                      height: 18,
+                                      backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 'info.main',
+                                      color: 'white',
+                                      fontWeight: 'medium',
+                                      '& .MuiChip-label': { px: 1 }
+                                    }}
+                                  />
+                                </Box>
+                              </Box>
+                              <Box sx={{ textAlign: 'right' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                                  <Box sx={{ textAlign: 'center' }}>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                                      Bestand
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                      {produkt.aktuellerBestand || '0'}
+                                    </Typography>
+                                  </Box>
+                                  <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>/</Typography>
+                                  <Box sx={{ textAlign: 'center' }}>
+                                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
+                                      Max. Produktion
+                                    </Typography>
+                                    <Typography variant="h6" sx={{ 
+                                      fontWeight: 'bold', 
+                                      color: produkt.maxProduktion === 0 ? 'error.main' : 
+                                             produkt.maxProduktion <= 5 ? 'warning.dark' : 'success.main',
+                                      fontSize: '1.1rem'
+                                    }}>
+                                      {produkt.maxProduktion}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', textAlign: 'center', display: 'block' }}>
+                                  Stück
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                              {produkt.maxProduktion === 0 ? (
+                                <Chip label="Nicht möglich" sx={{ backgroundColor: 'error.main', color: 'white', fontWeight: 'medium' }} size="small" />
+                              ) : produkt.maxProduktion <= 5 ? (
+                                <Chip label="Kritisch" sx={{ backgroundColor: 'warning.main', color: 'white', fontWeight: 'medium' }} size="small" />
+                              ) : (
+                                <Chip label="Verfügbar" sx={{ backgroundColor: 'success.main', color: 'white', fontWeight: 'medium' }} size="small" />
+                              )}
+                            </Box>
+                            {produkt.probleme && produkt.probleme.length > 0 && (
+                              <Box sx={{ mt: 1, p: 1, backgroundColor: 'error.light', borderRadius: 1 }}>
+                                <Typography variant="caption" color="error.dark" sx={{ fontSize: '0.7rem', fontWeight: 'medium' }}>
+                                  {produkt.probleme[0]}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Card>
+                        ))}
+                      </Box>
+                    </Box>
+                    
+                    {/* Desktop-Tabellen-Ansicht */}
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300, display: { xs: 'none', md: 'block' } }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell><strong>Produkt</strong></TableCell>
+                            <TableCell align="center"><strong>Bestand</strong></TableCell>
+                            <TableCell align="center"><strong>Max. Produktion</strong></TableCell>
+                            <TableCell align="center"><strong>Limitiert durch</strong></TableCell>
+                            <TableCell align="center"><strong>Status</strong></TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {getFilteredProdukte().map((produkt, index) => (
+                            <TableRow 
+                              key={produkt.produktId || index}
+                              sx={{ 
+                                backgroundColor: produkt.maxProduktion === 0 ? 'rgba(244, 67, 54, 0.1)' : 
+                                                produkt.maxProduktion <= 5 ? 'rgba(255, 152, 0, 0.1)' : 'transparent',
+                                '&:hover': {
+                                  backgroundColor: produkt.maxProduktion === 0 ? 'rgba(244, 67, 54, 0.2)' : 
+                                                  produkt.maxProduktion <= 5 ? 'rgba(255, 152, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)'
+                                }
+                              }}
+                            >
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                                  {produkt.produktName}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {produkt.grammProEinheit}g • {produkt.seife}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip 
+                                  label={produkt.aktuellerBestand || '0'}
+                                  color={produkt.aktuellerBestand <= 5 ? 'error' : produkt.aktuellerBestand <= 10 ? 'warning' : 'default'}
+                                  size="small"
+                                  sx={{ fontWeight: 'bold' }}
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography 
+                                  variant="h6" 
+                                  sx={{ 
+                                    fontWeight: 'bold',
+                                    color: produkt.maxProduktion === 0 ? 'error.main' : 
+                                           produkt.maxProduktion <= 5 ? 'warning.dark' : 'success.main'
+                                  }}
+                                >
+                                  {produkt.maxProduktion}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                {produkt.limitierenderFaktor && (
+                                  <Chip 
+                                    label={
+                                      produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
+                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' : 'Verpackung'
+                                    }
+                                    size="small"
+                                    sx={{
+                                      backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 'info.main',
+                                      color: 'white',
+                                      fontWeight: 'medium'
+                                    }}
+                                  />
+                                )}
+                                {produkt.probleme && produkt.probleme.length > 0 && (
+                                  <Typography variant="caption" color="error.main" sx={{ display: 'block', mt: 0.5, fontWeight: 'medium' }}>
+                                    {produkt.probleme[0]}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell align="center">
+                                {produkt.maxProduktion === 0 ? (
+                                  <Chip 
+                                    label="Nicht möglich" 
+                                    sx={{ backgroundColor: 'error.main', color: 'white', fontWeight: 'medium' }}
+                                    size="small" 
+                                  />
+                                ) : produkt.maxProduktion <= 5 ? (
+                                  <Chip 
+                                    label="Kritisch" 
+                                    sx={{ backgroundColor: 'warning.main', color: 'white', fontWeight: 'medium' }}
+                                    size="small" 
+                                  />
+                                ) : (
+                                  <Chip 
+                                    label="OK" 
+                                    sx={{ backgroundColor: 'success.main', color: 'white', fontWeight: 'medium' }}
+                                    size="small" 
+                                  />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      {produktionsFilter === 'alle' 
+                        ? `Zeige Top 10 von ${produktionsKapazitaet.produkte?.length || 0} Produkten`
+                        : `${getFilteredProdukte().length} Produkte gefiltert (${produktionsFilter})`
+                      } • Tippen Sie auf die Kacheln zum Filtern
+                    </Typography>
                   </Grid>
                   
                   {/* Limitierende Faktoren */}
-                  {Object.keys(produktionsKapazitaet.zusammenfassung.limitierungen).length > 0 && (
+                  {produktionsKapazitaet.zusammenfassung.limitierungen && Object.keys(produktionsKapazitaet.zusammenfassung.limitierungen).length > 0 && (
                     <Grid item xs={12}>
                       <Alert severity="info" sx={{ mt: 1 }}>
                         <strong>Hauptlimitierung:</strong> {
@@ -462,6 +730,19 @@ const AdminDashboard = () => {
                     </Grid>
                   )}
                 </Grid>
+              ) : produktionsKapazitaet === null ? (
+                <Alert severity="warning">
+                  <strong>Produktionskapazität nicht verfügbar</strong><br/>
+                  Die Produktionsanalyse konnte nicht geladen werden. 
+                  Möglicherweise fehlen Rohstoff-Daten oder die API ist nicht verfügbar.
+                  <Button 
+                    size="small" 
+                    onClick={loadDashboardData}
+                    sx={{ ml: 2 }}
+                  >
+                    Erneut laden
+                  </Button>
+                </Alert>
               ) : (
                 <Alert severity="info">
                   Produktionskapazität wird geladen...
@@ -471,77 +752,169 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
 
-        {/* Rechnungen & Anfragen */}
-        <Grid item xs={12} lg={8}>
+        {/* Verkaufs- & Produktionsübersicht */}
+        <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                <ShippingIcon sx={{ mr: 1, color: 'primary.main' }} />
-                Rechnungen & Anfragen
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
+                  <ShippingIcon sx={{ mr: 1, color: 'primary.main' }} />
+                  Verkaufs- & Produktionsübersicht
+                </Typography>
+                <IconButton 
+                  size="small" 
+                  onClick={() => setInfoDialogOpen(true)}
+                  sx={{ color: 'info.main' }}
+                >
+                  <InfoIcon />
+                </IconButton>
+              </Box>
               
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 2, mb: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                      {verkauf.rechnungen?.gesamtRechnungen || 0}
+              {/* Verkaufskennzahlen */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                📊 Verkaufskennzahlen (30 Tage)
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={6} sm={3}>
+                  <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
+                      {verkauf.rechnungen?.rechnungenLetzter30Tage || 0}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Rechnungen gesamt
+                    <Typography variant="body2" sx={{ color: 'white' }}>
+                      Rechnungen
                     </Typography>
                   </Box>
                 </Grid>
                 
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 2, mb: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'info.main' }}>
-                      {verkauf.rechnungen?.rechnungenLetzter30Tage || 0}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Rechnungen (30 Tage)
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 2, mb: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                <Grid item xs={6} sm={3}>
+                  <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
                       {formatCurrency(verkauf.rechnungen?.umsatzLetzter30Tage || 0)}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Umsatz (30 Tage)
+                    <Typography variant="body2" sx={{ color: 'white' }}>
+                      Umsatz
                     </Typography>
                   </Box>
                 </Grid>
 
-                <Grid item xs={12} sm={6} md={3}>
-                  <Box sx={{ p: 2, bgcolor: 'grey.100', borderRadius: 2, mb: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                <Grid item xs={6} sm={3}>
+                  <Box sx={{ p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
                       {verkauf.rechnungen?.nachStatus?.find(s => s._id === 'paid')?.anzahl || 0}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Bezahlte Rechnungen
+                    <Typography variant="body2" sx={{ color: 'white' }}>
+                      Bezahlt
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      ({formatCurrency(verkauf.rechnungen?.nachStatus?.find(s => s._id === 'paid')?.gesamtwert || 0)})
+                  </Box>
+                </Grid>
+
+                <Grid item xs={6} sm={3}>
+                  <Box sx={{ p: 2, bgcolor: 'warning.light', borderRadius: 2 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
+                      {produktion.produkteZurProduktion.filter(p => p.voraussichtlicheReichweite < 30).length}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'white' }}>
+                      Kritische Produkte
                     </Typography>
                   </Box>
                 </Grid>
               </Grid>
+
+              {/* Produktionspriorität */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                🚀 Produktionspriorität (Top 10)
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Basierend auf Bestand und Verkaufshäufigkeit der letzten 90 Tage
+              </Typography>
               
-              <TableContainer component={Paper} variant="outlined">
+              {/* Mobile-optimierte Karten-Ansicht für kleine Bildschirme */}
+              <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+                <Box sx={{ maxHeight: 400, overflowY: 'auto' }}>
+                  {produktion.produkteZurProduktion.slice(0, 8).map((product, index) => (
+                    <Card key={product._id || index} variant="outlined" sx={{ mb: 2, p: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                        <Box sx={{ flex: 1, mr: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.85rem', lineHeight: 1.2 }}>
+                            {(product.produktName || product.portfolio?.name || 'Unbekannt').length > 25 ? 
+                              `${(product.produktName || product.portfolio?.name || 'Unbekannt').substring(0, 25)}...` : 
+                              (product.produktName || product.portfolio?.name || 'Unbekannt')
+                            }
+                          </Typography>
+                          {product.portfolio?.seife && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+                              {product.portfolio.seife} • {product.portfolio.aroma}
+                            </Typography>
+                          )}
+                        </Box>
+                        
+                        <Box sx={{ textAlign: 'right' }}>
+                          <Chip 
+                            label={`Score: ${product.prioritaetsScore}`}
+                            size="small"
+                            sx={{
+                              backgroundColor: product.prioritaetsScore > 20 ? 'error.main' : 
+                                              product.prioritaetsScore > 10 ? 'warning.main' : 'info.main',
+                              color: 'white',
+                              fontWeight: 'medium',
+                              fontSize: '0.7rem'
+                            }}
+                          />
+                        </Box>
+                      </Box>
+                      
+                      <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                        <Box sx={{ flex: 1, textAlign: 'center', p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                            Bestand
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.8rem', color: product.aktuellerBestand <= product.mindestbestand ? 'error.main' : 'text.primary' }}>
+                            {product.aktuellerBestand}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ flex: 1, textAlign: 'center', p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                            Verkäufe (90T)
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.8rem' }}>
+                            {product.verkaufteMenge90Tage}
+                          </Typography>
+                        </Box>
+                        
+                        <Box sx={{ flex: 1, textAlign: 'center', p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>
+                            Reichweite
+                          </Typography>
+                          <Typography variant="body2" sx={{ 
+                            fontWeight: 'bold', 
+                            fontSize: '0.8rem',
+                            color: product.voraussichtlicheReichweite < 30 ? 'error.main' : 
+                                   product.voraussichtlicheReichweite < 60 ? 'warning.main' : 'success.main'
+                          }}>
+                            {product.voraussichtlicheReichweite > 999 ? '∞' : `${product.voraussichtlicheReichweite}d`}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Card>
+                  ))}
+                </Box>
+              </Box>
+              
+              {/* Desktop-Tabellen-Ansicht */}
+              <TableContainer component={Paper} variant="outlined" sx={{ display: { xs: 'none', md: 'block' } }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell><strong>Produkt</strong></TableCell>
-                      <TableCell align="center"><strong>Aktueller Bestand</strong></TableCell>
+                      <TableCell align="center"><strong>Bestand</strong></TableCell>
                       <TableCell align="center"><strong>Verkäufe (90T)</strong></TableCell>
-                      <TableCell align="center"><strong>Reichweite (Tage)</strong></TableCell>
+                      <TableCell align="center"><strong>Reichweite</strong></TableCell>
                       <TableCell align="center"><strong>Priorität</strong></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {produktion.produkteZurProduktion.map((product, index) => (
+                    {produktion.produkteZurProduktion.slice(0, 8).map((product, index) => (
                       <TableRow key={product._id || index}>
                         <TableCell>
                           <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
@@ -591,7 +964,7 @@ const AdminDashboard = () => {
         </Grid>
 
         {/* Meistverkaufte Produkte Chart */}
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12} md={4}>
           <Card sx={{ height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -653,82 +1026,8 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
 
-        {/* Produktionspriorität */}
-        <Grid item xs={12} lg={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                <ProductionIcon sx={{ mr: 1, color: 'warning.main' }} />
-                Produkte zur Produktion (Top 10)
-              </Typography>
-              
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Basierend auf Bestand und Verkaufshäufigkeit der letzten 90 Tage
-              </Typography>
-              
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell><strong>Produkt</strong></TableCell>
-                      <TableCell align="center"><strong>Aktueller Bestand</strong></TableCell>
-                      <TableCell align="center"><strong>Verkäufe (90T)</strong></TableCell>
-                      <TableCell align="center"><strong>Reichweite (Tage)</strong></TableCell>
-                      <TableCell align="center"><strong>Priorität</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {produktion.produkteZurProduktion.map((product, index) => (
-                      <TableRow key={product._id || index}>
-                        <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                            {product.produktName || product.portfolio?.name || 'Unbekannt'}
-                          </Typography>
-                          {product.portfolio?.seife && (
-                            <Typography variant="caption" color="text.secondary">
-                              {product.portfolio.seife} • {product.portfolio.aroma}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="center">
-                          <Chip 
-                            label={product.aktuellerBestand}
-                            color={product.aktuellerBestand <= product.mindestbestand ? 'error' : 'default'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="center">{product.verkaufteMenge90Tage}</TableCell>
-                        <TableCell align="center">
-                          <Chip 
-                            label={product.voraussichtlicheReichweite > 999 ? '∞' : `${product.voraussichtlicheReichweite}d`}
-                            color={product.voraussichtlicheReichweite < 30 ? 'error' : product.voraussichtlicheReichweite < 60 ? 'warning' : 'success'}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell align="center">
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Typography variant="body2" sx={{ mr: 1 }}>
-                              {product.prioritaetsScore}
-                            </Typography>
-                            <LinearProgress 
-                              variant="determinate" 
-                              value={Math.min(product.prioritaetsScore * 2, 100)} 
-                              sx={{ width: 40, height: 4 }}
-                              color={product.prioritaetsScore > 20 ? 'error' : product.prioritaetsScore > 10 ? 'warning' : 'info'}
-                            />
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </CardContent>
-          </Card>
-        </Grid>
-
         {/* Rohstoff-Status */}
-        <Grid item xs={12} lg={6}>
+        <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -802,7 +1101,7 @@ const AdminDashboard = () => {
         </Grid>
 
         {/* Fertigprodukte mit niedrigstem Bestand */}
-        <Grid item xs={12} lg={6}>
+        <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
               <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
@@ -923,6 +1222,96 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
       </Grid>
+      
+      {/* Info-Dialog für Kennzahlen-Erklärung */}
+      <Dialog 
+        open={infoDialogOpen} 
+        onClose={() => setInfoDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
+          <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
+          Erklärung der Produktions-Kennzahlen
+        </DialogTitle>
+        <DialogContent>
+          <List>
+            <ListItem>
+              <ListItemIcon>
+                <ScheduleIcon color="warning" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Reichweite (Tage)"
+                secondary={
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Zeigt an, wie viele Tage der aktuelle Bestand bei der aktuellen Verkaufsrate noch reichen wird.
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Beispiel:</strong> 15 Stück Bestand ÷ 0,33 Stück/Tag = 45 Tage Reichweite
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                      <Chip label="< 30 Tage: Kritisch" color="error" size="small" />
+                      <Chip label="30-60 Tage: Warnung" color="warning" size="small" />
+                      <Chip label="> 60 Tage: OK" color="success" size="small" />
+                    </Box>
+                  </Box>
+                }
+              />
+            </ListItem>
+            
+            <Divider sx={{ my: 2 }} />
+            
+            <ListItem>
+              <ListItemIcon>
+                <StarIcon color="info" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Prioritätsscore"
+                secondary={
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Berechnet die Dringlichkeit der Produktion basierend auf Bestand, Verkaufsgeschwindigkeit und Reichweite.
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Höherer Score = höhere Produktionspriorität</strong>
+                    </Typography>
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>• <strong>Score &gt; 20:</strong> Hohe Priorität - Sofort produzieren</Typography>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>• <strong>Score 10-20:</strong> Mittlere Priorität - Bald produzieren</Typography>
+                      <Typography variant="body2">• <strong>Score &lt; 10:</strong> Niedrige Priorität - Bestand ausreichend</Typography>
+                    </Box>
+                  </Box>
+                }
+              />
+            </ListItem>
+            
+            <Divider sx={{ my: 2 }} />
+            
+            <ListItem>
+              <ListItemIcon>
+                <TrendingUpIcon color="success" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Geschäftlicher Nutzen"
+                secondary={
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>• Vermeidung von Stockouts und verlorenen Verkäufen</Typography>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>• Optimale Produktionsplanung und Ressourceneinsatz</Typography>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>• Lagerkostenoptimierung</Typography>
+                    <Typography variant="body2">• Verbessertes Cashflow-Management</Typography>
+                  </Box>
+                }
+              />
+            </ListItem>
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInfoDialogOpen(false)} color="primary">
+            Verstanden
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
