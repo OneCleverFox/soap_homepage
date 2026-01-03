@@ -98,6 +98,82 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
   }
 });
 
+// DEBUG ROUTE - Invoice Filter Test
+router.get('/debug-invoices', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('🔍 DEBUG: Analysiere Rechnungen für Dashboard...');
+    
+    const heute = new Date();
+    const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // Alle Rechnungen abrufen
+    const alleRechnungen = await Invoice.find({}).sort({ 'dates.invoiceDate': -1 });
+    
+    console.log('\n=== ALLE RECHNUNGEN ===');
+    const rechnungsDetails = alleRechnungen.map(inv => {
+      const invoiceDate = inv.dates.invoiceDate;
+      const isInLast30Days = invoiceDate >= einMonatZurueck;
+      
+      const details = {
+        nummer: inv.invoiceNumber,
+        betrag: inv.amounts.total,
+        status: inv.status,
+        datum: invoiceDate.toISOString().split('T')[0],
+        inLetzten30Tagen: isInLast30Days,
+        paymentMethod: inv.payment?.method || 'none',
+        paidAmount: inv.payment?.paidAmount || 0,
+        paidDate: inv.payment?.paidDate || null
+      };
+      
+      console.log(`${details.nummer}: ${details.betrag}€ - Status: ${details.status} - In 30d: ${details.inLetzten30Tagen}`);
+      return details;
+    });
+    
+    // Dashboard-Filter testen
+    const umsatzFilter = {
+      'dates.invoiceDate': { $gte: einMonatZurueck },
+      ...getRevenueRelevantInvoicesFilter()
+    };
+    
+    const umsatzRechnungen = await Invoice.find(umsatzFilter);
+    
+    console.log('\n=== RECHNUNGEN IM UMSATZ-FILTER ===');
+    let gesamtUmsatz = 0;
+    const erfassteRechnungen = umsatzRechnungen.map(inv => {
+      console.log(`${inv.invoiceNumber}: ${inv.amounts.total}€ (Status: ${inv.status})`);
+      gesamtUmsatz += inv.amounts.total;
+      return {
+        nummer: inv.invoiceNumber,
+        betrag: inv.amounts.total,
+        status: inv.status
+      };
+    });
+    
+    console.log(`\nGESAMTUMSATZ: ${gesamtUmsatz}€`);
+    
+    res.json({
+      success: true,
+      data: {
+        alleRechnungen: rechnungsDetails,
+        erfassteRechnungen: erfassteRechnungen,
+        gesamtUmsatz: gesamtUmsatz,
+        filter: {
+          zeitraum: '30 Tage',
+          stichtag: einMonatZurueck.toISOString().split('T')[0]
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Debug Invoices Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Debug der Rechnungen',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/dashboard/fertigprodukte-ohne-bestand
 // @desc    Fertigprodukte mit 0 Bestand
 // @access  Private (Admin only)
@@ -297,7 +373,19 @@ async function getMeistverkaufteProdukte() {
   const verkaufsDaten = await Invoice.aggregate([
     {
       $match: {
-        ...getRevenueRelevantInvoicesFilter(),
+        $or: [
+          // Reguläre Rechnungen (sent, paid, pending)
+          { status: { $in: ['sent', 'paid', 'pending'] } },
+          // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+          { 
+            status: 'draft', 
+            $or: [
+              { 'payment.paidAmount': { $gt: 0 } },
+              { 'payment.paidDate': { $exists: true } },
+              { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+            ]
+          }
+        ],
         'dates.invoiceDate': {
           $gte: new Date(lastYear, 0, 1),
           $lte: new Date(currentYear, 11, 31, 23, 59, 59)
@@ -384,7 +472,19 @@ async function getProdukteZurProduktion() {
   const verkaufsDataInvoices = await Invoice.aggregate([
     {
       $match: {
-        ...getRevenueRelevantInvoicesFilter(),
+        $or: [
+          // Reguläre Rechnungen (sent, paid, pending)
+          { status: { $in: ['sent', 'paid', 'pending'] } },
+          // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+          { 
+            status: 'draft', 
+            $or: [
+              { 'payment.paidAmount': { $gt: 0 } },
+              { 'payment.paidDate': { $exists: true } },
+              { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+            ]
+          }
+        ],
         'dates.invoiceDate': { $gte: last90Days }
       }
     },
@@ -535,7 +635,19 @@ async function getRechnungsStatistiken() {
           {
             $match: {
               'dates.invoiceDate': { $gte: einMonatZurueck },
-              ...getRevenueRelevantInvoicesFilter()
+              $or: [
+                // Reguläre Rechnungen (sent, paid, pending)
+                { status: { $in: ['sent', 'paid', 'pending'] } },
+                // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
+                { 
+                  status: 'draft', 
+                  $or: [
+                    { 'payment.paidAmount': { $gt: 0 } },
+                    { 'payment.paidDate': { $exists: true } },
+                    { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
+                  ]
+                }
+              ]
             }
           },
           {
