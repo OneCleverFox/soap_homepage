@@ -140,9 +140,8 @@ class CookieManager {
 // Singleton Instance
 const cookieManager = new CookieManager();
 
-// Event-Listener für Cookie-Setting-Änderungen
-window.addEventListener('cookieSettingsChanged', (event) => {
-  cookieManager.updateSettings(event.detail);
-});
+// REMOVED: Event-Listener that was causing infinite loop
+// The updateSettings method already dispatches the event,
+// no need to listen and call updateSettings again
 
 export default cookieManager;

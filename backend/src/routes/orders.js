@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require("../models/Order");
 const Kunde = require("../models/Kunde");
 const Bestand = require("../models/Bestand");
+const { reduceInventoryForProduct } = require("../utils/inventoryUtils");
 
 router.get("/", async (req, res) => {
   try {
@@ -81,32 +82,57 @@ router.post("/create-admin", async (req, res) => {
       console.log('✅ Neuer Kunde erstellt:', kunde.kundennummer);
     }
 
-    // Bestandsabgang durchführen
+    // Bestandsabgang durchführen - Neue Dual-Soap-fähige Logik
     const artikelMitBestand = [];
     for (const artikel_item of artikel) {
       try {
-        // Bestand finden und reduzieren
-        const bestand = await Bestand.findOne({
-          artikelId: artikel_item.produktId,
-          typ: artikel_item.produktType === 'portfolio' ? 'produkt' : artikel_item.produktType
-        });
-
-        if (bestand) {
-          if (bestand.menge >= artikel_item.menge) {
-            bestand.menge -= artikel_item.menge;
-            await bestand.save();
-            console.log(`📦 Bestand reduziert: ${artikel_item.produktSnapshot.name} (-${artikel_item.menge})`);
+        // Verwende neue Inventar-Utility für Dual-Soap-Support
+        if (artikel_item.produktType === 'portfolio') {
+          const inventoryResult = await reduceInventoryForProduct(
+            artikel_item.produktId, 
+            artikel_item.menge
+          );
+          
+          if (inventoryResult.success) {
+            console.log(`✅ Bestand erfolgreich reduziert für: ${inventoryResult.produktName}`);
+            if (inventoryResult.isDualSoap) {
+              console.log(`   🔧 Dual-Soap Reduktion:`);
+              inventoryResult.operations.forEach(op => {
+                console.log(`      - ${op.rohseife}: -${op.reduzierung}g (${op.prozent}%)`);
+              });
+            }
           } else {
-            console.warn(`⚠️ Nicht genügend Bestand für: ${artikel_item.produktSnapshot.name} (verfügbar: ${bestand.menge}, benötigt: ${artikel_item.menge})`);
+            console.warn(`⚠️ Bestandsreduktion fehlgeschlagen für: ${artikel_item.produktSnapshot.name}`);
+            inventoryResult.operations.forEach(op => {
+              if (!op.success) {
+                console.warn(`      - ${op.rohseife}: ${op.error}`);
+              }
+            });
           }
         } else {
-          console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${artikel_item.produktSnapshot.name}`);
+          // Fallback für andere Produkttypen (alte Logik)
+          const bestand = await Bestand.findOne({
+            artikelId: artikel_item.produktId,
+            typ: artikel_item.produktType
+          });
+
+          if (bestand) {
+            if (bestand.menge >= artikel_item.menge) {
+              bestand.menge -= artikel_item.menge;
+              await bestand.save();
+              console.log(`📦 Bestand reduziert: ${artikel_item.produktSnapshot.name} (-${artikel_item.menge})`);
+            } else {
+              console.warn(`⚠️ Nicht genügend Bestand für: ${artikel_item.produktSnapshot.name} (verfügbar: ${bestand.menge}, benötigt: ${artikel_item.menge})`);
+            }
+          } else {
+            console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${artikel_item.produktSnapshot.name}`);
+          }
         }
 
         artikelMitBestand.push(artikel_item);
 
       } catch (bestandError) {
-        console.error('Fehler beim Bestandsabgang:', bestandError);
+        console.error('❌ Fehler beim Bestandsabgang:', bestandError);
         // Artikel trotzdem hinzufügen, aber Warnung loggen
         artikelMitBestand.push(artikel_item);
       }

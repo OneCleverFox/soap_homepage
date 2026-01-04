@@ -62,6 +62,15 @@ const ProductDetailPage = () => {
       const response = await portfolioAPI.getById(id);
       console.log('Product response:', response);
       const productData = response.data?.data || response.data;
+      
+      // DEBUG: Prüfe rohseifenKonfiguration
+      if (productData) {
+        console.log('🔍 DEBUG: Product Data loaded:', productData);
+        console.log('🔍 DEBUG: rohseifenKonfiguration:', productData.rohseifenKonfiguration);
+        console.log('🔍 DEBUG: verwendeZweiRohseifen:', productData.rohseifenKonfiguration?.verwendeZweiRohseifen);
+        console.log('🔍 DEBUG: seife2:', productData.rohseifenKonfiguration?.seife2);
+      }
+      
       setProduct(productData);
       setSelectedImage(productData?.bilder?.hauptbild);
     } catch (err) {
@@ -237,12 +246,28 @@ const ProductDetailPage = () => {
             {product.name}
           </Typography>
 
-          <Chip 
-            label={product.seife} 
-            color="primary" 
-            sx={{ mt: 2, mb: 3 }}
-            size={isMobile ? "small" : "medium"}
-          />
+          {/* Rohseifen-Anzeige: Single oder Dual */}
+          {product.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+            <Box sx={{ mt: 2, mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Chip 
+                label={`${product.seife} (${product.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}%)`}
+                color="primary" 
+                size={isMobile ? "small" : "medium"}
+              />
+              <Chip 
+                label={`${product.rohseifenKonfiguration.seife2} (${product.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}%)`}
+                color="secondary"
+                size={isMobile ? "small" : "medium"}
+              />
+            </Box>
+          ) : (
+            <Chip 
+              label={product.seife} 
+              color="primary" 
+              sx={{ mt: 2, mb: 3 }}
+              size={isMobile ? "small" : "medium"}
+            />
+          )}
 
           {/* Verfügbarkeitsanzeige */}
           {product.bestand && (
