@@ -1,5 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+
+// Utility-Funktion für Cache-Invalidation
+const invalidateProductsCache = () => {
+  try {
+    // SessionStorage Cache leeren
+    sessionStorage.removeItem('cachedProducts');
+    console.log('🧹 Products cache invalidated');
+    
+    // Event feuern für reaktive Updates
+    window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+    console.log('📡 Inventory update event dispatched');
+    
+    return true;
+  } catch (e) {
+    console.warn('⚠️ Could not invalidate products cache:', e);
+    return false;
+  }
+};
 import {
   Box,
   Typography,
@@ -687,6 +705,9 @@ const AdminPortfolio = () => {
       if (data.success) {
         showSnackbar(data.message);
         
+        // Cache invalidieren und Updates propagieren
+        invalidateProductsCache();
+        
         // Erst die Produkte neu laden, dann den Dialog schließen
         await loadProducts();
         await loadStats();
@@ -716,6 +737,10 @@ const AdminPortfolio = () => {
 
       if (data.success) {
         showSnackbar(data.message);
+        
+        // Cache invalidieren und Updates propagieren
+        invalidateProductsCache();
+        
         loadProducts();
         loadStats();
       } else {
