@@ -170,6 +170,13 @@ export const CartProvider = ({ children }) => {
     const token = cookieManager.getItem('token', 'necessary');
     console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
     
+    // 🚀 PERFORMANCE: Cart nicht auf Admin-Seiten laden
+    const isAdminPage = window.location.pathname.startsWith('/admin');
+    if (isAdminPage) {
+      console.log('🚀 Admin-Seite erkannt - überspringe Warenkorb-Load für bessere Performance');
+      return;
+    }
+    
     if (token && isMounted) {
       console.log('📦 Lade Warenkorb beim Mount...');
       loadCart();

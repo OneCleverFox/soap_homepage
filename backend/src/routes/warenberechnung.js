@@ -24,8 +24,15 @@ router.get('/', auth, async (req, res) => {
 // GET Warenberechnung für ein Portfolio-Produkt
 router.get('/portfolio/:portfolioId', auth, async (req, res) => {
   try {
+    // Validiere Portfolio-ID
+    const portfolioId = req.params.portfolioId;
+    if (!portfolioId || portfolioId === 'undefined' || portfolioId === 'null') {
+      console.warn(`⚠️ Ungültige Portfolio-ID erhalten: "${portfolioId}"`);
+      return res.status(400).json({ message: 'Ungültige Portfolio-ID' });
+    }
+    
     let berechnung = await Warenberechnung.findOne({ 
-      portfolioProdukt: req.params.portfolioId 
+      portfolioProdukt: portfolioId 
     }).populate('portfolioProdukt');
     
     // Wenn keine Berechnung existiert, erstelle eine neue
@@ -38,6 +45,12 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       // Rohstoffe laden für initiale Berechnung
       const rohseifeList = await Rohseife.find();
       const rohseife = rohseifeList.find(r => r.bezeichnung === portfolio.seife);
+      
+      // Zweite Rohseife laden falls konfiguriert
+      let rohseife2 = null;
+      if (portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen && portfolio.rohseifenKonfiguration.seife2) {
+        rohseife2 = rohseifeList.find(r => r.bezeichnung === portfolio.rohseifenKonfiguration.seife2);
+      }
       
       let duftoil = null;
       if (portfolio.aroma && portfolio.aroma !== 'Neutral' && portfolio.aroma !== '') {
@@ -57,7 +70,31 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       
       // Kosten berechnen mit verbessertem Logging
       const gewichtInGramm = portfolio.gramm || 50;
-      const rohseifeKosten = rohseife ? (gewichtInGramm * rohseife.preisProGramm) : 0;
+      
+      // Gewichtsverteilung für Rohseifen berechnen
+      let rohseife1Gramm = gewichtInGramm;
+      let rohseife2Gramm = 0;
+      let rohseife2Kosten = 0;
+      
+      if (portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen) {
+        const seife1Prozent = portfolio.rohseifenKonfiguration.gewichtVerteilung?.seife1Prozent || 50;
+        const seife2Prozent = portfolio.rohseifenKonfiguration.gewichtVerteilung?.seife2Prozent || 50;
+        
+        rohseife1Gramm = Math.round(gewichtInGramm * (seife1Prozent / 100));
+        rohseife2Gramm = Math.round(gewichtInGramm * (seife2Prozent / 100));
+        
+        rohseife2Kosten = rohseife2 ? (rohseife2Gramm * rohseife2.preisProGramm) : 0;
+        
+        console.log(`🧮 Dual-Soap-Berechnung für "${portfolio.name}":`);
+        console.log(`   - Seife1: ${portfolio.seife} = ${rohseife1Gramm}g (${seife1Prozent}%) → ${rohseife ? (rohseife1Gramm * rohseife.preisProGramm).toFixed(4) : 0}€`);
+        console.log(`   - Seife2: ${portfolio.rohseifenKonfiguration.seife2} = ${rohseife2Gramm}g (${seife2Prozent}%) → ${rohseife2Kosten.toFixed(4)}€`);
+        console.log(`   - Rohseife2 gefunden: ${rohseife2 ? 'JA' : 'NEIN'}`);
+        if (rohseife2) {
+          console.log(`   - Rohseife2 Preis/g: ${rohseife2.preisProGramm}€`);
+        }
+      }
+      
+      const rohseifeKosten = rohseife ? (rohseife1Gramm * rohseife.preisProGramm) : 0;
       
       // Logging für Nachvollziehbarkeit
       if (!rohseife && portfolio.seife) {
@@ -77,10 +114,19 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
         portfolioProdukt: portfolio._id,
         produktName: portfolio.name,
         rohseifeName: portfolio.seife,
+        rohseifenKonfiguration: {
+          verwendeZweiRohseifen: portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
+          rohseife2Name: portfolio.rohseifenKonfiguration?.seife2 || '',
+          gewichtVerteilung: {
+            rohseife1Gramm: rohseife1Gramm,
+            rohseife2Gramm: rohseife2Gramm
+          }
+        },
         duftoelName: portfolio.aroma || '',
         verpackungName: portfolio.verpackung,
         gewichtInGramm,
         rohseifeKosten,
+        rohseife2Kosten,
         duftoelKosten,
         verpackungKosten,
         energieKosten: 0,
@@ -173,6 +219,32 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Warenberechnung nicht gefunden' });
     }
     
+    res.json({ message: 'Warenberechnung gelöscht' });
+  } catch (error) {
+    console.error('Fehler beim Löschen der Warenberechnung:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE - Warenberechnung für Portfolio-Produkt löschen
+router.delete('/portfolio/:portfolioId', auth, async (req, res) => {
+  try {
+    // Validiere Portfolio-ID
+    const portfolioId = req.params.portfolioId;
+    if (!portfolioId || portfolioId === 'undefined' || portfolioId === 'null') {
+      console.warn(`⚠️ DELETE: Ungültige Portfolio-ID erhalten: "${portfolioId}"`);
+      return res.status(400).json({ message: 'Ungültige Portfolio-ID' });
+    }
+    
+    const berechnung = await Warenberechnung.findOneAndDelete({ 
+      portfolioProdukt: portfolioId 
+    });
+    
+    if (!berechnung) {
+      return res.status(404).json({ message: 'Warenberechnung für Portfolio nicht gefunden' });
+    }
+    
+    console.log(`✅ Warenberechnung für Portfolio ${portfolioId} gelöscht - wird bei nächstem Aufruf neu erstellt`);
     res.json({ message: 'Warenberechnung gelöscht' });
   } catch (error) {
     console.error('Fehler beim Löschen der Warenberechnung:', error);

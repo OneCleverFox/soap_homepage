@@ -96,6 +96,22 @@ router.get('/debug/portfolio-status', async (req, res) => {
   }
 });
 
+// DEBUG Route - Cache invalidierung erzwingen
+router.get('/debug/invalidate-cache', async (req, res) => {
+  try {
+    console.log('🧹 MANUAL CACHE INVALIDATION triggered');
+    invalidatePortfolioCache();
+    res.json({
+      success: true,
+      message: 'Portfolio cache manually invalidated',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Manual cache invalidation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // DEBUG Route - alle Bestände anzeigen
 router.get('/debug/bestaende', async (req, res) => {
   try {
@@ -189,7 +205,30 @@ async function calculatePortfolioPrice(portfolioItem) {
     });
     
     if (rohseife) {
-      details.rohseife = rohseife.preisProGramm * portfolioItem.gramm;
+      // Prüfe ob zwei Rohseifen verwendet werden
+      if (portfolioItem.rohseifenKonfiguration?.verwendeZweiRohseifen) {
+        const seife1Prozent = portfolioItem.rohseifenKonfiguration.gewichtVerteilung?.seife1Prozent || 50;
+        const rohseife1Gramm = Math.round(portfolioItem.gramm * (seife1Prozent / 100));
+        
+        details.rohseife = rohseife.preisProGramm * rohseife1Gramm;
+        
+        // Zweite Rohseife laden und berechnen
+        if (portfolioItem.rohseifenKonfiguration.seife2) {
+          const rohseife2 = await Rohseife.findOne({ 
+            bezeichnung: { $regex: new RegExp(portfolioItem.rohseifenKonfiguration.seife2, 'i') }
+          });
+          
+          if (rohseife2) {
+            const seife2Prozent = portfolioItem.rohseifenKonfiguration.gewichtVerteilung?.seife2Prozent || 50;
+            const rohseife2Gramm = Math.round(portfolioItem.gramm * (seife2Prozent / 100));
+            
+            details.rohseife += rohseife2.preisProGramm * rohseife2Gramm;
+          }
+        }
+      } else {
+        // Standard: Eine Rohseife
+        details.rohseife = rohseife.preisProGramm * portfolioItem.gramm;
+      }
     } else {
       // Fallback: Schätzpreis basierend auf Durchschnittswerten
       details.rohseife = portfolioItem.gramm * 0.05; // 5 Cent pro Gramm
@@ -450,16 +489,19 @@ router.get('/with-prices', async (req, res) => {
   console.log('🚀 Portfolio with-prices request started');
   
   try {
-    // Cache-Control Headers für Browser-Caching
+    // Cache-Control Headers für Browser-Caching (entwicklungsfreundlich)
     res.set({
-      'Cache-Control': 'public, max-age=300, stale-while-revalidate=600', // 5 Min Cache, 10 Min stale
+      'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0', // Browser-Cache deaktivieren
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'ETag': `portfolio-${Date.now()}`,
       'Last-Modified': new Date().toUTCString()
     });
     
-    // Cache-Check
+    // Cache-Check (TEMPORÄR DEAKTIVIERT für Debugging)
     const now = Date.now();
-    if (portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
+    const cacheDisabled = true; // Temporär für Dual-Soap Debugging
+    if (!cacheDisabled && portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
       console.log(`⚡ Cache hit! Returning cached data (${now - portfolioCache.timestamp}ms old)`);
       return res.status(200).json({
         success: true,
@@ -783,6 +825,10 @@ router.post('/', auth, async (req, res) => {
 // @access  Private (Admin only)
 router.put('/:id', auth, async (req, res) => {
   try {
+    // 🔍 DEBUG: Zeige Request-Body vor dem Speichern
+    console.log('🔍 PORTFOLIO UPDATE - Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 PORTFOLIO UPDATE - Rohseifen-Konfiguration:', req.body.rohseifenKonfiguration);
+    
     const portfolioItem = await Portfolio.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -796,7 +842,18 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
-    // Cache invalidieren nach erfolgreichem Update
+    // 🔍 DEBUG: Zeige gespeicherte Daten
+    console.log('🔍 PORTFOLIO UPDATE - Gespeicherte Daten:', JSON.stringify(portfolioItem.toObject(), null, 2));
+    console.log('🔍 PORTFOLIO UPDATE - Gespeicherte Rohseifen-Konfiguration:', portfolioItem.rohseifenKonfiguration);
+
+    // Cache SOFORT und AGGRESSIV invalidieren nach erfolgreichem Update
+    portfolioCache.data = null;
+    portfolioCache.timestamp = 0;
+    global.portfolioCache = portfolioCache;
+    cacheManager.invalidateProductCache();
+    console.log('🗑️ IMMEDIATE Portfolio cache invalidation after update');
+    
+    // Zusätzliche Cache-Invalidierung
     invalidatePortfolioCache();
     
     res.status(200).json({

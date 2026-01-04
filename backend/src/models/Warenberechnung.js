@@ -18,6 +18,27 @@ const warenberechnungSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  // Erweiterte Rohseifen-Konfiguration
+  rohseifenKonfiguration: {
+    verwendeZweiRohseifen: {
+      type: Boolean,
+      default: false
+    },
+    rohseife2Name: {
+      type: String,
+      default: ''
+    },
+    gewichtVerteilung: {
+      rohseife1Gramm: {
+        type: Number,
+        default: 0
+      },
+      rohseife2Gramm: {
+        type: Number,
+        default: 0
+      }
+    }
+  },
   duftoelName: {
     type: String,
     default: ''
@@ -36,6 +57,10 @@ const warenberechnungSchema = new mongoose.Schema({
   
   // Fixe Kosten (berechnet aus Rohstoffen)
   rohseifeKosten: {
+    type: Number,
+    default: 0
+  },
+  rohseife2Kosten: {
     type: Number,
     default: 0
   },
@@ -128,9 +153,10 @@ const warenberechnungSchema = new mongoose.Schema({
 
 // Pre-save Hook: Berechnungen durchführen
 warenberechnungSchema.pre('save', function(next) {
-  // Zwischensumme EK
+  // Zwischensumme EK - berücksichtigt zweite Rohseife
   this.zwischensummeEK = 
     this.rohseifeKosten + 
+    this.rohseife2Kosten +
     this.duftoelKosten + 
     this.verpackungKosten + 
     this.energieKosten;

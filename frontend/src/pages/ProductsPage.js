@@ -34,7 +34,6 @@ import { useCart } from '../contexts/CartContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
-import NetworkAwareLoader from '../components/NetworkAwareLoader';
 import stockEventService from '../services/stockEventService';
 
 // API Base URL für Bild-URLs
@@ -47,13 +46,13 @@ const ProductsPage = React.memo(() => {
   
   const { user } = useAuth();
   const { addToCart } = useCart();
-  const { isOnline, isSlowConnection } = useNetworkStatus();
+  const { isOnline: _isOnline, isSlowConnection: _isSlowConnection } = useNetworkStatus();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
   const [error, setError] = useState('');
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
-  const [retryCount, setRetryCount] = useState(0); // Für Retry-Logik
+  const [_retryCount, setRetryCount] = useState(0); // Für Retry-Logik
 
   // Optimierte fetchProducts Funktion mit Retry-Mechanismus
   const fetchProducts = useCallback(async (isBackgroundUpdate = false, retryAttempt = 0) => {
@@ -70,6 +69,17 @@ const ProductsPage = React.memo(() => {
       
       const response = await portfolioAPI.getWithPrices();
       const productsData = response.data?.data || response.data || [];
+      
+      // DEBUG: Prüfe Vanilla Dream Dual-Soap Konfiguration
+      const vanillaDream = productsData.find(p => p.name === 'Vanilla Dream');
+      if (vanillaDream) {
+        console.log('🔍 DEBUG: Vanilla Dream gefunden:', vanillaDream);
+        console.log('🔍 DEBUG: rohseifenKonfiguration:', vanillaDream.rohseifenKonfiguration);
+        console.log('🔍 DEBUG: verwendeZweiRohseifen:', vanillaDream.rohseifenKonfiguration?.verwendeZweiRohseifen);
+        console.log('🔍 DEBUG: seife2:', vanillaDream.rohseifenKonfiguration?.seife2);
+      } else {
+        console.log('❌ DEBUG: Vanilla Dream NICHT gefunden!');
+      }
       
       const duration = performance.now() - startTime;
       console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length}`);
@@ -123,6 +133,7 @@ const ProductsPage = React.memo(() => {
         setLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Mengenauswahl für jedes Produkt initialisieren
@@ -253,7 +264,7 @@ const ProductsPage = React.memo(() => {
         )
       );
     }
-  }, []);
+  }, [fetchProducts]);
 
   useEffect(() => {
     let isMounted = true;
@@ -263,11 +274,20 @@ const ProductsPage = React.memo(() => {
     
     // Event-Listener für Lageränderungen (Legacy)
     const handleInventoryUpdate = () => {
-      console.log('📦 Inventory update detected - refreshing products');
-      // Cache invalidieren und Produkte neu laden
+      console.log('📦 Inventory update detected - forcing immediate refresh');
+      
+      // Cache komplett invalidieren mit mehreren Sicherheitsstufen
       sessionStorage.removeItem('cachedProducts');
+      sessionStorage.setItem('forceProductsReload', 'true');
+      localStorage.removeItem('cachedProducts'); // Fallback für versehentliche localStorage-Nutzung
+      
+      console.log('🔒 FORCE FLAG SET: forceProductsReload =', sessionStorage.getItem('forceProductsReload'));
+      
       if (isMounted) {
-        fetchProducts(false); // Fresh load
+        console.log('🔄 Immediate fresh reload triggered');
+        setProducts([]); // Clear current products
+        setLoading(true); // Show loading state
+        fetchProducts(false); // Fresh load, nicht background
       }
     };
 
@@ -277,12 +297,28 @@ const ProductsPage = React.memo(() => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
+        // DEBUG: Überprüfe alle Storage-Flags
+        const forceReload = sessionStorage.getItem('forceProductsReload');
+        const cachedData = sessionStorage.getItem('cachedProducts');
+        console.log('🔍 CACHE CHECK: forceReload =', forceReload);
+        console.log('🔍 CACHE CHECK: cachedData exists =', !!cachedData);
+        
+        // Prüfe auf forcierte Neuladen-Flag - ERSTE PRIORITÄT
+        if (forceReload) {
+          console.log('🔄 Force reload detected - completely skipping cache');
+          sessionStorage.removeItem('forceProductsReload');
+          return false; // Cache nicht verwenden
+        }
+        
         // Cache aktiviert für bessere Performance
         const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
           const { data, timestamp } = JSON.parse(cached);
+          const cacheAge = Date.now() - timestamp;
+          console.log('🔍 CACHE AGE: ', Math.round(cacheAge / 1000), 'seconds old');
+          
           // Verwende Cache wenn er weniger als 2 Minuten alt ist
-          if (Date.now() - timestamp < 2 * 60 * 1000) {
+          if (cacheAge < 2 * 60 * 1000) {
             console.log('⚡ Loading cached products immediately');
             if (isMounted) {
               setProducts(data);
@@ -331,8 +367,13 @@ const ProductsPage = React.memo(() => {
     };
     
     // Wenn kein Cache geladen wurde, normale Ladung
+    console.log('🚀 ProductsPage initializing...');
+    
     if (!loadCachedProducts() && isMounted) {
+      console.log('🆕 No valid cache - loading fresh products');
       fetchProducts(false);
+    } else {
+      console.log('✅ Cache decision completed');
     }
 
     // Cleanup function
@@ -341,6 +382,7 @@ const ProductsPage = React.memo(() => {
       unsubscribeStock(); // Stock-Event-Listener entfernen
       window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps  
   }, []); // Empty deps - useCallback handles fetchProducts deps
 
   if (initialLoading && products.length === 0) {
@@ -488,19 +530,66 @@ const ProductsPage = React.memo(() => {
                     }
                   />
                   
-                  {/* Seifentyp Badge */}
-                  <Chip 
-                    label={product.seife}
-                    size="small"
-                    sx={{ 
-                      position: 'absolute',
-                      top: 16,
-                      right: 16,
-                      bgcolor: 'rgba(255,255,255,0.95)',
-                      fontWeight: 'bold',
-                      backdropFilter: 'blur(10px)'
-                    }}
-                  />
+                  {/* Rohseifen Badge(s) */}
+                  {(() => {
+                    const isDualSoap = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
+                    const seife2 = product.rohseifenKonfiguration?.seife2;
+                    
+                    // DEBUG für Vanilla Dream
+                    if (product.name === 'Vanilla Dream') {
+                      console.log('🎯 RENDER DEBUG Vanilla Dream:');
+                      console.log('  isDualSoap:', isDualSoap);
+                      console.log('  seife2:', seife2);
+                      console.log('  rohseifenKonfiguration:', product.rohseifenKonfiguration);
+                    }
+                    
+                    return isDualSoap ? (
+                    <Box
+                      sx={{ 
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.5
+                      }}
+                    >
+                      <Chip 
+                        label={product.seife}
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(255,255,255,0.95)',
+                          fontWeight: 'bold',
+                          backdropFilter: 'blur(10px)',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                      <Chip 
+                        label={seife2}
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(255,255,255,0.95)',
+                          fontWeight: 'bold',
+                          backdropFilter: 'blur(10px)',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Chip 
+                      label={product.seife}
+                      size="small"
+                      sx={{ 
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        bgcolor: 'rgba(255,255,255,0.95)',
+                        fontWeight: 'bold',
+                        backdropFilter: 'blur(10px)'
+                      }}
+                    />
+                  );
+                  })()}
                 </Box>
 
                 <CardContent sx={{ flexGrow: 1, p: 3 }}>
@@ -563,6 +652,40 @@ const ProductsPage = React.memo(() => {
                         {product.aroma}
                       </Typography>
                     </Box>
+                  </Box>
+
+                  {/* Rohseifen-Information */}
+                  <Box sx={{ mb: 2 }}>
+                    {(() => {
+                      const isDualSoapInfo = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
+                      
+                      // DEBUG für Vanilla Dream Detail-Info
+                      if (product.name === 'Vanilla Dream') {
+                        console.log('🎯 RENDER DEBUG Vanilla Dream INFO:');
+                        console.log('  isDualSoapInfo:', isDualSoapInfo);
+                        console.log('  gewichtVerteilung:', product.rohseifenKonfiguration?.gewichtVerteilung);
+                      }
+                      
+                      return isDualSoapInfo ? (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mb: 1, fontWeight: 500 }}>
+                          Rohseifen-Mischung:
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Typography variant="body2" color="primary.main" sx={{ fontSize: '0.8rem' }}>
+                            • {product.seife} ({product.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}%)
+                          </Typography>
+                          <Typography variant="body2" color="primary.main" sx={{ fontSize: '0.8rem' }}>
+                            • {product.rohseifenKonfiguration.seife2} ({product.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}%)
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                        <strong>Rohseife:</strong> {product.seife}
+                      </Typography>
+                    );
+                    })()}
                   </Box>
 
                   {/* Preis */}

@@ -41,7 +41,35 @@ import {
   DeleteForever as DeleteForeverIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 import LazyImage from '../components/LazyImage';
+
+// Utility-Funktion für Cache-Invalidation
+const invalidateProductsCache = () => {
+  try {
+    // SessionStorage Cache leeren
+    sessionStorage.removeItem('cachedProducts');
+    
+    // Force Reload Flag setzen
+    sessionStorage.setItem('forceProductsReload', 'true');
+    
+    console.log('🧹 Products cache invalidated with force reload flag');
+    
+    // Zusätzlich Backend-Cache invalidieren via API
+    api.get('/portfolio/debug/invalidate-cache')
+      .then(() => console.log('✅ Backend cache also invalidated'))
+      .catch(err => console.warn('⚠️ Backend cache invalidation failed:', err));
+    
+    // Event feuern für reaktive Updates
+    window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+    console.log('📡 Inventory update event dispatched');
+    
+    return true;
+  } catch (e) {
+    console.warn('⚠️ Could not invalidate products cache:', e);
+    return false;
+  }
+};
 
 const AdminPortfolio = () => {
   const { user } = useAuth();
@@ -69,6 +97,15 @@ const AdminPortfolio = () => {
     verpackung: '',
     aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
     reihenfolge: 0, // Wird beim Öffnen des Dialogs automatisch gesetzt
+    // Erweiterte Rohseifen-Konfiguration
+    rohseifenKonfiguration: {
+      verwendeZweiRohseifen: false,
+      seife2: '',
+      gewichtVerteilung: {
+        seife1Prozent: 50,
+        seife2Prozent: 50
+      }
+    },
     // Beschreibungsfelder
     beschreibung: {
       kurz: '',
@@ -119,8 +156,55 @@ const AdminPortfolio = () => {
     }
   }, [API_BASE]);
 
-  // Lade dynamische Optionen
+  // Lade dynamische Optionen (optimiert)
   const loadOptions = useCallback(async () => {
+    try {
+      console.log('🚀 Loading options from optimized endpoint...');
+      
+      // 🚀 PERFORMANCE: Alle Optionen in einem Call
+      const response = await fetch(`${API_BASE}/admin/portfolio/options`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        const { rohseifen, verpackungen, duftoele } = data.data;
+        
+        // Rohseifen verarbeiten
+        const seifenList = rohseifen.map(item => item.bezeichnung);
+        setSeifenOptions([...new Set(seifenList)]);
+
+        // Verpackungen verarbeiten  
+        const verpackungList = verpackungen.map(item => item.bezeichnung);
+        const existingVerpackungen = [...new Set(products.map(p => p.verpackung).filter(Boolean))];
+        const orphanedVerpackungen = existingVerpackungen.filter(v => !verpackungList.includes(v));
+        
+        if (orphanedVerpackungen.length > 0) {
+          console.warn('⚠️ Veraltete Verpackungen in Portfolio gefunden:', orphanedVerpackungen);
+        }
+        
+        const allVerpackungOptions = [...verpackungList, ...orphanedVerpackungen.map(v => `${v} (VERALTET)`)];
+        setVerpackungOptions([...new Set(allVerpackungOptions)]);
+
+        // Duftöle verarbeiten
+        const aromaList = duftoele.map(item => item.bezeichnung);
+        const existingAromen = [...new Set(products.map(p => p.aroma).filter(Boolean))];
+        const filteredExistingAromen = existingAromen.filter(a => !aromaList.includes(a));
+        
+        setAromaOptions([...new Set([...aromaList, ...filteredExistingAromen])]);
+        
+        console.log('✅ Options loaded successfully from optimized endpoint');
+      }
+    } catch (error) {
+      console.warn('Failed to load from optimized endpoint, falling back to individual calls');
+      // Fallback zu alten einzelnen Calls falls neue Route nicht verfügbar
+      await loadOptionsLegacy();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
+  
+  // Legacy-Fallback (für Rückwärtskompatibilität)
+  const loadOptionsLegacy = async () => {
     try {
       // Rohseifen laden (inkl. inaktive für Produktplanung)
       const rohseifeResponse = await fetch(`${API_BASE}/rohseife?includeUnavailable=true`, {
@@ -184,7 +268,7 @@ const AdminPortfolio = () => {
     } catch (error) {
       console.error('Fehler beim Laden der Optionen:', error);
     }
-  }, [API_BASE, products]);
+  };
 
   // Neue Option erstellen
   const createNewOption = async (type, value) => {
@@ -322,6 +406,15 @@ const AdminPortfolio = () => {
       verpackung: '',
       aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
       reihenfolge: getNextAvailableOrder(), // ✅ Automatisch nächste verfügbare Nummer
+      // Erweiterte Rohseifen-Konfiguration
+      rohseifenKonfiguration: {
+        verwendeZweiRohseifen: false,
+        seife2: '',
+        gewichtVerteilung: {
+          seife1Prozent: 50,
+          seife2Prozent: 50
+        }
+      },
       // Beschreibungsfelder
       beschreibung: {
         kurz: '',
@@ -334,20 +427,43 @@ const AdminPortfolio = () => {
     setEditingProduct(null);
   };
 
-  const handleOpenDialog = (product = null) => {
+  const handleOpenDialog = async (product = null) => {
     if (product) {
+      // 🔍 DEBUG: Zeige Produkt-Daten beim Dialog-Öffnen
+      console.log('🔍 DIALOG ÖFFNEN - Original Product Data:', product);
+      console.log('🔍 DIALOG ÖFFNEN - Rohseifen-Konfiguration:', product.rohseifenKonfiguration);
+      
+      // Bei Edit: Aktuelle Daten vom Server holen um sicherzustellen, dass wir die neuesten Daten haben
+      let currentProduct = product;
+      if (product._id) {
+        try {
+          const response = await fetch(`${API_BASE}/admin/portfolio/${product._id}`, {
+            headers: getAuthHeaders()
+          });
+          const data = await response.json();
+          if (data.success && data.data) {
+            currentProduct = data.data;
+            console.log('🔍 DIALOG ÖFFNEN - Aktuelle Server-Daten:', currentProduct);
+            console.log('🔍 DIALOG ÖFFNEN - Server Rohseifen-Konfiguration:', currentProduct.rohseifenKonfiguration);
+          }
+        } catch (error) {
+          console.warn('Fehler beim Laden aktueller Produktdaten:', error);
+          // Bei Fehler verwenden wir die übergebenen Daten
+        }
+      }
+      
       // Erst die Optionen mit den Produktwerten erweitern
-      if (product.seifenform && !seifenformOptions.includes(product.seifenform)) {
-        setSeifenformOptions(prev => [...prev, product.seifenform]);
+      if (currentProduct.seifenform && !seifenformOptions.includes(currentProduct.seifenform)) {
+        setSeifenformOptions(prev => [...prev, currentProduct.seifenform]);
       }
-      if (product.verpackung && !verpackungOptions.includes(product.verpackung)) {
-        setVerpackungOptions(prev => [...prev, product.verpackung]);
+      if (currentProduct.verpackung && !verpackungOptions.includes(currentProduct.verpackung)) {
+        setVerpackungOptions(prev => [...prev, currentProduct.verpackung]);
       }
-      if (product.seife && !seifenOptions.includes(product.seife)) {
-        setSeifenOptions(prev => [...prev, product.seife]);
+      if (currentProduct.seife && !seifenOptions.includes(currentProduct.seife)) {
+        setSeifenOptions(prev => [...prev, currentProduct.seife]);
       }
-      if (product.aroma && !aromaOptions.includes(product.aroma)) {
-        setAromaOptions(prev => [...prev, product.aroma]);
+      if (currentProduct.aroma && !aromaOptions.includes(currentProduct.aroma)) {
+        setAromaOptions(prev => [...prev, currentProduct.aroma]);
       }
       
       setFormData({
@@ -361,6 +477,15 @@ const AdminPortfolio = () => {
         verpackung: product.verpackung,
         aktiv: product.aktiv,
         reihenfolge: product.reihenfolge.toString(),
+        // 🧪 Erweiterte Rohseifen-Konfiguration laden - mit Debug
+        rohseifenKonfiguration: {
+          verwendeZweiRohseifen: currentProduct.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
+          seife2: currentProduct.rohseifenKonfiguration?.seife2 || '',
+          gewichtVerteilung: {
+            seife1Prozent: currentProduct.rohseifenKonfiguration?.gewichtVerteilung?.seife1Prozent || 50,
+            seife2Prozent: currentProduct.rohseifenKonfiguration?.gewichtVerteilung?.seife2Prozent || 50
+          }
+        },
         // Beschreibungsfelder laden
         beschreibung: {
           kurz: product.beschreibung?.kurz || '',
@@ -370,7 +495,11 @@ const AdminPortfolio = () => {
           besonderheiten: product.beschreibung?.besonderheiten || ''
         }
       });
-      setEditingProduct(product);
+      
+      console.log('🔍 DIALOG ÖFFNEN - FormData gesetzt mit verwendeZweiRohseifen:', 
+        currentProduct.rohseifenKonfiguration?.verwendeZweiRohseifen);
+      
+      setEditingProduct(currentProduct);
     } else {
       // Für neue Produkte: automatisch nächste Reihenfolge setzen
       const nextOrder = getNextAvailableOrder();
@@ -407,6 +536,16 @@ const AdminPortfolio = () => {
   const handleInputChange = (e) => {
     const { name, value, checked, type } = e.target;
     
+    // 🔍 DEBUG: Zeige alle Input-Events
+    console.log('🔍 INPUT CHANGE EVENT:', {
+      name,
+      value,
+      checked,
+      type,
+      target: e.target,
+      eventType: e.type
+    });
+    
     // Prüfen, ob "Neu erstellen..." ausgewählt wurde
     if (value === '__CREATE_NEW__') {
       handleCreateNew(name);
@@ -423,7 +562,52 @@ const AdminPortfolio = () => {
           [fieldName]: value
         }
       }));
-    } else {
+    }
+    // Prüfen, ob es sich um Rohseifen-Konfiguration handelt
+    else if (name.startsWith('rohseifenKonfiguration.')) {
+      console.log('🔍 ROHSEIFEN KONFIGURATION EVENT:', { name, value, checked, type });
+      
+      const fieldParts = name.split('.'); // z.B. ['rohseifenKonfiguration', 'gewichtVerteilung', 'seife1Prozent']
+      
+      if (fieldParts.length === 2) {
+        // Direkte Felder wie 'rohseifenKonfiguration.verwendeZweiRohseifen'
+        const fieldName = fieldParts[1];
+        
+        console.log('🔍 ROHSEIFEN DIREKT-FELD UPDATE:', {
+          fieldName,
+          oldValue: formData.rohseifenKonfiguration[fieldName],
+          newValue: type === 'checkbox' ? checked : value
+        });
+        
+        setFormData(prev => {
+          const newData = {
+            ...prev,
+            rohseifenKonfiguration: {
+              ...prev.rohseifenKonfiguration,
+              [fieldName]: type === 'checkbox' ? checked : value
+            }
+          };
+          console.log('🔍 NEUE FORMDATA nach Rohseifen-Update:', newData);
+          return newData;
+        });
+      } else if (fieldParts.length === 3) {
+        // Verschachtelte Felder wie 'rohseifenKonfiguration.gewichtVerteilung.seife1Prozent'
+        const groupName = fieldParts[1]; // 'gewichtVerteilung'
+        const fieldName = fieldParts[2]; // 'seife1Prozent'
+        
+        setFormData(prev => ({
+          ...prev,
+          rohseifenKonfiguration: {
+            ...prev.rohseifenKonfiguration,
+            [groupName]: {
+              ...prev.rohseifenKonfiguration[groupName],
+              [fieldName]: type === 'number' ? parseFloat(value) || 0 : value
+            }
+          }
+        }));
+      }
+    }
+    else {
       setFormData(prev => ({
         ...prev,
         [name]: type === 'checkbox' ? checked : value
@@ -485,6 +669,10 @@ const AdminPortfolio = () => {
 
   const handleSubmit = async () => {
     try {
+      // 🔍 DEBUG: Zeige aktuelle formData vor dem Speichern
+      console.log('🔍 PORTFOLIO SUBMIT - FormData vor Speicherung:', JSON.stringify(formData, null, 2));
+      console.log('🔍 PORTFOLIO SUBMIT - Rohseifen-Konfiguration:', formData.rohseifenKonfiguration);
+      
       // 🔍 VALIDIERUNG: Prüfe Verpackung vor Speicherung
       const verpackungName = formData.verpackung;
       
@@ -527,8 +715,18 @@ const AdminPortfolio = () => {
 
       if (data.success) {
         showSnackbar(data.message);
-        loadProducts();
-        loadStats();
+        
+        // Cache invalidieren und Updates propagieren
+        invalidateProductsCache();
+        
+        // Warte kurz damit Cache-Clear vor neuem Laden passiert
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Erst die Produkte neu laden, dann den Dialog schließen
+        await loadProducts();
+        await loadStats();
+        
+        // Dialog schließen nachdem die neuen Daten geladen sind
         handleCloseDialog();
       } else {
         throw new Error(data.message);
@@ -553,6 +751,10 @@ const AdminPortfolio = () => {
 
       if (data.success) {
         showSnackbar(data.message);
+        
+        // Cache invalidieren und Updates propagieren
+        invalidateProductsCache();
+        
         loadProducts();
         loadStats();
       } else {
@@ -970,6 +1172,117 @@ const AdminPortfolio = () => {
                 required
               />
             </Grid>
+            
+            {/* 🧪 ERWEITERTE ROHSEIFEN-KONFIGURATION */}
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                🧪 Rohseifen-Konfiguration (Debug: {formData.rohseifenKonfiguration.verwendeZweiRohseifen ? 'AKTIV' : 'INAKTIV'})
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.rohseifenKonfiguration.verwendeZweiRohseifen}
+                    onChange={handleInputChange}
+                    name="rohseifenKonfiguration.verwendeZweiRohseifen"
+                  />
+                }
+                label="Dieses Produkt verwendet zwei verschiedene Rohseifen"
+              />
+            </Grid>
+            
+            {/* Zweite Rohseife nur anzeigen wenn aktiviert */}
+            {formData.rohseifenKonfiguration.verwendeZweiRohseifen && (
+              <>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Zweite Rohseife</InputLabel>
+                    <Select
+                      name="rohseifenKonfiguration.seife2"
+                      value={formData.rohseifenKonfiguration.seife2}
+                      onChange={handleInputChange}
+                      label="Zweite Rohseife"
+                      required
+                    >
+                      {seifenOptions
+                        .filter(option => option !== formData.seife) // Keine Doppelung
+                        .map(option => (
+                          <MenuItem key={option} value={option}>{option}</MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Gewichtsverteilung
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label={`${formData.seife || 'Seife 1'} (%)`}
+                    name="rohseifenKonfiguration.gewichtVerteilung.seife1Prozent"
+                    type="number"
+                    value={formData.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      handleInputChange(e);
+                      // Automatisch zweite Seife anpassen
+                      setFormData(prev => ({
+                        ...prev,
+                        rohseifenKonfiguration: {
+                          ...prev.rohseifenKonfiguration,
+                          gewichtVerteilung: {
+                            ...prev.rohseifenKonfiguration.gewichtVerteilung,
+                            seife2Prozent: 100 - value
+                          }
+                        }
+                      }));
+                    }}
+                    inputProps={{ min: 0, max: 100 }}
+                    helperText={`${Math.round(formData.gramm * formData.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent / 100)}g`}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label={`${formData.rohseifenKonfiguration.seife2 || 'Seife 2'} (%)`}
+                    name="rohseifenKonfiguration.gewichtVerteilung.seife2Prozent"
+                    type="number"
+                    value={formData.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}
+                    onChange={(e) => {
+                      const value = parseFloat(e.target.value) || 0;
+                      handleInputChange(e);
+                      // Automatisch erste Seife anpassen
+                      setFormData(prev => ({
+                        ...prev,
+                        rohseifenKonfiguration: {
+                          ...prev.rohseifenKonfiguration,
+                          gewichtVerteilung: {
+                            ...prev.rohseifenKonfiguration.gewichtVerteilung,
+                            seife1Prozent: 100 - value
+                          }
+                        }
+                      }));
+                    }}
+                    inputProps={{ min: 0, max: 100 }}
+                    helperText={`${Math.round(formData.gramm * formData.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent / 100)}g`}
+                  />
+                </Grid>
+                
+                <Grid item xs={12}>
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    <strong>Gewichtsverteilung:</strong> Die beiden Prozentwerte sollten zusammen 100% ergeben.
+                    Das Gesamtgewicht von {formData.gramm}g wird entsprechend aufgeteilt.
+                  </Alert>
+                </Grid>
+              </>
+            )}
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Aroma</InputLabel>
