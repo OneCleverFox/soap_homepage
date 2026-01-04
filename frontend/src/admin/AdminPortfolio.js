@@ -1,23 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-// Utility-Funktion für Cache-Invalidation
-const invalidateProductsCache = () => {
-  try {
-    // SessionStorage Cache leeren
-    sessionStorage.removeItem('cachedProducts');
-    console.log('🧹 Products cache invalidated');
-    
-    // Event feuern für reaktive Updates
-    window.dispatchEvent(new CustomEvent('inventoryUpdated'));
-    console.log('📡 Inventory update event dispatched');
-    
-    return true;
-  } catch (e) {
-    console.warn('⚠️ Could not invalidate products cache:', e);
-    return false;
-  }
-};
 import {
   Box,
   Typography,
@@ -60,6 +42,28 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import LazyImage from '../components/LazyImage';
+
+// Utility-Funktion für Cache-Invalidation
+const invalidateProductsCache = () => {
+  try {
+    // SessionStorage Cache leeren
+    sessionStorage.removeItem('cachedProducts');
+    
+    // Force Reload Flag setzen
+    sessionStorage.setItem('forceProductsReload', 'true');
+    
+    console.log('🧹 Products cache invalidated with force reload flag');
+    
+    // Event feuern für reaktive Updates
+    window.dispatchEvent(new CustomEvent('inventoryUpdated'));
+    console.log('📡 Inventory update event dispatched');
+    
+    return true;
+  } catch (e) {
+    console.warn('⚠️ Could not invalidate products cache:', e);
+    return false;
+  }
+};
 
 const AdminPortfolio = () => {
   const { user } = useAuth();
@@ -190,6 +194,7 @@ const AdminPortfolio = () => {
       // Fallback zu alten einzelnen Calls falls neue Route nicht verfügbar
       await loadOptionsLegacy();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products]);
   
   // Legacy-Fallback (für Rückwärtskompatibilität)
@@ -707,6 +712,9 @@ const AdminPortfolio = () => {
         
         // Cache invalidieren und Updates propagieren
         invalidateProductsCache();
+        
+        // Warte kurz damit Cache-Clear vor neuem Laden passiert
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // Erst die Produkte neu laden, dann den Dialog schließen
         await loadProducts();
