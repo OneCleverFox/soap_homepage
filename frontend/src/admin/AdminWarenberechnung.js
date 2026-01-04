@@ -330,21 +330,38 @@ const AdminWarenberechnung = () => {
               {isMobile ? (
                 // Mobile Card View
                 <Stack spacing={1.5}>
-                  {/* Rohseife */}
+                  {/* Rohseifen */}
                   <Card variant="outlined">
                     <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                       <Typography variant="subtitle2" color="primary" gutterBottom>
-                        Seife
+                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
                       </Typography>
-                      <Box display="flex" justifyContent="space-between" alignItems="center">
-                        <Typography variant="body2">{calculation.rohseifeName}</Typography>
-                        <Typography variant="body2" fontWeight="bold">
-                          {calculation.rohseifeKosten?.toFixed(2)} €
+                      <Stack spacing={1}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center">
+                          <Typography variant="body2">{calculation.rohseifeName}</Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            {calculation.rohseifeKosten?.toFixed(2)} €
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
+                            `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
+                            `${calculation.gewichtInGramm}g`}
                         </Typography>
-                      </Box>
-                      <Typography variant="caption" color="text.secondary">
-                        Menge: {calculation.gewichtInGramm}g
-                      </Typography>
+                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
+                          <>
+                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                              <Typography variant="body2">{calculation.rohseifenKonfiguration.rohseife2Name}</Typography>
+                              <Typography variant="body2" fontWeight="bold">
+                                {calculation.rohseife2Kosten?.toFixed(2)} €
+                              </Typography>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                            </Typography>
+                          </>
+                        )}
+                      </Stack>
                     </CardContent>
                   </Card>
 
@@ -536,17 +553,36 @@ const AdminWarenberechnung = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {/* Rohseife */}
+                    {/* Rohseifen */}
                     <TableRow>
-                      <TableCell>Seife</TableCell>
+                      <TableCell rowSpan={calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 4 : 2}>
+                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
+                      </TableCell>
                       <TableCell>{calculation.rohseifeName}</TableCell>
-                      <TableCell align="right"></TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Menge in gramm</TableCell>
-                      <TableCell>{calculation.gewichtInGramm}</TableCell>
                       <TableCell align="right">{calculation.rohseifeKosten?.toFixed(2)} €</TableCell>
                     </TableRow>
+                    <TableRow>
+                      <TableCell>
+                        Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
+                          `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
+                          `${calculation.gewichtInGramm}g`}
+                      </TableCell>
+                      <TableCell align="right"></TableCell>
+                    </TableRow>
+                    {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
+                      <>
+                        <TableRow>
+                          <TableCell>{calculation.rohseifenKonfiguration.rohseife2Name}</TableCell>
+                          <TableCell align="right">{calculation.rohseife2Kosten?.toFixed(2)} €</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>
+                            Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                          </TableCell>
+                          <TableCell align="right"></TableCell>
+                        </TableRow>
+                      </>
+                    )}
 
                     {/* Duftstoff */}
                     {calculation.duftoelName && calculation.duftoelName !== '' && (
@@ -754,7 +790,14 @@ const AdminWarenberechnung = () => {
               </Typography>
               <Box sx={{ pl: 2, pb: 2, backgroundColor: '#f5f5f5', borderRadius: 1, p: isMobile ? 1.5 : 2 }}>
                 <Typography variant={isMobile ? "caption" : "body2"}>
-                  Rohseife: {calculation?.rohseifeKosten?.toFixed(2)} €<br/>
+                  {calculation?.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+                    <>
+                      {calculation.rohseifeName}: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife1Gramm || 0}g)<br/>
+                      {calculation?.rohseifenKonfiguration?.rohseife2Name}: {calculation?.rohseife2Kosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife2Gramm || 0}g)<br/>
+                    </>
+                  ) : (
+                    <>Rohseife: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.gewichtInGramm}g)<br/></>
+                  )}
                   Duftöl: {calculation?.duftoelKosten?.toFixed(2)} €<br/>
                   Verpackung: {calculation?.verpackungKosten?.toFixed(2)} €
                 </Typography>
