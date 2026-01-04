@@ -24,8 +24,15 @@ router.get('/', auth, async (req, res) => {
 // GET Warenberechnung für ein Portfolio-Produkt
 router.get('/portfolio/:portfolioId', auth, async (req, res) => {
   try {
+    // Validiere Portfolio-ID
+    const portfolioId = req.params.portfolioId;
+    if (!portfolioId || portfolioId === 'undefined' || portfolioId === 'null') {
+      console.warn(`⚠️ Ungültige Portfolio-ID erhalten: "${portfolioId}"`);
+      return res.status(400).json({ message: 'Ungültige Portfolio-ID' });
+    }
+    
     let berechnung = await Warenberechnung.findOne({ 
-      portfolioProdukt: req.params.portfolioId 
+      portfolioProdukt: portfolioId 
     }).populate('portfolioProdukt');
     
     // Wenn keine Berechnung existiert, erstelle eine neue
@@ -222,15 +229,22 @@ router.delete('/:id', auth, async (req, res) => {
 // DELETE - Warenberechnung für Portfolio-Produkt löschen
 router.delete('/portfolio/:portfolioId', auth, async (req, res) => {
   try {
+    // Validiere Portfolio-ID
+    const portfolioId = req.params.portfolioId;
+    if (!portfolioId || portfolioId === 'undefined' || portfolioId === 'null') {
+      console.warn(`⚠️ DELETE: Ungültige Portfolio-ID erhalten: "${portfolioId}"`);
+      return res.status(400).json({ message: 'Ungültige Portfolio-ID' });
+    }
+    
     const berechnung = await Warenberechnung.findOneAndDelete({ 
-      portfolioProdukt: req.params.portfolioId 
+      portfolioProdukt: portfolioId 
     });
     
     if (!berechnung) {
       return res.status(404).json({ message: 'Warenberechnung für Portfolio nicht gefunden' });
     }
     
-    console.log(`✅ Warenberechnung für Portfolio ${req.params.portfolioId} gelöscht - wird bei nächstem Aufruf neu erstellt`);
+    console.log(`✅ Warenberechnung für Portfolio ${portfolioId} gelöscht - wird bei nächstem Aufruf neu erstellt`);
     res.json({ message: 'Warenberechnung gelöscht' });
   } catch (error) {
     console.error('Fehler beim Löschen der Warenberechnung:', error);
