@@ -71,6 +71,17 @@ const ProductsPage = React.memo(() => {
       const response = await portfolioAPI.getWithPrices();
       const productsData = response.data?.data || response.data || [];
       
+      // DEBUG: Prüfe Vanilla Dream Dual-Soap Konfiguration
+      const vanillaDream = productsData.find(p => p.name === 'Vanilla Dream');
+      if (vanillaDream) {
+        console.log('🔍 DEBUG: Vanilla Dream gefunden:', vanillaDream);
+        console.log('🔍 DEBUG: rohseifenKonfiguration:', vanillaDream.rohseifenKonfiguration);
+        console.log('🔍 DEBUG: verwendeZweiRohseifen:', vanillaDream.rohseifenKonfiguration?.verwendeZweiRohseifen);
+        console.log('🔍 DEBUG: seife2:', vanillaDream.rohseifenKonfiguration?.seife2);
+      } else {
+        console.log('❌ DEBUG: Vanilla Dream NICHT gefunden!');
+      }
+      
       const duration = performance.now() - startTime;
       console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length}`);
       
@@ -277,6 +288,14 @@ const ProductsPage = React.memo(() => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
+        // Prüfe auf forcierte Neuladen-Flag
+        const forceReload = sessionStorage.getItem('forceProductsReload');
+        if (forceReload) {
+          console.log('🔄 Force reload detected - skipping cache');
+          sessionStorage.removeItem('forceProductsReload');
+          return false;
+        }
+        
         // Cache aktiviert für bessere Performance
         const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
