@@ -41,6 +41,7 @@ import {
   DeleteForever as DeleteForeverIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 import LazyImage from '../components/LazyImage';
 
 // Utility-Funktion für Cache-Invalidation

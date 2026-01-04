@@ -369,12 +369,6 @@ const ProductsPage = React.memo(() => {
     // Wenn kein Cache geladen wurde, normale Ladung
     console.log('🚀 ProductsPage initializing...');
     
-    // TEMPORARY AGGRESSIVE CACHE CLEARING für DEBUGGING
-    console.log('🧹 AGGRESSIVE CACHE CLEAR for debugging');
-    sessionStorage.clear();
-    localStorage.removeItem('cachedProducts');
-    localStorage.removeItem('cachedProductsData');
-    
     if (!loadCachedProducts() && isMounted) {
       console.log('🆕 No valid cache - loading fresh products');
       fetchProducts(false);
