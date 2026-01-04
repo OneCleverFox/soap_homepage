@@ -530,7 +530,19 @@ const ProductsPage = React.memo(() => {
                   />
                   
                   {/* Rohseifen Badge(s) */}
-                  {product.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+                  {(() => {
+                    const isDualSoap = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
+                    const seife2 = product.rohseifenKonfiguration?.seife2;
+                    
+                    // DEBUG für Vanilla Dream
+                    if (product.name === 'Vanilla Dream') {
+                      console.log('🎯 RENDER DEBUG Vanilla Dream:');
+                      console.log('  isDualSoap:', isDualSoap);
+                      console.log('  seife2:', seife2);
+                      console.log('  rohseifenKonfiguration:', product.rohseifenKonfiguration);
+                    }
+                    
+                    return isDualSoap ? (
                     <Box
                       sx={{ 
                         position: 'absolute',
@@ -552,7 +564,7 @@ const ProductsPage = React.memo(() => {
                         }}
                       />
                       <Chip 
-                        label={product.rohseifenKonfiguration.seife2}
+                        label={seife2}
                         size="small"
                         sx={{ 
                           bgcolor: 'rgba(255,255,255,0.95)',
@@ -575,7 +587,8 @@ const ProductsPage = React.memo(() => {
                         backdropFilter: 'blur(10px)'
                       }}
                     />
-                  )}
+                  );
+                  })()}
                 </Box>
 
                 <CardContent sx={{ flexGrow: 1, p: 3 }}>
@@ -642,7 +655,17 @@ const ProductsPage = React.memo(() => {
 
                   {/* Rohseifen-Information */}
                   <Box sx={{ mb: 2 }}>
-                    {product.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+                    {(() => {
+                      const isDualSoapInfo = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
+                      
+                      // DEBUG für Vanilla Dream Detail-Info
+                      if (product.name === 'Vanilla Dream') {
+                        console.log('🎯 RENDER DEBUG Vanilla Dream INFO:');
+                        console.log('  isDualSoapInfo:', isDualSoapInfo);
+                        console.log('  gewichtVerteilung:', product.rohseifenKonfiguration?.gewichtVerteilung);
+                      }
+                      
+                      return isDualSoapInfo ? (
                       <Box>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mb: 1, fontWeight: 500 }}>
                           Rohseifen-Mischung:
@@ -660,7 +683,8 @@ const ProductsPage = React.memo(() => {
                       <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                         <strong>Rohseife:</strong> {product.seife}
                       </Typography>
-                    )}
+                    );
+                    })()}
                   </Box>
 
                   {/* Preis */}
