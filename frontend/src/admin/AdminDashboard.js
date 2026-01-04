@@ -554,9 +554,22 @@ const AdminDashboard = () => {
                                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
                                       Bestand
                                     </Typography>
-                                    <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                      {produkt.aktuellerBestand || '0'}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+                                      <Chip 
+                                        label={produkt.aktuellerBestand || '0'}
+                                        size="small"
+                                        variant={produkt.aktuellerBestand <= 5 ? 'filled' : 'outlined'}
+                                        sx={{ 
+                                          fontWeight: 'bold',
+                                          fontSize: '0.7rem',
+                                          height: 20,
+                                          backgroundColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'transparent',
+                                          color: produkt.aktuellerBestand <= 5 ? 'white' : 'text.primary',
+                                          borderColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'grey.300',
+                                          '& .MuiChip-label': { px: 1 }
+                                        }}
+                                      />
+                                    </Box>
                                   </Box>
                                   <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>/</Typography>
                                   <Box sx={{ textAlign: 'center' }}>
@@ -635,9 +648,15 @@ const AdminDashboard = () => {
                               <TableCell align="center">
                                 <Chip 
                                   label={produkt.aktuellerBestand || '0'}
-                                  color={produkt.aktuellerBestand <= 5 ? 'error' : produkt.aktuellerBestand <= 10 ? 'warning' : 'default'}
+                                  color={produkt.aktuellerBestand <= 5 ? 'error' : 'default'}
+                                  variant={produkt.aktuellerBestand <= 5 ? 'filled' : 'outlined'}
                                   size="small"
-                                  sx={{ fontWeight: 'bold' }}
+                                  sx={{ 
+                                    fontWeight: 'bold',
+                                    backgroundColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'transparent',
+                                    color: produkt.aktuellerBestand <= 5 ? 'white' : 'text.primary',
+                                    borderColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'grey.300'
+                                  }}
                                 />
                               </TableCell>
                               <TableCell align="center">
