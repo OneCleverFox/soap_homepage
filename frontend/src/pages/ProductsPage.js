@@ -34,7 +34,6 @@ import { useCart } from '../contexts/CartContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
-import NetworkAwareLoader from '../components/NetworkAwareLoader';
 import stockEventService from '../services/stockEventService';
 
 // API Base URL für Bild-URLs
@@ -47,13 +46,13 @@ const ProductsPage = React.memo(() => {
   
   const { user } = useAuth();
   const { addToCart } = useCart();
-  const { isOnline, isSlowConnection } = useNetworkStatus();
+  const { isOnline: _isOnline, isSlowConnection: _isSlowConnection } = useNetworkStatus();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
   const [error, setError] = useState('');
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
-  const [retryCount, setRetryCount] = useState(0); // Für Retry-Logik
+  const [_retryCount, setRetryCount] = useState(0); // Für Retry-Logik
 
   // Optimierte fetchProducts Funktion mit Retry-Mechanismus
   const fetchProducts = useCallback(async (isBackgroundUpdate = false, retryAttempt = 0) => {
@@ -134,6 +133,7 @@ const ProductsPage = React.memo(() => {
         setLoading(false);
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Mengenauswahl für jedes Produkt initialisieren
@@ -264,7 +264,7 @@ const ProductsPage = React.memo(() => {
         )
       );
     }
-  }, []);
+  }, [fetchProducts]);
 
   useEffect(() => {
     let isMounted = true;
@@ -274,11 +274,14 @@ const ProductsPage = React.memo(() => {
     
     // Event-Listener für Lageränderungen (Legacy)
     const handleInventoryUpdate = () => {
-      console.log('📦 Inventory update detected - refreshing products');
-      // Cache invalidieren und Produkte neu laden
+      console.log('📦 Inventory update detected - forcing immediate refresh');
+      // Cache komplett invalidieren
       sessionStorage.removeItem('cachedProducts');
+      sessionStorage.setItem('forceProductsReload', 'true');
+      
       if (isMounted) {
-        fetchProducts(false); // Fresh load
+        console.log('🔄 Immediate fresh reload triggered');
+        fetchProducts(false); // Fresh load, nicht background
       }
     };
 
@@ -288,12 +291,12 @@ const ProductsPage = React.memo(() => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
-        // Prüfe auf forcierte Neuladen-Flag
+        // Prüfe auf forcierte Neuladen-Flag - ERSTE PRIORITÄT
         const forceReload = sessionStorage.getItem('forceProductsReload');
         if (forceReload) {
-          console.log('🔄 Force reload detected - skipping cache');
+          console.log('🔄 Force reload detected - completely skipping cache');
           sessionStorage.removeItem('forceProductsReload');
-          return false;
+          return false; // Cache nicht verwenden
         }
         
         // Cache aktiviert für bessere Performance
@@ -360,6 +363,7 @@ const ProductsPage = React.memo(() => {
       unsubscribeStock(); // Stock-Event-Listener entfernen
       window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps  
   }, []); // Empty deps - useCallback handles fetchProducts deps
 
   if (initialLoading && products.length === 0) {
