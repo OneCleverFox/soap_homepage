@@ -184,9 +184,9 @@ const AdminDashboard = () => {
     
     switch (produktionsFilter) {
       case 'produzierbar':
-        return alleProdukte.filter(p => p.maxProduktion > 5);
+        return alleProdukte.filter(p => (p.aktuellerBestand || 0) > 5);
       case 'kritisch':
-        return alleProdukte.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5);
+        return alleProdukte.filter(p => (p.aktuellerBestand || 0) <= 5);
       case 'hoechste':
         return alleProdukte.filter(p => p.maxProduktion > 0).slice(0, 3);
       case 'nicht-produzierbar':
@@ -452,7 +452,7 @@ const AdminDashboard = () => {
                       onClick={() => setProduktionsFilter(produktionsFilter === 'produzierbar' ? 'alle' : 'produzierbar')}
                     >
                       <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                        {produktionsKapazitaet.zusammenfassung.uebersicht.produzierbar || 0}
+                        {produktionsKapazitaet.produkte?.filter(p => (p.aktuellerBestand || 0) > 5).length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                         Produzierbar
@@ -486,7 +486,7 @@ const AdminDashboard = () => {
                       onClick={() => setProduktionsFilter(produktionsFilter === 'kritisch' ? 'alle' : 'kritisch')}
                     >
                       <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                        {produktionsKapazitaet.zusammenfassung.kritischeProdukte?.length || 0}
+                        {produktionsKapazitaet.produkte?.filter(p => (p.aktuellerBestand || 0) <= 5).length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                         Kritisch
@@ -554,9 +554,22 @@ const AdminDashboard = () => {
                                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>
                                       Bestand
                                     </Typography>
-                                    <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
-                                      {produkt.aktuellerBestand || '0'}
-                                    </Typography>
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 0.5 }}>
+                                      <Chip 
+                                        label={produkt.aktuellerBestand || '0'}
+                                        size="small"
+                                        variant={produkt.aktuellerBestand <= 5 ? 'filled' : 'outlined'}
+                                        sx={{ 
+                                          fontWeight: 'bold',
+                                          fontSize: '0.7rem',
+                                          height: 20,
+                                          backgroundColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'transparent',
+                                          color: produkt.aktuellerBestand <= 5 ? 'white' : 'text.primary',
+                                          borderColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'grey.300',
+                                          '& .MuiChip-label': { px: 1 }
+                                        }}
+                                      />
+                                    </Box>
                                   </Box>
                                   <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>/</Typography>
                                   <Box sx={{ textAlign: 'center' }}>
@@ -565,8 +578,7 @@ const AdminDashboard = () => {
                                     </Typography>
                                     <Typography variant="h6" sx={{ 
                                       fontWeight: 'bold', 
-                                      color: produkt.maxProduktion === 0 ? 'error.main' : 
-                                             produkt.maxProduktion <= 5 ? 'warning.dark' : 'success.main',
+                                      color: 'text.primary',
                                       fontSize: '1.1rem'
                                     }}>
                                       {produkt.maxProduktion}
@@ -616,11 +628,9 @@ const AdminDashboard = () => {
                             <TableRow 
                               key={produkt.produktId || index}
                               sx={{ 
-                                backgroundColor: produkt.maxProduktion === 0 ? 'rgba(244, 67, 54, 0.1)' : 
-                                                produkt.maxProduktion <= 5 ? 'rgba(255, 152, 0, 0.1)' : 'transparent',
+                                backgroundColor: (produkt.aktuellerBestand || 0) <= 5 ? 'rgba(244, 67, 54, 0.1)' : 'transparent',
                                 '&:hover': {
-                                  backgroundColor: produkt.maxProduktion === 0 ? 'rgba(244, 67, 54, 0.2)' : 
-                                                  produkt.maxProduktion <= 5 ? 'rgba(255, 152, 0, 0.2)' : 'rgba(0, 0, 0, 0.04)'
+                                  backgroundColor: (produkt.aktuellerBestand || 0) <= 5 ? 'rgba(244, 67, 54, 0.2)' : 'rgba(0, 0, 0, 0.04)'
                                 }
                               }}
                             >
@@ -635,9 +645,15 @@ const AdminDashboard = () => {
                               <TableCell align="center">
                                 <Chip 
                                   label={produkt.aktuellerBestand || '0'}
-                                  color={produkt.aktuellerBestand <= 5 ? 'error' : produkt.aktuellerBestand <= 10 ? 'warning' : 'default'}
+                                  color={produkt.aktuellerBestand <= 5 ? 'error' : 'default'}
+                                  variant={produkt.aktuellerBestand <= 5 ? 'filled' : 'outlined'}
                                   size="small"
-                                  sx={{ fontWeight: 'bold' }}
+                                  sx={{ 
+                                    fontWeight: 'bold',
+                                    backgroundColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'transparent',
+                                    color: produkt.aktuellerBestand <= 5 ? 'white' : 'text.primary',
+                                    borderColor: produkt.aktuellerBestand <= 5 ? 'error.main' : 'grey.300'
+                                  }}
                                 />
                               </TableCell>
                               <TableCell align="center">
@@ -645,8 +661,7 @@ const AdminDashboard = () => {
                                   variant="h6" 
                                   sx={{ 
                                     fontWeight: 'bold',
-                                    color: produkt.maxProduktion === 0 ? 'error.main' : 
-                                           produkt.maxProduktion <= 5 ? 'warning.dark' : 'success.main'
+                                    color: 'text.primary'
                                   }}
                                 >
                                   {produkt.maxProduktion}
@@ -675,16 +690,10 @@ const AdminDashboard = () => {
                                 )}
                               </TableCell>
                               <TableCell align="center">
-                                {produkt.maxProduktion === 0 ? (
-                                  <Chip 
-                                    label="Nicht möglich" 
-                                    sx={{ backgroundColor: 'error.main', color: 'white', fontWeight: 'medium' }}
-                                    size="small" 
-                                  />
-                                ) : produkt.maxProduktion <= 5 ? (
+                                {(produkt.aktuellerBestand || 0) <= 5 ? (
                                   <Chip 
                                     label="Kritisch" 
-                                    sx={{ backgroundColor: 'warning.main', color: 'white', fontWeight: 'medium' }}
+                                    sx={{ backgroundColor: 'error.main', color: 'white', fontWeight: 'medium' }}
                                     size="small" 
                                   />
                                 ) : (
