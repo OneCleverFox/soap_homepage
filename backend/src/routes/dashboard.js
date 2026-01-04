@@ -972,35 +972,109 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
   
   let minProduktion = Infinity;
   
-  // 1. Rohseife analysieren
-  const rohseife = rohseifen.find(r => 
-    r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
-    r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
-    produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
-  );
+  // 1. Rohseifen analysieren (DUAL-SOAP Support)
+  const istweiRohseifen = produkt.rohseifenKonfiguration?.verwendeZweiRohseifen;
   
-  if (rohseife) {
-    const benoetigt = produkt.gramm; // Gramm pro Produkt
-    const verfuegbar = rohseife.aktuellVorrat;
-    const maxProduktionRohseife = Math.floor(verfuegbar / benoetigt);
+  if (istweiRohseifen) {
+    // DUAL-SOAP: Zwei Rohseifen analysieren
+    console.log(`🔍 Dual-Soap Analyse für ${produkt.name}: ${produkt.seife} + ${produkt.rohseifenKonfiguration.seife2}`);
     
-    analyse.rohstoffBedarf.push({
-      typ: 'rohseife',
-      name: rohseife.bezeichnung,
-      benoetigt: benoetigt,
-      einheit: 'g',
-      verfuegbar: verfuegbar,
-      maxProduktion: maxProduktionRohseife,
-      ausreichend: verfuegbar >= benoetigt
-    });
+    const gewichtVerteilung = produkt.rohseifenKonfiguration.gewichtVerteilung || 
+                              { seife1Prozent: 50, seife2Prozent: 50 };
     
-    if (maxProduktionRohseife < minProduktion) {
-      minProduktion = maxProduktionRohseife;
-      analyse.limitierenderFaktor = 'rohseife';
+    // Seife 1 (Hauptseife)
+    const rohseife1 = rohseifen.find(r => 
+      r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
+      r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
+      produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
+    );
+    
+    if (rohseife1) {
+      const benoetigt1 = Math.round(produkt.gramm * (gewichtVerteilung.seife1Prozent / 100));
+      const verfuegbar1 = rohseife1.aktuellVorrat;
+      const maxProduktion1 = Math.floor(verfuegbar1 / benoetigt1);
+      
+      analyse.rohstoffBedarf.push({
+        typ: 'rohseife',
+        name: `${rohseife1.bezeichnung} (${gewichtVerteilung.seife1Prozent}%)`,
+        benoetigt: benoetigt1,
+        einheit: 'g',
+        verfuegbar: verfuegbar1,
+        maxProduktion: maxProduktion1,
+        ausreichend: verfuegbar1 >= benoetigt1
+      });
+      
+      if (maxProduktion1 < minProduktion) {
+        minProduktion = maxProduktion1;
+        analyse.limitierenderFaktor = 'rohseife-1';
+      }
+    } else {
+      analyse.probleme.push(`Rohseife "${produkt.seife}" nicht gefunden`);
+      minProduktion = 0;
     }
+    
+    // Seife 2 (zweite Rohseife)
+    const rohseife2 = rohseifen.find(r => 
+      r.bezeichnung.toLowerCase() === produkt.rohseifenKonfiguration.seife2.toLowerCase() ||
+      r.bezeichnung.toLowerCase().includes(produkt.rohseifenKonfiguration.seife2.toLowerCase()) ||
+      produkt.rohseifenKonfiguration.seife2.toLowerCase().includes(r.bezeichnung.toLowerCase())
+    );
+    
+    if (rohseife2) {
+      const benoetigt2 = Math.round(produkt.gramm * (gewichtVerteilung.seife2Prozent / 100));
+      const verfuegbar2 = rohseife2.aktuellVorrat;
+      const maxProduktion2 = Math.floor(verfuegbar2 / benoetigt2);
+      
+      analyse.rohstoffBedarf.push({
+        typ: 'rohseife',
+        name: `${rohseife2.bezeichnung} (${gewichtVerteilung.seife2Prozent}%)`,
+        benoetigt: benoetigt2,
+        einheit: 'g',
+        verfuegbar: verfuegbar2,
+        maxProduktion: maxProduktion2,
+        ausreichend: verfuegbar2 >= benoetigt2
+      });
+      
+      if (maxProduktion2 < minProduktion) {
+        minProduktion = maxProduktion2;
+        analyse.limitierenderFaktor = 'rohseife-2';
+      }
+    } else {
+      analyse.probleme.push(`Rohseife "${produkt.rohseifenKonfiguration.seife2}" nicht gefunden`);
+      minProduktion = 0;
+    }
+    
   } else {
-    analyse.probleme.push(`Rohseife "${produkt.seife}" nicht gefunden`);
-    minProduktion = 0;
+    // STANDARD: Eine Rohseife analysieren
+    const rohseife = rohseifen.find(r => 
+      r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
+      r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
+      produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
+    );
+    
+    if (rohseife) {
+      const benoetigt = produkt.gramm; // Gramm pro Produkt
+      const verfuegbar = rohseife.aktuellVorrat;
+      const maxProduktionRohseife = Math.floor(verfuegbar / benoetigt);
+      
+      analyse.rohstoffBedarf.push({
+        typ: 'rohseife',
+        name: rohseife.bezeichnung,
+        benoetigt: benoetigt,
+        einheit: 'g',
+        verfuegbar: verfuegbar,
+        maxProduktion: maxProduktionRohseife,
+        ausreichend: verfuegbar >= benoetigt
+      });
+      
+      if (maxProduktionRohseife < minProduktion) {
+        minProduktion = maxProduktionRohseife;
+        analyse.limitierenderFaktor = 'rohseife';
+      }
+    } else {
+      analyse.probleme.push(`Rohseife "${produkt.seife}" nicht gefunden`);
+      minProduktion = 0;
+    }
   }
   
   // 2. Duftöl analysieren (falls erforderlich)
