@@ -184,9 +184,9 @@ const AdminDashboard = () => {
     
     switch (produktionsFilter) {
       case 'produzierbar':
-        return alleProdukte.filter(p => (p.aktuellerBestand || 0) > 5);
+        return alleProdukte.filter(p => p.maxProduktion > 5);
       case 'kritisch':
-        return alleProdukte.filter(p => (p.aktuellerBestand || 0) <= 5);
+        return alleProdukte.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5);
       case 'hoechste':
         return alleProdukte.filter(p => p.maxProduktion > 0).slice(0, 3);
       case 'nicht-produzierbar':
@@ -452,7 +452,7 @@ const AdminDashboard = () => {
                       onClick={() => setProduktionsFilter(produktionsFilter === 'produzierbar' ? 'alle' : 'produzierbar')}
                     >
                       <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                        {produktionsKapazitaet.produkte?.filter(p => (p.aktuellerBestand || 0) > 5).length || 0}
+                        {produktionsKapazitaet.produkte?.filter(p => p.maxProduktion > 5).length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                         Produzierbar
@@ -486,7 +486,7 @@ const AdminDashboard = () => {
                       onClick={() => setProduktionsFilter(produktionsFilter === 'kritisch' ? 'alle' : 'kritisch')}
                     >
                       <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                        {produktionsKapazitaet.produkte?.filter(p => (p.aktuellerBestand || 0) <= 5).length || 0}
+                        {produktionsKapazitaet.produkte?.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5).length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                         Kritisch
