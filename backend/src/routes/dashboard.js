@@ -275,10 +275,20 @@ async function getFertigprodukteOhneBestand() {
     
     // Produkt hat keinen Bestand oder Bestand ist 0
     if (!bestand || bestand.menge === 0) {
+      // Seife-Beschreibung für Dual-Soap erweitern
+      let seifeBeschreibung = item.seife;
+      const istDualSeife = item.rohseifenKonfiguration?.verwendeZweiRohseifen;
+      
+      if (istDualSeife && item.rohseifenKonfiguration.seife2) {
+        const gewichtVerteilung = item.rohseifenKonfiguration.gewichtVerteilung || 
+                                  { seife1Prozent: 50, seife2Prozent: 50 };
+        seifeBeschreibung = `${item.seife} (${gewichtVerteilung.seife1Prozent}%) + ${item.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
+      }
+      
       produkteOhneBestand.push({
         _id: item._id,
         name: item.name,
-        seife: item.seife,
+        seife: seifeBeschreibung,
         aroma: item.aroma,
         gramm: item.gramm,
         preis: item.preis,
@@ -573,7 +583,18 @@ async function getProdukteZurProduktion() {
       produktName: verkaufsdaten.produktName || portfolio.name,
       portfolio: {
         name: portfolio.name,
-        seife: portfolio.seife,
+        seife: (() => {
+          // Seife-Beschreibung für Dual-Soap erweitern
+          let seifeBeschreibung = portfolio.seife;
+          const istDualSeife = portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen;
+          
+          if (istDualSeife && portfolio.rohseifenKonfiguration.seife2) {
+            const gewichtVerteilung = portfolio.rohseifenKonfiguration.gewichtVerteilung || 
+                                      { seife1Prozent: 50, seife2Prozent: 50 };
+            seifeBeschreibung = `${portfolio.seife} (${gewichtVerteilung.seife1Prozent}%) + ${portfolio.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
+          }
+          return seifeBeschreibung;
+        })(),
         aroma: portfolio.aroma,
         gramm: portfolio.gramm
       },
@@ -833,10 +854,20 @@ async function getFertigprodukteNiedrigerBestand() {
     
     // Nur Produkte mit Bestand > 0 (aber niedrig) einschließen
     if (aktuelleMenge > 0) {
+      // Seife-Beschreibung für Dual-Soap erweitern
+      let seifeBeschreibung = item.seife;
+      const istDualSeife = item.rohseifenKonfiguration?.verwendeZweiRohseifen;
+      
+      if (istDualSeife && item.rohseifenKonfiguration.seife2) {
+        const gewichtVerteilung = item.rohseifenKonfiguration.gewichtVerteilung || 
+                                  { seife1Prozent: 50, seife2Prozent: 50 };
+        seifeBeschreibung = `${item.seife} (${gewichtVerteilung.seife1Prozent}%) + ${item.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
+      }
+      
       produkteMitBestand.push({
         _id: item._id,
         name: item.name,
-        seife: item.seife,
+        seife: seifeBeschreibung,
         aroma: item.aroma,
         gramm: item.gramm,
         aktuelleMenge: aktuelleMenge,
@@ -957,10 +988,20 @@ async function getProduktionsKapazitaetsAnalyse() {
 
 // Analysiert die Produktionskapazität für ein einzelnes Produkt
 async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen) {
+  // Seife-Beschreibung für Dual-Soap erweitern
+  let seifeBeschreibung = produkt.seife;
+  const istDualSeife = produkt.rohseifenKonfiguration?.verwendeZweiRohseifen;
+  
+  if (istDualSeife && produkt.rohseifenKonfiguration.seife2) {
+    const gewichtVerteilung = produkt.rohseifenKonfiguration.gewichtVerteilung || 
+                              { seife1Prozent: 50, seife2Prozent: 50 };
+    seifeBeschreibung = `${produkt.seife} (${gewichtVerteilung.seife1Prozent}%) + ${produkt.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
+  }
+  
   const analyse = {
     produktId: produkt._id,
     produktName: produkt.name,
-    seife: produkt.seife,
+    seife: seifeBeschreibung,
     aroma: produkt.aroma,
     verpackung: produkt.verpackung,
     grammProEinheit: produkt.gramm,
