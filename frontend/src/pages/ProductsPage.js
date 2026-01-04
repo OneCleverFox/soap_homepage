@@ -275,12 +275,18 @@ const ProductsPage = React.memo(() => {
     // Event-Listener für Lageränderungen (Legacy)
     const handleInventoryUpdate = () => {
       console.log('📦 Inventory update detected - forcing immediate refresh');
-      // Cache komplett invalidieren
+      
+      // Cache komplett invalidieren mit mehreren Sicherheitsstufen
       sessionStorage.removeItem('cachedProducts');
       sessionStorage.setItem('forceProductsReload', 'true');
+      localStorage.removeItem('cachedProducts'); // Fallback für versehentliche localStorage-Nutzung
+      
+      console.log('🔒 FORCE FLAG SET: forceProductsReload =', sessionStorage.getItem('forceProductsReload'));
       
       if (isMounted) {
         console.log('🔄 Immediate fresh reload triggered');
+        setProducts([]); // Clear current products
+        setLoading(true); // Show loading state
         fetchProducts(false); // Fresh load, nicht background
       }
     };
@@ -291,8 +297,13 @@ const ProductsPage = React.memo(() => {
     // Sofort mit gecachten Daten starten wenn verfügbar
     const loadCachedProducts = () => {
       try {
-        // Prüfe auf forcierte Neuladen-Flag - ERSTE PRIORITÄT
+        // DEBUG: Überprüfe alle Storage-Flags
         const forceReload = sessionStorage.getItem('forceProductsReload');
+        const cachedData = sessionStorage.getItem('cachedProducts');
+        console.log('🔍 CACHE CHECK: forceReload =', forceReload);
+        console.log('🔍 CACHE CHECK: cachedData exists =', !!cachedData);
+        
+        // Prüfe auf forcierte Neuladen-Flag - ERSTE PRIORITÄT
         if (forceReload) {
           console.log('🔄 Force reload detected - completely skipping cache');
           sessionStorage.removeItem('forceProductsReload');
@@ -303,8 +314,11 @@ const ProductsPage = React.memo(() => {
         const cached = sessionStorage.getItem('cachedProducts');
         if (cached) {
           const { data, timestamp } = JSON.parse(cached);
+          const cacheAge = Date.now() - timestamp;
+          console.log('🔍 CACHE AGE: ', Math.round(cacheAge / 1000), 'seconds old');
+          
           // Verwende Cache wenn er weniger als 2 Minuten alt ist
-          if (Date.now() - timestamp < 2 * 60 * 1000) {
+          if (cacheAge < 2 * 60 * 1000) {
             console.log('⚡ Loading cached products immediately');
             if (isMounted) {
               setProducts(data);
@@ -353,8 +367,12 @@ const ProductsPage = React.memo(() => {
     };
     
     // Wenn kein Cache geladen wurde, normale Ladung
+    console.log('🚀 ProductsPage initializing...');
     if (!loadCachedProducts() && isMounted) {
+      console.log('🆕 No valid cache - loading fresh products');
       fetchProducts(false);
+    } else {
+      console.log('✅ Cache decision completed');
     }
 
     // Cleanup function
