@@ -78,7 +78,13 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
         
         rohseife2Kosten = rohseife2 ? (rohseife2Gramm * rohseife2.preisProGramm) : 0;
         
-        console.log(`🧮 Gewichtsverteilung: Seife1=${rohseife1Gramm}g (${seife1Prozent}%), Seife2=${rohseife2Gramm}g (${seife2Prozent}%)`);
+        console.log(`🧮 Dual-Soap-Berechnung für "${portfolio.name}":`);
+        console.log(`   - Seife1: ${portfolio.seife} = ${rohseife1Gramm}g (${seife1Prozent}%) → ${rohseife ? (rohseife1Gramm * rohseife.preisProGramm).toFixed(4) : 0}€`);
+        console.log(`   - Seife2: ${portfolio.rohseifenKonfiguration.seife2} = ${rohseife2Gramm}g (${seife2Prozent}%) → ${rohseife2Kosten.toFixed(4)}€`);
+        console.log(`   - Rohseife2 gefunden: ${rohseife2 ? 'JA' : 'NEIN'}`);
+        if (rohseife2) {
+          console.log(`   - Rohseife2 Preis/g: ${rohseife2.preisProGramm}€`);
+        }
       }
       
       const rohseifeKosten = rohseife ? (rohseife1Gramm * rohseife.preisProGramm) : 0;
@@ -206,6 +212,25 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Warenberechnung nicht gefunden' });
     }
     
+    res.json({ message: 'Warenberechnung gelöscht' });
+  } catch (error) {
+    console.error('Fehler beim Löschen der Warenberechnung:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// DELETE - Warenberechnung für Portfolio-Produkt löschen
+router.delete('/portfolio/:portfolioId', auth, async (req, res) => {
+  try {
+    const berechnung = await Warenberechnung.findOneAndDelete({ 
+      portfolioProdukt: req.params.portfolioId 
+    });
+    
+    if (!berechnung) {
+      return res.status(404).json({ message: 'Warenberechnung für Portfolio nicht gefunden' });
+    }
+    
+    console.log(`✅ Warenberechnung für Portfolio ${req.params.portfolioId} gelöscht - wird bei nächstem Aufruf neu erstellt`);
     res.json({ message: 'Warenberechnung gelöscht' });
   } catch (error) {
     console.error('Fehler beim Löschen der Warenberechnung:', error);
