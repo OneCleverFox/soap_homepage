@@ -96,6 +96,22 @@ router.get('/debug/portfolio-status', async (req, res) => {
   }
 });
 
+// DEBUG Route - Cache invalidierung erzwingen
+router.get('/debug/invalidate-cache', async (req, res) => {
+  try {
+    console.log('🧹 MANUAL CACHE INVALIDATION triggered');
+    invalidatePortfolioCache();
+    res.json({
+      success: true,
+      message: 'Portfolio cache manually invalidated',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Manual cache invalidation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // DEBUG Route - alle Bestände anzeigen
 router.get('/debug/bestaende', async (req, res) => {
   try {
