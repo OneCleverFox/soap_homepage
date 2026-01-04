@@ -61,10 +61,13 @@ const AdminWarenberechnung = () => {
   }, []);
 
   const calculateProductCosts = useCallback(async () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !selectedProduct._id) {
+      console.warn('⚠️ calculateProductCosts: selectedProduct oder _id ist undefined');
+      return;
+    }
 
     try {
-      console.log('Lade Warenberechnung für Produkt:', selectedProduct);
+      console.log('Lade Warenberechnung für Produkt:', selectedProduct.name, 'ID:', selectedProduct._id);
       
       // Lade gespeicherte Berechnung aus Datenbank
       const response = await api.get(`/warenberechnung/portfolio/${selectedProduct._id}`);
@@ -156,10 +159,13 @@ const AdminWarenberechnung = () => {
   };
 
   const handleNeuberechnen = async () => {
-    if (!selectedProduct) return;
+    if (!selectedProduct || !selectedProduct._id) {
+      console.warn('⚠️ handleNeuberechnen: selectedProduct oder _id ist undefined');
+      return;
+    }
     
     try {
-      console.log('🔄 Lösche bestehende Warenberechnung für Neuberechnung...');
+      console.log('🔄 Lösche bestehende Warenberechnung für Neuberechnung:', selectedProduct.name);
       
       // Lösche bestehende Warenberechnung
       await api.delete(`/warenberechnung/portfolio/${selectedProduct._id}`);

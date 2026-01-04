@@ -488,19 +488,53 @@ const ProductsPage = React.memo(() => {
                     }
                   />
                   
-                  {/* Seifentyp Badge */}
-                  <Chip 
-                    label={product.seife}
-                    size="small"
-                    sx={{ 
-                      position: 'absolute',
-                      top: 16,
-                      right: 16,
-                      bgcolor: 'rgba(255,255,255,0.95)',
-                      fontWeight: 'bold',
-                      backdropFilter: 'blur(10px)'
-                    }}
-                  />
+                  {/* Rohseifen Badge(s) */}
+                  {product.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+                    <Box
+                      sx={{ 
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 0.5
+                      }}
+                    >
+                      <Chip 
+                        label={product.seife}
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(255,255,255,0.95)',
+                          fontWeight: 'bold',
+                          backdropFilter: 'blur(10px)',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                      <Chip 
+                        label={product.rohseifenKonfiguration.seife2}
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(255,255,255,0.95)',
+                          fontWeight: 'bold',
+                          backdropFilter: 'blur(10px)',
+                          fontSize: '0.7rem'
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <Chip 
+                      label={product.seife}
+                      size="small"
+                      sx={{ 
+                        position: 'absolute',
+                        top: 16,
+                        right: 16,
+                        bgcolor: 'rgba(255,255,255,0.95)',
+                        fontWeight: 'bold',
+                        backdropFilter: 'blur(10px)'
+                      }}
+                    />
+                  )}
                 </Box>
 
                 <CardContent sx={{ flexGrow: 1, p: 3 }}>
