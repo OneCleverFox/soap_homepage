@@ -565,6 +565,29 @@ const ProductsPage = React.memo(() => {
                     </Box>
                   </Box>
 
+                  {/* Rohseifen-Information */}
+                  <Box sx={{ mb: 2 }}>
+                    {product.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mb: 1, fontWeight: 500 }}>
+                          Rohseifen-Mischung:
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Typography variant="body2" color="primary.main" sx={{ fontSize: '0.8rem' }}>
+                            • {product.seife} ({product.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}%)
+                          </Typography>
+                          <Typography variant="body2" color="primary.main" sx={{ fontSize: '0.8rem' }}>
+                            • {product.rohseifenKonfiguration.seife2} ({product.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}%)
+                          </Typography>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                        <strong>Rohseife:</strong> {product.seife}
+                      </Typography>
+                    )}
+                  </Box>
+
                   {/* Preis */}
                   <Box 
                     sx={{ 

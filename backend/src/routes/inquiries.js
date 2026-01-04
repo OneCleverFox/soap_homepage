@@ -5,6 +5,7 @@ const Order = require('../models/Order');
 const { auth, authenticateToken } = require('../middleware/auth');
 const PayPalService = require('../services/PayPalService');
 const { cacheManager } = require('../utils/cacheManager');
+const { reduceInventoryForProduct } = require('../utils/inventoryUtils');
 
 // Hilfsfunktion zum Portfolio-Cache-Invalidieren
 function invalidatePortfolioCache() {
@@ -442,44 +443,71 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
       respondedAt: new Date()
     };
     
-    // ⚡ BESTAND IMMER REDUZIEREN beim Annehmen einer Anfrage
+    // ⚡ BESTAND IMMER REDUZIEREN beim Annehmen einer Anfrage - Neue Dual-Soap-fähige Logik
     const Bestand = require('../models/Bestand');
     
     console.log('🔄 Bestandsreduzierung für angenommene Anfrage...');
     for (const item of inquiry.items) {
       try {
-        // Bestand finden und reduzieren - prüfe beide mögliche Typ-Bezeichnungen
-        let bestand = await Bestand.findOne({
-          artikelId: item.produktId || item.productId,
-          typ: 'Portfolio' // Korrekter Typ für Portfolio-Produkte
-        });
+        // Verwende neue Inventar-Utility für Dual-Soap-Support bei Portfolio-Produkten
+        const mengeZuReduzieren = item.quantity || item.menge;
         
-        // Falls nicht gefunden, versuche andere Typ-Bezeichnungen
-        if (!bestand) {
-          bestand = await Bestand.findOne({
-            artikelId: item.produktId || item.productId,
-            typ: 'produkt'
-          });
-        }
-        
-        if (!bestand) {
-          bestand = await Bestand.findOne({
-            artikelId: item.produktId || item.productId,
-            typ: 'portfolio'
-          });
-        }
-
-        if (bestand) {
-          const mengeZuReduzieren = item.quantity || item.menge;
-          if (bestand.menge >= mengeZuReduzieren) {
-            bestand.menge -= mengeZuReduzieren;
-            await bestand.save();
-            console.log(`📦 Bestand reduziert: ${item.name} (-${mengeZuReduzieren}), Restbestand: ${bestand.menge}`);
+        // Prüfe ob es ein Portfolio-Produkt ist
+        if (item.produktType === 'Portfolio' || item.type === 'portfolio') {
+          const inventoryResult = await reduceInventoryForProduct(
+            item.produktId || item.productId, 
+            mengeZuReduzieren
+          );
+          
+          if (inventoryResult.success) {
+            console.log(`✅ Bestand erfolgreich reduziert für: ${inventoryResult.produktName}`);
+            if (inventoryResult.isDualSoap) {
+              console.log(`   🔧 Dual-Soap Reduktion:`);
+              inventoryResult.operations.forEach(op => {
+                console.log(`      - ${op.rohseife}: -${op.reduzierung}g (${op.prozent}%)`);
+              });
+            }
           } else {
-            console.warn(`⚠️ Nicht genügend Bestand für: ${item.name} (verfügbar: ${bestand.menge}, benötigt: ${mengeZuReduzieren})`);
+            console.warn(`⚠️ Bestandsreduktion fehlgeschlagen für: ${item.name}`);
+            inventoryResult.operations.forEach(op => {
+              if (!op.success) {
+                console.warn(`      - ${op.rohseife}: ${op.error}`);
+              }
+            });
           }
         } else {
-          console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${item.name} (ID: ${item.produktId || item.productId})`);
+          // Fallback für andere Produkttypen - alte Logik beibehalten
+          let bestand = await Bestand.findOne({
+            artikelId: item.produktId || item.productId,
+            typ: 'Portfolio' // Korrekter Typ für Portfolio-Produkte
+          });
+          
+          // Falls nicht gefunden, versuche andere Typ-Bezeichnungen
+          if (!bestand) {
+            bestand = await Bestand.findOne({
+              artikelId: item.produktId || item.productId,
+              typ: 'produkt'
+            });
+          }
+          
+          if (!bestand) {
+            bestand = await Bestand.findOne({
+              artikelId: item.produktId || item.productId,
+              typ: 'portfolio'
+            });
+          }
+
+          if (bestand) {
+            if (bestand.menge >= mengeZuReduzieren) {
+              bestand.menge -= mengeZuReduzieren;
+              await bestand.save();
+              console.log(`📦 Bestand reduziert: ${item.name} (-${mengeZuReduzieren}), Restbestand: ${bestand.menge}`);
+            } else {
+              console.warn(`⚠️ Nicht genügend Bestand für: ${item.name} (verfügbar: ${bestand.menge}, benötigt: ${mengeZuReduzieren})`);
+            }
+          } else {
+            console.warn(`⚠️ Kein Bestandseintrag gefunden für: ${item.name}`);
+          }
         }
       } catch (bestandError) {
         console.error('❌ Fehler beim Bestandsabgang:', bestandError);
