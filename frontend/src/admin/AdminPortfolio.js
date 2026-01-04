@@ -54,6 +54,11 @@ const invalidateProductsCache = () => {
     
     console.log('🧹 Products cache invalidated with force reload flag');
     
+    // Zusätzlich Backend-Cache invalidieren via API
+    api.get('/portfolio/debug/invalidate-cache')
+      .then(() => console.log('✅ Backend cache also invalidated'))
+      .catch(err => console.warn('⚠️ Backend cache invalidation failed:', err));
+    
     // Event feuern für reaktive Updates
     window.dispatchEvent(new CustomEvent('inventoryUpdated'));
     console.log('📡 Inventory update event dispatched');
