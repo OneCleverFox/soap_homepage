@@ -155,6 +155,29 @@ const AdminWarenberechnung = () => {
     }
   };
 
+  const handleNeuberechnen = async () => {
+    if (!selectedProduct) return;
+    
+    try {
+      console.log('🔄 Lösche bestehende Warenberechnung für Neuberechnung...');
+      
+      // Lösche bestehende Warenberechnung
+      await api.delete(`/warenberechnung/portfolio/${selectedProduct._id}`);
+      
+      // Lade Portfolio-Produkt neu um aktuelle Rohseifen-Konfiguration zu erhalten
+      const portfolioResponse = await api.get(`/admin/portfolio/${selectedProduct._id}`);
+      setSelectedProduct(portfolioResponse.data);
+      
+      // Triggere Neuberechnung durch erneuten Aufruf
+      await calculateProductCosts();
+      
+      console.log('✅ Warenberechnung erfolgreich neu erstellt');
+    } catch (err) {
+      console.error('Fehler bei Neuberechnung:', err);
+      setError(`Fehler bei Neuberechnung: ${err.message}`);
+    }
+  };
+
   const handlePreisUebernehmen = async () => {
     if (!calculation || !selectedProduct) return;
     
@@ -309,6 +332,15 @@ const AdminWarenberechnung = () => {
                       width: isMobile ? '100%' : 'auto'
                     }}
                   />
+                  <Button 
+                    variant="outlined" 
+                    color="warning"
+                    onClick={handleNeuberechnen}
+                    size={isMobile ? "small" : "medium"}
+                    startIcon={<span>🔄</span>}
+                  >
+                    {isMobile ? '🔄 Neu' : '🔄 Neuberechnen'}
+                  </Button>
                   <Button 
                     variant="contained" 
                     color="primary"
