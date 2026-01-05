@@ -46,6 +46,8 @@ const ProductDetailPage = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [textDataLoaded, setTextDataLoaded] = useState(false); // 🚀 Text-First Loading
+  const [imagesLoading, setImagesLoading] = useState(true); // 🖼️ Images Loading State
   const [error, setError] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -63,16 +65,16 @@ const ProductDetailPage = () => {
       console.log('Product response:', response);
       const productData = response.data?.data || response.data;
       
-      // DEBUG: Prüfe rohseifenKonfiguration
-      if (productData) {
-        console.log('🔍 DEBUG: Product Data loaded:', productData);
-        console.log('🔍 DEBUG: rohseifenKonfiguration:', productData.rohseifenKonfiguration);
-        console.log('🔍 DEBUG: verwendeZweiRohseifen:', productData.rohseifenKonfiguration?.verwendeZweiRohseifen);
-        console.log('🔍 DEBUG: seife2:', productData.rohseifenKonfiguration?.seife2);
-      }
+      // Produktdaten verarbeitet ✅
       
       setProduct(productData);
       setSelectedImage(productData?.bilder?.hauptbild);
+      setTextDataLoaded(true); // 📝 Text ist da - Produktinfo sofort anzeigen
+      
+      // Starte Image-Loading nach kurzer Verzögerung
+      setTimeout(() => {
+        setImagesLoading(false); // Bilder können jetzt geladen werden
+      }, 100);
     } catch (err) {
       console.error('Error fetching product:', err);
       setError('Fehler beim Laden: ' + (err.response?.data?.message || err.message));
@@ -135,15 +137,53 @@ const ProductDetailPage = () => {
     }
   };
 
-  if (loading) {
+  // 🚀 PROGRESSIVE LOADING: Zeige Skeleton während Laden
+  if (loading || !textDataLoaded) {
     return (
-      <Container maxWidth="lg" sx={{ display: 'flex', justifyContent: 'center', mt: 8 }}>
-        <Box textAlign="center">
-          <CircularProgress size={60} />
-          <Typography variant="h6" sx={{ mt: 2 }}>
-            Lade Produktdetails...
-          </Typography>
-        </Box>
+      <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
+        <Button 
+          startIcon={<ArrowBack />} 
+          onClick={() => navigate('/products')} 
+          sx={{ mb: isMobile ? 2 : 3 }}
+          variant="outlined"
+          size={isMobile ? "small" : "medium"}
+        >
+          Zurück
+        </Button>
+
+        <Grid container spacing={isMobile ? 2 : 4}>
+          <Grid item xs={12} md={6}>
+            <Card elevation={3}>
+              <Box
+                sx={{
+                  height: isMobile ? 300 : 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'grey.100'
+                }}
+              >
+                <CircularProgress size={60} />
+              </Box>
+            </Card>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <Box sx={{ p: isMobile ? 1 : 2 }}>
+              <Typography variant="body2" color="primary" sx={{ mb: 2, fontWeight: 500 }}>
+                {textDataLoaded ? 'Bilder werden geladen...' : 'Produktdetails werden geladen...'}
+              </Typography>
+              
+              {/* Skeleton für Produktinfo */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2" color="text.secondary">
+                  Lade Produktdaten...
+                </Typography>
+              </Box>
+            </Box>
+          </Grid>
+        </Grid>
       </Container>
     );
   }
@@ -180,15 +220,37 @@ const ProductDetailPage = () => {
       <Grid container spacing={isMobile ? 2 : 4}>
         <Grid item xs={12} md={6}>
           <Card elevation={3}>
-            <LazyImage
-              src={getImageUrl(selectedImage || product.bilder?.hauptbild)}
-              alt={product.name}
-              height={isMobile ? 300 : 500}
-              objectFit="cover"
-            />
+            {imagesLoading ? (
+              // 📝 TEXT-FIRST PHASE: Zeige Skeleton während Image-Loading
+              <Box
+                sx={{
+                  height: isMobile ? 300 : 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'grey.100'
+                }}
+              >
+                <Box textAlign="center">
+                  <CircularProgress size={40} />
+                  <Typography variant="body2" sx={{ mt: 1 }} color="text.secondary">
+                    Bilder werden geladen...
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              // 🖼️ IMAGE PHASE: Lade Bild nach Text-Content
+              <LazyImage
+                src={getImageUrl(selectedImage || product.bilder?.hauptbild)}
+                alt={product.name}
+                height={isMobile ? 300 : 500}
+                objectFit="cover"
+                priority={true} // 🚀 Hauptbild hat Priorität
+              />
+            )}
           </Card>
 
-          {product.bilder?.galerie && product.bilder.galerie.length > 0 && (
+          {!imagesLoading && product.bilder?.galerie && product.bilder.galerie.length > 0 && (
             <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
               <Box
                 onClick={() => setSelectedImage(product.bilder.hauptbild)}
