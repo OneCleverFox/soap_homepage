@@ -44,7 +44,7 @@ const HomePage = () => {
     <>
       <Helmet>
         <title>Glücksmomente-Manufaktur</title>
-        <meta name="description" content="Entdecken Sie unsere handgemachte Naturkosmetik und Seifen. Hochwertige, nachhaltige Pflege für Körper und Seele." />
+        <meta name="description" content="Entdecken Sie unsere Seifen. Hochwertige, nachhaltige Pflege für Körper und Seele." />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </Helmet>
       
