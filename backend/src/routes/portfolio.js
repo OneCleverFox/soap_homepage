@@ -12,11 +12,13 @@ const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// Cache für Portfolio-Daten (15 Minuten TTL)
+// ⚡ OPTIMIZED CACHE: Intelligente Cache-Strategie
 let portfolioCache = global.portfolioCache || {
   data: null,
   timestamp: 0,
-  ttl: 15 * 60 * 1000 // 15 Minuten für bessere Performance
+  ttl: 10 * 60 * 1000, // 10 Minuten (Balance zwischen Performance und Aktualität)
+  lastHit: 0,
+  hitCount: 0
 };
 
 // Synchronisiere mit globalem Cache
@@ -489,31 +491,32 @@ router.get('/with-prices', async (req, res) => {
   console.log('🚀 Portfolio with-prices request started');
   
   try {
-    // Cache-Control Headers für Browser-Caching (entwicklungsfreundlich)
+    // ⚡ OPTIMIZED CACHE HEADERS: Intelligentes Browser-Caching
     res.set({
-      'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0', // Browser-Cache deaktivieren
-      'Pragma': 'no-cache',
-      'Expires': '0',
+      'Cache-Control': 'public, max-age=600, stale-while-revalidate=900', // 10 Min Cache, 15 Min stale
       'ETag': `portfolio-${Date.now()}`,
       'Last-Modified': new Date().toUTCString()
     });
     
-    // Cache-Check (TEMPORÄR DEAKTIVIERT für Debugging)
+    // ⚡ ENHANCED CACHE-CHECK mit Metriken
     const now = Date.now();
-    const cacheDisabled = true; // Temporär für Dual-Soap Debugging
-    if (!cacheDisabled && portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
-      console.log(`⚡ Cache hit! Returning cached data (${now - portfolioCache.timestamp}ms old)`);
+    if (portfolioCache.data && (now - portfolioCache.timestamp) < portfolioCache.ttl) {
+      portfolioCache.lastHit = now;
+      portfolioCache.hitCount++;
+      const cacheAge = now - portfolioCache.timestamp;
+      console.log(`⚡ Cache hit #${portfolioCache.hitCount}! Returning cached data (${cacheAge}ms old)`);
       return res.status(200).json({
         success: true,
         count: portfolioCache.data.length,
         data: portfolioCache.data,
         cached: true,
-        cacheAge: now - portfolioCache.timestamp
+        cacheAge: cacheAge,
+        hitCount: portfolioCache.hitCount
       });
     }
     
     console.log('🔄 Cache miss or expired, fetching fresh data...');
-    // 1. Portfolio Items laden (Nur aktive Items)
+    // 1. Portfolio Items laden (⚡ NUR aktive Items mit optimiertem Index!)
     const portfolioStart = Date.now();
     const portfolioItems = await Portfolio.find({ aktiv: true })
       .sort({ reihenfolge: 1, name: 1 })
@@ -538,31 +541,59 @@ router.get('/with-prices', async (req, res) => {
     // 2. Alle benötigten Daten in Batch-Abfragen laden
     const batchStart = Date.now();
     
-    // 2a. Bestand-Daten
-    const alleBestaende = await Bestand.find({ typ: 'produkt' }).lean();
+    // 2a. Bestand-Daten (nur für Produkte)
+    const alleBestaende = await Bestand.find({ typ: 'produkt' })
+      .select('artikelId menge')
+      .lean();
     const bestandMap = new Map(
       alleBestaende.map(b => [b.artikelId.toString(), b])
     );
     
-    // 2b. Rohseifen-Daten
-    const alleRohseifen = await Rohseife.find({}).lean();
+    // ⚡ OPTIMIERUNG: Nur benötigte Rohstoffe laden (statt ALLE)
+    const uniqueRohseifen = [...new Set(portfolioItems.map(p => p.seife))];
+    const uniqueVerpackungen = [...new Set(portfolioItems.map(p => p.verpackung))];
+    const uniqueDuftoele = [...new Set(
+      portfolioItems
+        .map(p => p.aroma)
+        .filter(aroma => aroma && aroma !== 'Neutral' && aroma !== '')
+    )];
+    
+    console.log(`🎯 Loading selective data: ${uniqueRohseifen.length} Rohseifen, ${uniqueVerpackungen.length} Verpackungen, ${uniqueDuftoele.length} Duftöle`);
+    
+    // 2b. Nur benötigte Rohseifen laden
+    const alleRohseifen = await Rohseife.find({ 
+      bezeichnung: { $in: uniqueRohseifen },
+      verfuegbar: true 
+    })
+    .select('bezeichnung preisProGramm')
+    .lean();
     const rohseifenMap = new Map(
       alleRohseifen.map(r => [r.bezeichnung.toLowerCase(), r])
     );
     
-    // 2c. Verpackungs-Daten
-    const alleVerpackungen = await Verpackung.find({}).lean();
+    // 2c. Nur benötigte Verpackungen laden
+    const alleVerpackungen = await Verpackung.find({ 
+      bezeichnung: { $in: uniqueVerpackungen },
+      verfuegbar: true 
+    })
+    .select('bezeichnung kostenProStueck')
+    .lean();
     const verpackungsMap = new Map(
       alleVerpackungen.map(v => [v.bezeichnung.toLowerCase(), v])
     );
     
-    // 2d. Duftöl-Daten
-    const alleDuftoele = await Duftoil.find({}).lean();
+    // 2d. Nur benötigte Duftöle laden
+    const alleDuftoele = await Duftoil.find({ 
+      bezeichnung: { $in: uniqueDuftoele },
+      verfuegbar: true 
+    })
+    .select('bezeichnung preisProTropfen kostenProTropfen')
+    .lean();
     const duftoelMap = new Map(
       alleDuftoele.map(d => [d.bezeichnung.toLowerCase(), d])
     );
     
-    console.log(`📦 Batch data loaded: ${Date.now() - batchStart}ms`);
+    console.log(`📦 Optimized batch data loaded: ${Date.now() - batchStart}ms`);
 
     // 3. Preise für jedes Portfolio-Element berechnen (parallel, aber mit gecachten Daten)
     const priceStart = Date.now();

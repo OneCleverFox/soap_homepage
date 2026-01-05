@@ -54,7 +54,7 @@ const ProductsPage = React.memo(() => {
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
   const [_retryCount, setRetryCount] = useState(0); // Für Retry-Logik
 
-  // Optimierte fetchProducts Funktion mit Retry-Mechanismus
+  // Optimierte fetchProducts Funktion mit Retry-Mechanismus und Progressive Loading
   const fetchProducts = useCallback(async (isBackgroundUpdate = false, retryAttempt = 0) => {
     try {
       if (!isBackgroundUpdate) {
@@ -62,7 +62,7 @@ const ProductsPage = React.memo(() => {
       }
       setError('');
       
-      console.log(`🔄 Fetching products... ${isBackgroundUpdate ? '(Background)' : '(Initial)'} - Attempt: ${retryAttempt + 1}`);
+      console.log(`🚀 OPTIMIZED: Fetching products... ${isBackgroundUpdate ? '(Background)' : '(Initial)'} - Attempt: ${retryAttempt + 1}`);
       
       // Performance Tracking
       const startTime = performance.now();
@@ -82,17 +82,22 @@ const ProductsPage = React.memo(() => {
       }
       
       const duration = performance.now() - startTime;
-      console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length}`);
+      console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length} ${response.data?.cached ? '(CACHED)' : '(FRESH)'}`);
       
-      setProducts(productsData);
-      setInitialLoading(false);
+      // ⚡ PROGRESSIVE UPDATE: Zeige sofort verfügbare Daten
+      if (productsData.length > 0) {
+        setProducts(productsData);
+        setInitialLoading(false);
+      }
       setRetryCount(0); // Reset retry count on success
       
-      // Cache für bessere Performance
+      // ⚡ OPTIMIZED CACHING: Cache-Strategie für bessere Performance
       try {
         sessionStorage.setItem('cachedProducts', JSON.stringify({
           data: productsData,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          cacheAge: response.data?.cacheAge || 0,
+          cached: response.data?.cached || false
         }));
       } catch (cacheError) {
         console.warn('⚠️ Could not cache products:', cacheError);
