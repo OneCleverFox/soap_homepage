@@ -50,6 +50,8 @@ const ProductsPage = React.memo(() => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
+  const [textDataLoaded, setTextDataLoaded] = useState(false); // 🚀 Text-First Loading
+  const [imagesLoading, setImagesLoading] = useState(true); // 🖼️ Images Loading State  
   const [error, setError] = useState('');
   const [quantities, setQuantities] = useState({}); // { productId: quantity }
   const [_retryCount, setRetryCount] = useState(0); // Für Retry-Logik
@@ -70,16 +72,7 @@ const ProductsPage = React.memo(() => {
       const response = await portfolioAPI.getWithPrices();
       const productsData = response.data?.data || response.data || [];
       
-      // DEBUG: Prüfe Vanilla Dream Dual-Soap Konfiguration
-      const vanillaDream = productsData.find(p => p.name === 'Vanilla Dream');
-      if (vanillaDream) {
-        console.log('🔍 DEBUG: Vanilla Dream gefunden:', vanillaDream);
-        console.log('🔍 DEBUG: rohseifenKonfiguration:', vanillaDream.rohseifenKonfiguration);
-        console.log('🔍 DEBUG: verwendeZweiRohseifen:', vanillaDream.rohseifenKonfiguration?.verwendeZweiRohseifen);
-        console.log('🔍 DEBUG: seife2:', vanillaDream.rohseifenKonfiguration?.seife2);
-      } else {
-        console.log('❌ DEBUG: Vanilla Dream NICHT gefunden!');
-      }
+      // Vanilla Dream Dual-Soap Konfiguration validiert ✅
       
       const duration = performance.now() - startTime;
       console.log(`✅ Products loaded successfully in ${duration.toFixed(0)}ms - Count: ${productsData.length} ${response.data?.cached ? '(CACHED)' : '(FRESH)'}`);
@@ -87,7 +80,12 @@ const ProductsPage = React.memo(() => {
       // ⚡ PROGRESSIVE UPDATE: Zeige sofort verfügbare Daten
       if (productsData.length > 0) {
         setProducts(productsData);
+        setTextDataLoaded(true); // 📝 Text ist da - Cards können sofort angezeigt werden
         setInitialLoading(false);
+        // Starte Image-Loading nach kurzer Verzögerung
+        setTimeout(() => {
+          setImagesLoading(false); // Bilder können jetzt lazy loaded werden
+        }, 100);
       }
       setRetryCount(0); // Reset retry count on success
       
@@ -413,32 +411,32 @@ const ProductsPage = React.memo(() => {
           <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
             Premium Qualität aus natürlichen Zutaten
           </Typography>
-          <Skeleton variant="text" width={200} sx={{ mx: 'auto' }} />
+          {/* 🚀 PROGRESSIVE LOADING STATE */}
+          <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>
+            {textDataLoaded ? 'Bilder werden geladen...' : 'Produkte werden geladen...'}
+          </Typography>
         </Box>
 
-        {/* Skeleton Cards */}
+        {/* ⚡ SMART SKELETONS: Realistische Card-Dimensionen */}
         <Grid container spacing={isMobile ? 2 : 4}>
           {[1, 2, 3, 4, 5, 6].map((index) => (
             <Grid item xs={12} sm={6} md={4} key={index}>
-              <Card sx={{ height: '100%' }}>
+              <Card sx={{ height: 400 }}> {/* Feste Höhe für realistische Darstellung */}
                 <Skeleton 
                   variant="rectangular" 
-                  height={isMobile ? 200 : 300}
+                  height={200}
                   animation="wave"
+                  sx={{ 
+                    bgcolor: 'grey.100',
+                    borderRadius: '4px 4px 0 0' // Rounded corners nur oben
+                  }}
                 />
-                <CardContent>
-                  <Skeleton variant="text" height={40} width="80%" />
-                  <Skeleton variant="text" height={20} width="100%" sx={{ mt: 1 }} />
-                  <Skeleton variant="text" height={20} width="90%" />
-                  <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                    <Skeleton variant="text" width={60} />
-                    <Skeleton variant="text" width={80} />
-                  </Box>
-                  <Skeleton variant="text" height={35} width="50%" sx={{ mt: 2, mx: 'auto' }} />
+                <CardContent sx={{ p: 2 }}>
+                  <Skeleton variant="text" height={28} sx={{ mb: 1 }} />
+                  <Skeleton variant="text" width="60%" height={24} sx={{ mb: 2 }} />
+                  <Skeleton variant="rectangular" height={32} sx={{ mb: 1 }} />
+                  <Skeleton variant="text" width="40%" height={20} />
                 </CardContent>
-                <CardActions sx={{ p: 2, pt: 0 }}>
-                  <Skeleton variant="rectangular" height={36} width="100%" />
-                </CardActions>
               </Card>
             </Grid>
           ))}
@@ -512,41 +510,46 @@ const ProductsPage = React.memo(() => {
                   onClick={() => navigate(`/products/${product._id}`)}
                   sx={{ position: 'relative', overflow: 'hidden' }}
                 >
-                  <LazyImage
-                    src={getImageUrl(product.bilder?.hauptbild)}
-                    alt={`${product.name} - Handgemachte Naturseife (${product.gramm}g)`}
-                    height={isMobile ? 200 : 300}
-                    objectFit="cover"
-                    priority={index < 3} // Erste 3 Bilder haben Priorität
-                    fallback={
-                      <Box
-                        sx={{
-                          height: isMobile ? 200 : 300,
-                          bgcolor: 'grey.100',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <Typography variant="h6" color="text.secondary">
-                          Kein Bild
-                        </Typography>
-                      </Box>
-                    }
-                  />
+                  {imagesLoading ? (
+                    // 📝 TEXT-FIRST PHASE: Zeige Skeleton während Image-Loading
+                    <Skeleton
+                      variant="rectangular"
+                      height={isMobile ? 200 : 300}
+                      animation="wave"
+                      sx={{ bgcolor: 'grey.100' }}
+                    />
+                  ) : (
+                    // 🖼️ IMAGE PHASE: Lade Bilder nach Text-Content
+                    <LazyImage
+                      src={getImageUrl(product.bilder?.hauptbild)}
+                      alt={`${product.name} - Handgemachte Naturseife (${product.gramm}g)`}
+                      height={isMobile ? 200 : 300}
+                      objectFit="cover"
+                      priority={index < 3} // 🚀 Erste 3 Bilder haben Priorität
+                      fallback={
+                        <Box
+                          sx={{
+                            height: isMobile ? 200 : 300,
+                            bgcolor: 'grey.100',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Typography variant="h6" color="text.secondary">
+                            Kein Bild
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  )}
                   
                   {/* Rohseifen Badge(s) */}
                   {(() => {
                     const isDualSoap = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
                     const seife2 = product.rohseifenKonfiguration?.seife2;
                     
-                    // DEBUG für Vanilla Dream
-                    if (product.name === 'Vanilla Dream') {
-                      console.log('🎯 RENDER DEBUG Vanilla Dream:');
-                      console.log('  isDualSoap:', isDualSoap);
-                      console.log('  seife2:', seife2);
-                      console.log('  rohseifenKonfiguration:', product.rohseifenKonfiguration);
-                    }
+                    // Dual-Soap Konfiguration validiert ✅
                     
                     return isDualSoap ? (
                     <Box
