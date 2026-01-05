@@ -179,6 +179,10 @@ portfolioSchema.index({ seife: 1 });
 portfolioSchema.index({ aroma: 1 });
 portfolioSchema.index({ reihenfolge: 1 });
 
+// ⚡ PERFORMANCE BOOST: Index für aktive Produkte (kritisch für /with-prices)
+portfolioSchema.index({ aktiv: 1 });
+portfolioSchema.index({ aktiv: 1, reihenfolge: 1 }); // Compound für sortierte Abfrage
+
 // Pre-save Hook für Datenvalidierung
 portfolioSchema.pre('save', function(next) {
   // Validierung für Zwei-Rohseifen-Konfiguration
