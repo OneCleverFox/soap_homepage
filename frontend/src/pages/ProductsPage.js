@@ -667,12 +667,7 @@ const ProductsPage = React.memo(() => {
                     {(() => {
                       const isDualSoapInfo = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
                       
-                      // DEBUG für Vanilla Dream Detail-Info
-                      if (product.name === 'Vanilla Dream') {
-                        console.log('🎯 RENDER DEBUG Vanilla Dream INFO:');
-                        console.log('  isDualSoapInfo:', isDualSoapInfo);
-                        console.log('  gewichtVerteilung:', product.rohseifenKonfiguration?.gewichtVerteilung);
-                      }
+                      // Gewichtverteilung Info validiert ✅
                       
                       return isDualSoapInfo ? (
                       <Box>
