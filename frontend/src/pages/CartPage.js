@@ -45,7 +45,7 @@ const CartPage = () => {
     loading: loading
   });
 
-  const SHIPPING_COST = 7.69; // Versandkosten innerhalb Deutschlands
+  const SHIPPING_COST = 5.99; // Versandkosten innerhalb Deutschlands (Versandtasche)
 
   // Helper-Funktion um Bild-URLs zu korrigieren
   const getImageUrl = (url) => {
@@ -97,12 +97,7 @@ const CartPage = () => {
       updateQuantity(productId, newQuantity);
     } else if (newQuantity > maxAvailable && isAvailable) {
       // Wenn Benutzer mehr als verfügbar eingeben will, setze auf Maximum
-      toast.info(`Nur ${maxAvailable} Stück verfügbar`);
       updateQuantity(productId, maxAvailable);
-    } else if (!isAvailable) {
-      toast.error('Artikel ist nicht verfügbar');
-    } else {
-      toast.error('Mengenänderung nicht möglich');
     }
   };
 
@@ -296,7 +291,10 @@ const CartPage = () => {
                       }}>
                         <IconButton
                           size={isMobile ? "medium" : "small"}
-                          onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleQuantityChange(item.id, item.quantity - 1);
+                          }}
                           disabled={item.quantity <= 1}
                         >
                           <RemoveIcon fontSize={isMobile ? "medium" : "small"} />
@@ -319,12 +317,11 @@ const CartPage = () => {
                         />
                         <IconButton
                           size={isMobile ? "medium" : "small"}
-                          onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
-                          disabled={
-                            item.quantity >= (item.bestand?.menge || 0) || 
-                            !item.aktiv || 
-                            (item.bestand?.menge || 0) <= 0
-                          }
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleQuantityChange(item.id, item.quantity + 1);
+                          }}
+                          disabled={(item.bestand?.menge || 0) <= item.quantity}
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
                         </IconButton>
