@@ -522,7 +522,12 @@ const CustomerInquiries = () => {
                         )}
                         {selectedInquiry.status === 'accepted' && (
                           <Alert severity="success" variant="outlined">
-                            Ihre Anfrage wurde angenommen! Sie erhalten in Kürze eine E-Mail mit den Zahlungsdetails über PayPal.
+                            <Box>
+                              <Typography>Ihre Anfrage wurde angenommen! Sie erhalten in Kürze eine E-Mail mit den Zahlungsdetails über PayPal.</Typography>
+                              <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
+                                PayPal-Adresse für die Zahlung: <strong>info.gluecksmomente.manufaktur@gmail.com</strong>
+                              </Typography>
+                            </Box>
                           </Alert>
                         )}
                         {selectedInquiry.status === 'rejected' && (
@@ -534,16 +539,28 @@ const CustomerInquiries = () => {
                         )}
                         {selectedInquiry.status === 'converted_to_order' && (
                           <Alert severity="primary" variant="outlined">
-                            {selectedInquiry.payment?.status === 'completed' ? (
-                              <>Ihre Anfrage wurde in eine Bestellung umgewandelt und ist bezahlt. Die Bearbeitung hat begonnen.</>
-                            ) : (
-                              <>Ihre Anfrage wurde in eine Bestellung umgewandelt. Bitte bezahlen Sie, damit wir mit der Bearbeitung beginnen können.</>
-                            )}
+                            <Box>
+                              {selectedInquiry.payment?.status === 'completed' ? (
+                                <Typography>Ihre Anfrage wurde in eine Bestellung umgewandelt und ist bezahlt. Die Bearbeitung hat begonnen.</Typography>
+                              ) : (
+                                <>
+                                  <Typography>Ihre Anfrage wurde in eine Bestellung umgewandelt. Bitte bezahlen Sie, damit wir mit der Bearbeitung beginnen können.</Typography>
+                                  <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
+                                    PayPal-Adresse für die Zahlung: <strong>info.gluecksmomente.manufaktur@gmail.com</strong>
+                                  </Typography>
+                                </>
+                              )}
+                            </Box>
                           </Alert>
                         )}
                         {selectedInquiry.status === 'payment_pending' && (
                           <Alert severity="warning" variant="outlined">
-                            Die Zahlung steht noch aus. Bitte schließen Sie die PayPal-Zahlung ab, damit wir Ihre Bestellung bearbeiten können.
+                            <Box>
+                              <Typography>Die Zahlung steht noch aus. Bitte schließen Sie die PayPal-Zahlung ab, damit wir Ihre Bestellung bearbeiten können.</Typography>
+                              <Typography sx={{ mt: 1, fontWeight: 'bold' }}>
+                                PayPal-Adresse für die Zahlung: <strong>info.gluecksmomente.manufaktur@gmail.com</strong>
+                              </Typography>
+                            </Box>
                           </Alert>
                         )}
                         {selectedInquiry.status === 'paid' && (
