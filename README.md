@@ -915,6 +915,37 @@ Wir freuen uns über Beiträge! Bitte befolge diese Schritte:
 - Security-Best-Practices befolgen
 - Performance-Impact berücksichtigen
 
+---
+
+## 🔄 Workflow & Status Management
+
+### 📋 Rechnungsworkflow
+Das System implementiert einen klaren Workflow-Prozess:
+
+1. **📧 Anfrage** → Admin genehmigt → **🛒 Bestellung**
+2. **💰 PayPal-Zahlung** → `payment.status = 'paid'`
+3. **📦 Verpackung** → nur bei bezahlten Bestellungen möglich
+4. **🚚 Versand** → finale Statusänderung
+
+### 🎨 Status-Anzeige
+- ✅ **"Bezahlt"** (Grün): Zahlung bestätigt (`payment.status='paid'` oder `payment.paidDate`)
+- ⚠️ **"Versendet - Zahlung ausstehend"** (Orange): Rechnung versendet, wartet auf Zahlung
+- 🔴 **"Überfällig"** (Rot): Zahlungsfrist überschritten
+- 📝 **"Entwurf"** (Grau): Rechnung noch nicht versendet
+
+### 🛡️ Validierung
+- **Verpackung**: Nur bei bezahlten Bestellungen möglich (`zahlung.status = 'bezahlt'`)
+- **Filter "zu bearbeiten"**: Zeigt nur Admin-handlungsrelevante Items
+- **Statistiken**: Korrekte Berechnung offener Beträge (Gesamtumsatz - bezahlte Rechnungen)
+
+### 📊 Dashboard Features
+- **8 KPI-Karten** mit intelligenter Farbcodierung
+- **Direkte Navigation** zu gefilterten Ansichten
+- **Echtzeit-Handlungsaufforderungen** für Admin-Aufgaben
+- **Auto-Refresh** alle 5 Minuten
+
+---
+
 ## � Lizenz
 
 Dieses Projekt steht unter der [MIT License](LICENSE).

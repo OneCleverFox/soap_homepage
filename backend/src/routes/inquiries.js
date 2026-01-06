@@ -540,6 +540,10 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
         });
       }
 
+      // Versandkosten berechnen
+      const versandkosten = inquiry.total >= 30 ? 0 : 5.99;
+      const gesamtsumme = inquiry.total + versandkosten;
+
       // Bestellung erstellen
       const bestellnummer = `ORDER-${Date.now()}`;
       const neueBestellung = new Order({
@@ -574,10 +578,10 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
         })),
         preise: {
           zwischensumme: inquiry.total,
-          versandkosten: 0,
+          versandkosten: versandkosten, // ✅ Korrekte Versandkostenberechnung
           mwst: {
             satz: 19,
-            betrag: inquiry.total * 0.19 / 1.19
+            betrag: gesamtsumme * 0.19 / 1.19
           },
           rabatt: {
             betrag: 0,
@@ -585,7 +589,7 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
             grund: '',
             prozent: 0
           },
-          gesamtsumme: inquiry.total
+          gesamtsumme: gesamtsumme // ✅ Gesamtsumme inkl. Versandkosten
         },
         status: 'bestaetigt',
         zahlungsart: 'rechnung',
@@ -664,7 +668,7 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
           ort: inquiry.adresse?.ort || inquiry.adresse?.stadt || '',
           land: inquiry.adresse?.land || 'Deutschland'
         },
-        status: 'bezahlung_pending', // Warten auf Bezahlung
+        status: 'neu', // Warten auf Bezahlung - erst nach Zahlungseingang 'bezahlt' setzen
         source: 'inquiry_accepted',
         sourceInquiryId: inquiry._id,
         notizen: inquiry.message || '',

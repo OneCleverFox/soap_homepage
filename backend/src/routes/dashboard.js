@@ -688,6 +688,16 @@ async function getRechnungsStatistiken() {
               anzahlRechnungen: { $sum: 1 }
             }
           }
+        ],
+        // Neue Statistik: Überfällige Rechnungen
+        overdue: [
+          {
+            $match: {
+              status: 'sent',
+              'dates.dueDate': { $lt: new Date() }
+            }
+          },
+          { $count: "total" }
         ]
       }
     }
@@ -698,7 +708,8 @@ async function getRechnungsStatistiken() {
     rechnungenLetzter30Tage: stats[0].letzter30Tage[0]?.total || 0,
     nachStatus: stats[0].nachStatus,
     umsatzLetzter30Tage: stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0,
-    rechnungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlRechnungen || 0
+    rechnungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlRechnungen || 0,
+    overdue: stats[0].overdue[0]?.total || 0
   };
 }
 
@@ -742,6 +753,60 @@ async function getBestellungsStatistiken() {
               anzahlBestellungen: { $sum: 1 }
             }
           }
+        ],
+        // Neue Statistik: Bestellungen die versendet werden müssen
+        zuVersenden: [
+          { 
+            $match: { 
+              status: { $in: ['verpackt'] }, // Verpackte Bestellungen die verschickt werden müssen
+              $or: [
+                { 'zahlung.status': { $in: ['bezahlt', 'completed'] } }, // Bezahlte Bestellungen
+                { 'zahlung.status': 'ausstehend', 'payment.status': 'completed' }, // Alternative Zahlungsfelder
+                { status: 'verpackt' } // Direkt als verpackt markierte Bestellungen
+              ]
+            } 
+          },
+          { 
+            $project: {
+              bestellnummer: 1,
+              besteller: 1,
+              rechnungsadresse: 1,
+              artikel: 1,
+              preise: 1,
+              status: 1,
+              createdAt: 1,
+              zahlung: 1
+            }
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 5 } // Top 5 neueste
+        ],
+        // Neue Statistik: Bestellungen die bestätigt werden müssen  
+        zuBestaetigen: [
+          { 
+            $match: { 
+              status: { $in: ['bezahlt'] }, // Bezahlte Bestellungen die bestätigt werden müssen
+              $or: [
+                { 'zahlung.status': { $in: ['bezahlt', 'completed'] } }, // Bezahlte Bestellungen
+                { 'zahlung.status': 'ausstehend', 'payment.status': 'completed' }, // Alternative Zahlungsfelder
+                { status: 'bezahlt' } // Direkt als bezahlt markierte Bestellungen
+              ]
+            } 
+          },
+          { 
+            $project: {
+              bestellnummer: 1,
+              besteller: 1,
+              rechnungsadresse: 1,
+              artikel: 1,
+              preise: 1,
+              status: 1,
+              createdAt: 1,
+              zahlung: 1
+            }
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 5 } // Top 5 neueste
         ]
       }
     }
@@ -752,7 +817,9 @@ async function getBestellungsStatistiken() {
     bestellungenLetzter30Tage: stats[0].letzter30Tage[0]?.total || 0,
     nachStatus: stats[0].nachStatus,
     umsatzLetzter30Tage: stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0,
-    bestellungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlBestellungen || 0
+    bestellungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlBestellungen || 0,
+    zuVersenden: stats[0].zuVersenden || [],
+    zuBestaetigen: stats[0].zuBestaetigen || []
   };
 }
 
@@ -778,6 +845,21 @@ async function getInquiryStatistiken() {
         offeneAnfragen: [
           { $match: { status: 'pending' } },
           { $count: "total" }
+        ],
+        // Neue Statistik: Anfragen die Admin-Handlung benötigen
+        benoetigtGenehmigung: [
+          { $match: { status: 'pending' } }, // Pending Anfragen müssen genehmigt werden
+          { 
+            $project: {
+              inquiryId: 1,
+              customer: 1,
+              items: 1,
+              total: 1,
+              createdAt: 1
+            }
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 5 } // Top 5 neueste
         ]
       }
     }
@@ -786,7 +868,8 @@ async function getInquiryStatistiken() {
   return {
     gesamtInquiries: stats[0].gesamt[0]?.total || 0,
     nachStatus: stats[0].nachStatus,
-    offeneAnfragen: stats[0].offeneAnfragen[0]?.total || 0
+    offeneAnfragen: stats[0].offeneAnfragen[0]?.total || 0,
+    benoetigtGenehmigung: stats[0].benoetigtGenehmigung || []
   };
 }
 

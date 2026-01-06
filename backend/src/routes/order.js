@@ -691,7 +691,7 @@ router.get('/admin', async (req, res) => {
     console.log('🔍 Admin orders request:', { status, sort, limit });
     
     // Filter für Status
-    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'bezahlung_pending']; // Default - bezahlung_pending für Anfrage-Bestellungen hinzugefügt
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'verschickt']; // Default - alle gültigen Status
     
     if (status) {
       // Status kann ein comma-separated string oder einzelner wert sein
@@ -1115,6 +1115,33 @@ router.put('/:orderId/status', async (req, res) => {
       });
     }
     
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bestellung nicht gefunden'
+      });
+    }
+
+    // 🚨 NEUE VALIDIERUNG: Verpackt nur bei bezahlter Bestellung
+    if (status === 'verpackt') {
+      // Prüfen ob Zahlung abgeschlossen ist
+      if (order.zahlung?.status !== 'bezahlt') {
+        return res.status(400).json({
+          success: false,
+          message: 'Eine Bestellung kann nur als "verpackt" markiert werden, wenn die Zahlung abgeschlossen ist. Aktueller Zahlungsstatus: ' + (order.zahlung?.status || 'unbekannt') + '. Bitte warten Sie auf die Zahlung des Kunden.'
+        });
+      }
+      
+      // Zusätzlich: Status muss "bestätigt" oder "bezahlt" sein
+      if (!['bestaetigt', 'bezahlt'].includes(order.status)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Eine Bestellung kann nur von "bestätigt" oder "bezahlt" zu "verpackt" geändert werden. Aktueller Status: ' + order.status
+        });
+      }
+    }
+    
     // Für verschickt Status: Sendungsnummer erforderlich und validieren
     if (status === 'verschickt') {
       if (!versand || !versand.sendungsnummer) {
@@ -1133,14 +1160,6 @@ router.put('/:orderId/status', async (req, res) => {
           errors: shippingValidation.errors
         });
       }
-    }
-    
-    const order = await Order.findById(orderId);
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: 'Bestellung nicht gefunden'
-      });
     }
     
     // Status aktualisieren und Status-Verlauf hinzufügen
