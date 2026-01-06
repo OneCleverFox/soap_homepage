@@ -45,7 +45,7 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -56,6 +56,7 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 
 const InvoiceList = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
@@ -66,12 +67,15 @@ const InvoiceList = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   
-  // Filter State
-  const [filters, setFilters] = useState({
-    status: 'all',
-    dateFrom: '',
-    dateTo: '',
-    search: ''
+  // Filter State - initialisiere mit URL-Parametern
+  const [filters, setFilters] = useState(() => {
+    const urlParams = new URLSearchParams(location.search);
+    return {
+      status: urlParams.get('status') || 'all',
+      dateFrom: urlParams.get('dateFrom') || '',
+      dateTo: urlParams.get('dateTo') || '',
+      search: urlParams.get('search') || ''
+    };
   });
   
   // UI State
@@ -106,7 +110,12 @@ const InvoiceList = () => {
       const cleanFilters = {};
       Object.keys(filters).forEach(key => {
         if (filters[key] && filters[key] !== '' && filters[key] !== 'all') {
-          cleanFilters[key] = filters[key];
+          if (key === 'search') {
+            // Suchbegriff als customer-Parameter senden
+            cleanFilters.customer = filters[key];
+          } else {
+            cleanFilters[key] = filters[key];
+          }
         }
       });
       
@@ -180,27 +189,57 @@ const InvoiceList = () => {
     setPage(0);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
+  const getStatusColor = (invoice) => {
+    // Farblogik basierend auf tatsächlichem Zahlungsstatus
+    if (invoice.payment && (invoice.payment.status === 'paid' || invoice.payment.paidDate)) {
+      return 'success'; // Grün für bezahlt
+    }
+    
+    if (invoice.status === 'paid') {
+      return 'success'; // Grün für bezahlt
+    }
+    
+    if (invoice.status === 'sent' && invoice.isOverdue) {
+      return 'error'; // Rot für überfällig
+    }
+    
+    switch (invoice.status) {
       case 'draft': return 'default';
-      case 'sent': return 'info';
+      case 'sent': return 'warning'; // Orange für ausstehende Zahlung
       case 'paid': return 'success';
       case 'overdue': return 'error';
       case 'cancelled': return 'secondary';
-      case 'pending': return 'warning';
+      case 'pending': return 'info';
       default: return 'default';
     }
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
+  const getStatusText = (invoice) => {
+    // NEUER WORKFLOW: Zahlungsstatus = Rechnungsstatus
+    // 1. Prüfe echte Bezahlung (payment.status oder paidDate)
+    if (invoice.payment && (invoice.payment.status === 'paid' || invoice.payment.paidDate)) {
+      return 'Bezahlt';
+    }
+    
+    // 2. Prüfe wenn Rechnung als paid markiert ist (für manuelle Bezahlung)
+    if (invoice.status === 'paid') {
+      return 'Bezahlt';
+    }
+    
+    // 3. Prüfe Überfälligkeit für versendete Rechnungen
+    if (invoice.status === 'sent' && invoice.isOverdue) {
+      return 'Überfällig';
+    }
+    
+    // 4. Standard Status-Mapping
+    switch (invoice.status) {
       case 'draft': return 'Entwurf';
-      case 'sent': return 'Versendet';
+      case 'sent': return 'Versendet - Zahlung ausstehend';
       case 'paid': return 'Bezahlt';
-      case 'overdue': return 'Überfällig';
+      case 'overdue': return 'Überfällig';  
       case 'cancelled': return 'Storniert';
-      case 'pending': return 'Ausstehend';
-      default: return status;
+      case 'pending': return 'Zum Versenden bereit';
+      default: return invoice.status;
     }
   };
 
@@ -217,7 +256,7 @@ const InvoiceList = () => {
 
       const data = await response.json();
       if (data.success) {
-        showSnackbar(`Status erfolgreich auf "${getStatusText(newStatus)}" geändert`, 'success');
+        showSnackbar(`Status erfolgreich geändert`, 'success');
         loadInvoices();
         loadStats();
       } else {
@@ -602,16 +641,14 @@ const InvoiceList = () => {
                         </Typography>
                         <Chip
                           size="small"
-                          label={getStatusText(invoice.status)}
-                          color={getStatusColor(invoice.status)}
+                          label={getStatusText(invoice)}
+                          color={getStatusColor(invoice)}
                         />
                       </Box>
                       
                       {/* Kunde */}
                       <Typography variant="body2" color="textSecondary" mb={1}>
-                        {invoice.customerData?.company || 
-                         `${invoice.customerData?.firstName || ''} ${invoice.customerData?.lastName || ''}`.trim() ||
-                         'Unbekannt'}
+                        {invoice.customerName || 'Unbekannt'}
                       </Typography>
                       
                       {/* Betragszeile mit Datum */}
@@ -708,12 +745,10 @@ const InvoiceList = () => {
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {invoice.customerData?.company || 
-                             `${invoice.customerData?.firstName || ''} ${invoice.customerData?.lastName || ''}`.trim() ||
-                             'Unbekannt'}
+                            {invoice.customerName || 'Unbekannt'}
                           </Typography>
                           <Typography variant="caption" color="textSecondary">
-                            {invoice.customerData?.email}
+                            {invoice.customerEmail || ''}
                           </Typography>
                         </TableCell>
                         <TableCell>
@@ -729,8 +764,8 @@ const InvoiceList = () => {
                         <TableCell>
                           <Chip
                             size="small"
-                            label={getStatusText(invoice.status)}
-                            color={getStatusColor(invoice.status)}
+                            label={getStatusText(invoice)}
+                            color={getStatusColor(invoice)}
                           />
                         </TableCell>
                         <TableCell>
@@ -854,14 +889,13 @@ const InvoiceList = () => {
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" gutterBottom>Kunde:</Typography>
                 <Typography variant="body2">
-                  {selectedInvoice.customerData?.company || 
-                   `${selectedInvoice.customerData?.firstName || ''} ${selectedInvoice.customerData?.lastName || ''}`.trim()}
+                  {selectedInvoice.customerName || 'Unbekannt'}
                 </Typography>
                 <Typography variant="body2">
-                  {selectedInvoice.customerData?.street}
+                  {selectedInvoice.customer?.customerData?.street || ''}
                 </Typography>
                 <Typography variant="body2">
-                  {selectedInvoice.customerData?.postalCode} {selectedInvoice.customerData?.city}
+                  {selectedInvoice.customer?.customerData?.postalCode || ''} {selectedInvoice.customer?.customerData?.city || ''}
                 </Typography>
               </Grid>
               <Grid item xs={12} md={6}>
@@ -872,8 +906,8 @@ const InvoiceList = () => {
                 <Typography variant="body2">
                   Status: <Chip
                     size="small"
-                    label={getStatusText(selectedInvoice.status)}
-                    color={getStatusColor(selectedInvoice.status)}
+                    label={getStatusText(selectedInvoice)}
+                    color={getStatusColor(selectedInvoice)}
                   />
                 </Typography>
                 <Typography variant="body2">
@@ -957,8 +991,8 @@ const InvoiceList = () => {
               <Typography><strong>Betrag:</strong> {invoiceToDelete.amounts.total.toFixed(2)}€</Typography>
               <Typography><strong>Status:</strong> 
                 <Chip
-                  label={getStatusText(invoiceToDelete.status)}
-                  color={getStatusColor(invoiceToDelete.status)}
+                  label={getStatusText(invoiceToDelete)}
+                  color={getStatusColor(invoiceToDelete)}
                   size="small"
                   sx={{ ml: 1 }}
                 />

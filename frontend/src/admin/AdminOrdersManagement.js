@@ -593,9 +593,18 @@ const AdminOrdersManagement = () => {
     // Apply status filter
     if (filters.status !== 'all') {
       if (filters.status === 'pending') {
-        items = items.filter(item => 
-          ['neu', 'bezahlt', 'bestaetigt', 'verpackt'].includes(item.status)
-        );
+        // Nur Admin-handlungsrelevante Items anzeigen
+        items = items.filter(item => {
+          // Für Anfragen: Nur pending (wartend auf Admin-Genehmigung), nicht accepted (wartet auf Kunde)
+          if (item.isInquiry) {
+            return item.status === 'neu' && !item.awaitingPayment; // Nur wartende Anfragen, nicht Zahlungs-wartende
+          }
+          
+          // Für Bestellungen: Nur die, wo Admin handeln kann
+          // Nicht "neu" (wartet auf Kunde), aber alles ab "bezahlt"
+          return ['bezahlt', 'bestaetigt', 'verpackt'].includes(item.status) && 
+                 item.zahlung?.status === 'bezahlt'; // Zusätzlich: Zahlung muss abgeschlossen sein
+        });
       } else {
         items = items.filter(item => item.status === filters.status);
       }

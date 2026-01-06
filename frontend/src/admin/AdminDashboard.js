@@ -211,36 +211,113 @@ const AdminDashboard = () => {
     }
   };
 
+  // Hilfsfunktion für intelligente Farblogik
+  const getCardColor = (title, value, subtitle) => {
+    switch (title) {
+      case 'Fertigprodukte ohne Bestand':
+        return value > 0 ? 'error' : 'success'; // Rot wenn Bestand fehlt, Grün wenn ok
+      
+      case 'Rohstoffe unter Mindestbestand':
+        if (value > 5) return 'error';    // Rot: Sehr kritisch (>5 Rohstoffe)
+        if (value > 0) return 'warning';  // Orange: Kritisch (1-5 Rohstoffe) 
+        return 'success';                 // Grün: Alles ok
+      
+      case 'Rechnungen (30 Tage)':
+        return 'info'; // Informativ, keine Handlung nötig
+      
+      case 'Anfragen zur Genehmigung':
+        if (value > 10) return 'error';   // Rot: Viele Anfragen (>10)
+        if (value > 0) return 'warning';  // Orange: Anfragen vorhanden
+        return 'success';                 // Grün: Alle bearbeitet
+      
+      case 'Zu bestätigen':
+        if (value > 5) return 'error';    // Rot: Viele unbestätigte (>5)
+        if (value > 0) return 'warning';  // Orange: Handlung erforderlich
+        return 'success';                 // Grün: Alle bestätigt
+      
+      case 'Zu versenden':
+        if (value > 3) return 'error';    // Rot: Versendestau (>3)
+        if (value > 0) return 'info';     // Blau: Bereit zum Versenden
+        return 'success';                 // Grün: Alle versendet
+      
+      case 'Neue Bestellungen':
+        if (value > 10) return 'warning'; // Orange: Viele neue Bestellungen
+        if (value > 0) return 'info';     // Blau: Neue Bestellungen da
+        return 'success';                 // Grün: Alle bearbeitet
+        
+      case 'Überfällige Rechnungen':
+        if (value > 5) return 'error';    // Rot: Viele überfällige (>5)
+        if (value > 0) return 'warning';  // Orange: Überfällige vorhanden
+        return 'success';                 // Grün: Keine überfälligen
+      
+      default:
+        return value > 0 ? 'warning' : 'success';
+    }
+  };
+
   // KPI-Karten Daten
   const kpiCards = [
     {
       title: 'Fertigprodukte ohne Bestand',
       value: warnungen.fertigprodukteOhneBestand,
       icon: <WarningIcon />,
-      color: warnungen.fertigprodukteOhneBestand > 0 ? 'error' : 'success',
+      color: getCardColor('Fertigprodukte ohne Bestand', warnungen.fertigprodukteOhneBestand),
       action: () => navigate('/admin/lager')
     },
     {
       title: 'Rohstoffe unter Mindestbestand',
       value: warnungen.rohstoffeUnterMindestbestand,
       icon: <InventoryIcon />,
-      color: warnungen.rohstoffeUnterMindestbestand > 0 ? 'warning' : 'success',
+      color: getCardColor('Rohstoffe unter Mindestbestand', warnungen.rohstoffeUnterMindestbestand),
       action: () => navigate('/admin/lager')
     },
     {
       title: 'Rechnungen (30 Tage)',
       value: verkauf.rechnungen?.rechnungenLetzter30Tage || 0,
       icon: <ShoppingCartIcon />,
-      color: 'info',
+      color: getCardColor('Rechnungen (30 Tage)', verkauf.rechnungen?.rechnungenLetzter30Tage || 0),
       subtitle: formatCurrency(verkauf.rechnungen?.umsatzLetzter30Tage || 0),
-      action: () => navigate('/admin/rechnungen')
+      action: () => navigate('/admin/invoice-list')
     },
     {
-      title: 'Offene Anfragen',
-      value: verkauf.anfragen.offeneAnfragen,
+      title: 'Anfragen zur Genehmigung',
+      value: verkauf.anfragen?.benoetigtGenehmigung?.length || 0,
       icon: <EmailIcon />,
-      color: 'primary',
+      color: getCardColor('Anfragen zur Genehmigung', verkauf.anfragen?.benoetigtGenehmigung?.length || 0),
+      subtitle: (verkauf.anfragen?.benoetigtGenehmigung?.length || 0) > 0 ? 'Handlung erforderlich' : 'Alle bearbeitet',
       action: () => navigate('/admin/anfragen')
+    },
+    {
+      title: 'Neue Bestellungen',
+      value: verkauf.bestellungen?.nachStatus?.find(s => s._id === 'neu')?.count || 0,
+      icon: <ShoppingCartIcon />,
+      color: getCardColor('Neue Bestellungen', verkauf.bestellungen?.nachStatus?.find(s => s._id === 'neu')?.count || 0),
+      subtitle: 'Warten auf Bezahlung',
+      action: () => navigate('/admin/bestellungen?status=neu')
+    },
+    {
+      title: 'Überfällige Rechnungen',
+      value: verkauf.rechnungen?.overdue || 0,
+      icon: <WarningIcon />,
+      color: getCardColor('Überfällige Rechnungen', verkauf.rechnungen?.overdue || 0),
+      subtitle: (verkauf.rechnungen?.overdue || 0) > 0 ? 'Mahnung erforderlich' : 'Alle pünktlich',
+      action: () => navigate('/admin/invoice-list?status=overdue')
+    },
+    {
+      title: 'Zu bestätigen',
+      value: verkauf.bestellungen?.zuBestaetigen?.length || 0,
+      icon: <ShoppingCartIcon />,
+      color: getCardColor('Zu bestätigen', verkauf.bestellungen?.zuBestaetigen?.length || 0),
+      subtitle: (verkauf.bestellungen?.zuBestaetigen?.length || 0) > 0 ? 'Bezahlt - bereit zur Bestätigung' : 'Alle bestätigt',
+      action: () => navigate('/admin/bestellungen?status=bezahlt')
+    },
+    {
+      title: 'Zu versenden',
+      value: verkauf.bestellungen?.zuVersenden?.length || 0,
+      icon: <ShippingIcon />,
+      color: getCardColor('Zu versenden', verkauf.bestellungen?.zuVersenden?.length || 0),
+      subtitle: (verkauf.bestellungen?.zuVersenden?.length || 0) > 0 ? 'Verpackt - bereit zum Versand' : 'Alle versendet',
+      action: () => navigate('/admin/bestellungen?status=verpackt')
     }
   ];
 
@@ -314,6 +391,223 @@ const AdminDashboard = () => {
             </Card>
           </Grid>
         ))}
+      </Grid>
+
+      {/* Handlungsbedarf Sektion */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        
+        {/* Anfragen zur Genehmigung */}
+        {verkauf.anfragen?.benoetigtGenehmigung && verkauf.anfragen.benoetigtGenehmigung.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Card sx={{ height: '100%', borderLeft: 6, borderLeftColor: 'warning.main' }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <EmailIcon sx={{ mr: 1, color: 'warning.main' }} />
+                  Anfragen zur Genehmigung ({verkauf.anfragen.benoetigtGenehmigung.length})
+                </Typography>
+                
+                <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {verkauf.anfragen.benoetigtGenehmigung.map((inquiry) => (
+                    <Card key={inquiry._id} variant="outlined" sx={{ mb: 2 }}>
+                      <CardContent sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            {inquiry.inquiryId}
+                          </Typography>
+                          <Chip 
+                            label={`${inquiry.total?.toFixed(2)}€`} 
+                            size="small" 
+                            color="primary"
+                          />
+                        </Box>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Kunde: {inquiry.customer?.name || 'Unbekannt'}
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ mb: 2 }}>
+                          {inquiry.items?.length || 0} Artikel
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button 
+                            size="small" 
+                            variant="contained"
+                            color="success"
+                            onClick={() => navigate(`/admin/anfragen`)}
+                          >
+                            Genehmigen
+                          </Button>
+                          <Button 
+                            size="small" 
+                            variant="outlined"
+                            onClick={() => navigate(`/admin/anfragen`)}
+                          >
+                            Details
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+                
+                <Button 
+                  fullWidth 
+                  variant="outlined" 
+                  sx={{ mt: 2 }}
+                  onClick={() => navigate('/admin/anfragen')}
+                >
+                  Alle Anfragen verwalten
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Bestellungen zu bestätigen */}
+        {verkauf.bestellungen?.zuBestaetigen && verkauf.bestellungen.zuBestaetigen.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Card sx={{ height: '100%', borderLeft: 6, borderLeftColor: 'success.main' }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <ShoppingCartIcon sx={{ mr: 1, color: 'success.main' }} />
+                  Bestellungen zu bestätigen ({verkauf.bestellungen.zuBestaetigen.length})
+                </Typography>
+                
+                <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {verkauf.bestellungen.zuBestaetigen.map((order) => (
+                    <Card key={order._id} variant="outlined" sx={{ mb: 2 }}>
+                      <CardContent sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            {order.bestellnummer}
+                          </Typography>
+                          <Chip 
+                            label={`${order.preise?.gesamtsumme?.toFixed(2) || '0.00'}€`} 
+                            size="small" 
+                            color="success"
+                          />
+                        </Box>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Kunde: {order.besteller?.vorname} {order.besteller?.nachname}
+                        </Typography>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Status: Bezahlt - bereit zur Bestätigung
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ mb: 2 }}>
+                          {order.artikel?.length || 0} Artikel
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button 
+                            size="small" 
+                            variant="contained"
+                            color="success"
+                            onClick={() => navigate(`/admin/bestellungen?status=bezahlt&highlight=${order.bestellnummer}`)}
+                          >
+                            Bestätigen
+                          </Button>
+                          <Button 
+                            size="small" 
+                            variant="outlined"
+                            onClick={() => navigate(`/admin/bestellungen?status=bezahlt&highlight=${order.bestellnummer}`)}
+                          >
+                            Details
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+                
+                <Button 
+                  fullWidth 
+                  variant="outlined" 
+                  sx={{ mt: 2 }}
+                  onClick={() => navigate('/admin/bestellungen?status=bezahlt')}
+                >
+                  Alle bezahlten Bestellungen anzeigen
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Bestellungen zu versenden */}
+        {verkauf.bestellungen?.zuVersenden && verkauf.bestellungen.zuVersenden.length > 0 && (
+          <Grid item xs={12} md={6}>
+            <Card sx={{ height: '100%', borderLeft: 6, borderLeftColor: 'info.main' }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
+                  <ShippingIcon sx={{ mr: 1, color: 'info.main' }} />
+                  Bestellungen zu versenden ({verkauf.bestellungen.zuVersenden.length})
+                </Typography>
+                
+                <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {verkauf.bestellungen.zuVersenden.map((order) => (
+                    <Card key={order._id} variant="outlined" sx={{ mb: 2 }}>
+                      <CardContent sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            {order.bestellnummer}
+                          </Typography>
+                          <Chip 
+                            label={`${order.preise?.gesamtsumme?.toFixed(2) || '0.00'}€`} 
+                            size="small" 
+                            color="primary"
+                          />
+                        </Box>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Kunde: {order.besteller?.vorname} {order.besteller?.nachname}
+                        </Typography>
+                        
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Status: Verpackt - bereit zum Versenden
+                        </Typography>
+                        
+                        <Typography variant="body2" sx={{ mb: 2 }}>
+                          {order.artikel?.length || 0} Artikel
+                        </Typography>
+                        
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button 
+                            size="small" 
+                            variant="contained"
+                            color="primary"
+                            onClick={() => navigate(`/admin/bestellungen?status=verpackt&highlight=${order.bestellnummer}`)}
+                          >
+                            Versenden
+                          </Button>
+                          <Button 
+                            size="small" 
+                            variant="outlined"
+                            onClick={() => navigate(`/admin/bestellungen?status=verpackt&highlight=${order.bestellnummer}`)}
+                          >
+                            Details
+                          </Button>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+                
+                <Button 
+                  fullWidth 
+                  variant="outlined" 
+                  sx={{ mt: 2 }}
+                  onClick={() => navigate('/admin/bestellungen?status=verpackt')}
+                >
+                  Alle zu versendenden Bestellungen anzeigen
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+        )}
+
       </Grid>
 
       {/* Haupt-Dashboard Grid */}

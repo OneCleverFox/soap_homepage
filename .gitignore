@@ -47,8 +47,21 @@ dist/
 tmp/
 temp/
 
+# Debug und Test-Dateien (Development only)
+**/debug*.js
+**/test*.js
+!backend/scripts/test*.js
+# Ausnahmen für wichtige Test-Scripts:
+!backend/scripts/testPayPalEnv.js
+
+# Session-Dokumentation (werden in README.md konsolidiert)
+*_COMPLETE.md
+*_FIX.md
+DEBUG_*.md
+TEST_*.md
+
 # Dokumentation - Wichtige Dateien NICHT ignorieren
-# *.md wird NICHT mehr ignoriert - alle .md Dateien werden committed
+# README.md, docs/, und Produktions-relevante .md werden committed
 
 # Environment vault files
 !.env.vault

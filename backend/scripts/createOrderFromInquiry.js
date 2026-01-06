@@ -84,6 +84,10 @@ async function createOrderFromInquiry() {
     // Bestellnummer generieren
     const bestellnummer = `ORDER-${Date.now()}`;
     
+    // Versandkosten berechnen
+    const versandkosten = inquiry.total >= 30 ? 0 : 5.99;
+    const gesamtsumme = inquiry.total + versandkosten;
+
     // Neue Bestellung erstellen
     const neueBestellung = new Order({
       bestellnummer: bestellnummer,
@@ -113,10 +117,10 @@ async function createOrderFromInquiry() {
       artikel: artikelMitBestand,
       preise: {
         zwischensumme: inquiry.total,
-        versandkosten: 0,
+        versandkosten: versandkosten, // ✅ Korrekte Versandkostenberechnung
         mwst: {
           satz: 19,
-          betrag: inquiry.total * 0.19 / 1.19
+          betrag: gesamtsumme * 0.19 / 1.19
         },
         rabatt: {
           betrag: 0,
@@ -124,7 +128,7 @@ async function createOrderFromInquiry() {
           grund: '',
           prozent: 0
         },
-        gesamtsumme: inquiry.total
+        gesamtsumme: gesamtsumme // ✅ Gesamtsumme inkl. Versandkosten
       },
       status: 'bestaetigt',
       zahlungsart: 'rechnung',

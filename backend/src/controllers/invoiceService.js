@@ -20,7 +20,13 @@ class InvoiceService {
       
       // Filter nach Status
       if (req.query.status && req.query.status !== 'all') {
-        filter.status = req.query.status;
+        if (req.query.status === 'overdue') {
+          // Spezialfilter für überfällige Rechnungen
+          filter.status = 'sent';
+          filter['dates.dueDate'] = { $lt: new Date() };
+        } else {
+          filter.status = req.query.status;
+        }
       }
       
       // Filter nach Kunde (durchsuche customerData direkt)
@@ -50,6 +56,8 @@ class InvoiceService {
         }
       }
 
+      console.log('📋 Invoice filter:', JSON.stringify(filter, null, 2));
+
       const invoices = await Invoice.find(filter)
         .populate('template', 'name')
         .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber')
@@ -57,17 +65,27 @@ class InvoiceService {
         .limit(limit)
         .skip(skip);
 
-      // Customer-Daten für die Response aufbereiten
-      const invoicesWithCustomer = invoices.map(invoice => ({
-        ...invoice.toObject(),
-        customerName: invoice.customer?.customerData ? 
-          `${invoice.customer.customerData.firstName || ''} ${invoice.customer.customerData.lastName || ''}`.trim() || 
-          invoice.customer.customerData.company || 'Unbekannt'
-          : 'Unbekannt',
-        customerEmail: invoice.customer?.customerData?.email || ''
-      }));
+      // Customer-Daten für die Response aufbereiten und überfällige Tage berechnen
+      const invoicesWithCustomer = invoices.map(invoice => {
+        const isOverdue = invoice.status === 'sent' && invoice.dates.dueDate < new Date();
+        const overdueDays = isOverdue ? 
+          Math.ceil((Date.now() - invoice.dates.dueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+
+        return {
+          ...invoice.toObject(),
+          customerName: invoice.customer?.customerData ? 
+            `${invoice.customer.customerData.firstName || ''} ${invoice.customer.customerData.lastName || ''}`.trim() || 
+            invoice.customer.customerData.company || 'Unbekannt'
+            : 'Unbekannt',
+          customerEmail: invoice.customer?.customerData?.email || '',
+          isOverdue,
+          overdueDays
+        };
+      });
 
       const total = await Invoice.countDocuments(filter);
+
+      console.log(`✅ ${invoices.length} Rechnungen gefunden (Filter: ${req.query.status || 'all'})`);
 
       res.json({
         success: true,
@@ -105,7 +123,12 @@ class InvoiceService {
             pendingAmount: { 
               $sum: {
                 $cond: [
-                  { $eq: ['$payment.status', 'pending'] },
+                  {
+                    $and: [
+                      { $ne: ['$payment.status', 'paid'] },
+                      { $eq: ['$payment.paidDate', null] }
+                    ]
+                  },
                   '$amounts.total',
                   0
                 ]
@@ -114,7 +137,12 @@ class InvoiceService {
             paidAmount: { 
               $sum: {
                 $cond: [
-                  { $eq: ['$payment.status', 'paid'] },
+                  {
+                    $or: [
+                      { $eq: ['$payment.status', 'paid'] },
+                      { $ne: ['$payment.paidDate', null] }
+                    ]
+                  },
                   '$amounts.total',
                   0
                 ]
@@ -330,6 +358,7 @@ class InvoiceService {
         tax: {
           isSmallBusiness
         },
+        status: 'sent', // Manuell erstellte Rechnungen sind direkt 'versendet', nicht 'draft'
         notes: {
           internal: notes?.internal || '',
           customer: notes?.customer || ''

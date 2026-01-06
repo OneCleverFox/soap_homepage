@@ -99,6 +99,7 @@ class OrderInvoiceService {
         })) || [],
         gesamtsumme: order.preise?.gesamtsumme || 0,
         nettosumme: order.preise?.zwischensumme || 0,
+        versandkosten: order.preise?.versandkosten || 0, // ✅ Versandkosten hinzufügen
         mwst: order.preise?.mwst?.betrag || 0,
         zahlungsmethode: order.zahlung?.methode || 'Überweisung'
       };
@@ -177,9 +178,9 @@ class OrderInvoiceService {
               tax: {
                 isSmallBusiness: template.companyInfo?.isSmallBusiness || false
               },
-              status: 'sent',
+              status: 'pending', // Bei automatischer Erstellung erst 'pending' - Admin muss manuell auf 'sent' setzen
               notes: {
-                internal: `Automatisch generiert für Bestellung ${order.bestellnummer}`,
+                internal: `Automatisch generiert für Bestellung ${order.bestellnummer} - Status manuell auf 'versendet' setzen`,
                 customer: ''
               },
               // Verknüpfung zur ursprünglichen Bestellung
