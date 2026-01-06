@@ -140,7 +140,7 @@ router.post("/create-admin", async (req, res) => {
 
     // Preise berechnen (Deutsche Steuerbehandlung: Preise inkl. MwSt.)
     const zwischensumme = artikelMitBestand.reduce((sum, item) => sum + item.gesamtpreis, 0);
-    const versandkosten = zwischensumme < 50 ? 4.99 : 0;
+    const versandkosten = zwischensumme < 30 ? 5.99 : 0;
     const mwstSatz = 19;
     
     // In Deutschland sind Preise normalerweise INKLUSIVE MwSt.

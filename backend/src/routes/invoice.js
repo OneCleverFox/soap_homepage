@@ -96,7 +96,7 @@ router.get('/sample-data', (req, res) => {
       ],
       netTotal: 26.03,
       vatTotal: 4.94,
-      shipping: { cost: 4.99 },
+      shipping: { cost: 5.99 },
       grandTotal: 35.96
     },
     invoice: {

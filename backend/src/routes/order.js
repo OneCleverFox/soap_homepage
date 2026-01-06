@@ -691,7 +691,7 @@ router.get('/admin', async (req, res) => {
     console.log('🔍 Admin orders request:', { status, sort, limit });
     
     // Filter für Status
-    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt']; // Default
+    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'bezahlung_pending']; // Default - bezahlung_pending für Anfrage-Bestellungen hinzugefügt
     
     if (status) {
       // Status kann ein comma-separated string oder einzelner wert sein

@@ -634,16 +634,73 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
       });
 
     } else {
-      // Nur annehmen, aber nicht konvertieren - Kunde muss erst bezahlen
-      inquiry.status = 'accepted';
+      // Anfrage annehmen und automatisch Bestellung + Rechnung erstellen
+      console.log('🔄 Erstelle automatisch Bestellung für angenommene Anfrage...');
+      
+      // Konvertiere Anfrage zu Bestellung
+      const neueBestellung = new Order({
+        // bestellnummer wird automatisch generiert durch pre-save hook
+        kundenId: inquiry.kundenId || null,
+        artikel: inquiry.items,
+        bestellsumme: inquiry.total,
+        versandkosten: inquiry.versandkosten || 5.99,
+        gesamtsumme: inquiry.total + (inquiry.versandkosten || 5.99),
+        rechnungsadresse: {
+          vorname: inquiry.vorname || '',
+          nachname: inquiry.nachname || '',
+          strasse: inquiry.adresse?.strasse || '',
+          hausnummer: inquiry.adresse?.hausnummer || '',
+          plz: inquiry.adresse?.plz || '',
+          ort: inquiry.adresse?.ort || inquiry.adresse?.stadt || '',
+          land: inquiry.adresse?.land || 'Deutschland',
+          email: inquiry.email
+        },
+        lieferadresse: inquiry.lieferadresse || {
+          vorname: inquiry.vorname || '',
+          nachname: inquiry.nachname || '',
+          strasse: inquiry.adresse?.strasse || '',
+          hausnummer: inquiry.adresse?.hausnummer || '',
+          plz: inquiry.adresse?.plz || '',
+          ort: inquiry.adresse?.ort || inquiry.adresse?.stadt || '',
+          land: inquiry.adresse?.land || 'Deutschland'
+        },
+        status: 'bezahlung_pending', // Warten auf Bezahlung
+        source: 'inquiry_accepted',
+        sourceInquiryId: inquiry._id,
+        notizen: inquiry.message || '',
+        bestelldatum: new Date(),
+        paymentStatus: 'pending'
+      });
+
+      await neueBestellung.save();
+      console.log(`✅ Bestellung erstellt: ${neueBestellung.bestellnummer}`);
+
+      // Automatisch Rechnung erstellen
+      try {
+        const orderInvoiceService = require('../services/orderInvoiceService');
+        const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(neueBestellung._id);
+        console.log('✅ Rechnung automatisch erstellt:', invoiceResult.invoiceNumber);
+      } catch (invoiceError) {
+        console.warn('⚠️ Warnung: Rechnung konnte nicht automatisch erstellt werden:', invoiceError.message);
+        // Nicht abbrechen, falls Rechnungserstellung fehlschlägt
+      }
+
+      // Anfrage als konvertiert markieren
+      inquiry.status = 'converted_to_order';
       inquiry.acceptedAt = new Date();
+      inquiry.convertedOrderId = neueBestellung._id;
       
       await inquiry.save();
       
       res.json({
         success: true,
-        message: 'Anfrage wurde angenommen. Kunde wird über Zahlungsmöglichkeit informiert.',
-        inquiry: inquiry
+        message: 'Anfrage wurde angenommen. Bestellung und Rechnung wurden automatisch erstellt.',
+        inquiry: inquiry,
+        order: {
+          orderId: neueBestellung._id,
+          bestellnummer: neueBestellung.bestellnummer,
+          status: neueBestellung.status
+        }
       });
     }
     
