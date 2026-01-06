@@ -287,12 +287,12 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                 if (verwendeZweiRohseifen) {
                   // === ZWEI ROHSEIFEN MODUS ===
                   console.log(`  🔄 ZWEI ROHSEIFEN MODUS für ${artikel.name}`);
-                  console.log(`  📊 Gewichtverteilung: Seife 1 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}%, Seife 2 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}%`);
+                  console.log(`  📊 Gewichtverteilung: Seife 1 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}%, Seife 2 ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}%`);
                   
                   // Erste Rohseife
                   const rohseife1 = await Rohseife.findOne({ bezeichnung: artikel.seife });
                   if (rohseife1) {
-                    const gewicht1 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife1 / 100));
+                    const gewicht1 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent / 100));
                     const benoetigt1 = gewicht1 * buchungsAnzahl;
                     
                     if (rohseife1.aktuellVorrat >= benoetigt1) {
@@ -312,7 +312,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                         bestandVorher: vorher1,
                         bestandNachher: rohseife1.aktuellVorrat,
                         grund: `Automatische Rohstoff-Subtraktion (Seife 1): ${buchungsAnzahl}x ${artikel.name}`,
-                        notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}% (${gewicht1}g)`,
+                        notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}% (${gewicht1}g)`,
                         referenz: {
                           typ: 'fertigprodukt-inventur',
                           produktId: artikel._id,
@@ -321,7 +321,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                         }
                       });
                       
-                      console.log(`  ✅ Rohseife 1 ${rohseife1.bezeichnung}: -${benoetigt1}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1}%)`);
+                      console.log(`  ✅ Rohseife 1 ${rohseife1.bezeichnung}: -${benoetigt1}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent})%`);
                     } else {
                       rohstoffFehler.push(`Nicht genug ${rohseife1.bezeichnung} (Seife 1): benötigt ${benoetigt1}g, verfügbar ${rohseife1.aktuellVorrat}g`);
                     }
@@ -333,7 +333,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                   if (artikel.rohseifenKonfiguration?.seife2) {
                     const rohseife2 = await Rohseife.findOne({ bezeichnung: artikel.rohseifenKonfiguration.seife2 });
                     if (rohseife2) {
-                      const gewicht2 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife2 / 100));
+                      const gewicht2 = Math.round(artikel.gramm * (artikel.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent / 100));
                       const benoetigt2 = gewicht2 * buchungsAnzahl;
                       
                       if (rohseife2.aktuellVorrat >= benoetigt2) {
@@ -353,7 +353,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                           bestandVorher: vorher2,
                           bestandNachher: rohseife2.aktuellVorrat,
                           grund: `Automatische Rohstoff-Subtraktion (Seife 2): ${buchungsAnzahl}x ${artikel.name}`,
-                          notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}% (${gewicht2}g)`,
+                          notizen: `Zwei-Rohseifen-Produkt - Anteil ${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}% (${gewicht2}g)`,
                           referenz: {
                             typ: 'fertigprodukt-inventur',
                             produktId: artikel._id,
@@ -362,7 +362,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                           }
                         });
                         
-                        console.log(`  ✅ Rohseife 2 ${rohseife2.bezeichnung}: -${benoetigt2}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2}%)`);
+                        console.log(`  ✅ Rohseife 2 ${rohseife2.bezeichnung}: -${benoetigt2}g (${artikel.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent})%`);
                       } else {
                         rohstoffFehler.push(`Nicht genug ${rohseife2.bezeichnung} (Seife 2): benötigt ${benoetigt2}g, verfügbar ${rohseife2.aktuellVorrat}g`);
                       }

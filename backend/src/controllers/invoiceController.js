@@ -424,7 +424,7 @@ class InvoiceController {
           netTotal: 26.03,
           vatTotal: 4.94,
           shipping: {
-            cost: 4.99,
+            cost: 5.99,
             netCost: 4.19,
             vatAmount: 0.80,
             vatRate: 19
@@ -2826,7 +2826,7 @@ class InvoiceController {
                 </tr>
                 <tr>
                   <td class="total-label">Versandkosten:</td>
-                  <td class="total-amount">${(data.order?.shipping?.cost || 4.99).toFixed(2)}€</td>
+                  <td class="total-amount">${(data.order?.shipping?.cost || 5.99).toFixed(2)}€</td>
                 </tr>
                 <tr class="grand-total">
                   <td class="total-label">Gesamtbetrag:</td>
