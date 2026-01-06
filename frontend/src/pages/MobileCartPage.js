@@ -23,7 +23,8 @@ import {
   Badge,
   AppBar,
   Toolbar,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -54,8 +55,8 @@ const MobileCartPage = () => {
   const [clearDialog, setClearDialog] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
 
-  const SHIPPING_COST = 7.69;
-  const FREE_SHIPPING_THRESHOLD = 50;
+  const SHIPPING_COST = 5.99;
+  const FREE_SHIPPING_THRESHOLD = 30;
 
   // Helper-Funktion um Bild-URLs zu korrigieren
   const getImageUrl = (url) => {
@@ -80,24 +81,16 @@ const MobileCartPage = () => {
     // Finde das Item um Bestandslimit zu prüfen
     const item = items.find(item => (item.id === productId || item.produktId === productId));
     const maxStock = item?.bestand?.menge || 0;
-    const isAvailable = item?.bestand?.verfuegbar === true;
     
-    // Prüfe Limits: min 1, max verfügbarer Bestand, max 99
+    // Prüfe Limits: min 1, max verfügbarer Bestand
     const minQuantity = 1;
-    const maxQuantity = isAvailable ? Math.min(maxStock, 99) : 1;
+    const maxQuantity = Math.max(maxStock, 1); // Mindestens 1, damit auch bei 0 Bestand die Buttons funktionieren
     
     if (newQuantity >= minQuantity && newQuantity <= maxQuantity) {
       updateQuantity(productId, newQuantity);
-    } else if (newQuantity > maxQuantity) {
-      // Zeige Warnung wenn Bestandslimit erreicht
-      toast(`Nur ${maxStock} Stück verfügbar`, {
-        icon: '⚠️',
-        style: {
-          background: '#fff3cd',
-          border: '1px solid #ffeaa7',
-          color: '#856404',
-        },
-      });
+    } else if (newQuantity > maxQuantity && maxStock > 0) {
+      // Setze auf Maximum ohne Toast
+      updateQuantity(productId, maxStock);
     }
   };
 
@@ -324,32 +317,47 @@ const MobileCartPage = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <IconButton 
                     size="small"
-                    onClick={() => handleQuantityChange(item.id || item.produktId, item.quantity - 1)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleQuantityChange(item.id || item.produktId, item.quantity - 1);
+                    }}
                     disabled={item.quantity <= 1}
                     sx={{ width: 28, height: 28 }}
                   >
                     <RemoveIcon fontSize="small" />
                   </IconButton>
                   
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      mx: 1, 
-                      minWidth: 24, 
-                      textAlign: 'center',
-                      fontWeight: 'bold'
+                  <TextField
+                    size="small"
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      handleQuantityChange(item.id || item.produktId, val);
                     }}
-                  >
-                    {item.quantity}
-                  </Typography>
+                    inputProps={{
+                      min: 1,
+                      max: Math.min(item.bestand?.menge || 0, 99),
+                      style: { textAlign: 'center', width: 35, fontSize: '0.875rem' }
+                    }}
+                    variant="standard"
+                    InputProps={{ disableUnderline: true }}
+                    sx={{ 
+                      mx: 0.5,
+                      '& .MuiInputBase-input': {
+                        fontWeight: 'bold',
+                        p: 0
+                      }
+                    }}
+                  />
                   
                   <IconButton 
                     size="small"
-                    onClick={() => handleQuantityChange(item.id || item.produktId, item.quantity + 1)}
-                    disabled={
-                      item.quantity >= Math.min(item.bestand?.menge || 0, 99) || 
-                      !item.bestand?.verfuegbar
-                    }
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleQuantityChange(item.id || item.produktId, item.quantity + 1);
+                    }}
+                    disabled={(item.bestand?.menge || 0) <= item.quantity}
                     sx={{ width: 28, height: 28 }}
                   >
                     <AddIcon fontSize="small" />

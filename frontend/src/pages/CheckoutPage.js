@@ -54,6 +54,7 @@ const CheckoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [customerData, setCustomerData] = useState(null);
   const [shopSettings, setShopSettings] = useState(null);
+  const [invoiceSettings, setInvoiceSettings] = useState(null);
   const [orderData, setOrderData] = useState({
     rechnungsadresse: {
       vorname: '',
@@ -130,6 +131,29 @@ const CheckoutPage = () => {
         checkoutMode: 'full',
         paypal: { available: true, mode: 'sandbox' }
       });
+    }
+  }, []);
+
+  // Rechnungseinstellungen laden für MwSt-Anzeige
+  const loadInvoiceSettings = useCallback(async () => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${apiUrl}/invoice/templates/default`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📄 Desktop Checkout: Invoice settings loaded:', data);
+        console.log('📄 Desktop Checkout: isSmallBusiness:', data.companyInfo?.isSmallBusiness);
+        setInvoiceSettings(data);
+      } else {
+        console.error('❌ Failed to load invoice settings');
+        // Fallback: MwSt anzeigen wenn Einstellungen nicht geladen werden können
+        setInvoiceSettings({ companyInfo: { isSmallBusiness: false } });
+      }
+    } catch (error) {
+      console.error('❌ Error loading invoice settings:', error);
+      // Fallback: MwSt anzeigen wenn Einstellungen nicht geladen werden können
+      setInvoiceSettings({ companyInfo: { isSmallBusiness: false } });
     }
   }, []);
 
@@ -219,6 +243,11 @@ const CheckoutPage = () => {
   useEffect(() => {
     loadShopSettings();
   }, [loadShopSettings]);
+
+  // Rechnungseinstellungen beim Laden abrufen
+  useEffect(() => {
+    loadInvoiceSettings();
+  }, [loadInvoiceSettings]);
 
   // Debug useEffect für Rechnungsadresse
   useEffect(() => {
@@ -379,7 +408,7 @@ const CheckoutPage = () => {
   const handleCreateOrder = async () => {
       // Bestellung erstellen (KORREKTE Steuerberechnung) - nur verfügbare Artikel
       const gesamtsumme = availableItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      const versandkosten = gesamtsumme >= 50 ? 0 : 4.99;
+      const versandkosten = gesamtsumme >= 30 ? 0 : 5.99;
       
       // In Deutschland sind Preise INKLUSIVE MwSt.
       // Endpreis = Artikelsumme (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
@@ -490,7 +519,7 @@ const CheckoutPage = () => {
   }
 
   const subtotal = availableTotal;
-  const versandkosten = subtotal >= 50 ? 0 : 4.99;
+  const versandkosten = subtotal >= 30 ? 0 : 5.99;
   
   // KORREKTE Steuerberechnung: In Deutschland sind Preise INKLUSIVE MwSt.
   // Gesamtsumme = Subtotal (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
@@ -868,10 +897,13 @@ const CheckoutPage = () => {
                 </Typography>
                 <Typography>{formatPrice(versandkosten)}</Typography>
               </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography>MwSt. (19%):</Typography>
-                <Typography>{formatPrice(mwst)}</Typography>
-              </Box>
+              {/* MwSt nur anzeigen wenn nicht Kleinunternehmer */}
+              {!invoiceSettings?.companyInfo?.isSmallBusiness && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography>MwSt. (19%):</Typography>
+                  <Typography>{formatPrice(mwst)}</Typography>
+                </Box>
+              )}
               <Divider sx={{ my: 2 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                 <Typography variant="h6">Gesamtsumme:</Typography>
@@ -881,10 +913,10 @@ const CheckoutPage = () => {
               </Box>
             </Box>
 
-            {subtotal < 50 && (
+            {subtotal < 30 && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  Versandkostenfrei ab 50€! Noch {formatPrice(50 - subtotal)} bis zum kostenlosen Versand.
+                  Versandkostenfrei ab 30€! Noch {formatPrice(30 - subtotal)} bis zum kostenlosen Versand.
                 </Typography>
               </Alert>
             )}

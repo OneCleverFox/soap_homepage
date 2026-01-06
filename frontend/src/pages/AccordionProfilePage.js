@@ -410,33 +410,85 @@ const AccordionProfilePage = () => {
       setLoading(true);
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`${API_URL}/auth/profile`, {
+      console.log('🔍 AccordionProfile: Profile laden - Token vorhanden:', !!token);
+      console.log('🔍 AccordionProfile: API_URL:', API_URL);
+      
+      // Versuche zuerst die Kunden-spezifische API
+      let response = await fetch(`${API_URL}/kunden/profil`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      console.log('📋 AccordionProfile: Kunden-API Response Status:', response.status);
+
+      // Falls Kunden-API fehlschlägt, versuche die Auth-API
+      if (!response.ok && response.status === 401) {
+        console.log('🔄 AccordionProfile: Kunden-API nicht zugänglich, versuche Auth-API');
+        response = await fetch(`${API_URL}/auth/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      console.log('📋 AccordionProfile: Profile Response Status:', response.status);
+      
       const data = await response.json();
+      console.log('📋 AccordionProfile: RAW Response Data:', JSON.stringify(data, null, 2));
       
       if (response.ok && data.success) {
-        setProfileData(prev => ({
-          ...prev,
-          ...data.data,
-          adresse: {
-            ...prev.adresse,
-            ...data.data.adresse
-          },
-          kommunikation: {
-            ...prev.kommunikation,
-            ...data.data.kommunikation
-          }
-        }));
+        console.log('✅ AccordionProfile: Profile erfolgreich geladen');
+        
+        // Prüfe ob es Kunden-API Antwort ist (deutsche Feldnamen) oder Auth-API
+        const isKundenAPI = data.data.vorname !== undefined;
+        console.log('🔍 AccordionProfile: Kunden-API Response:', isKundenAPI);
+        
+        if (isKundenAPI) {
+          // Kunden-API: Deutsche Feldnamen mappen
+          setProfileData(prev => ({
+            ...prev,
+            name: `${data.data.vorname || ''} ${data.data.nachname || ''}`.trim(),
+            email: data.data.email || '',
+            telefon: data.data.telefon || '',
+            adresse: {
+              strasse: data.data.adresse?.strasse || '',
+              hausnummer: data.data.adresse?.hausnummer || '',
+              plz: data.data.adresse?.plz || '',
+              ort: data.data.adresse?.stadt || '',
+              land: data.data.adresse?.land || 'Deutschland'
+            },
+            kommunikation: {
+              emailBenachrichtigungen: data.data.praeferenzen?.newsletter !== false,
+              smsBenachrichtigungen: data.data.praeferenzen?.sms || false,
+              newsletterAbonniert: data.data.praeferenzen?.newsletter || false
+            }
+          }));
+        } else {
+          // Auth-API: Direkt verwenden
+          setProfileData(prev => ({
+            ...prev,
+            ...data.data,
+            adresse: {
+              ...prev.adresse,
+              ...data.data.adresse
+            },
+            kommunikation: {
+              ...prev.kommunikation,
+              ...data.data.kommunikation
+            }
+          }));
+        }
+        console.log('✅ AccordionProfile: ProfileData gesetzt');
       } else {
-        console.error('Fehler beim Laden des Profils:', data.message);
+        console.error('❌ AccordionProfile: Fehler beim Laden des Profils:', data.message || response.statusText);
+        setError('Fehler beim Laden der Profildaten');
       }
     } catch (error) {
-      console.error('Fehler beim Laden des Profils:', error);
+      console.error('❌ AccordionProfile: Fehler beim Laden des Profils:', error);
+      setError('Netzwerkfehler beim Laden der Profildaten');
     } finally {
       setLoading(false);
     }
@@ -480,26 +532,75 @@ const AccordionProfilePage = () => {
       setError('');
       setSuccess('');
 
+      console.log('💾 AccordionProfile: Speichere Sektion:', section);
+      console.log('💾 AccordionProfile: ProfileData:', JSON.stringify(profileData, null, 2));
+
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/auth/profile`, {
+      
+      // Versuche zuerst die Kunden-API für das Speichern, da diese normalerweise funktioniert
+      const kundenData = {
+        // AccordionProfile structure zu Kunden-API mapping
+        vorname: profileData.name.split(' ')[0] || '',
+        nachname: profileData.name.split(' ').slice(1).join(' ') || '',
+        email: profileData.email,
+        telefon: profileData.telefon,
+        adresse: {
+          strasse: profileData.adresse.strasse,
+          hausnummer: profileData.adresse.hausnummer,
+          plz: profileData.adresse.plz,
+          stadt: profileData.adresse.ort,
+          land: profileData.adresse.land
+        },
+        praeferenzen: {
+          newsletter: profileData.kommunikation.newsletterAbonniert,
+          sms: profileData.kommunikation.smsBenachrichtigungen,
+          werbung: profileData.kommunikation.emailBenachrichtigungen
+        }
+      };
+
+      console.log('💾 AccordionProfile: Mapped Kunden Data:', JSON.stringify(kundenData, null, 2));
+
+      let response = await fetch(`${API_URL}/kunden/profil`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(profileData)
+        body: JSON.stringify(kundenData)
       });
 
+      console.log('📋 AccordionProfile: Kunden-API Save Response Status:', response.status);
+
+      // Falls Kunden-API fehlschlägt, versuche Auth-API
+      if (!response.ok && response.status === 401) {
+        console.log('🔄 AccordionProfile: Kunden-API Save fehlgeschlagen, versuche Auth-API');
+        response = await fetch(`${API_URL}/auth/profile`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(profileData)
+        });
+      }
+
       const data = await response.json();
+      console.log('📋 AccordionProfile: Save Response Data:', JSON.stringify(data, null, 2));
 
       if (response.ok && data.success) {
+        console.log('✅ AccordionProfile: Speichern erfolgreich');
         setSuccess(`${section} erfolgreich aktualisiert!`);
         setEditMode(prev => ({ ...prev, [section]: false }));
         setTimeout(() => setSuccess(''), 3000);
+        
+        // Profil neu laden um sicherzustellen dass die Daten aktuell sind
+        await fetchProfile();
       } else {
+        console.error('❌ AccordionProfile: Speichern fehlgeschlagen:', data.message);
         setError(data.message || 'Fehler beim Aktualisieren der Daten');
       }
     } catch (error) {
+      console.error('❌ AccordionProfile: Fehler beim Speichern:', error);
       setError('Ein unerwarteter Fehler ist aufgetreten');
     } finally {
       setLoading(false);
