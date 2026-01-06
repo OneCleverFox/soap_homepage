@@ -113,12 +113,26 @@ const ProfilePage = () => {
       console.log('🔍 FRONTEND: Profile laden - Token vorhanden:', !!token);
       console.log('🔍 FRONTEND: API_URL:', API_URL);
       
-      const response = await fetch(`${API_URL}/auth/profile`, {
+      // Versuche zuerst die Kunden-spezifische API, da die Checkout-Seiten diese erfolgreich verwenden
+      let response = await fetch(`${API_URL}/kunden/profil`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
+
+      console.log('📋 FRONTEND: Kunden-API Response Status:', response.status);
+
+      // Falls Kunden-API fehlschlägt, versuche die Auth-API
+      if (!response.ok && response.status === 401) {
+        console.log('🔄 FRONTEND: Kunden-API nicht zugänglich, versuche Auth-API');
+        response = await fetch(`${API_URL}/auth/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
 
       console.log('📋 FRONTEND: Profile Response Status:', response.status);
       console.log('📋 FRONTEND: Response OK:', response.ok);
@@ -136,49 +150,88 @@ const ProfilePage = () => {
       if (data.success) {
         console.log('✅ FRONTEND: Profile erfolgreich geladen');
         console.log('🔍 FRONTEND: Response Data:', data.data);
-        console.log('🔍 FRONTEND: AddressDetails in Response:', data.data.addressDetails);
-        console.log('🔍 FRONTEND: LieferadresseDetails in Response:', data.data.lieferadresseDetails);
-        console.log('🔍 FRONTEND: FirstName in Response:', data.data.firstName);
-        console.log('🔍 FRONTEND: LastName in Response:', data.data.lastName);
-        console.log('🔍 FRONTEND: Geschlecht in Response:', data.data.geschlecht);
         
-        setProfileData(prev => ({
-          ...prev,
-          username: data.data.username || '',
-          email: data.data.email || '',
-          firstName: data.data.firstName || '',
-          lastName: data.data.lastName || '',
-          phone: data.data.phone || '',
-          geschlecht: data.data.geschlecht || '',
-          dateOfBirth: data.data.dateOfBirth ? data.data.dateOfBirth.split('T')[0] : '',
-          // Backend sendet addressDetails - mappen zu address
-          address: {
-            street: data.data.addressDetails?.street || '',
-            houseNumber: data.data.addressDetails?.houseNumber || '',
-            zusatz: data.data.addressDetails?.zusatz || '',
-            zipCode: data.data.addressDetails?.zipCode || '',
-            city: data.data.addressDetails?.city || '',
-            country: data.data.addressDetails?.country || 'Deutschland'
-          },
-          // Backend sendet lieferadresseDetails - mappen zu lieferadresse
-          lieferadresse: {
-            verwendet: data.data.lieferadresseDetails?.verwendet || false,
-            firmenname: data.data.lieferadresseDetails?.firmenname || '',
-            vorname: data.data.lieferadresseDetails?.vorname || '',
-            nachname: data.data.lieferadresseDetails?.nachname || '',
-            street: data.data.lieferadresseDetails?.street || '',
-            houseNumber: data.data.lieferadresseDetails?.houseNumber || '',
-            zusatz: data.data.lieferadresseDetails?.zusatz || '',
-            zipCode: data.data.lieferadresseDetails?.zipCode || '',
-            city: data.data.lieferadresseDetails?.city || '',
-            country: data.data.lieferadresseDetails?.country || 'Deutschland'
-          },
-          communicationPreferences: {
-            newsletter: data.data.communicationPreferences?.newsletter || false,
-            sms: data.data.communicationPreferences?.sms || false,
-            werbung: data.data.communicationPreferences?.werbung || false
-          }
-        }));
+        // Prüfe ob es Kunden-API Antwort ist (direkte deutsche Feldnamen) oder Auth-API (englische + addressDetails)
+        const isKundenAPI = data.data.vorname !== undefined;
+        console.log('🔍 FRONTEND: Kunden-API Response:', isKundenAPI);
+        
+        if (isKundenAPI) {
+          // Kunden-API: Deutsche Feldnamen direkt mappen
+          setProfileData(prev => ({
+            ...prev,
+            username: data.data.username || `${data.data.vorname?.toLowerCase()}.${data.data.nachname?.toLowerCase()}`,
+            email: data.data.email || '',
+            firstName: data.data.vorname || '',
+            lastName: data.data.nachname || '',
+            phone: data.data.telefon || '',
+            geschlecht: data.data.geschlecht || '',
+            dateOfBirth: data.data.geburtsdatum ? data.data.geburtsdatum.split('T')[0] : '',
+            address: {
+              street: data.data.adresse?.strasse || '',
+              houseNumber: data.data.adresse?.hausnummer || '',
+              zusatz: data.data.adresse?.zusatz || '',
+              zipCode: data.data.adresse?.plz || '',
+              city: data.data.adresse?.stadt || '',
+              country: data.data.adresse?.land || 'Deutschland'
+            },
+            lieferadresse: {
+              verwendet: data.data.lieferadresse?.verwendet || false,
+              firmenname: data.data.lieferadresse?.firmenname || '',
+              vorname: data.data.lieferadresse?.vorname || '',
+              nachname: data.data.lieferadresse?.nachname || '',
+              street: data.data.lieferadresse?.strasse || '',
+              houseNumber: data.data.lieferadresse?.hausnummer || '',
+              zusatz: data.data.lieferadresse?.zusatz || '',
+              zipCode: data.data.lieferadresse?.plz || '',
+              city: data.data.lieferadresse?.stadt || '',
+              country: data.data.lieferadresse?.land || 'Deutschland'
+            },
+            communicationPreferences: {
+              newsletter: data.data.praeferenzen?.newsletter || false,
+              sms: data.data.praeferenzen?.sms || false,
+              werbung: data.data.praeferenzen?.werbung || false
+            }
+          }));
+        } else {
+          // Auth-API: Englische Feldnamen mit addressDetails
+          setProfileData(prev => ({
+            ...prev,
+            username: data.data.username || '',
+            email: data.data.email || '',
+            firstName: data.data.firstName || '',
+            lastName: data.data.lastName || '',
+            phone: data.data.phone || '',
+            geschlecht: data.data.geschlecht || '',
+            dateOfBirth: data.data.dateOfBirth ? data.data.dateOfBirth.split('T')[0] : '',
+            // Backend sendet addressDetails - mappen zu address
+            address: {
+              street: data.data.addressDetails?.street || '',
+              houseNumber: data.data.addressDetails?.houseNumber || '',
+              zusatz: data.data.addressDetails?.zusatz || '',
+              zipCode: data.data.addressDetails?.zipCode || '',
+              city: data.data.addressDetails?.city || '',
+              country: data.data.addressDetails?.country || 'Deutschland'
+            },
+            // Backend sendet lieferadresseDetails - mappen zu lieferadresse
+            lieferadresse: {
+              verwendet: data.data.lieferadresseDetails?.verwendet || false,
+              firmenname: data.data.lieferadresseDetails?.firmenname || '',
+              vorname: data.data.lieferadresseDetails?.vorname || '',
+              nachname: data.data.lieferadresseDetails?.nachname || '',
+              street: data.data.lieferadresseDetails?.street || '',
+              houseNumber: data.data.lieferadresseDetails?.houseNumber || '',
+              zusatz: data.data.lieferadresseDetails?.zusatz || '',
+              zipCode: data.data.lieferadresseDetails?.zipCode || '',
+              city: data.data.lieferadresseDetails?.city || '',
+              country: data.data.lieferadresseDetails?.country || 'Deutschland'
+            },
+            communicationPreferences: {
+              newsletter: data.data.communicationPreferences?.newsletter || false,
+              sms: data.data.communicationPreferences?.sms || false,
+              werbung: data.data.communicationPreferences?.werbung || false
+            }
+          }));
+        }
       } else {
         console.error('❌ Profile Fehler:', data.message);
         setError(data.message || 'Fehler beim Laden der Profil-Daten');
@@ -221,36 +274,113 @@ const ProfilePage = () => {
   };
 
   const handleSave = async () => {
+    if (saving) {
+      console.log('⏳ FRONTEND: Speichern bereits in Bearbeitung, ignoriere Request');
+      return;
+    }
+    
     try {
       setSaving(true);
       setError('');
       setMessage('');
 
+      // Grundlegende Validierung
+      if (!profileData.firstName || !profileData.lastName) {
+        setError('Vor- und Nachname sind erforderlich');
+        return;
+      }
+      
+      if (!profileData.email) {
+        setError('E-Mail-Adresse ist erforderlich');
+        return;
+      }
+
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`${API_URL}/auth/profile`, {
+      console.log('💾 FRONTEND: Speichern gestartet');
+      console.log('💾 FRONTEND: Zu sendende Daten:', JSON.stringify(profileData, null, 2));
+      
+      // Versuche zuerst die Kunden-spezifische API mit korrekten deutschen Feldnamen
+      const kundenData = {
+        vorname: profileData.firstName,
+        nachname: profileData.lastName,
+        telefon: profileData.phone,
+        adresse: {
+          strasse: profileData.address.street,
+          hausnummer: profileData.address.houseNumber,
+          zusatz: profileData.address.zusatz,
+          plz: profileData.address.zipCode,
+          stadt: profileData.address.city,
+          land: profileData.address.country
+        },
+        lieferadresse: profileData.lieferadresse.verwendet ? {
+          verwendet: profileData.lieferadresse.verwendet,
+          firmenname: profileData.lieferadresse.firmenname,
+          vorname: profileData.lieferadresse.vorname,
+          nachname: profileData.lieferadresse.nachname,
+          strasse: profileData.lieferadresse.street,
+          hausnummer: profileData.lieferadresse.houseNumber,
+          zusatz: profileData.lieferadresse.zusatz,
+          plz: profileData.lieferadresse.zipCode,
+          stadt: profileData.lieferadresse.city,
+          land: profileData.lieferadresse.country
+        } : null,
+        geburtsdatum: profileData.dateOfBirth || null,
+        geschlecht: profileData.geschlecht,
+        praeferenzen: {
+          newsletter: profileData.communicationPreferences.newsletter,
+          sms: profileData.communicationPreferences.sms,
+          werbung: profileData.communicationPreferences.werbung
+        }
+      };
+
+      console.log('💾 FRONTEND: Transformierte Kunden-Daten:', JSON.stringify(kundenData, null, 2));
+      
+      let response = await fetch(`${API_URL}/kunden/profil`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(profileData)
+        body: JSON.stringify(kundenData)
       });
 
+      console.log('💾 FRONTEND: Kunden-API Response Status:', response.status);
+
+      // Falls Kunden-API fehlschlägt, versuche die Auth-API
+      if (!response.ok && response.status === 401) {
+        console.log('🔄 FRONTEND: Kunden-API nicht zugänglich, versuche Auth-API');
+        response = await fetch(`${API_URL}/auth/profile`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(profileData)
+        });
+      }
+
+      console.log('💾 FRONTEND: Response Status:', response.status);
+      console.log('💾 FRONTEND: Response OK:', response.ok);
+      
       const data = await response.json();
+      console.log('💾 FRONTEND: Response Data:', JSON.stringify(data, null, 2));
       
       if (data.success) {
+        console.log('✅ FRONTEND: Profil erfolgreich gespeichert');
         setMessage(data.message);
         setEditMode(false);
         // Profil neu laden um aktuelle Daten zu haben
-        fetchProfile();
+        setTimeout(() => fetchProfile(), 500); // Kleine Verzögerung für DB-Update
       } else {
+        console.error('❌ FRONTEND: Speichern fehlgeschlagen:', data.message);
         setError(data.message || 'Fehler beim Speichern der Profil-Daten');
       }
     } catch (error) {
-      console.error('Fehler beim Speichern:', error);
+      console.error('💾 FRONTEND: Fehler beim Speichern:', error);
       setError('Verbindungsfehler beim Speichern der Profil-Daten');
     } finally {
+      console.log('💾 FRONTEND: Speichern abgeschlossen');
       setSaving(false);
     }
   };
