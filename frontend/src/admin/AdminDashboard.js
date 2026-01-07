@@ -75,6 +75,7 @@ const AdminDashboard = () => {
   const [rohstoffFilter, setRohstoffFilter] = useState('alle'); // 'alle', 'rohseife', 'duftoil', 'verpackung'
   const [verkaufJahr, setVerkaufJahr] = useState(new Date().getFullYear()); // Jahr für Verkaufsfilter
   const [infoDialogOpen, setInfoDialogOpen] = useState(false); // Info-Dialog für Kennzahlen-Erklärung
+  const [produktionInfoOpen, setProduktionInfoOpen] = useState(false); // Info-Dialog für Produktionspriorität
 
   // Dashboard Data laden
   const loadDashboardData = async () => {
@@ -284,7 +285,7 @@ const AdminDashboard = () => {
       value: verkauf.anfragen?.benoetigtGenehmigung?.length || 0,
       icon: <EmailIcon />,
       color: getCardColor('Anfragen zur Genehmigung', verkauf.anfragen?.benoetigtGenehmigung?.length || 0),
-      subtitle: (verkauf.anfragen?.benoetigtGenehmigung?.length || 0) > 0 ? 'Handlung erforderlich' : 'Alle bearbeitet',
+      subtitle: (verkauf.anfragen?.benoetigtGenehmigung?.length || 0) > 0 ? 'Handlung erforderlich' : undefined,
       action: () => navigate('/admin/anfragen')
     },
     {
@@ -292,7 +293,6 @@ const AdminDashboard = () => {
       value: verkauf.bestellungen?.nachStatus?.find(s => s._id === 'neu')?.count || 0,
       icon: <ShoppingCartIcon />,
       color: getCardColor('Neue Bestellungen', verkauf.bestellungen?.nachStatus?.find(s => s._id === 'neu')?.count || 0),
-      subtitle: 'Warten auf Bezahlung',
       action: () => navigate('/admin/bestellungen?status=neu')
     },
     {
@@ -300,7 +300,7 @@ const AdminDashboard = () => {
       value: verkauf.rechnungen?.overdue || 0,
       icon: <WarningIcon />,
       color: getCardColor('Überfällige Rechnungen', verkauf.rechnungen?.overdue || 0),
-      subtitle: (verkauf.rechnungen?.overdue || 0) > 0 ? 'Mahnung erforderlich' : 'Alle pünktlich',
+      subtitle: (verkauf.rechnungen?.overdue || 0) > 0 ? 'Mahnung erforderlich' : undefined,
       action: () => navigate('/admin/invoice-list?status=overdue')
     },
     {
@@ -308,7 +308,7 @@ const AdminDashboard = () => {
       value: verkauf.bestellungen?.zuBestaetigen?.length || 0,
       icon: <ShoppingCartIcon />,
       color: getCardColor('Zu bestätigen', verkauf.bestellungen?.zuBestaetigen?.length || 0),
-      subtitle: (verkauf.bestellungen?.zuBestaetigen?.length || 0) > 0 ? 'Bezahlt - bereit zur Bestätigung' : 'Alle bestätigt',
+      subtitle: (verkauf.bestellungen?.zuBestaetigen?.length || 0) > 0 ? 'Bezahlt - bereit zur Bestätigung' : undefined,
       action: () => navigate('/admin/bestellungen?status=bezahlt')
     },
     {
@@ -316,15 +316,14 @@ const AdminDashboard = () => {
       value: verkauf.bestellungen?.zuVersenden?.length || 0,
       icon: <ShippingIcon />,
       color: getCardColor('Zu versenden', verkauf.bestellungen?.zuVersenden?.length || 0),
-      subtitle: (verkauf.bestellungen?.zuVersenden?.length || 0) > 0 ? 'Verpackt - bereit zum Versand' : 'Alle versendet',
       action: () => navigate('/admin/bestellungen?status=verpackt')
     }
   ];
 
   return (
-    <Container maxWidth="xl" sx={{ py: isMobile ? 2 : 4 }}>
+    <Container maxWidth="xl" sx={{ py: isMobile ? 1 : 2 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: isMobile ? 2 : 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography 
             variant={isMobile ? "h4" : "h3"} 
@@ -353,7 +352,7 @@ const AdminDashboard = () => {
         </Typography>
       </Box>
       {/* KPI Übersicht */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={isMobile ? 1.5 : 2} sx={{ mb: 4 }}>
         {kpiCards.map((kpi, index) => (
           <Grid item xs={6} sm={6} md={3} key={index}>
             <Card 
@@ -370,23 +369,80 @@ const AdminDashboard = () => {
               }}
               onClick={kpi.action}
             >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography color="text.secondary" gutterBottom variant="body2">
-                    {kpi.title}
-                  </Typography>
-                  <Box sx={{ color: `${kpi.color}.main` }}>
-                    {kpi.icon}
+              <CardContent sx={{ 
+                py: isMobile ? 1.5 : 2, 
+                px: isMobile ? 1.5 : 2,
+                '&:last-child': { pb: isMobile ? 1.5 : 2 }
+              }}>
+                {/* Mobile: Horizontal Layout, Desktop: Vertical Layout */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: isMobile ? 'row' : 'column',
+                  alignItems: isMobile ? 'center' : 'flex-start',
+                  justifyContent: isMobile ? 'space-between' : 'flex-start',
+                  height: '100%'
+                }}>
+                  {/* Title und Icon Container */}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center', 
+                    justifyContent: isMobile ? 'flex-start' : 'space-between',
+                    width: isMobile ? 'auto' : '100%',
+                    mb: isMobile ? 0 : 1
+                  }}>
+                    <Typography 
+                      color="text.secondary" 
+                      gutterBottom={!isMobile} 
+                      variant={isMobile ? "caption" : "body2"}
+                      sx={{ 
+                        fontSize: isMobile ? '0.75rem' : undefined,
+                        lineHeight: isMobile ? 1.2 : undefined,
+                        mb: isMobile ? 0.5 : 0
+                      }}
+                    >
+                      {kpi.title}
+                    </Typography>
+                    {!isMobile && (
+                      <Box sx={{ color: `${kpi.color}.main` }}>
+                        {kpi.icon}
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  {/* Value - rechts auf Mobile, unter Title auf Desktop */}
+                  <Box sx={{ 
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: isMobile ? 'flex-end' : 'flex-start'
+                  }}>
+                    <Typography 
+                      variant={isMobile ? "h5" : "h3"} 
+                      component="div" 
+                      sx={{ 
+                        fontWeight: 'bold', 
+                        color: `${kpi.color}.main`,
+                        fontSize: isMobile ? '1.5rem' : undefined,
+                        lineHeight: isMobile ? 1.1 : undefined
+                      }}
+                    >
+                      {kpi.value}
+                    </Typography>
+                    {kpi.subtitle && (
+                      <Typography 
+                        variant={isMobile ? "caption" : "body2"} 
+                        color="text.secondary"
+                        sx={{ 
+                          fontSize: isMobile ? '0.7rem' : undefined,
+                          textAlign: isMobile ? 'right' : 'left',
+                          mt: isMobile ? 0.25 : 0
+                        }}
+                      >
+                        {kpi.subtitle}
+                      </Typography>
+                    )}
                   </Box>
                 </Box>
-                <Typography variant={isMobile ? "h4" : "h3"} component="div" sx={{ fontWeight: 'bold', color: `${kpi.color}.main` }}>
-                  {kpi.value}
-                </Typography>
-                {kpi.subtitle && (
-                  <Typography variant="body2" color="text.secondary">
-                    {kpi.subtitle}
-                  </Typography>
-                )}
               </CardContent>
             </Card>
           </Grid>
@@ -612,52 +668,6 @@ const AdminDashboard = () => {
 
       {/* Haupt-Dashboard Grid */}
       <Grid container spacing={3}>
-        
-        {/* Kritische Warnungen */}
-        <Grid item xs={12} lg={6}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                <WarningIcon sx={{ mr: 1, color: 'error.main' }} />
-                Sofortiger Handlungsbedarf
-              </Typography>
-              
-              {warnungen.fertigprodukteOhneBestand === 0 && warnungen.rohstoffeUnterMindestbestand === 0 ? (
-                <Alert severity="success">
-                  ✅ Alle Bestände sind ausreichend vorhanden
-                </Alert>
-              ) : (
-                <Box>
-                  {warnungen.fertigprodukteOhneBestand > 0 && (
-                    <Alert severity="error" sx={{ mb: 2 }}>
-                      <strong>{warnungen.fertigprodukteOhneBestand} Fertigprodukte</strong> sind nicht auf Lager
-                      <Button 
-                        size="small" 
-                        onClick={() => navigate('/admin/lager')}
-                        sx={{ ml: 2 }}
-                      >
-                        Zur Lagerverwaltung
-                      </Button>
-                    </Alert>
-                  )}
-                  
-                  {warnungen.rohstoffeUnterMindestbestand > 0 && (
-                    <Alert severity="warning">
-                      <strong>{warnungen.rohstoffeUnterMindestbestand} Rohstoffe</strong> sind unter Mindestbestand
-                      <Button 
-                        size="small" 
-                        onClick={() => navigate('/admin/lager')}
-                        sx={{ ml: 2 }}
-                      >
-                        Zu Rohstoffen
-                      </Button>
-                    </Alert>
-                  )}
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
 
         {/* Lager-Übersicht */}
         <Grid item xs={12} lg={6}>
@@ -1124,9 +1134,18 @@ const AdminDashboard = () => {
               </Grid>
 
               {/* Produktionspriorität */}
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
-                🚀 Produktionspriorität (Top 10)
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                  🚀 Produktionspriorität (Top 10)
+                </Typography>
+                <IconButton 
+                  size="small" 
+                  onClick={() => setProduktionInfoOpen(true)}
+                  sx={{ color: 'info.main' }}
+                >
+                  <InfoIcon />
+                </IconButton>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Basierend auf Bestand und Verkaufshäufigkeit der letzten 90 Tage
               </Typography>
@@ -1403,53 +1422,6 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
 
-        {/* Fertigprodukte mit niedrigstem Bestand */}
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
-                <ProductionIcon sx={{ mr: 1, color: 'primary.main' }} />
-                Produktionspriorität
-              </Typography>
-              
-              {produktion.fertigprodukteNiedrigerBestand && produktion.fertigprodukteNiedrigerBestand.length > 0 ? (
-                <Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Top 3 Fertigprodukte mit niedrigstem Bestand:
-                  </Typography>
-                  
-                  {produktion.fertigprodukteNiedrigerBestand.map((produkt, index) => (
-                    <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'primary.light', borderRadius: 2, color: 'white' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        #{index + 1} {produkt.name}
-                      </Typography>
-                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                        {produkt.seife} • {produkt.aroma} • {produkt.gramm}g
-                      </Typography>
-                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                        🏭 Bestand: {produkt.aktuelleMenge} Stück • Mindest: {produkt.mindestbestand} Stück
-                        {produkt.istNiedrig && ' • ⚠️ Niedrig'}
-                      </Typography>
-                    </Box>
-                  ))}
-                  
-                  <Button 
-                    variant="contained" 
-                    size="small"
-                    onClick={() => navigate('/admin/portfolio')}
-                    sx={{ mt: 1 }}
-                  >
-                    Zur Produktion
-                  </Button>
-                </Box>
-              ) : (
-                <Alert severity="info">
-                  📊 Alle Fertigprodukte haben ausreichend Bestand
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
 
         {/* Schnellzugriff Aktionen */}
         <Grid item xs={12}>
@@ -1525,6 +1497,100 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
       </Grid>
+      
+      {/* Info-Dialog für Produktionspriorität */}
+      <Dialog 
+        open={produktionInfoOpen} 
+        onClose={() => setProduktionInfoOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
+          <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
+          Produktionspriorität - Was bedeutet das?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Die Produktionspriorität hilft Ihnen dabei, <strong>intelligente Produktionsentscheidungen</strong> zu treffen, 
+            indem sie die dringendsten Produkte automatisch identifiziert.
+          </Typography>
+          
+          <List>
+            <ListItem>
+              <ListItemIcon>
+                <StarIcon color="warning" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Prioritätsscore"
+                secondary={
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Ein intelligenter Algorithmus berechnet für jedes Produkt einen Score basierend auf:
+                    </Typography>
+                    <Typography variant="body2" sx={{ ml: 2, mb: 0.5 }}>• <strong>Aktuellem Bestand</strong> (weniger = höherer Score)</Typography>
+                    <Typography variant="body2" sx={{ ml: 2, mb: 0.5 }}>• <strong>Verkaufsgeschwindigkeit</strong> der letzten 90 Tage</Typography>
+                    <Typography variant="body2" sx={{ ml: 2, mb: 1 }}>• <strong>Voraussichtlicher Reichweite</strong> (weniger Tage = höherer Score)</Typography>
+                    <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                      <Chip label="Score > 20: SOFORT produzieren!" color="error" size="small" />
+                      <Chip label="Score 10-20: Bald produzieren" color="warning" size="small" />
+                      <Chip label="Score < 10: Bestand OK" color="success" size="small" />
+                    </Box>
+                  </Box>
+                }
+              />
+            </ListItem>
+            
+            <Divider sx={{ my: 2 }} />
+            
+            <ListItem>
+              <ListItemIcon>
+                <ScheduleIcon color="info" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Reichweite (Tage)"
+                secondary={
+                  <Box>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Zeigt an, wie viele Tage Ihr aktueller Bestand bei der durchschnittlichen Verkaufsrate noch reicht.
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>Beispiel:</strong> 15 Stück Bestand ÷ 0,5 Stück pro Tag = 30 Tage Reichweite
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 'bold' }}>
+                      ⚠️ Weniger als 30 Tage = Kritisch!
+                    </Typography>
+                  </Box>
+                }
+              />
+            </ListItem>
+            
+            <Divider sx={{ my: 2 }} />
+            
+            <ListItem>
+              <ListItemIcon>
+                <TrendingUpIcon color="success" />
+              </ListItemIcon>
+              <ListItemText 
+                primary="Geschäftlicher Nutzen"
+                secondary={
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>💡 <strong>Nie wieder Stockouts!</strong> - Vermeidung verlorener Verkäufe</Typography>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>⚡ <strong>Effiziente Produktion</strong> - Produzieren Sie das Richtige zur richtigen Zeit</Typography>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>💰 <strong>Lageroptimierung</strong> - Weniger gebundenes Kapital, mehr Liquidität</Typography>
+                    <Typography variant="body2">📈 <strong>Kundenzufriedenheit</strong> - Ihre beliebtesten Produkte sind immer verfügbar</Typography>
+                  </Box>
+                }
+              />
+            </ListItem>
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setProduktionInfoOpen(false)} color="primary" variant="contained">
+            Verstanden - Jetzt produzieren! 🚀
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
       
       {/* Info-Dialog für Kennzahlen-Erklärung */}
       <Dialog 

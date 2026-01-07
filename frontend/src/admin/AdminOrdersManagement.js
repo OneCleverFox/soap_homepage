@@ -1,6 +1,7 @@
 import { validateTrackingNumber, detectCarrier, generateTrackingUrl } from '../utils/trackingUtils';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminState } from '../hooks/useAdminState';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -111,6 +112,8 @@ const statusConfig = {
 const AdminOrdersManagement = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // Standardisierte Admin-States
   const {
@@ -128,13 +131,21 @@ const AdminOrdersManagement = () => {
   const [inquiryDialogOpen, setInquiryDialogOpen] = useState(false);
   const [trackingDialog, setTrackingDialog] = useState(false);
 
+  // URL-Parameter verarbeiten und Filter setzen
+  const getInitialFilters = () => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get('status');
+    
+    return {
+      status: statusParam || 'pending', // URL-Parameter überschreibt Standard
+      sortBy: 'oldest',
+      searchTerm: '',
+      showInquiries: true
+    };
+  };
+
   // Filter and view state
-  const [filters, setFilters] = useState({
-    status: 'pending',
-    sortBy: 'oldest',
-    searchTerm: '',
-    showInquiries: true
-  });
+  const [filters, setFilters] = useState(getInitialFilters());
   const [stats, setStats] = useState({});
   const [tabValue, setTabValue] = useState(0);
 
@@ -242,12 +253,48 @@ const AdminOrdersManagement = () => {
     loadInquiries();
   }, [loadOrders, loadInquiries]);
 
+  // Filter change handler - aktualisiert Filter und URL
+  const handleFilterChange = useCallback((filterName, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterName]: value
+    }));
+    
+    // URL aktualisieren
+    const currentParams = new URLSearchParams(location.search);
+    if (filterName === 'status' && value !== 'pending') {
+      currentParams.set('status', value);
+    } else if (filterName === 'status' && value === 'pending') {
+      currentParams.delete('status'); // Default-Status, URL sauber halten
+    }
+    
+    const newUrl = currentParams.toString() 
+      ? `/admin/bestellungen?${currentParams.toString()}`
+      : '/admin/bestellungen';
+    
+    navigate(newUrl, { replace: true });
+  }, [navigate, location.search]);
+
   useEffect(() => {
     loadOrders();
     if (filters.showInquiries) {
       loadInquiries();
     }
   }, [loadOrders, loadInquiries, filters.showInquiries]);
+
+  // URL-Parameter-Änderungen verarbeiten (nur bei location.search Änderungen)
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get('status');
+    
+    // Nur URL-Parameter setzen, wenn sie von den aktuellen Filtern abweichen
+    if (statusParam && statusParam !== filters.status) {
+      setFilters(prev => ({
+        ...prev,
+        status: statusParam
+      }));
+    }
+  }, [location.search]); // Entfernt filters.status aus Dependencies
 
   // Status update handler
   const handleStatusUpdate = async (orderId, newStatus, note = '', versandData = null) => {
@@ -905,7 +952,7 @@ const AdminOrdersManagement = () => {
                 <Select
                   value={filters.status}
                   label="Status Filter"
-                  onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
                 >
                   <MenuItem value="pending">🔄 Zu bearbeiten</MenuItem>
                   <MenuItem value="all">📋 Alle Bestellungen</MenuItem>
@@ -926,7 +973,7 @@ const AdminOrdersManagement = () => {
                 <Select
                   value={filters.sortBy}
                   label="Sortierung"
-                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                  onChange={(e) => handleFilterChange('sortBy', e.target.value)}
                 >
                   <MenuItem value="oldest">⏰ Älteste zuerst</MenuItem>
                   <MenuItem value="newest">🆕 Neueste zuerst</MenuItem>
