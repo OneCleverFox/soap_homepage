@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminState } from '../hooks/useAdminState';
 import { useAdminSearch } from '../hooks/useAdminSearch';
-import { useAdminPagination } from '../hooks/useAdminPagination';
 import {
   Container,
   Typography,
@@ -39,7 +38,6 @@ import {
   useTheme,
   Switch,
   FormControlLabel,
-  Divider,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -54,10 +52,7 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   VerifiedUser as VerifyIcon,
-  ToggleOn as ToggleOnIcon,
-  ToggleOff as ToggleOffIcon,
   Email as EmailIcon,
-  Warning as WarningIcon,
 } from '@mui/icons-material';
 import { kundenAPI } from '../services/api';
 import { API_URL } from '../services/api';
@@ -68,10 +63,7 @@ function AdminUsers() {
   
   // Standardisierte Admin-States
   const {
-    loading, setLoading,
-    error, setError,
-    success, setSuccess,
-    handleAsyncOperation
+    loading, setLoading
   } = useAdminState();
 
   const [users, setUsers] = useState([]);
@@ -87,10 +79,7 @@ function AdminUsers() {
   // Search Hook
   const {
     searchTerm,
-    setSearchTerm,
-    filteredItems,
-    clearSearch,
-    hasSearchTerm
+    setSearchTerm
   } = useAdminSearch(users, ['username', 'email', 'firstName', 'lastName']);
   
   // Dialog states
@@ -163,7 +152,7 @@ function AdminUsers() {
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, searchTerm, statusFilter, roleFilter, showSnackbar]);
+  }, [page, rowsPerPage, searchTerm, statusFilter, roleFilter, showSnackbar, setLoading]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -743,8 +732,7 @@ function AdminUsers() {
               >
                 <MenuItem value="all">Alle</MenuItem>
                 <MenuItem value="admin">Administrator</MenuItem>
-                <MenuItem value="user">Benutzer</MenuItem>
-                <MenuItem value="customer">Kunde</MenuItem>
+                <MenuItem value="kunde">Kunde</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -945,11 +933,54 @@ function AdminUsers() {
 
                       {/* Notizen */}
                       {user.notizen && (
-                        <Box>
+                        <Box mb={1.5}>
                           <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
                             Notizen:
                           </Typography>
-                          <Typography variant="body2">{user.notizen}</Typography>
+                          <Typography variant="body2">
+                            {user.notizen}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* Kontodetails */}
+                      <Box mb={1.5}>
+                        <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                          Kontodetails:
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontSize: '0.75rem', mb: 0.2 }}>
+                          Anmeldeversuche: {user.anmeldeversuche || 0}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontSize: '0.75rem', mb: 0.2 }}>
+                          Gesamte Anmeldungen: {user.anzahlAnmeldungen || 0}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                          Letzter Login: {user.letzteAnmeldung ? new Date(user.letzteAnmeldung).toLocaleString('de-DE') : 'Noch nie'}
+                        </Typography>
+                      </Box>
+
+                      {/* Bestellstatistiken */}
+                      {user.bestellstatistiken && (
+                        <Box>
+                          <Typography variant="caption" color="textSecondary" display="block" fontWeight="bold">
+                            Bestellstatistiken:
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontSize: '0.75rem', mb: 0.2 }}>
+                            Anzahl Bestellungen: {user.bestellstatistiken.anzahlBestellungen}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontSize: '0.75rem', mb: 0.2 }}>
+                            Gesamtumsatz: €{(user.bestellstatistiken.gesamtumsatz || 0).toFixed(2)}
+                          </Typography>
+                          {user.bestellstatistiken.letzteBestellung && (
+                            <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
+                              Letzte Bestellung: {user.bestellstatistiken.letzteBestellung.datum ? new Date(user.bestellstatistiken.letzteBestellung.datum).toLocaleDateString('de-DE') : 'Unbekannt'}
+                            </Typography>
+                          )}
+                          {user.bestellstatistiken.anzahlBestellungen === 0 && (
+                            <Typography variant="body2" color="textSecondary" sx={{ fontSize: '0.75rem' }}>
+                              Noch keine Bestellungen getätigt
+                            </Typography>
+                          )}
                         </Box>
                       )}
                     </Box>
@@ -974,17 +1005,18 @@ function AdminUsers() {
               <TableCell>Rolle</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Registriert</TableCell>
+              <TableCell>Aktivität</TableCell>
               <TableCell align="right">Aktionen</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">Laden...</TableCell>
+                <TableCell colSpan={11} align="center">Laden...</TableCell>
               </TableRow>
             ) : users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">Keine Benutzer gefunden</TableCell>
+                <TableCell colSpan={11} align="center">Keine Benutzer gefunden</TableCell>
               </TableRow>
             ) : (
               users.map((user) => (
@@ -1064,6 +1096,21 @@ function AdminUsers() {
                         {user.createdAt ? new Date(user.createdAt).toLocaleDateString('de-DE') : '-'}
                       </Typography>
                     </TableCell>
+                    <TableCell>
+                      <Box display="flex" flexDirection="column" gap={0.5}>
+                        <Typography variant="caption" color="textSecondary">
+                          Logins: {user.anzahlAnmeldungen || 0}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          Letzter: {user.letzteAnmeldung ? new Date(user.letzteAnmeldung).toLocaleDateString('de-DE') : 'Noch nie'}
+                        </Typography>
+                        {user.bestellstatistiken && user.bestellstatistiken.anzahlBestellungen !== undefined && (
+                          <Typography variant="caption" color="primary">
+                            {user.bestellstatistiken.anzahlBestellungen} Bestellungen
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
                     <TableCell align="right">
                       <Tooltip title="Bearbeiten">
                         <IconButton size="small" onClick={() => openEditUserDialog(user)}>
@@ -1105,7 +1152,7 @@ function AdminUsers() {
                   
                   {/* Erweiterte Detailzeile */}
                   <TableRow>
-                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
+                    <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={11}>
                       <Collapse in={expandedRows[user._id]} timeout="auto" unmountOnExit>
                         <Box sx={{ margin: 2 }}>
                           <Typography variant="h6" gutterBottom component="div">
@@ -1213,14 +1260,45 @@ function AdminUsers() {
                                     Anmeldeversuche: {user.anmeldeversuche || 0}
                                   </Typography>
                                   <Typography variant="body2">
-                                    Letzter Login: {user.lastLogin ? new Date(user.lastLogin).toLocaleString('de-DE') : 'Noch nie'}
+                                    Gesamte Anmeldungen: {user.anzahlAnmeldungen || 0}
                                   </Typography>
                                   <Typography variant="body2">
-                                    Aktualisiert: {user.updatedAt ? new Date(user.updatedAt).toLocaleString('de-DE') : '-'}
+                                    Letzter Login: {user.letzteAnmeldung ? new Date(user.letzteAnmeldung).toLocaleString('de-DE') : 'Noch nie'}
                                   </Typography>
                                 </CardContent>
                               </Card>
                             </Grid>
+
+                            {/* Bestellstatistiken */}
+                            {user.bestellstatistiken && (
+                              <Grid item xs={12} md={6}>
+                                <Card variant="outlined">
+                                  <CardContent>
+                                    <Typography variant="subtitle2" color="primary" gutterBottom>
+                                      Bestellstatistiken
+                                    </Typography>
+                                    <Typography variant="body2">
+                                      Anzahl Bestellungen: {user.bestellstatistiken.anzahlBestellungen}
+                                    </Typography>
+                                    <Typography variant="body2">
+                                      Gesamtumsatz: €{(user.bestellstatistiken.gesamtumsatz || 0).toFixed(2)}
+                                    </Typography>
+                                    {user.bestellstatistiken.letzteBestellung && (
+                                      <>
+                                        <Typography variant="body2">
+                                          Letzte Bestellung: {user.bestellstatistiken.letzteBestellung.datum ? new Date(user.bestellstatistiken.letzteBestellung.datum).toLocaleDateString('de-DE') : 'Unbekannt'}
+                                        </Typography>
+                                      </>
+                                    )}
+                                    {user.bestellstatistiken.anzahlBestellungen === 0 && (
+                                      <Typography variant="body2" color="textSecondary">
+                                        Noch keine Bestellungen getätigt
+                                      </Typography>
+                                    )}
+                                  </CardContent>
+                                </Card>
+                              </Grid>
+                            )}
                           </Grid>
                         </Box>
                       </Collapse>
