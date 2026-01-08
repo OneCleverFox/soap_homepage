@@ -63,6 +63,32 @@ const portfolioSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  
+  // Zusatzinhaltsstoffe-Konfiguration (NEU)
+  zusatzinhaltsstoffe: [{
+    inhaltsstoffName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    menge: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 50 // Maximal 50g pro Zusatz bei 100g Seife
+    },
+    einheit: {
+      type: String,
+      enum: ['gramm', 'prozent'],
+      default: 'gramm'
+    },
+    hinweise: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  }],
+  
   verpackung: {
     type: String,
     required: true,

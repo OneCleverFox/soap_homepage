@@ -8,7 +8,7 @@ const bestandSchema = new mongoose.Schema({
   // Typ des Lagerartikels
   typ: {
     type: String,
-    enum: ['rohseife', 'duftoil', 'verpackung', 'produkt'],
+    enum: ['rohseife', 'duftoil', 'verpackung', 'produkt', 'zusatzinhaltsstoff'],
     required: true
     // index: true entfernt - wird über Compound-Index abgedeckt
   },
@@ -25,7 +25,7 @@ const bestandSchema = new mongoose.Schema({
   artikelModell: {
     type: String,
     required: true,
-    enum: ['Rohseife', 'Duftoil', 'Verpackung', 'Portfolio']
+    enum: ['Rohseife', 'Duftoil', 'Verpackung', 'Portfolio', 'ZusatzInhaltsstoff']
   },
   
   // Aktueller Lagerbestand

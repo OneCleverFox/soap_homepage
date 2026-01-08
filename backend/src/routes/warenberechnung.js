@@ -4,6 +4,8 @@ const Portfolio = require('../models/Portfolio');
 const Rohseife = require('../models/Rohseife');
 const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
+const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
+const ZusatzinhaltsstoffeService = require('../services/zusatzinhaltsstoffeService');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -285,12 +287,58 @@ router.post('/:id/recalculate', auth, async (req, res) => {
     
     berechnung.verpackungKosten = verpackung ? verpackung.kostenProStueck : 0;
     
-    await berechnung.save();
+    // Zusatzinhaltsstoffe-Kosten berechnen (NEU)
+    const zusatzErgebnis = await ZusatzinhaltsstoffeService.aktualisiereWarenberechnung(berechnung.portfolioProdukt._id);
+    if (zusatzErgebnis.success) {
+      console.log(`✅ Zusatzinhaltsstoffe-Kosten aktualisiert für ${berechnung.produktName}`);
+      berechnung = zusatzErgebnis.warenberechnung;
+    } else {
+      console.warn(`⚠️ Fehler bei Zusatzinhaltsstoffe-Berechnung: ${zusatzErgebnis.error}`);
+      await berechnung.save();
+    }
     
     const updatedBerechnung = await Warenberechnung.findById(berechnung._id).populate('portfolioProdukt');
     res.json(updatedBerechnung);
   } catch (error) {
     console.error('Fehler beim Neuberechnen:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST Route für Neuberechnung aller Zusatzinhaltsstoffe nach Preisänderung
+router.post('/zusatzinhaltsstoffe/:inhaltsstoffId/neuberechnen', auth, async (req, res) => {
+  try {
+    const ergebnis = await ZusatzinhaltsstoffeService.aktualisiereAlleBetroffenenWarenberechnungen(req.params.inhaltsstoffId);
+    
+    if (ergebnis.success) {
+      res.json({
+        message: `${ergebnis.erfolgreichAktualisiert} Warenberechnungen erfolgreich aktualisiert`,
+        betroffeneProdukte: ergebnis.betroffeneProdukte,
+        erfolgreichAktualisiert: ergebnis.erfolgreichAktualisiert,
+        fehlerBeiAktualisierung: ergebnis.fehlerBeiAktualisierung
+      });
+    } else {
+      res.status(500).json({
+        message: 'Fehler bei der Massen-Aktualisierung',
+        error: ergebnis.error
+      });
+    }
+  } catch (error) {
+    console.error('Fehler bei Massen-Neuberechnung:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET Route für Zusatzinhaltsstoffe-Validierung
+router.post('/zusatzinhaltsstoffe/validieren', auth, async (req, res) => {
+  try {
+    const { zusatzinhaltsstoffe, maxGewicht } = req.body;
+    
+    const validierung = await ZusatzinhaltsstoffeService.validiereZusatzinhaltsstoffe(zusatzinhaltsstoffe, maxGewicht);
+    
+    res.json(validierung);
+  } catch (error) {
+    console.error('Fehler bei Zusatzinhaltsstoffe-Validierung:', error);
     res.status(500).json({ message: error.message });
   }
 });

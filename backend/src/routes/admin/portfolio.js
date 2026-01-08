@@ -1,6 +1,7 @@
 const express = require('express');
 const Portfolio = require('../../models/Portfolio');
 const { optimizeMainImage } = require('../../middleware/imageOptimization');
+const ZusatzinhaltsstoffeService = require('../../services/zusatzinhaltsstoffeService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -75,7 +76,9 @@ router.post('/', async (req, res) => {
       verpackung,
       aktiv,
       reihenfolge,
-      beschreibung
+      beschreibung,
+      zusatzinhaltsstoffe,
+      rohseifenKonfiguration
     } = req.body;
 
     // Prüfen ob Name bereits existiert
@@ -106,6 +109,15 @@ router.post('/', async (req, res) => {
         anwendung: '',
         besonderheiten: ''
       },
+      zusatzinhaltsstoffe: zusatzinhaltsstoffe || [],
+      rohseifenKonfiguration: rohseifenKonfiguration || {
+        verwendeZweiRohseifen: false,
+        seife2: '',
+        gewichtVerteilung: {
+          seife1Prozent: 100,
+          seife2Prozent: 0
+        }
+      },
       bilder: {
         hauptbild: '',
         galerie: [],
@@ -114,6 +126,16 @@ router.post('/', async (req, res) => {
     });
 
     const savedProduct = await newProduct.save();
+    
+    // Warenberechnung mit Zusatzinhaltsstoffen aktualisieren
+    if (zusatzinhaltsstoffe && zusatzinhaltsstoffe.length > 0) {
+      try {
+        await ZusatzinhaltsstoffeService.aktualisiereWarenberechnung(savedProduct._id);
+        console.log('✅ Warenberechnung mit Zusatzinhaltsstoffen aktualisiert für:', savedProduct.name);
+      } catch (error) {
+        console.warn('⚠️ Warenberechnung-Update fehlgeschlagen:', error.message);
+      }
+    }
 
     res.status(201).json({
       success: true,
@@ -213,7 +235,24 @@ router.put('/:id', async (req, res) => {
       console.log('🔧 PORTFOLIO UPDATE - Setze Rohseifen-Konfiguration:', product.rohseifenKonfiguration);
     }
 
+    // Zusatzinhaltsstoffe separat handhaben
+    if (updateData.zusatzinhaltsstoffe) {
+      console.log('🗺 PORTFOLIO UPDATE - Erhalte Zusatzinhaltsstoffe:', updateData.zusatzinhaltsstoffe);
+      product.zusatzinhaltsstoffe = updateData.zusatzinhaltsstoffe;
+      console.log('🗺 PORTFOLIO UPDATE - Setze Zusatzinhaltsstoffe:', product.zusatzinhaltsstoffe);
+    }
+
     const updatedProduct = await product.save();
+
+    // Warenberechnung mit Zusatzinhaltsstoffen aktualisieren
+    if (updateData.zusatzinhaltsstoffe !== undefined) {
+      try {
+        await ZusatzinhaltsstoffeService.aktualisiereWarenberechnung(updatedProduct._id);
+        console.log('✅ Warenberechnung mit Zusatzinhaltsstoffen aktualisiert für:', updatedProduct.name);
+      } catch (error) {
+        console.warn('⚠️ Warenberechnung-Update fehlgeschlagen:', error.message);
+      }
+    }
 
     res.json({
       success: true,

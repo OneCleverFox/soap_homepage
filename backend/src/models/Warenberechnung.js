@@ -73,6 +73,37 @@ const warenberechnungSchema = new mongoose.Schema({
     default: 0
   },
   
+  // Zusatzinhaltsstoffe-Kosten (NEU)
+  zusatzinhaltsstoffeKonfiguration: [{
+    inhaltsstoffName: {
+      type: String,
+      required: true
+    },
+    menge: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    einheit: {
+      type: String,
+      enum: ['gramm', 'prozent'],
+      default: 'gramm'
+    },
+    kostenProEinheit: {
+      type: Number,
+      default: 0
+    },
+    gesamtKosten: {
+      type: Number,
+      default: 0
+    }
+  }],
+  
+  zusatzinhaltsstoffeKostenGesamt: {
+    type: Number,
+    default: 0
+  },
+  
   // Bearbeitbare Kosten
   energieKosten: {
     type: Number,
@@ -153,13 +184,19 @@ const warenberechnungSchema = new mongoose.Schema({
 
 // Pre-save Hook: Berechnungen durchführen
 warenberechnungSchema.pre('save', function(next) {
-  // Zwischensumme EK - berücksichtigt zweite Rohseife
+  // Zusatzinhaltsstoffe-Gesamtkosten berechnen
+  this.zusatzinhaltsstoffeKostenGesamt = this.zusatzinhaltsstoffeKonfiguration.reduce((sum, zutat) => {
+    return sum + (zutat.gesamtKosten || 0);
+  }, 0);
+  
+  // Zwischensumme EK - berücksichtigt zweite Rohseife und Zusatzinhaltsstoffe
   this.zwischensummeEK = 
     this.rohseifeKosten + 
     this.rohseife2Kosten +
     this.duftoelKosten + 
     this.verpackungKosten + 
-    this.energieKosten;
+    this.energieKosten +
+    this.zusatzinhaltsstoffeKostenGesamt;
   
   // Pauschale (EK * Faktor)
   this.pauschale = this.zwischensummeEK * this.pauschaleFaktor;
