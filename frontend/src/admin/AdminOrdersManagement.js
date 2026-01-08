@@ -42,8 +42,7 @@ import {
   Refresh as RefreshIcon,
   Search,
   ViewList,
-  Sort,
-  Dashboard
+  Sort
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -169,6 +168,31 @@ const AdminOrdersManagement = () => {
   ];
 
   const [refreshing, setRefreshing] = useState(false);
+
+  // Handle tab switching for mobile view
+  useEffect(() => {
+    // Ensure tabValue is always valid
+    const maxTabIndex = isMobile ? 0 : 1; // Mobile: only Cards (0), Desktop: Cards (0) or Table (1)
+    
+    if (tabValue > maxTabIndex) {
+      setTabValue(0); // Reset to Cards tab if invalid
+    }
+    
+    // If on mobile and currently on Table tab, switch to Cards tab
+    if (isMobile && tabValue === 1) {
+      setTabValue(0);
+    }
+  }, [isMobile, tabValue]);
+
+  // Safe display helper für Objekte
+  const safeDisplayValue = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) return value.join(', ');
+      return JSON.stringify(value);
+    }
+    return String(value);
+  };
 
   // Load orders with enhanced filtering
   const loadOrders = useCallback(async (isRefresh = false) => {
@@ -574,7 +598,16 @@ const AdminOrdersManagement = () => {
 
   // Combined data for display
   const combinedItems = React.useMemo(() => {
-    let items = [...orders];
+    // Transform orders to have consistent field names
+    let items = orders.map(order => ({
+      ...order,
+      bestelltAm: order.createdAt || order.bestelldatum || order.bestelltAm, // Fallback für verschiedene Datumsfelder
+      besteller: order.besteller || order.kunde || {
+        vorname: order.kundenname?.split(' ')[0] || '',
+        nachname: order.kundenname?.split(' ').slice(1).join(' ') || '',
+        email: order.kundenEmail || order.email || ''
+      }
+    }));
     
     if (filters.showInquiries) {
       const inquiryItems = inquiries.map(inquiry => {
@@ -680,8 +713,9 @@ const AdminOrdersManagement = () => {
 
   // Tab content renderer
   const getTabContent = () => {
+    // Only Cards tab (0) on mobile, Cards (0) and Table (1) on desktop
     switch (tabValue) {
-      case 0: // Karten-Ansicht
+      case 0: // Cards view
         return (
           <Grid container spacing={2}>
             {combinedItems.map((item) => (
@@ -713,37 +747,38 @@ const AdminOrdersManagement = () => {
                     
                     {/* Zeige Tracking-Nummer für verschickte Bestellungen */}
                     {item.status === 'verschickt' && (item.trackingNumber || item.versand?.sendungsnummer) ? (
-                      <Typography 
-                        variant="body2" 
-                        color="primary.main" 
-                        gutterBottom
-                        sx={{ 
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          '&:hover': { color: 'primary.dark' }
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation(); // Verhindert das Öffnen des Detail-Dialogs
-                          const trackingNum = item.trackingNumber || item.versand?.sendungsnummer;
-                          const carrier = item.carrier || item.versand?.anbieter;
-                          const trackingUrl = generateTrackingUrl(carrier, trackingNum);
-                          if (trackingUrl) {
-                            window.open(trackingUrl, '_blank');
-                          }
-                        }}
-                        title="Klicken um Sendung zu verfolgen"
-                      >
-                        📦 {item.trackingNumber || item.versand?.sendungsnummer}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Typography 
+                          variant="body2" 
+                          color="primary.main" 
+                          sx={{ 
+                            cursor: 'pointer',
+                            textDecoration: 'underline',
+                            '&:hover': { color: 'primary.dark' }
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Verhindert das Öffnen des Detail-Dialogs
+                            const trackingNum = item.trackingNumber || item.versand?.sendungsnummer;
+                            const carrier = item.carrier || item.versand?.anbieter;
+                            const trackingUrl = generateTrackingUrl(carrier, trackingNum);
+                            if (trackingUrl) {
+                              window.open(trackingUrl, '_blank');
+                            }
+                          }}
+                          title="Klicken um Sendung zu verfolgen"
+                        >
+                          📦 {item.trackingNumber || item.versand?.sendungsnummer}
+                        </Typography>
                         {(item.carrier || item.versand?.anbieter) && (
                           <Chip 
                             size="small" 
                             label={(item.carrier || item.versand?.anbieter).toUpperCase()} 
-                            sx={{ ml: 1, fontSize: '0.6rem', height: '16px' }}
+                            sx={{ fontSize: '0.6rem', height: '16px' }}
                             variant="outlined"
                             color="primary"
                           />
                         )}
-                      </Typography>
+                      </Box>
                     ) : (
                       <Typography variant="body2" color="text.secondary" gutterBottom>
                         📞 {item.besteller?.telefon || 'Telefon nicht verfügbar'}
@@ -839,72 +874,7 @@ const AdminOrdersManagement = () => {
           </Paper>
         );
 
-      case 2: // Dashboard
-        return (
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <Card>
-                <CardContent>
-                  <Typography variant="h5" gutterBottom>
-                    📊 Übersichts-Dashboard
-                  </Typography>
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <Grid container spacing={3}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom color="primary">
-                            📈 Schnelle Statistiken
-                          </Typography>
-                          <Box display="flex" justifyContent="space-between" py={1}>
-                            <Typography>Gesamte Bestellungen:</Typography>
-                            <Typography fontWeight="bold">{stats.totalOrders || 0}</Typography>
-                          </Box>
-                          <Box display="flex" justifyContent="space-between" py={1}>
-                            <Typography>Offene Anfragen:</Typography>
-                            <Typography fontWeight="bold">{inquiries.length}</Typography>
-                          </Box>
-                          <Box display="flex" justifyContent="space-between" py={1}>
-                            <Typography>Gesamtumsatz:</Typography>
-                            <Typography fontWeight="bold" color="primary">
-                              {formatCurrency(stats.totalRevenue || 0)}
-                            </Typography>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom color="secondary">
-                            🎯 Status Übersicht
-                          </Typography>
-                          {Object.entries(statusConfig).map(([status, config]) => {
-                            const count = orders.filter(order => order.status === status).length;
-                            return (
-                              <Box key={status} display="flex" justifyContent="space-between" alignItems="center" py={1}>
-                                <Box display="flex" alignItems="center" gap={1}>
-                                  <Chip 
-                                    label={config.label} 
-                                    color={config.color} 
-                                    size="small" 
-                                  />
-                                </Box>
-                                <Typography variant="h6">{count}</Typography>
-                              </Box>
-                            );
-                          })}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        );
+
 
       default:
         return null;
@@ -919,15 +889,33 @@ const AdminOrdersManagement = () => {
           📦 Bestellungen verwalten
         </Typography>
         <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-          <Badge badgeContent={combinedItems.length} color="primary">
-            <Chip
-              label={`${combinedItems.length} Bestellungen + Anfragen`}
-              color="primary" 
-              variant="outlined"
-              sx={{ fontWeight: 'bold' }}
-              size={isMobile ? 'small' : 'medium'}
-            />
-          </Badge>
+          {(() => {
+            // Zähle nur wirklich neue/unbearbeitete Items
+            const unbearbeitetCount = combinedItems.filter(item => {
+              const status = item.status?.toLowerCase();
+              return status === 'neu' || status === 'pending' || !status;
+            }).length;
+            
+            return unbearbeitetCount > 0 ? (
+              <Badge badgeContent={unbearbeitetCount} color="error">
+                <Chip
+                  label={`${unbearbeitetCount} neue ${unbearbeitetCount === 1 ? 'Bestellung' : 'Bestellungen'}`}
+                  color="warning" 
+                  variant="outlined"
+                  sx={{ fontWeight: 'bold' }}
+                  size={isMobile ? 'small' : 'medium'}
+                />
+              </Badge>
+            ) : (
+              <Chip
+                label="Alles bearbeitet"
+                color="success" 
+                variant="outlined"
+                sx={{ fontWeight: 'bold' }}
+                size={isMobile ? 'small' : 'medium'}
+              />
+            );
+          })()}
           {loading && (
             <CircularProgress size={20} />
           )}
@@ -1017,7 +1005,13 @@ const AdminOrdersManagement = () => {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs 
           value={tabValue} 
-          onChange={(e, newValue) => setTabValue(newValue)}
+          onChange={(e, newValue) => {
+            // Ensure newValue is within valid range
+            const maxTabIndex = isMobile ? 0 : 1;
+            if (newValue >= 0 && newValue <= maxTabIndex) {
+              setTabValue(newValue);
+            }
+          }}
           variant={isMobile ? 'fullWidth' : 'standard'}
           scrollButtons="auto"
         >
@@ -1026,16 +1020,13 @@ const AdminOrdersManagement = () => {
             icon={<ViewList />} 
             iconPosition={isMobile ? 'top' : 'start'}
           />
-          <Tab 
-            label={isMobile ? "Tabelle" : "📊 Tabellen-Ansicht"} 
-            icon={<Sort />} 
-            iconPosition={isMobile ? 'top' : 'start'}
-          />
-          <Tab 
-            label={isMobile ? "Dashboard" : "📈 Dashboard"} 
-            icon={<Dashboard />} 
-            iconPosition={isMobile ? 'top' : 'start'}
-          />
+          {!isMobile && (
+            <Tab 
+              label="📊 Tabellen-Ansicht" 
+              icon={<Sort />} 
+              iconPosition="start"
+            />
+          )}
         </Tabs>
       </Box>
 
@@ -1250,21 +1241,91 @@ const AdminOrdersManagement = () => {
                     <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       🛒 Bestellte Artikel
                     </Typography>
-                    {selectedOrder.warenkorb && selectedOrder.warenkorb.map((item, index) => (
-                      <Box key={index} sx={{ p: 2, border: 1, borderColor: 'grey.300', borderRadius: 1, mb: 1, bgcolor: 'grey.50' }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Box>
-                            <Typography variant="body1" fontWeight="medium">{item.name}</Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              Menge: {item.menge} × {formatCurrency(item.preis || 0)}
+                    {(() => {
+                      // Versuche verschiedene mögliche Feldnamen für Artikel
+                      const artikelArray = selectedOrder.warenkorb || 
+                                         selectedOrder.artikel || 
+                                         selectedOrder.items || 
+                                         selectedOrder.products || 
+                                         selectedOrder.orderItems || 
+                                         selectedOrder.cart || 
+                                         selectedOrder.positionen ||
+                                         [];
+                      
+                      console.log('🛒 Artikel Debug:', {
+                        warenkorb: selectedOrder.warenkorb,
+                        artikel: selectedOrder.artikel,
+                        items: selectedOrder.items,
+                        products: selectedOrder.products,
+                        orderItems: selectedOrder.orderItems,
+                        cart: selectedOrder.cart,
+                        positionen: selectedOrder.positionen,
+                        selectedOrder: Object.keys(selectedOrder)
+                      });
+                      
+                      if (artikelArray && artikelArray.length > 0) {
+                        console.log('🔍 Erste Artikel-Details:', artikelArray[0]);
+                        console.log('🔍 ProduktSnapshot Details:', artikelArray[0]?.produktSnapshot);
+                        console.log('🔍 Alle Artikel-Keys:', artikelArray.map(item => Object.keys(item)));
+                        
+                        return artikelArray.map((item, index) => (
+                          <Box key={index} sx={{ p: 2, border: 1, borderColor: 'grey.300', borderRadius: 1, mb: 1, bgcolor: 'grey.50' }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Box>
+                                <Typography variant="body1" fontWeight="medium">
+                                  {safeDisplayValue(
+                                    item.name || 
+                                    item.produktname || 
+                                    item.title || 
+                                    item.bezeichnung || 
+                                    item.productName || 
+                                    item.itemName || 
+                                    item.produkt || 
+                                    item.artikel ||
+                                    item.portfolioName || 
+                                    item.duftoelName || 
+                                    item.seifeName ||
+                                    // Aus produktSnapshot extrahieren
+                                    item.produktSnapshot?.name ||
+                                    item.produktSnapshot?.produktname ||
+                                    item.produktSnapshot?.title ||
+                                    item.produktSnapshot?.bezeichnung ||
+                                    // Fallback mit Produkttyp
+                                    (item.produktType ? `${item.produktType} (ID: ${item.produktId?.slice(-6)})` : null) ||
+                                    'Unbekanntes Produkt'
+                                  )}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  Menge: {item.menge || item.anzahl || item.quantity || item.qty || 1} × {formatCurrency(item.preis || item.einzelpreis || item.price || item.unitPrice || 0)}
+                                </Typography>
+                                {(item.beschreibung || item.description) && (
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                    {safeDisplayValue(item.beschreibung || item.description)}
+                                  </Typography>
+                                )}
+                                {item.sku && (
+                                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                                    SKU: {item.sku}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Typography variant="body1" fontWeight="bold">
+                                {formatCurrency((item.menge || item.anzahl || item.quantity || item.qty || 1) * (item.preis || item.einzelpreis || item.price || item.unitPrice || 0))}
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ));
+                      } else {
+                        return (
+                          <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
+                            <Typography>Keine Artikel gefunden</Typography>
+                            <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
+                              Debug: Verfügbare Felder in der Bestellung: {Object.keys(selectedOrder).join(', ')}
                             </Typography>
                           </Box>
-                          <Typography variant="body1" fontWeight="bold">
-                            {formatCurrency((item.menge || 1) * (item.preis || 0))}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    ))}
+                        );
+                      }
+                    })()}
                   </Card>
                 </Grid>
                 
@@ -1283,17 +1344,17 @@ const AdminOrdersManagement = () => {
                           </Typography>
                         </Box>
                       )}
-                      {selectedOrder.preise?.versandkosten > 0 && (
+                      {selectedOrder.preise?.versandkosten !== undefined && selectedOrder.preise.versandkosten >= 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                           <Typography variant="body1">Versandkosten:</Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {formatCurrency(selectedOrder.preise.versandkosten)}
+                            {selectedOrder.preise.versandkosten === 0 ? 'Kostenlos' : formatCurrency(selectedOrder.preise.versandkosten)}
                           </Typography>
                         </Box>
                       )}
-                      {selectedOrder.preise?.mwst?.betrag && (
+                      {selectedOrder.preise?.mwst?.betrag > 0 && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body1">MwSt ({selectedOrder.preise.mwst.satz}%):</Typography>
+                          <Typography variant="body1">MwSt ({selectedOrder.preise.mwst.satz || 19}%):</Typography>
                           <Typography variant="body1" fontWeight="medium">
                             {formatCurrency(selectedOrder.preise.mwst.betrag)}
                           </Typography>
@@ -1338,20 +1399,11 @@ const AdminOrdersManagement = () => {
                         />
                       </Box>
                       
-                      {selectedOrder.bestelldatum && (
+                      {(selectedOrder.bestelldatum || selectedOrder.bestelltAm || selectedOrder.createdAt) && (
                         <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                           <Typography variant="body1">Bestellt am:</Typography>
                           <Typography variant="body1" fontWeight="medium">
-                            {new Date(selectedOrder.bestelldatum).toLocaleDateString('de-DE')}
-                          </Typography>
-                        </Box>
-                      )}
-
-                      {selectedOrder.bestelltAm && (
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <Typography variant="body1">Bestellt am:</Typography>
-                          <Typography variant="body1" fontWeight="medium">
-                            {new Date(selectedOrder.bestelltAm).toLocaleDateString('de-DE')}
+                            {new Date(selectedOrder.bestelldatum || selectedOrder.bestelltAm || selectedOrder.createdAt).toLocaleDateString('de-DE')}
                           </Typography>
                         </Box>
                       )}
@@ -1369,48 +1421,51 @@ const AdminOrdersManagement = () => {
                 </Grid>
                 
                 {/* Zusätzliche Informationen */}
-                {((selectedOrder.notizen && typeof selectedOrder.notizen !== 'undefined') || 
-                  (selectedOrder.paymentMethod && typeof selectedOrder.paymentMethod !== 'undefined') || 
-                  (selectedOrder.rechnung && typeof selectedOrder.rechnung !== 'undefined') || 
-                  (selectedOrder.notes && typeof selectedOrder.notes !== 'undefined')) && (
-                  <Grid item xs={12}>
-                    <Card sx={{ p: 2 }}>
-                      <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        ℹ️ Zusätzliche Informationen
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {selectedOrder.paymentMethod && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body1">Zahlungsmethode:</Typography>
-                            <Typography variant="body1" fontWeight="medium">
-                              {formatDisplayValue(selectedOrder.paymentMethod)}
+                <Grid item xs={12}>
+                  <Card sx={{ p: 2 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      ℹ️ Zusätzliche Informationen
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {(selectedOrder.paymentMethod || selectedOrder.zahlungsmethode || selectedOrder.zahlung?.methode) && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Zahlungsmethode:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {safeDisplayValue(selectedOrder.paymentMethod || selectedOrder.zahlungsmethode || selectedOrder.zahlung?.methode) || 'Nicht angegeben'}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {(selectedOrder.rechnungsnummer || selectedOrder.rechnung?.nummer || selectedOrder.invoice?.number) && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body1">Rechnungsnummer:</Typography>
+                          <Typography variant="body1" fontWeight="medium">
+                            {safeDisplayValue(selectedOrder.rechnungsnummer || selectedOrder.rechnung?.nummer || selectedOrder.invoice?.number)}
+                          </Typography>
+                        </Box>
+                      )}
+                      
+                      {(selectedOrder.notizen || selectedOrder.notes || selectedOrder.bemerkungen) && (
+                        <Box>
+                          <Typography variant="body1" sx={{ mb: 1 }}>Notizen:</Typography>
+                          <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1 }}>
+                            <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
+                              {safeDisplayValue(selectedOrder.notizen || selectedOrder.notes || selectedOrder.bemerkungen)}
                             </Typography>
                           </Box>
-                        )}
-                        
-                        {selectedOrder.rechnung && (
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <Typography variant="body1">Rechnungsnummer:</Typography>
-                            <Typography variant="body1" fontWeight="medium">
-                              {formatDisplayValue(selectedOrder.rechnung)}
-                            </Typography>
-                          </Box>
-                        )}
-                        
-                        {(selectedOrder.notizen || selectedOrder.notes) && (
-                          <Box>
-                            <Typography variant="body1" sx={{ mb: 1 }}>Notizen:</Typography>
-                            <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1 }}>
-                              <Typography variant="body2" style={{ whiteSpace: 'pre-wrap' }}>
-                                {formatDisplayValue(selectedOrder.notizen || selectedOrder.notes)}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        )}
-                      </Box>
-                    </Card>
-                  </Grid>
-                )}
+                        </Box>
+                      )}
+                      
+                      {!selectedOrder.paymentMethod && !selectedOrder.zahlungsmethode && !selectedOrder.zahlung?.methode &&
+                       !selectedOrder.rechnungsnummer && !selectedOrder.rechnung?.nummer && !selectedOrder.invoice?.number &&
+                       !selectedOrder.notizen && !selectedOrder.notes && !selectedOrder.bemerkungen && (
+                        <Box sx={{ p: 2, textAlign: 'center', color: 'text.secondary' }}>
+                          <Typography variant="body2">Keine zusätzlichen Informationen verfügbar</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Card>
+                </Grid>
               </Grid>
             </DialogContent>
             <DialogActions>

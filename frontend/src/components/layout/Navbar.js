@@ -18,8 +18,13 @@ import {
   ListItemButton,
   Divider,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Collapse
 } from '@mui/material';
+import { ExpandMore } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCart } from '../../contexts/CartContext';
 import api from '../../services/api';
@@ -31,6 +36,7 @@ const Navbar = () => {
   const [accountMenu, setAccountMenu] = useState(null);
   const [infoMenu, setInfoMenu] = useState(null);
   const [adminMenu, setAdminMenu] = useState(null);
+  const [legalExpanded, setLegalExpanded] = useState(false);
   
   // Badge-Zähler für Handlungsbedarf
   const [pendingInquiries, setPendingInquiries] = useState(0);
@@ -58,22 +64,17 @@ const Navbar = () => {
         const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
         
         if (isAdmin) {
-          // Admin: Zähle neue, unbearbeitete Anfragen mit lastViewed-System
-          const lastViewedKey = 'admin_inquiries_last_viewed';
-          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
-          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
-          
-          // Nur Anfragen zählen, die nach dem letzten Besuch eingegangen sind
+          // Admin: Nur tatsächlich neue, unbearbeitete Anfragen zählen
           const newInquiries = inquiries.filter(inquiry => {
             const status = inquiry.status?.toLowerCase();
-            const createdAt = new Date(inquiry.createdAt);
-            return (status === 'pending' || !status) && createdAt > lastViewedDate;
+            // Nur als wirklich "neu" oder "pending" markierte Anfragen zählen
+            return status === 'pending' || status === 'neu' || !status;
           });
           
           setPendingInquiries(newInquiries.length);
           
           if (process.env.NODE_ENV === 'development') {
-            console.log(`👑 Admin: ${newInquiries.length} neue Anfragen seit ${lastViewedDate.toLocaleString()}`);
+            console.log(`👑 Admin: ${newInquiries.length} neue Anfragen`);
           }
         } else {
           // Kunde: Zähle Antworten auf eigene Anfragen
@@ -130,15 +131,12 @@ const Navbar = () => {
         const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
         
         if (isAdmin) {
-          // Admin: Zähle Bestellungen die Aufmerksamkeit benötigen
+          // Admin: Nur wirklich neue Bestellungen zählen, die noch nicht bearbeitet wurden
           const needsAttention = result.data.bestellungen.filter(order => {
-            const paymentStatus = order.zahlung?.status?.toLowerCase();
             const orderStatus = order.status?.toLowerCase();
             
-            // Bestellungen die Handlungsbedarf haben
-            return orderStatus === 'neu' || 
-                   orderStatus === 'pending' ||
-                   paymentStatus === 'failed';
+            // Nur neue, noch nicht bearbeitete Bestellungen zählen
+            return orderStatus === 'neu' || orderStatus === 'pending';
           });
           setPendingOrders(needsAttention.length);
         } else {
@@ -313,7 +311,6 @@ const Navbar = () => {
   const adminNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
     { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
-    { label: 'Mein Warenkorb', path: '/admin/warenkorb', icon: '🛒' },
     { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
     { label: 'Bestellverwaltung', path: '/admin/bestellungen', icon: '📋' },
     { label: 'Anfragen-Verwaltung', path: '/admin/anfragen', icon: '📨' },
@@ -328,7 +325,7 @@ const Navbar = () => {
   ];
 
   const drawer = (
-    <Box sx={{ width: 250 }}>
+    <Box sx={{ width: 250, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
         <Typography variant="h6" component="div">
           Glücksmomente
@@ -357,98 +354,92 @@ const Navbar = () => {
 
       <Divider />
 
+      {/* Collapsible Rechtliches Section */}
       <List>
-        <ListItem>
+        <ListItemButton onClick={() => setLegalExpanded(!legalExpanded)}>
+          <ListItemIcon>
+            ⚖️
+          </ListItemIcon>
           <ListItemText 
             primary="Rechtliches" 
             primaryTypographyProps={{ 
-              variant: 'subtitle2', 
-              color: 'text.secondary' 
+              variant: 'subtitle2'
             }} 
           />
-        </ListItem>
-        {legalNavItems.map((item) => (
-          <ListItemButton 
-            key={item.path}
-            component={Link}
-            to={item.path}
-            selected={isActive(item.path)}
-            onClick={() => setMobileOpen(false)}
-            sx={{ pl: 3 }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText primary={item.label} />
-          </ListItemButton>
-        ))}
+          <ExpandMore 
+            sx={{ 
+              transform: legalExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.3s'
+            }} 
+          />
+        </ListItemButton>
+        <Collapse in={legalExpanded} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            {legalNavItems.map((item) => (
+              <ListItemButton 
+                key={item.path}
+                component={Link}
+                to={item.path}
+                selected={isActive(item.path)}
+                onClick={() => setMobileOpen(false)}
+                sx={{ pl: 4 }}
+              >
+                <ListItemIcon sx={{ minWidth: 32 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+        </Collapse>
       </List>
 
       <Divider />
 
+      {/* Admin Section */}
+      {user && (user.rolle === 'admin' || user.role === 'admin') && (
+        <>
+          <List>
+            <ListItem>
+              <ListItemText 
+                primary="Admin-Bereiche" 
+                primaryTypographyProps={{ 
+                  variant: 'subtitle2', 
+                  color: 'primary.main',
+                  fontWeight: 'bold'
+                }} 
+              />
+            </ListItem>
+            {adminNavItems.map((item) => (
+              <ListItemButton 
+                key={item.path}
+                component={Link}
+                to={item.path}
+                selected={isActive(item.path)}
+                onClick={() => setMobileOpen(false)}
+                sx={{ pl: 3 }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+          <Divider />
+        </>
+      )}
+
+      {/* Bottom section */}
+      <Box sx={{ flexGrow: 1 }} />
       <List>
         {user ? (
-          <>
-            <ListItemButton onClick={() => { setMobileOpen(false); navigate('/profile'); }}>
-              <ListItemIcon>
-                <Badge 
-                  badgeContent={pendingInquiries + pendingOrders} 
-                  color="warning"
-                  invisible={pendingInquiries + pendingOrders === 0}
-                  sx={{
-                    '& .MuiBadge-badge': {
-                      fontSize: '0.6rem',
-                      minWidth: '16px',
-                      height: '16px'
-                    }
-                  }}
-                >
-                  👤
-                </Badge>
-              </ListItemIcon>
-              <ListItemText primary={`Hallo, ${user.name}`} />
-            </ListItemButton>
-            
-            {/* Admin-Bereiche für Mobile */}
-            {(user.rolle === 'admin' || user.role === 'admin') && (
-              <>
-                <Divider />
-                <ListItem>
-                  <ListItemText 
-                    primary="Admin-Bereiche" 
-                    primaryTypographyProps={{ 
-                      variant: 'subtitle2', 
-                      color: 'primary.main',
-                      fontWeight: 'bold'
-                    }} 
-                  />
-                </ListItem>
-                {adminNavItems.map((item) => (
-                  <ListItemButton 
-                    key={item.path}
-                    component={Link}
-                    to={item.path}
-                    selected={isActive(item.path)}
-                    onClick={() => setMobileOpen(false)}
-                    sx={{ pl: 3 }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      {item.icon}
-                    </ListItemIcon>
-                    <ListItemText primary={item.label} />
-                  </ListItemButton>
-                ))}
-                <Divider />
-              </>
-            )}
-            
-            <ListItemButton onClick={() => { setMobileOpen(false); handleLogout(); }}>
-              <ListItemIcon>
-                🚪
-              </ListItemIcon>
-              <ListItemText primary="Abmelden" />
-            </ListItemButton>
-          </>
+          <ListItemButton onClick={() => { setMobileOpen(false); handleLogout(); }}>
+            <ListItemIcon>
+              🚪
+            </ListItemIcon>
+            <ListItemText primary="Abmelden" />
+          </ListItemButton>
         ) : (
           <ListItemButton onClick={() => { setMobileOpen(false); navigate('/login'); }}>
             <ListItemIcon>

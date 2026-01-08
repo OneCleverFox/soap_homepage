@@ -124,9 +124,9 @@ class PDFService {
     const defaultCompany = {
       name: 'Glücksmomente Manufaktur',
       address: {
-        street: 'Musterstraße 123',
-        postalCode: '64673',
-        city: 'Zwingenberg',
+        street: 'Wasserwerkstrasse 15',
+        postalCode: '68642',
+        city: 'Bürstadt',
         country: 'Deutschland'
       },
       contact: {
@@ -705,8 +705,8 @@ class PDFService {
             <div class="footer-column footer-right">
               <h4>⚖️ Rechtliche Angaben</h4>
               <p><strong>Amtsgericht:</strong> ${companyInfo.taxInfo.registrationCourt}</p>
-              <p><strong>Rechtsform:</strong> Einzelunternehmen</p>
-              <p><strong>Gerichtsstand:</strong> Zwingenberg</p>
+              <p><strong>Rechtsform:</strong> ${template?.companyInfo?.taxInfo?.legalForm || 'Einzelunternehmen'}</p>
+              <p><strong>Gerichtsstand:</strong> ${template?.companyInfo?.taxInfo?.registrationCourt || 'Lampertheim'}</p>
             </div>
           </div>
           
@@ -745,7 +745,7 @@ class PDFService {
               }
             </strong><br>
             Diese Rechnung entspricht den gesetzlichen Anforderungen nach § 14 UStG. 
-            Es gilt deutsches Recht. Erfüllungsort und Gerichtsstand ist Zwingenberg.
+            Es gilt deutsches Recht. Erfüllungsort und Gerichtsstand ist ${template?.companyInfo?.taxInfo?.registrationCourt || 'Lampertheim'}.
           </div>
         </div>
         

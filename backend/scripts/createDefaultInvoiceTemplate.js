@@ -24,9 +24,9 @@ const invoiceTemplateSchema = new mongoose.Schema({
   companyInfo: {
     name: { type: String, default: 'Glücksmomente Manufaktur' },
     address: {
-      street: { type: String, default: 'Musterstraße 123' },
-      postalCode: { type: String, default: '64673' },
-      city: { type: String, default: 'Zwingenberg' },
+      street: { type: String, default: 'Wasserwerkstrasse 15' },
+      postalCode: { type: String, default: '68642' },
+      city: { type: String, default: 'Bürstadt' },
       country: { type: String, default: 'Deutschland' }
     },
     contact: {
@@ -72,7 +72,8 @@ async function createDefaultTemplate() {
             'companyInfo.taxInfo.ceo': 'Ralf Jacob',
             'companyInfo.taxInfo.vatId': '',  // Muss vom User eingegeben werden
             'companyInfo.taxInfo.taxNumber': '',  // Muss vom User eingegeben werden
-            'companyInfo.taxInfo.legalForm': 'Einzelunternehmen'
+            'companyInfo.taxInfo.legalForm': 'Einzelunternehmen',
+            'companyInfo.taxInfo.registrationCourt': 'Lampertheim'
           }
         }
       );

@@ -418,18 +418,38 @@ const CheckoutPage = () => {
       const mwstBetrag = endpreis - (endpreis / 1.19);
 
       const bestellungData = {
-        artikel: availableItems.map(item => ({
-          produktType: 'portfolio', // Standardwert für Portfolio-Produkte
-          produktId: item.id,
-          produktSnapshot: {
-            name: item.name,
-            beschreibung: item.beschreibung || '',
-            bild: item.image || ''
-          },
-          menge: item.quantity,
-          einzelpreis: item.price,
-          gesamtpreis: item.price * item.quantity
-        })),
+        artikel: availableItems.map(item => {
+          // Beschreibung intelligent extrahieren
+          let beschreibung = '';
+          if (item.beschreibung) {
+            if (typeof item.beschreibung === 'string') {
+              beschreibung = item.beschreibung;
+            } else if (typeof item.beschreibung === 'object') {
+              // Portfolio hat beschreibung.kurz und beschreibung.lang
+              beschreibung = item.beschreibung.kurz || 
+                           item.beschreibung.lang || 
+                           'Handgefertigte Seife';
+            }
+          }
+          
+          // Beschreibung auf ca. 120 Zeichen begrenzen
+          if (beschreibung.length > 120) {
+            beschreibung = beschreibung.substring(0, 117) + '...';
+          }
+          
+          return {
+            produktType: 'portfolio',
+            produktId: item.id,
+            produktSnapshot: {
+              name: item.name,
+              beschreibung,
+              bild: item.image || ''
+            },
+            menge: item.quantity,
+            einzelpreis: item.price,
+            gesamtpreis: item.price * item.quantity
+          };
+        }),
         besteller: {
           email: customerData?.email || orderData.rechnungsadresse.email || '',
           vorname: orderData.rechnungsadresse.vorname,

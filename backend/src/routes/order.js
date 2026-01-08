@@ -10,6 +10,42 @@ const { validateCheckoutStatus, validatePayPalStatus } = require('../middleware/
 const { createInquiryFromOrder } = require('../utils/inquiryHelper');
 const { validateShippingData, generateTrackingUrl } = require('../utils/trackingValidation');
 
+// Hilfsfunktion zur Generierung einer Produktbeschreibung aus Portfolio-Daten
+function generateProductDescription(portfolioData) {
+  const parts = [];
+  
+  // Aroma hinzufügen (immer vorhanden)
+  if (portfolioData.aroma && portfolioData.aroma !== 'keine Auswahl') {
+    parts.push(portfolioData.aroma);
+  }
+  
+  // Seifenform hinzufügen (immer vorhanden)
+  if (portfolioData.seifenform && portfolioData.seifenform !== 'keine Auswahl') {
+    parts.push(portfolioData.seifenform);
+  }
+  
+  // Verpackung hinzufügen (immer vorhanden)
+  if (portfolioData.verpackung && portfolioData.verpackung !== 'keine Auswahl') {
+    parts.push(portfolioData.verpackung);
+  }
+  
+  // Zusatz hinzufügen (optional)
+  if (portfolioData.zusatz && portfolioData.zusatz.trim() !== '') {
+    parts.push(portfolioData.zusatz);
+  }
+  
+  // Optional hinzufügen (falls vorhanden)
+  if (portfolioData.optional && portfolioData.optional.trim() !== '') {
+    parts.push(portfolioData.optional);
+  }
+  
+  // Teile mit " • " verbinden für professionelle Optik
+  const description = parts.join(' • ');
+  
+  // Fallback falls keine Teile gefunden
+  return description || 'Handgefertigte Seife';
+}
+
 // 🎯 PayPal-Erfolg: Bestellung finalisieren
 router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, async (req, res) => {
   try {
@@ -362,13 +398,33 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
         });
       }
 
+      // Beschreibung intelligent extrahieren aus Portfolio-Objekt
+      let beschreibung = generateProductDescription({
+        aroma: dbArtikel.aroma,
+        seifenform: dbArtikel.seifenform,
+        verpackung: dbArtikel.verpackung,
+        zusatz: dbArtikel.zusatz,
+        optional: dbArtikel.optional
+      });
+      
+      // Beschreibung auf ca. 120 Zeichen begrenzen
+      if (beschreibung.length > 120) {
+        beschreibung = beschreibung.substring(0, 117) + '...';
+      }
+      
       // Validierter Artikel für Order-Schema
       validierteArtikel.push({
         produktType: artikelItem.produktType || 'portfolio',
         produktId: dbArtikel._id,
         produktSnapshot: {
           name: dbArtikel.name,
-          beschreibung: dbArtikel.beschreibung || '',
+          beschreibung,
+          // Portfolio-Strukturdaten für spätere Beschreibungsgenerierung speichern
+          aroma: dbArtikel.aroma,
+          seifenform: dbArtikel.seifenform,
+          verpackung: dbArtikel.verpackung,
+          zusatz: dbArtikel.zusatz,
+          optional: dbArtikel.optional,
           kategorie: dbArtikel.kategorie || '',
           bild: dbArtikel.bild || '',
           gewicht: dbArtikel.gewicht,

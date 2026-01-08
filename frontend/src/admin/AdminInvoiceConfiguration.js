@@ -90,9 +90,9 @@ const AdminInvoiceConfiguration = () => {
     companyInfo: {
       name: 'Glücksmomente Manufaktur',
       address: {
-        street: 'Musterstraße 123',
-        postalCode: '64673',
-        city: 'Zwingenberg',
+        street: 'Wasserwerkstrasse 15',
+        postalCode: '68642',
+        city: 'Bürstadt',
         country: 'Deutschland'
       },
       contact: {
@@ -101,12 +101,12 @@ const AdminInvoiceConfiguration = () => {
         website: 'www.gluecksmomente-manufaktur.de'
       },
       taxInfo: {
-        taxNumber: 'DE123456789',
-        vatId: 'USt-IdNr.: DE123456789',
-        ceo: 'Max Mustermann',
+        taxNumber: '11548484',
+        vatId: 'wurde beantragt',
+        ceo: 'Ralf Jacob',
         legalForm: 'Einzelunternehmen',
-        registrationCourt: 'Amtsgericht Musterstadt',
-        registrationNumber: 'HRB 123456'
+        registrationCourt: 'Lampertheim',
+        registrationNumber: 'wurde beantragt'
       },
       bankDetails: {
         bankName: 'Musterbank',
@@ -558,7 +558,7 @@ const AdminInvoiceConfiguration = () => {
               label="Stadt"
               value={currentTemplate?.companyInfo?.address?.city || ''}
               onChange={(e) => updateTemplate('companyInfo.address.city', e.target.value)}
-              placeholder="Zwingenberg"
+              placeholder="Bürstadt"
             />
           </Grid>
           <Grid item xs={12} md={6}>

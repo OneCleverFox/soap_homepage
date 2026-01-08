@@ -1,8 +1,42 @@
 const Order = require('../models/Order');
 const InvoiceTemplate = require('../models/InvoiceTemplate');
+const Portfolio = require('../models/Portfolio');
 const invoiceController = require('../controllers/invoiceController');
 const nodemailer = require('nodemailer');
 const path = require('path');
+
+// Hilfsfunktion zur Generierung einer Produktbeschreibung aus Portfolio-Daten
+function generateProductDescription(portfolioData) {
+  const parts = [];
+  
+  // Aroma hinzufügen (immer vorhanden)
+  if (portfolioData.aroma && portfolioData.aroma !== 'keine Auswahl') {
+    parts.push(portfolioData.aroma);
+  }
+  
+  // Seifenform hinzufügen (immer vorhanden)
+  if (portfolioData.seifenform && portfolioData.seifenform !== 'keine Auswahl') {
+    parts.push(portfolioData.seifenform);
+  }
+  
+  // Verpackung hinzufügen (immer vorhanden)
+  if (portfolioData.verpackung && portfolioData.verpackung !== 'keine Auswahl') {
+    parts.push(portfolioData.verpackung);
+  }
+  
+  // Zusatz hinzufügen (optional)
+  if (portfolioData.zusatz && portfolioData.zusatz.trim() !== '') {
+    parts.push(portfolioData.zusatz);
+  }
+  
+  // Optional-Feld hinzufügen (falls vorhanden)
+  if (portfolioData.optional && portfolioData.optional.trim() !== '') {
+    parts.push(portfolioData.optional);
+  }
+  
+  // Teile mit "•" verknüpfen, oder Fallback wenn leer
+  return parts.length > 0 ? parts.join(' • ') : 'Handgemachte Seife';
+}
 
 class OrderInvoiceService {
   constructor() {
@@ -88,15 +122,72 @@ class OrderInvoiceService {
           stadt: rechnungsadresse?.stadt || '',
           land: rechnungsadresse?.land || 'Deutschland'
         },
-        artikel: order.artikel?.map((item, index) => ({
-          artikelnummer: `ART-${(index + 1).toString().padStart(3, '0')}`, // ✅ Artikelnummer hinzufügen
-          name: item.produktSnapshot?.name || 'Produktname nicht verfügbar',
-          beschreibung: item.produktSnapshot?.beschreibung || 'Keine Beschreibung verfügbar',
-          menge: item.menge || 1,
-          preis: item.einzelpreis || 0,
-          einzelpreis: item.einzelpreis || 0,
-          gesamtpreis: item.gesamtpreis || 0
-        })) || [],
+        artikel: await Promise.all(order.artikel?.map(async (item, index) => {
+          // Beschreibung intelligent aus Portfolio-Daten generieren
+          let beschreibung = 'Handgefertigte Seife';
+          
+          // Prüfe ob Portfolio-Strukturdaten im produktSnapshot verfügbar sind
+          if (item.produktSnapshot) {
+            const snapshot = item.produktSnapshot;
+            
+            // Prüfe ob Portfolio-Strukturdaten verfügbar sind
+            if (snapshot.aroma || snapshot.seifenform || snapshot.verpackung) {
+              beschreibung = generateProductDescription({
+                aroma: snapshot.aroma,
+                seifenform: snapshot.seifenform,
+                verpackung: snapshot.verpackung,
+                zusatz: snapshot.zusatz,
+                optional: snapshot.optional
+              });
+            } else {
+              // Live-Laden von Portfolio-Daten für ältere Bestellungen
+              try {
+                const portfolioItem = await Portfolio.findOne({
+                  name: { $regex: new RegExp(snapshot.name, 'i') }
+                }).lean();
+                
+                if (portfolioItem) {
+                  console.log(`🔄 Live-Laden Portfolio-Daten für: ${snapshot.name}`);
+                  beschreibung = generateProductDescription({
+                    aroma: portfolioItem.aroma,
+                    seifenform: portfolioItem.seifenform,
+                    verpackung: portfolioItem.verpackung,
+                    zusatz: portfolioItem.zusatz,
+                    optional: portfolioItem.optional
+                  });
+                }
+              } catch (error) {
+                console.warn(`⚠️ Fehler beim Live-Laden Portfolio-Daten für ${snapshot.name}:`, error);
+              }
+              
+              // Fallback: Verwende gespeicherte Beschreibung
+              if (beschreibung === 'Handgefertigte Seife' && snapshot.beschreibung) {
+                if (typeof snapshot.beschreibung === 'string') {
+                  beschreibung = snapshot.beschreibung;
+                } else if (typeof snapshot.beschreibung === 'object') {
+                  beschreibung = snapshot.beschreibung.kurz || 
+                               snapshot.beschreibung.lang || 
+                               'Handgefertigte Seife';
+                }
+              }
+            }
+          }
+          
+          // Beschreibung auf ca. 120 Zeichen begrenzen für professionelle Optik
+          if (beschreibung.length > 120) {
+            beschreibung = beschreibung.substring(0, 117) + '...';
+          }
+          
+          return {
+            artikelnummer: `ART-${(index + 1).toString().padStart(3, '0')}`, // ✅ Artikelnummer hinzufügen
+            name: item.produktSnapshot?.name || 'Produktname nicht verfügbar',
+            beschreibung,
+            menge: item.menge || 1,
+            preis: item.einzelpreis || 0,
+            einzelpreis: item.einzelpreis || 0,
+            gesamtpreis: item.gesamtpreis || 0
+          };
+        }) || []),
         gesamtsumme: order.preise?.gesamtsumme || 0,
         nettosumme: order.preise?.zwischensumme || 0,
         versandkosten: order.preise?.versandkosten || 0, // ✅ Versandkosten hinzufügen
@@ -151,7 +242,7 @@ class OrderInvoiceService {
                 productId: null,
                 productData: {
                   name: item.name,
-                  description: item.beschreibung,
+                  description: item.beschreibung, // Bereits korrekt verarbeitet
                   sku: item.artikelnummer, // ✅ Verwende generierte Artikelnummer
                   category: 'Seife'
                 },

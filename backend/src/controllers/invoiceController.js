@@ -988,7 +988,7 @@ class InvoiceController {
         <div class="header">
           <div class="company">${data.company?.name || 'Glücksmomente Manufaktur'}</div>
           <div>${data.company?.address?.street || 'Musterstraße 123'}</div>
-          <div>${data.company?.address?.postalCode || '64673'} ${data.company?.address?.city || 'Zwingenberg'}</div>
+          <div>${data.company?.address?.postalCode || '68642'} ${data.company?.address?.city || 'Bürstadt'}</div>
         </div>
         
         <div class="customer">
@@ -1425,7 +1425,7 @@ class InvoiceController {
       legal: {
         registrationCourt: 'Darmstadt',
         legalForm: 'Einzelunternehmen',
-        jurisdiction: 'Zwingenberg'
+        jurisdiction: 'Lampertheim'
       },
       bankDetails: {
         bankName: 'Sparkasse Bensheim',
@@ -2849,7 +2849,7 @@ class InvoiceController {
                 </div>
                 <div class="footer-column footer-right">
                   <h4>⚖️ Rechtliches</h4>
-                  <p><strong>Gerichtsstand:</strong> Zwingenberg</p>
+                  <p><strong>Gerichtsstand:</strong> Lampertheim</p>
                 </div>
               </div>
             </div>
