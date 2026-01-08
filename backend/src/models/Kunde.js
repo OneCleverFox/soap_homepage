@@ -274,6 +274,10 @@ const kundenSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  anzahlAnmeldungen: {
+    type: Number,
+    default: 0
+  },
   notizen: {
     type: String,
     trim: true,

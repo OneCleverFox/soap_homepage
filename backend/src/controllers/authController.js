@@ -262,6 +262,7 @@ const loginAdmin = async (req, res) => {
     // Erfolgreiche Kunden-Anmeldung - normale Felder updaten
     kunde.letzteAnmeldung = new Date();
     kunde.anmeldeversuche = 0;
+    kunde.anzahlAnmeldungen = (kunde.anzahlAnmeldungen || 0) + 1;
     
     // Normaler Save für Standard-Updates (letzteAnmeldung, anmeldeversuche)
     try {

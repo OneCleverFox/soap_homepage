@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Kunde = require('../models/Kunde');
+const Order = require('../models/Order');
 const jwt = require('jsonwebtoken');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -512,7 +513,8 @@ router.get('/', async (req, res) => {
       limit = 20, 
       suche, 
       status, 
-      stadt, 
+      stadt,
+      role, 
       sortieren = '-createdAt' 
     } = req.query;
 
@@ -532,6 +534,10 @@ router.get('/', async (req, res) => {
       filter['status.aktiv'] = status === 'aktiv';
     }
     
+    if (role) {
+      filter['rolle'] = role;
+    }
+    
     if (stadt) {
       filter['adresse.stadt'] = { $regex: stadt, $options: 'i' };
     }
@@ -544,15 +550,81 @@ router.get('/', async (req, res) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Bestellstatistiken für jeden Kunden hinzufügen
+    const kundenMitStatistiken = await Promise.all(
+      kunden.map(async (kunde) => {
+        try {
+          // Bestellstatistiken berechnen - sowohl über ObjectId als auch über E-Mail suchen
+          const bestellungenByKundeId = await Order.find({ kunde: kunde._id });
+          const bestellungenByEmail = await Order.find({ 'besteller.email': kunde.email.toLowerCase() });
+          
+          // Kombiniere beide Ergebnisse und entferne Duplikate
+          const alleBestellungenMap = new Map();
+          [...bestellungenByKundeId, ...bestellungenByEmail].forEach(order => {
+            alleBestellungenMap.set(order._id.toString(), order);
+          });
+          const bestellungen = Array.from(alleBestellungenMap.values());
+          
+          console.log(`📊 Bestellungen für ${kunde.email}: ${bestellungen.length} gefunden (ID: ${bestellungenByKundeId.length}, Email: ${bestellungenByEmail.length})`);
+          console.log(`👤 Kunde Login-Daten: anmeldeversuche=${kunde.anmeldeversuche}, anzahlAnmeldungen=${kunde.anzahlAnmeldungen}, letzteAnmeldung=${kunde.letzteAnmeldung}`);
+          
+          const anzahlBestellungen = bestellungen.length;
+          const gesamtumsatz = bestellungen.reduce((sum, order) => {
+            // Korrekte Feldnamen verwenden: preise.gesamtsumme
+            const orderTotal = order.preise?.gesamtsumme || order.gesamtpreis || 0;
+            return sum + orderTotal;
+          }, 0);
+          const letzteBestellung = bestellungen.length > 0 
+            ? bestellungen.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+            : null;
+          
+          // Kunde-Objekt in Plain Object konvertieren und Statistiken hinzufügen
+          const kundeObj = kunde.toObject();
+          
+          // Explizit sicherstellen, dass wichtige Felder verfügbar sind
+          if (typeof kundeObj.anmeldeversuche === 'undefined') {
+            kundeObj.anmeldeversuche = kunde.anmeldeversuche || 0;
+          }
+          if (typeof kundeObj.anzahlAnmeldungen === 'undefined') {
+            kundeObj.anzahlAnmeldungen = kunde.anzahlAnmeldungen || 0;
+          }
+          if (typeof kundeObj.letzteAnmeldung === 'undefined') {
+            kundeObj.letzteAnmeldung = kunde.letzteAnmeldung;
+          }
+          
+          kundeObj.bestellstatistiken = {
+            anzahlBestellungen,
+            gesamtumsatz: Math.round(gesamtumsatz * 100) / 100, // Auf 2 Dezimalstellen runden
+            letzteBestellung: letzteBestellung ? {
+              datum: letzteBestellung.createdAt,
+              gesamtpreis: letzteBestellung.preise?.gesamtsumme || letzteBestellung.gesamtpreis || 0
+            } : null
+          };
+          
+          return kundeObj;
+        } catch (error) {
+          console.error(`Fehler beim Laden der Bestellstatistiken für Kunde ${kunde._id}:`, error);
+          // Fallback: Kunde ohne Statistiken zurückgeben
+          const kundeObj = kunde.toObject();
+          kundeObj.bestellstatistiken = {
+            anzahlBestellungen: 0,
+            gesamtumsatz: 0,
+            letzteBestellung: null
+          };
+          return kundeObj;
+        }
+      })
+    );
+
     const gesamt = await Kunde.countDocuments(filter);
 
     res.status(200).json({
       success: true,
-      count: kunden.length,
+      count: kundenMitStatistiken.length,
       gesamt,
       seite: parseInt(seite),
       seiten: Math.ceil(gesamt / parseInt(limit)),
-      data: kunden
+      data: kundenMitStatistiken
     });
 
   } catch (error) {
@@ -819,6 +891,77 @@ router.get('/search', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler bei der Kundensuche'
+    });
+  }
+});
+
+// @route   GET /api/kunden/debug-orders/:email
+// @desc    Debug - Bestellungen für E-Mail suchen
+// @access  Private (Admin only)
+router.get('/debug-orders/:email', async (req, res) => {
+  try {
+    const email = req.params.email.toLowerCase();
+    console.log(`🔍 Suche Bestellungen für E-Mail: ${email}`);
+    
+    // Suche nach Kunde
+    const kunde = await Kunde.findOne({ email });
+    console.log(`👤 Kunde gefunden:`, kunde ? {
+      id: kunde._id,
+      email: kunde.email,
+      name: `${kunde.vorname} ${kunde.nachname}`,
+      kundennummer: kunde.kundennummer
+    } : 'Nicht gefunden');
+    
+    // Suche nach Bestellungen über Kunde-ID
+    const bestellungenByKundeId = kunde ? await Order.find({ kunde: kunde._id }) : [];
+    console.log(`📦 Bestellungen über Kunde-ID: ${bestellungenByKundeId.length}`);
+    
+    // Suche nach Bestellungen über E-Mail
+    const bestellungenByEmail = await Order.find({ 'besteller.email': email });
+    console.log(`📧 Bestellungen über E-Mail: ${bestellungenByEmail.length}`);
+    
+    // Alle Bestellungen mit E-Mail (für Debug)
+    const alleBestellungen = await Order.find({}).select('besteller.email kunde createdAt preise.gesamtsumme gesamtpreis status bestellstatus').limit(10);
+    console.log(`📋 Sample Bestellungen in DB:`, alleBestellungen.map(o => ({
+      email: o.besteller?.email,
+      kunde: o.kunde,
+      datum: o.createdAt,
+      preisGesamtsumme: o.preise?.gesamtsumme,
+      preisGesamtpreis: o.gesamtpreis,
+      status: o.status,
+      bestellstatus: o.bestellstatus
+    })));
+    
+    res.json({
+      success: true,
+      debug: {
+        gesuchtEmail: email,
+        kunde: kunde ? {
+          id: kunde._id,
+          email: kunde.email,
+          name: `${kunde.vorname} ${kunde.nachname}`,
+          kundennummer: kunde.kundennummer
+        } : null,
+        bestellungenByKundeId: bestellungenByKundeId.length,
+        bestellungenByEmail: bestellungenByEmail.length,
+        bestellungen: [...bestellungenByKundeId, ...bestellungenByEmail].map(o => ({
+          id: o._id,
+          datum: o.createdAt,
+          preisGesamtsumme: o.preise?.gesamtsumme,
+          preisGesamtpreis: o.gesamtpreis,
+          status: o.status,
+          bestellstatus: o.bestellstatus,
+          verknuepfung: o.kunde ? 'Kunde-ID' : 'E-Mail'
+        }))
+      }
+    });
+    
+  } catch (error) {
+    console.error('Debug Orders Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Debug-Fehler',
+      error: error.message
     });
   }
 });
