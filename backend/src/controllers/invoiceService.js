@@ -761,6 +761,7 @@ class InvoiceService {
           gesamtpreis: item.total
         })),
         gesamtsumme: invoice.amounts.total,
+        versandkosten: invoice.amounts.shippingCost || 0, // ✅ Versandkosten hinzufügen
         zahlungsmethode: invoice.payment.method || 'Überweisung'
       };
 
@@ -785,13 +786,18 @@ class InvoiceService {
       
       // MwSt-Berechnung basierend auf Template
       const isSmallBusiness = template.companyInfo?.isSmallBusiness || false;
+      const productTotal = invoice.amounts.subtotal || (invoice.amounts.total - (invoice.amounts.shippingCost || 0));
+      const shippingCost = invoice.amounts.shippingCost || 0;
+      
       if (isSmallBusiness) {
-        bestellungData.nettosumme = invoice.amounts.total;
+        bestellungData.nettosumme = productTotal;
         bestellungData.mwst = 0;
       } else {
         // Bei USt-pflichtigen Unternehmen: Netto = Brutto / 1.19, MwSt = Brutto - Netto
-        bestellungData.nettosumme = invoice.amounts.total / 1.19;
-        bestellungData.mwst = invoice.amounts.total - bestellungData.nettosumme;
+        // Aber Versandkosten separat behandeln (meist auch USt-pflichtig)
+        const totalIncludingShipping = productTotal + shippingCost;
+        bestellungData.nettosumme = totalIncludingShipping / 1.19;
+        bestellungData.mwst = totalIncludingShipping - bestellungData.nettosumme;
       }
       
       console.log('🎨 PDF-Template:', template.name || 'Unnamed');
@@ -799,6 +805,7 @@ class InvoiceService {
       console.log('💰 MwSt-Berechnung:');
       console.log('  - Kleinunternehmer:', isSmallBusiness);
       console.log('  - Gesamtsumme:', bestellungData.gesamtsumme.toFixed(2), '€');
+      console.log('  - Versandkosten:', bestellungData.versandkosten.toFixed(2), '€');
       console.log('  - Nettosumme:', bestellungData.nettosumme.toFixed(2), '€');
       console.log('  - MwSt-Betrag:', bestellungData.mwst.toFixed(2), '€');
       console.log('🧾 Bestellung-Daten für PDF:');

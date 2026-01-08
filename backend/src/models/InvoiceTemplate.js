@@ -17,9 +17,9 @@ const invoiceTemplateSchema = new mongoose.Schema({
       default: 'Glücksmomente Manufaktur'
     },
     address: {
-      street: { type: String, default: 'Musterstraße 123' },
-      postalCode: { type: String, default: '64673' },
-      city: { type: String, default: 'Zwingenberg' },
+      street: { type: String, default: 'Wasserwerkstrasse 15' },
+      postalCode: { type: String, default: '68642' },
+      city: { type: String, default: 'Bürstadt' },
       country: { type: String, default: 'Deutschland' }
     },
     contact: {

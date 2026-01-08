@@ -42,7 +42,8 @@ import {
   Search as SearchIcon,
   FilterList as FilterIcon,
   Delete as DeleteIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -113,6 +114,12 @@ const InvoiceList = () => {
           if (key === 'search') {
             // Suchbegriff als customer-Parameter senden
             cleanFilters.customer = filters[key];
+          } else if (key === 'dateFrom') {
+            // Frontend sendet dateFrom, Backend erwartet from
+            cleanFilters.from = filters[key];
+          } else if (key === 'dateTo') {
+            // Frontend sendet dateTo, Backend erwartet to
+            cleanFilters.to = filters[key];
           } else {
             cleanFilters[key] = filters[key];
           }
@@ -265,6 +272,36 @@ const InvoiceList = () => {
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Status:', error);
       showSnackbar('Fehler beim Aktualisieren des Status', 'error');
+    }
+  };
+
+  const markAsPaid = async (invoiceId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          status: 'paid',
+          paidDate: new Date().toISOString(),
+          paymentReference: 'Manuell als bezahlt markiert'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showSnackbar('Rechnung erfolgreich als bezahlt markiert', 'success');
+        loadInvoices();
+        loadStats();
+        if (viewDialogOpen) setViewDialogOpen(false);
+      } else {
+        showSnackbar(data.message || 'Fehler beim Markieren als bezahlt', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Markieren als bezahlt:', error);
+      showSnackbar('Fehler beim Markieren als bezahlt', 'error');
     }
   };
 
@@ -436,8 +473,32 @@ const InvoiceList = () => {
     });
   };
 
-  const viewInvoice = (invoice) => {
-    setSelectedInvoice(invoice);
+  const viewInvoice = async (invoice) => {
+    try {
+      // Lade vollständige Rechnungsdetails
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoice._id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setSelectedInvoice(data.data);
+        } else {
+          console.error('Fehler beim Laden der Rechnungsdetails:', data.message);
+          setSelectedInvoice(invoice); // Fallback zu Listenansicht
+        }
+      } else {
+        console.error('API-Fehler beim Laden der Rechnungsdetails');
+        setSelectedInvoice(invoice); // Fallback zu Listenansicht
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Rechnungsdetails:', error);
+      setSelectedInvoice(invoice); // Fallback zu Listenansicht
+    }
+    
     setViewDialogOpen(true);
   };
 
@@ -842,6 +903,17 @@ const InvoiceList = () => {
           <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
           PDF herunterladen
         </MenuItem>
+        {actionMenuInvoice && 
+         !(actionMenuInvoice.payment && (actionMenuInvoice.payment.status === 'paid' || actionMenuInvoice.payment.paidDate)) && 
+         actionMenuInvoice.status !== 'paid' && (
+          <MenuItem onClick={() => {
+            markAsPaid(actionMenuInvoice._id);
+            closeActionMenu();
+          }} sx={{ color: 'success.main' }}>
+            <CheckCircleIcon sx={{ mr: 1 }} fontSize="small" />
+            Als bezahlt markieren
+          </MenuItem>
+        )}
         <MenuItem onClick={() => {
           deleteInvoice(actionMenuInvoice._id);
           closeActionMenu();
@@ -869,11 +941,10 @@ const InvoiceList = () => {
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: 'center',
-          pb: isMobile ? 1 : 2
+          pb: isMobile ? 1 : 2,
+          fontSize: isMobile ? '1.25rem' : '1.5rem'
         }}>
-          <Typography variant={isMobile ? "h6" : "h5"}>
-            Rechnung {selectedInvoice?.invoiceNumber}
-          </Typography>
+          Rechnung {selectedInvoice?.invoiceNumber}
           {isMobile && (
             <IconButton 
               onClick={() => setViewDialogOpen(false)}
@@ -901,17 +972,21 @@ const InvoiceList = () => {
               <Grid item xs={12} md={6}>
                 <Typography variant="subtitle2" gutterBottom>Details:</Typography>
                 <Typography variant="body2">
-                  Datum: {new Date(selectedInvoice.invoiceDate).toLocaleDateString('de-DE')}
+                  Datum: {selectedInvoice.dates?.invoiceDate ? 
+                    formatDate(selectedInvoice.dates.invoiceDate) : 
+                    (selectedInvoice.invoiceDate ? formatDate(selectedInvoice.invoiceDate) : 'Kein Datum')
+                  }
                 </Typography>
-                <Typography variant="body2">
-                  Status: <Chip
+                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                  <Typography variant="body2">Status:</Typography>
+                  <Chip
                     size="small"
                     label={getStatusText(selectedInvoice)}
                     color={getStatusColor(selectedInvoice)}
                   />
-                </Typography>
+                </Box>
                 <Typography variant="body2">
-                  Betrag: {selectedInvoice.totalAmount?.toFixed(2)}€
+                  Betrag: {(selectedInvoice.amounts?.total || selectedInvoice.totalAmount)?.toFixed(2)}€
                 </Typography>
               </Grid>
               <Grid item xs={12}>
@@ -926,14 +1001,29 @@ const InvoiceList = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {selectedInvoice.items?.map((item, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{item.name}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{item.unitPrice?.toFixed(2)}€</TableCell>
-                        <TableCell>{(item.quantity * item.unitPrice)?.toFixed(2)}€</TableCell>
+                    {selectedInvoice.items && selectedInvoice.items.length > 0 ? (
+                      selectedInvoice.items.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            {item.productData?.name || item.name || 'Unbekannt'}
+                            {item.productData?.description && (
+                              <Typography variant="caption" display="block" color="textSecondary">
+                                {item.productData.description}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>{item.quantity || '-'}</TableCell>
+                          <TableCell>{(item.unitPrice || 0)?.toFixed(2)}€</TableCell>
+                          <TableCell>{(item.total || (item.quantity * item.unitPrice) || 0)?.toFixed(2)}€</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center">
+                          <Typography color="textSecondary">Keine Artikel verfügbar</Typography>
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </Grid>
@@ -948,6 +1038,21 @@ const InvoiceList = () => {
           {!isMobile && (
             <Button onClick={() => setViewDialogOpen(false)}>
               Schließen
+            </Button>
+          )}
+          {selectedInvoice && 
+           !(selectedInvoice.payment && (selectedInvoice.payment.status === 'paid' || selectedInvoice.payment.paidDate)) && 
+           selectedInvoice.status !== 'paid' && (
+            <Button 
+              variant="contained"
+              color="success"
+              size={isMobile ? "large" : "medium"}
+              fullWidth={isMobile}
+              startIcon={<CheckCircleIcon />}
+              onClick={() => markAsPaid(selectedInvoice._id)}
+              sx={{ mr: isMobile ? 0 : 1 }}
+            >
+              Als bezahlt markieren
             </Button>
           )}
           <Button 

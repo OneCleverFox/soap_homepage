@@ -183,8 +183,13 @@ const CreateInvoice = () => {
         description = product.beschreibung.kurz || 
                      product.beschreibung.lang || 
                      `${product.beschreibung.kurz || ''} ${product.beschreibung.lang || ''}`.trim() ||
-                     'Produktbeschreibung verfügbar';
+                     'Handgefertigte Seife';
       }
+    }
+    
+    // Beschreibung auf ca. 120 Zeichen begrenzen für professionelle Optik
+    if (description.length > 120) {
+      description = description.substring(0, 117) + '...';
     }
 
     if (existingItem) {
