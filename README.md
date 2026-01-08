@@ -2,52 +2,483 @@
 
 ![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
 ![Version](https://img.shields.io/badge/version-2.1.0-blue)
+![Node.js](https://img.shields.io/badge/node.js-18+-green)
+![React](https://img.shields.io/badge/React-18+-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Eine moderne, skalierbare E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit MERN Stack und optimiert für Performance, Wartbarkeit und Benutzerfreundlichkeit.
-
-## 🚀 Live Demo
-
-- 🌐 **Frontend**: https://gluecksmomente-manufaktur.vercel.app
-- 🔧 **Admin Panel**: https://gluecksmomente-manufaktur.vercel.app/admin
-- 📡 **Backend API**: https://soap-homepage-backend-production.up.railway.app/api
-
----
+Eine moderne, vollständige E-Commerce-Lösung für handgemachte Naturkosmetik und Seifen. Entwickelt mit MERN Stack und optimiert für Performance, Skalierbarkeit und Benutzerfreundlichkeit.
 
 ## 📖 Inhaltsverzeichnis
 
-- [Features](#-features)
-- [Technologie Stack](#-technologie-stack)
-- [Architektur](#-architektur)
-- [Installation](#-installation)
-- [Deployment](#-deployment)
-- [API Dokumentation](#-api-dokumentation)
-- [Development](#-development)
-- [Contributing](#-contributing)
+- [🚀 Überblick](#-überblick)
+- [✨ Features](#-features)
+- [🛠 Technologie Stack](#-technologie-stack)
+- [🏗 Architektur](#-architektur)
+- [📦 Installation](#-installation)
+- [🔧 Konfiguration](#-konfiguration)
+- [🚀 Deployment](#-deployment)
+- [📚 API Dokumentation](#-api-dokumentation)
+- [🔐 Sicherheit](#-sicherheit)
+- [🧪 Testing](#-testing)
+- [🤝 Contributing](#-contributing)
+
+---
+
+## 🚀 Überblick
+
+Glücksmomente ist eine vollständige E-Commerce-Plattform, die speziell für handgemachte Naturkosmetik entwickelt wurde. Die Lösung bietet sowohl einen modernen Online-Shop als auch ein umfassendes Admin-Panel für die Geschäftsverwaltung.
+
+### Hauptkomponenten
+- **Frontend**: React-basierte Progressive Web App
+- **Backend**: Node.js/Express.js API Server
+- **Admin Panel**: Vollständiges Verwaltungssystem
+- **Payment**: PayPal Integration
+- **Database**: MongoDB mit Mongoose ODM
 
 ---
 
 ## ✨ Features
 
 ### 🛒 E-Commerce Kernfunktionen
-- **Produktkatalog** mit erweiterten Kategorien und Filtern
-- **Intelligenter Warenkorb** mit Echtzeit-Synchronisation
-- **Multi-Payment Checkout** (PayPal, Kreditkarte)
-- **Benutzerverwaltung** mit E-Mail-Verifizierung
+- **Produktkatalog** mit erweiterten Kategorien und intelligenten Filtern
+- **Responsive Produktsuche** mit Echtzeit-Ergebnissen
+- **Intelligenter Warenkorb** mit persistenter Speicherung
+- **Multi-Payment Checkout** (PayPal, zukünftig Kreditkarte)
+- **Benutzerregistrierung** mit E-Mail-Verifizierung
 - **Bestellverfolgung** mit automatischen Status-Updates
+- **Kundenanfragen** System mit automatisierter Bearbeitung
 
-### 🎨 Responsive Design
+### 🎨 Responsive Design & UX
 - **Mobile-First** Progressive Web App (PWA)
-- **Adaptive UI** für alle Bildschirmgrößen
+- **Material-UI Design System** für konsistente Benutzererfahrung
+- **Touch-optimierte** Bedienelemente für mobile Geräte
 - **Offline-Funktionalität** mit Service Worker
-- **Touch-optimierte** Bedienelemente
+- **Performance-optimiert** mit Lazy Loading und Code-Splitting
+- **Dark/Light Mode** Support
 
-### 🔧 Admin-Management
-- **Umfassendes Dashboard** mit Analytics
-- **Produktverwaltung** mit Batch-Operationen
-- **Lagerverwaltung** mit Bestandsalarmen
-- **Kundenverwaltung** mit Segmentierung
-- **Bestellabwicklung** mit automatisierten Workflows
+### 🔧 Admin-Management System
+- **📊 Analytics Dashboard** mit Verkaufsstatistiken und KPIs
+- **🗃️ Produktverwaltung** (CRUD-Operationen, Batch-Updates)
+- **📋 Bestellabwicklung** mit automatisierten Workflows
+- **📦 Lagerverwaltung** mit Bestandsalarmen und Mindestmengen
+- **👥 Kundenverwaltung** mit Segmentierung und Kommunikationshistorie
+- **🎨 Portfolio-Verwaltung** für Produktpräsentationen
+- **🧪 Rohstoff-Verwaltung** (Rohseife, Duftöle, Verpackungen)
+- **📐 Warenberechnung** für Produktionsplanung und Kostenkalkulation
+- **🧾 Rechnungssystem** mit PDF-Generierung und E-Mail-Versand
+- **📧 E-Mail Management** mit Templates und Automatisierung
+- **🖼️ Bildoptimierung** (WebP-Konvertierung, automatische Größenanpassung)
+
+### 🧾 Professionelles Rechnungssystem
+- **Rechnungsvorlagen-Designer** mit Drag & Drop Interface
+- **Automatische PDF-Generierung** für alle Bestellungen
+- **E-Mail-Rechnungsversand** mit anpassbaren Templates
+- **Rechnungsverwaltung** mit Such- und Filterfunktionen
+- **Firmenbranding** mit Logo-Upload und Corporate Design
+- **Variable System** für dynamische Rechnungsinhalte
+- **Rechtskonformität** mit allen erforderlichen Pflichtangaben
+
+### 🚀 Performance & Security
+- **JWT-basierte Authentifizierung** mit Refresh-Token-System
+- **Role-based Access Control** (Admin/User)
+- **Rate Limiting** und CORS-Schutz
+- **Input Validation** und XSS-Schutz
+- **Bildoptimierung** und intelligentes Caching
+- **SSL/HTTPS** End-to-End Verschlüsselung
+- **Database Security** mit MongoDB Atlas
+
+---
+
+## 🛠 Technologie Stack
+
+### Frontend
+```
+React 18.2.0          # Modern UI Framework
+Material-UI 5.15.0    # Design System & Components
+React Router 6.8.0    # Client-side Routing
+Axios 1.6.2           # HTTP Client
+React Query 3.39.3    # Server State Management
+Framer Motion 10.16.16 # Animations
+React Hook Form 7.48.2 # Form Management
+Recharts 2.15.4       # Analytics Charts
+```
+
+### Backend
+```
+Node.js 18+           # Runtime Environment
+Express.js 4.18.2     # Web Framework
+MongoDB/Mongoose 8.0.3 # Database & ODM
+JWT 9.0.2             # Authentication
+Multer 1.4.5          # File Upload
+Nodemailer 7.0.9      # Email Service
+Puppeteer 24.25.0     # PDF Generation
+Sharp 0.34.4          # Image Processing
+bcryptjs 2.4.3        # Password Hashing
+```
+
+### Development & Deployment
+```
+React Scripts 5.0.1   # Build Tools
+Railway              # Backend Hosting
+Vercel               # Frontend Deployment
+MongoDB Atlas        # Cloud Database
+GitHub Actions       # CI/CD Pipeline
+```
+
+---
+
+## 🏗 Architektur
+
+### Projekt-Struktur
+```
+soap_homepage/
+├── frontend/                     # React Client Application
+│   ├── public/                  # Static Assets & PWA Manifest
+│   └── src/
+│       ├── components/          # Reusable UI Components
+│       │   ├── common/         # Shared Components
+│       │   └── layout/         # Layout Components (Navbar, Footer)
+│       ├── pages/              # Route-specific Pages
+│       ├── admin/              # Admin Panel Components
+│       │   ├── AdminDashboard.js
+│       │   ├── AdminOrdersManagement.js
+│       │   ├── CreateInvoice.js
+│       │   ├── InvoiceList.js
+│       │   └── AdminInvoiceDesigner.js
+│       ├── hooks/              # Custom React Hooks
+│       ├── services/           # API Services & Utilities
+│       ├── contexts/           # React Context Providers
+│       └── utils/              # Helper Functions
+├── backend/                     # Node.js Server Application
+│   └── src/
+│       ├── controllers/        # Business Logic
+│       ├── models/             # MongoDB Models
+│       ├── routes/             # API Routes
+│       │   ├── admin/         # Admin-specific Routes
+│       │   ├── auth.js
+│       │   ├── orders.js
+│       │   └── inquiries.js
+│       ├── middleware/         # Custom Middleware
+│       ├── services/           # Business Services
+│       │   ├── PDFService.js
+│       │   ├── emailService.js
+│       │   └── orderInvoiceService.js
+│       └── utils/              # Helper Utilities
+├── docs/                       # Project Documentation
+├── logs/                       # Application Logs
+└── uploads/                    # File Upload Storage
+```
+
+### Database Schema (MongoDB)
+```
+Collections:
+├── users              # Customer & Admin Accounts
+├── products           # Product Catalog
+├── orders             # Order Management
+├── inquiries          # Customer Inquiries
+├── invoices           # Invoice System
+├── invoiceTemplates   # Invoice Templates & Company Data
+├── portfolio          # Product Portfolio
+├── rohseife          # Raw Soap Materials
+├── duftoil           # Fragrance Oils
+├── verpackung        # Packaging Materials
+└── bestand           # Inventory Management
+```
+
+---
+
+## 📦 Installation
+
+### Voraussetzungen
+- **Node.js 18+** und **npm 8+**
+- **MongoDB Atlas Account** oder lokale MongoDB-Installation
+- **Git** für Repository-Cloning
+
+### 1. Repository klonen
+```bash
+git clone <repository-url>
+cd soap_homepage
+```
+
+### 2. Abhängigkeiten installieren
+```bash
+# Root-Level Dependencies (Backend Production)
+npm install
+
+# Frontend Dependencies
+cd frontend
+npm install
+
+# Backend Development Dependencies
+cd ../backend
+npm install
+```
+
+### 3. Environment Variablen konfigurieren
+```bash
+# Root-Level .env erstellen
+cp .env.example .env
+
+# Frontend .env erstellen (falls erforderlich)
+cd frontend
+cp .env.example .env
+```
+
+---
+
+## 🔧 Konfiguration
+
+### Environment Variablen (.env)
+```env
+# Database
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database
+
+# JWT
+JWT_SECRET=your-secure-jwt-secret-minimum-32-characters
+JWT_REFRESH_SECRET=your-secure-refresh-secret
+
+# PayPal
+PAYPAL_CLIENT_ID=your-paypal-client-id
+PAYPAL_CLIENT_SECRET=your-paypal-client-secret
+PAYPAL_ENVIRONMENT=sandbox # oder production
+
+# Email Service
+EMAIL_SERVICE=gmail # oder smtp
+EMAIL_USER=your-email@domain.com
+EMAIL_PASSWORD=your-app-password
+
+# Application
+NODE_ENV=development # oder production
+PORT=5000
+FRONTEND_URL=http://localhost:3000
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# File Upload
+MAX_FILE_SIZE=5242880 # 5MB in bytes
+UPLOAD_PATH=./uploads
+```
+
+### Frontend Konfiguration
+```env
+# API Connection
+REACT_APP_API_URL=http://localhost:5000/api
+
+# PayPal
+REACT_APP_PAYPAL_CLIENT_ID=your-paypal-client-id
+
+# Application
+REACT_APP_ENVIRONMENT=development
+```
+
+---
+
+## 🚀 Deployment
+
+### Development
+```bash
+# Backend starten
+npm run dev
+
+# Frontend starten (neues Terminal)
+cd frontend
+npm start
+```
+
+### Production Build
+```bash
+# Frontend Build
+cd frontend
+npm run build
+
+# Backend Production
+npm start
+```
+
+### Hosting-Plattformen
+
+#### Railway (Backend)
+1. **Repository mit Railway verbinden**
+2. **Environment Variablen konfigurieren**
+3. **Automatisches Deployment bei Git-Push**
+
+#### Vercel (Frontend)
+1. **Frontend-Ordner mit Vercel verbinden**
+2. **Build-Settings konfigurieren**
+3. **Domain-Konfiguration**
+
+---
+
+## 📚 API Dokumentation
+
+### Authentication Endpoints
+```
+POST   /api/auth/register     # Benutzerregistrierung
+POST   /api/auth/login        # Benutzeranmeldung
+POST   /api/auth/refresh      # Token-Refresh
+POST   /api/auth/logout       # Abmeldung
+```
+
+### Product Management
+```
+GET    /api/products          # Produktliste abrufen
+GET    /api/products/:id      # Einzelnes Produkt
+POST   /api/admin/products    # Produkt erstellen (Admin)
+PUT    /api/admin/products/:id # Produkt aktualisieren (Admin)
+DELETE /api/admin/products/:id # Produkt löschen (Admin)
+```
+
+### Order Management
+```
+GET    /api/orders            # Bestellungen abrufen
+POST   /api/orders            # Neue Bestellung erstellen
+GET    /api/orders/:id        # Bestelldetails
+PUT    /api/admin/orders/:id  # Bestellstatus ändern (Admin)
+```
+
+### Invoice System
+```
+GET    /api/admin/invoices          # Alle Rechnungen (Admin)
+POST   /api/admin/invoices          # Rechnung erstellen (Admin)
+GET    /api/admin/invoices/:id/pdf  # PDF herunterladen (Admin)
+POST   /api/admin/invoices/:id/send # Rechnung per E-Mail senden (Admin)
+```
+
+### Admin Dashboard
+```
+GET    /api/dashboard/overview # Dashboard-Statistiken
+GET    /api/admin/users        # Benutzerverwaltung
+GET    /api/admin/analytics    # Verkaufsanalytics
+```
+
+---
+
+## 🔐 Sicherheit
+
+### Implementierte Sicherheitsmaßnahmen
+- **Helmet.js** für HTTP-Header-Sicherheit
+- **CORS-Konfiguration** mit Whitelist
+- **Rate Limiting** zum Schutz vor Brute-Force
+- **Input Validation** mit express-validator
+- **XSS-Schutz** durch Eingabe-Sanitization
+- **SQL Injection Prevention** durch MongoDB/Mongoose
+- **Password Hashing** mit bcryptjs (Salting)
+- **JWT Security** mit sicheren Secrets und Expiration
+
+### Authentifizierung & Autorisierung
+```javascript
+// JWT-Token-Struktur
+{
+  "userId": "user-id",
+  "email": "user@example.com",
+  "permissions": ["admin", "user"],
+  "exp": 1234567890
+}
+
+// Role-based Access Control
+const requireAdmin = (req, res, next) => {
+  if (!req.user?.permissions?.includes('admin')) {
+    return res.status(403).json({ message: 'Admin-Berechtigung erforderlich' });
+  }
+  next();
+};
+```
+
+---
+
+## 🧪 Testing
+
+### Test-Umgebung einrichten
+```bash
+# Test-Dependencies installieren
+npm install --save-dev jest supertest
+
+# Tests ausführen
+npm test
+```
+
+### API-Testing mit Postman
+Eine Postman-Collection mit allen API-Endpoints ist verfügbar:
+```
+docs/api-collection.postman.json
+```
+
+---
+
+## 🤝 Contributing
+
+### Development Workflow
+1. **Feature Branch** erstellen: `git checkout -b feature/neue-funktion`
+2. **Änderungen implementieren** und committen
+3. **Tests ausführen**: `npm test`
+4. **Pull Request** erstellen mit ausführlicher Beschreibung
+
+### Code Standards
+- **ESLint** für JavaScript-Standards
+- **Prettier** für Code-Formatierung
+- **Kommentare** für komplexe Businesslogik
+- **Commit Messages** nach Conventional Commits
+
+### Branch-Strategie
+- **main**: Production-ready Code
+- **quality**: Testing/Staging Branch
+- **feature/***: Feature-Development
+- **bugfix/***: Bug-Fixes
+
+---
+
+## 📋 System Requirements
+
+### Minimum Requirements
+- **Node.js**: 18.0.0+
+- **npm**: 8.0.0+
+- **MongoDB**: 4.4+
+- **RAM**: 2GB (Development), 4GB (Production)
+- **Storage**: 10GB für Uploads und Logs
+
+### Empfohlene Requirements
+- **Node.js**: 20.0.0+
+- **RAM**: 8GB+
+- **Storage**: 50GB+ SSD
+- **CPU**: 4+ Cores
+- **Netzwerk**: Stabile Internetverbindung für MongoDB Atlas
+
+---
+
+## 📞 Support & Wartung
+
+### Logs & Monitoring
+```bash
+# Backend-Logs anzeigen
+npm run logs:view        # Combined Logs
+npm run logs:errors      # Nur Fehler
+
+# Cache leeren
+npm run cache:clear
+```
+
+### Backup & Maintenance
+- **Automatische MongoDB-Backups** durch MongoDB Atlas
+- **Regelmäßige Dependency-Updates** empfohlen
+- **Performance-Monitoring** durch Built-in Analytics
+
+### Performance Optimierung
+- **Bildoptimierung**: Automatische WebP-Konvertierung
+- **Caching**: Redis-kompatible Cache-Layer
+- **CDN**: Für statische Assets empfohlen
+- **Database Indexing**: Optimiert für häufige Queries
+
+---
+
+## 📄 Lizenz
+
+MIT License - Details siehe [LICENSE](LICENSE) Datei.
+
+---
+
+**Entwickelt mit ❤️ für handgemachte Naturkosmetik**
 
 ### 🚀 Performance & Security
 - **Lazy Loading** und Code-Splitting
