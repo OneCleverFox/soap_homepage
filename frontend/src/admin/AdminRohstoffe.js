@@ -63,6 +63,7 @@ const AdminRohstoffe = () => {
     loading, setLoading,
     error, setError,
     success, setSuccess,
+    // eslint-disable-next-line no-unused-vars
     handleAsyncOperation
   } = useAdminState();
   
@@ -70,6 +71,7 @@ const AdminRohstoffe = () => {
   const [rohseife, setRohseife] = useState([]);
   const [duftoele, setDuftoele] = useState([]);
   const [verpackungen, setVerpackungen] = useState([]);
+  const [zusatzinhaltsstoffe, setZusatzinhaltsstoffe] = useState([]);
   
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -83,15 +85,13 @@ const AdminRohstoffe = () => {
   const getCurrentTabData = () => {
     if (currentTab === 0) return rohseife;
     if (currentTab === 1) return duftoele;
-    return verpackungen;
+    if (currentTab === 2) return verpackungen;
+    return zusatzinhaltsstoffe;
   };
 
   const {
     searchTerm,
-    setSearchTerm,
-    filteredItems,
-    clearSearch,
-    hasSearchTerm
+    setSearchTerm
   } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung']);
 
   const loadData = React.useCallback(async () => {
@@ -107,13 +107,16 @@ const AdminRohstoffe = () => {
       } else if (currentTab === 2) {
         const response = await axios.get(`${API_BASE}/verpackungen?includeUnavailable=true`, { headers: getAuthHeaders() });
         setVerpackungen(response.data.data || []);
+      } else if (currentTab === 3) {
+        const response = await axios.get(`${API_BASE}/zusatzinhaltsstoffe?includeUnavailable=true`, { headers: getAuthHeaders() });
+        setZusatzinhaltsstoffe(response.data.data || []);
       }
     } catch (err) {
       setError('Fehler beim Laden der Daten: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [currentTab]);
+  }, [currentTab, setError, setLoading]);
 
   useEffect(() => {
     loadData();
@@ -130,6 +133,7 @@ const AdminRohstoffe = () => {
       let tabIndex = 0;
       if (tab === 'duftoele') tabIndex = 1;
       else if (tab === 'verpackungen') tabIndex = 2;
+      else if (tab === 'zusatzinhaltsstoffe') tabIndex = 3;
       else if (tab === 'rohseifen') tabIndex = 0;
       
       setCurrentTab(tabIndex);
@@ -310,10 +314,26 @@ const AdminRohstoffe = () => {
     const newValue = type === 'checkbox' ? checked : value;
     
     setFormData(prev => {
-      const updated = {
-        ...prev,
-        [name]: newValue
-      };
+      let updated = { ...prev };
+      
+      // Handle verschachtelte Eigenschaften (z.B. "dosierung.empfohleneZusatzmenge")
+      if (name.includes('.')) {
+        const keys = name.split('.');
+        let current = updated;
+        
+        // Erstelle verschachtelte Objekte falls sie nicht existieren
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!current[keys[i]]) {
+            current[keys[i]] = {};
+          }
+          current = current[keys[i]];
+        }
+        
+        // Setze den Wert
+        current[keys[keys.length - 1]] = newValue;
+      } else {
+        updated[name] = newValue;
+      }
       
       // Automatische Berechnung für Rohseife: preisProGramm
       if (currentTab === 0 && (name === 'gesamtInGramm' || name === 'ekPreis')) {
@@ -358,6 +378,16 @@ const AdminRohstoffe = () => {
         }
       }
       
+      // Automatische Berechnung für Zusatzinhaltsstoffe: kostenProGramm
+      if (currentTab === 3 && (name === 'packungsgroesse' || name === 'einkaufspreis')) {
+        const packungsgroesse = name === 'packungsgroesse' ? parseFloat(newValue) : parseFloat(prev.packungsgroesse || 1);
+        const einkaufspreis = name === 'einkaufspreis' ? parseFloat(newValue) : parseFloat(prev.einkaufspreis || 0);
+        
+        if (packungsgroesse > 0 && einkaufspreis >= 0) {
+          updated.kostenProGramm = parseFloat((einkaufspreis / packungsgroesse).toFixed(4));
+        }
+      }
+      
       return updated;
     });
   };
@@ -368,7 +398,9 @@ const AdminRohstoffe = () => {
     
     try {
       const endpoint = currentTab === 0 ? 'rohseife' : 
-                      currentTab === 1 ? 'duftoele' : 'verpackungen';
+                      currentTab === 1 ? 'duftoele' : 
+                      currentTab === 2 ? 'verpackungen' :
+                      'zusatzinhaltsstoffe';
       
       if (dialogMode === 'create') {
         await axios.post(`${API_BASE}/${endpoint}`, formData, { headers: getAuthHeaders() });
@@ -392,7 +424,9 @@ const AdminRohstoffe = () => {
 
     try {
       const endpoint = currentTab === 0 ? 'rohseife' : 
-                      currentTab === 1 ? 'duftoele' : 'verpackungen';
+                      currentTab === 1 ? 'duftoele' : 
+                      currentTab === 2 ? 'verpackungen' :
+                      'zusatzinhaltsstoffe';
       
       await axios.delete(`${API_BASE}/${endpoint}/${id}`, { headers: getAuthHeaders() });
       setSuccess('Erfolgreich gelöscht!');
@@ -826,6 +860,142 @@ const AdminRohstoffe = () => {
                 <TableCell>{item.material || '-'}</TableCell>
                 <TableCell align="right">{item.kostenProStueck?.toFixed(2)}</TableCell>
                 <TableCell align="right">{item.aktuellVorrat}</TableCell>
+                <TableCell>
+                  <Chip 
+                    label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                    color={item.verfuegbar ? 'success' : 'error'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell align="center">
+                  <IconButton 
+                    size="small" 
+                    color="primary"
+                    onClick={() => handleOpenDialog('edit', item)}
+                  >
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    color="error"
+                    onClick={() => handleDelete(item._id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
+
+  const renderZusatzinhaltsstoffeTable = () => {
+    const filteredData = filterItems(zusatzinhaltsstoffe, searchTerm);
+    
+    if (isMobile) {
+      return (
+        <Stack spacing={2}>
+          {filteredData.map((item) => (
+            <Card key={item._id} variant="outlined">
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Typography variant="h6" component="div">
+                      {item.name}
+                    </Typography>
+                    <Chip 
+                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                      color={item.verfuegbar ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+                  
+                  <Divider />
+                  
+                  <Stack spacing={0.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Hersteller:</Typography>
+                      <Typography variant="body2">{item.typ}</Typography>
+                    </Box>
+                    {item.dosierung?.empfohleneZusatzmenge && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Dosierung:</Typography>
+                        <Typography variant="body2">{item.dosierung.empfohleneZusatzmenge}% {item.dosierung.einheit}</Typography>
+                      </Box>
+                    )}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Kosten/Gramm:</Typography>
+                      <Typography variant="body2">{item.kostenProGramm?.toFixed(4)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Vorrat:</Typography>
+                      <Typography variant="body2">
+                        {item.aktuellVorrat} {item.einheit || 'g'}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                  
+                  <Divider />
+                  
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleOpenDialog('edit', item)}
+                      sx={{ flex: 1 }}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDelete(item._id)}
+                      sx={{ flex: 1 }}
+                    >
+                      Löschen
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      );
+    }
+    
+    // Desktop-Tabellenansicht
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Name</TableCell>
+              <TableCell>Hersteller</TableCell>
+              <TableCell>Dosierung</TableCell>
+              <TableCell align="right">Kosten/Gramm (€)</TableCell>
+              <TableCell align="right">Vorrat</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="center">Aktionen</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredData.map((item) => (
+              <TableRow key={item._id}>
+                <TableCell>{item.name}</TableCell>
+                <TableCell>{item.typ}</TableCell>
+                <TableCell>
+                  {item.dosierung?.empfohleneZusatzmenge ? 
+                    `${item.dosierung.empfohleneZusatzmenge}% ${item.dosierung.einheit}` : 
+                    '-'
+                  }
+                </TableCell>
+                <TableCell align="right">{item.kostenProGramm?.toFixed(4)}</TableCell>
+                <TableCell align="right">{item.aktuellVorrat} {item.einheit || 'g'}</TableCell>
                 <TableCell>
                   <Chip 
                     label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
@@ -1498,6 +1668,278 @@ const AdminRohstoffe = () => {
           </Grid>
         </Grid>
       );
+    } else if (currentTab === 3) {
+      // Zusatzinhaltsstoffe Form
+      return (
+        <Grid container spacing={isMobile ? 1.5 : 2}>
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Grundinformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Name *"
+              name="name"
+              value={formData.name || ''}
+              onChange={handleInputChange}
+              required
+              placeholder="z.B. Aktivkohle, Moon Peeling, Haferflocken"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Hersteller/Bezugsquelle"
+              name="typ"
+              value={formData.typ || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. Mountain Rose Herbs, Dragonspice"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Einheit"
+              name="einheit"
+              value={formData.einheit || 'g'}
+              onChange={handleInputChange}
+              placeholder="g, ml, Stück"
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Beschreibung"
+              name="beschreibung"
+              value={formData.beschreibung || ''}
+              onChange={handleInputChange}
+              multiline
+              rows={3}
+              placeholder="Detaillierte Beschreibung des Zusatzinhaltsstoffs..."
+            />
+          </Grid>
+
+          {/* Dosierung */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Dosierung
+            </Typography>
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Empfohlene Zusatzmenge"
+              name="dosierung.empfohleneZusatzmenge"
+              type="number"
+              value={formData.dosierung?.empfohleneZusatzmenge || ''}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.1' }}
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>Dosierung Einheit</InputLabel>
+              <Select
+                name="dosierung.einheit"
+                value={formData.dosierung?.einheit || 'prozent'}
+                onChange={handleInputChange}
+              >
+                <MenuItem value="prozent">% (Prozent)</MenuItem>
+                <MenuItem value="gramm">Gramm pro 100g Seife</MenuItem>
+                <MenuItem value="teelöffel">Teelöffel</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Max. Dosierung"
+              name="dosierung.maximaleZusatzmenge"
+              type="number"
+              value={formData.dosierung?.maximaleZusatzmenge || ''}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.1' }}
+            />
+          </Grid>
+
+          {/* Kosten und Lager */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Kosten & Lager
+            </Typography>
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Einkaufspreis (€)"
+              name="einkaufspreis"
+              type="number"
+              value={formData.einkaufspreis || 0}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.01' }}
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Packungsgröße"
+              name="packungsgroesse"
+              type="number"
+              value={formData.packungsgroesse || ''}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.1' }}
+              helperText={`in ${formData.einheit || 'g'}`}
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Kosten/Gramm (€)"
+              name="kostenProGramm"
+              type="number"
+              value={formData.kostenProGramm || 0}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.0001' }}
+              helperText="Wird automatisch berechnet"
+              disabled
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Aktueller Vorrat"
+              name="aktuellVorrat"
+              type="number"
+              value={formData.aktuellVorrat || 0}
+              onChange={handleInputChange}
+              inputProps={{ step: '0.1' }}
+              helperText={`in ${formData.einheit || 'g'}`}
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Mindestbestand"
+              name="mindestbestand"
+              type="number"
+              value={formData.mindestbestand || 0}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>Verfügbar</InputLabel>
+              <Select
+                name="verfuegbar"
+                value={formData.verfuegbar === undefined ? true : formData.verfuegbar}
+                onChange={handleInputChange}
+              >
+                <MenuItem value={true}>Ja</MenuItem>
+                <MenuItem value={false}>Nein</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Eigenschaften */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Eigenschaften
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Farbe"
+              name="eigenschaften.farbe"
+              value={formData.eigenschaften?.farbe || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. schwarz, grau, weiß"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Wasserlöslichkeit"
+              name="eigenschaften.wasserloeslichkeit"
+              value={formData.eigenschaften?.wasserloeslichkeit || ''}
+              onChange={handleInputChange}
+              placeholder="hoch, mittel, niedrig"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Hauttyp"
+              name="eigenschaften.hauttyp"
+              value={formData.eigenschaften?.hauttyp || ''}
+              onChange={handleInputChange}
+              placeholder="alle, fettig, trocken, empfindlich"
+            />
+          </Grid>
+
+          {/* Sicherheit */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Sicherheit & Hinweise
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Sicherheitshinweise"
+              name="sicherheit.hinweise"
+              value={formData.sicherheit?.hinweise || ''}
+              onChange={handleInputChange}
+              multiline
+              rows={2}
+              placeholder="Wichtige Sicherheitshinweise..."
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>Allergene vorhanden</InputLabel>
+              <Select
+                name="sicherheit.allergene"
+                value={formData.sicherheit?.allergene || false}
+                onChange={handleInputChange}
+              >
+                <MenuItem value={false}>Nein</MenuItem>
+                <MenuItem value={true}>Ja</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>Gefahrstoff</InputLabel>
+              <Select
+                name="sicherheit.gefahrstoff"
+                value={formData.sicherheit?.gefahrstoff || false}
+                onChange={handleInputChange}
+              >
+                <MenuItem value={false}>Nein</MenuItem>
+                <MenuItem value={true}>Ja</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      );
     }
   };
 
@@ -1547,6 +1989,7 @@ const AdminRohstoffe = () => {
           <Tab label={isMobile ? "Seifen" : "Rohseifen"} />
           <Tab label={isMobile ? "Düfte" : "Duftöle"} />
           <Tab label={isMobile ? "Verp." : "Verpackungen"} />
+          <Tab label={isMobile ? "Zusatz" : "Zusatzinhaltsstoffe"} />
         </Tabs>
       </Box>
 
@@ -1568,7 +2011,8 @@ const AdminRohstoffe = () => {
           placeholder={
             currentTab === 0 ? "Suche nach Rohseifen (Name, Farbe, Lieferant, Preis...)" :
             currentTab === 1 ? "Suche nach Duftölen (Name, Hersteller, Duftrichtung...)" :
-            "Suche nach Verpackungen (Name, Material, Form, Größe...)"
+            currentTab === 2 ? "Suche nach Verpackungen (Name, Material, Form, Größe...)" :
+            "Suche nach Zusatzinhaltsstoffen (Name, Typ, Dosierung, Eigenschaften...)"
           }
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -1594,7 +2038,8 @@ const AdminRohstoffe = () => {
             label={`Ergebnisse: ${
               currentTab === 0 ? filterItems(rohseife, searchTerm).length :
               currentTab === 1 ? filterItems(duftoele, searchTerm).length :
-              filterItems(verpackungen, searchTerm).length
+              currentTab === 2 ? filterItems(verpackungen, searchTerm).length :
+              filterItems(zusatzinhaltsstoffe, searchTerm).length
             }`}
             color="primary"
             variant="outlined"
@@ -1627,6 +2072,7 @@ const AdminRohstoffe = () => {
           {currentTab === 0 && renderRohseifeTable()}
           {currentTab === 1 && renderDuftoeleTable()}
           {currentTab === 2 && renderVerpackungenTable()}
+          {currentTab === 3 && renderZusatzinhaltsstoffeTable()}
         </>
       )}
 

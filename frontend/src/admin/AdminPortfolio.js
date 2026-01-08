@@ -113,7 +113,9 @@ const AdminPortfolio = () => {
       inhaltsstoffe: '',
       anwendung: '',
       besonderheiten: ''
-    }
+    },
+    // Zusatzinhaltsstoffe
+    zusatzinhaltsstoffe: []
   });
 
   // State für dynamische Optionen
@@ -121,6 +123,7 @@ const AdminPortfolio = () => {
   const [aromaOptions, setAromaOptions] = useState(['Vanille', 'Sandelholz', 'Minze', 'Yasmin', 'Lavendel']);
   const [seifenformOptions, setSeifenformOptions] = useState([]);
   const [verpackungOptions, setVerpackungOptions] = useState([]);
+  const [zusatzinhaltsstoffeOptions, setZusatzinhaltsstoffeOptions] = useState([]);
   
   // State für neue Einträge Dialog
   const [newEntryDialog, setNewEntryDialog] = useState({ open: false, type: '', value: '' });
@@ -192,6 +195,16 @@ const AdminPortfolio = () => {
         const filteredExistingAromen = existingAromen.filter(a => !aromaList.includes(a));
         
         setAromaOptions([...new Set([...aromaList, ...filteredExistingAromen])]);
+        
+        // Zusatzinhaltsstoffe laden
+        const zusatzinhaltsstoffeResponse = await fetch(`${API_BASE}/zusatzinhaltsstoffe?includeUnavailable=true`, {
+          headers: getAuthHeaders()
+        });
+        const zusatzinhaltsstoffeData = await zusatzinhaltsstoffeResponse.json();
+        
+        if (zusatzinhaltsstoffeData.success) {
+          setZusatzinhaltsstoffeOptions(zusatzinhaltsstoffeData.data);
+        }
         
         console.log('✅ Options loaded successfully from optimized endpoint');
       }
@@ -493,7 +506,9 @@ const AdminPortfolio = () => {
           inhaltsstoffe: product.beschreibung?.inhaltsstoffe || '',
           anwendung: product.beschreibung?.anwendung || '',
           besonderheiten: product.beschreibung?.besonderheiten || ''
-        }
+        },
+        // Zusatzinhaltsstoffe laden
+        zusatzinhaltsstoffe: product.zusatzinhaltsstoffe || []
       });
       
       console.log('🔍 DIALOG ÖFFNEN - FormData gesetzt mit verwendeZweiRohseifen:', 
@@ -521,7 +536,9 @@ const AdminPortfolio = () => {
           inhaltsstoffe: '',
           anwendung: '',
           besonderheiten: ''
-        }
+        },
+        // Zusatzinhaltsstoffe
+        zusatzinhaltsstoffe: []
       });
       setEditingProduct(null);
     }
@@ -1357,6 +1374,131 @@ const AdminPortfolio = () => {
                 value={formData.optional}
                 onChange={handleInputChange}
               />
+            </Grid>
+            
+            {/* Zusatzinhaltsstoffe Sektion */}
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                🧬 Zusatzinhaltsstoffe
+              </Typography>
+            </Grid>
+            
+            <Grid item xs={12}>
+              <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                  Zusätzliche Inhaltsstoffe für dieses Produkt:
+                </Typography>
+                
+                {formData.zusatzinhaltsstoffe.map((zutat, index) => (
+                  <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    <Grid container spacing={2} alignItems="center">
+                      <Grid item xs={12} sm={4}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Inhaltsstoff</InputLabel>
+                          <Select
+                            value={zutat.inhaltsstoffName || ''}
+                            onChange={(e) => {
+                              const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
+                              newZusatzinhaltsstoffe[index].inhaltsstoffName = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                zusatzinhaltsstoffe: newZusatzinhaltsstoffe
+                              }));
+                            }}
+                          >
+                            {zusatzinhaltsstoffeOptions.map(option => (
+                              <MenuItem key={option._id} value={option.name}>{option.name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={6} sm={2}>
+                        <TextField
+                          label="Menge"
+                          type="number"
+                          size="small"
+                          value={zutat.menge || ''}
+                          onChange={(e) => {
+                            const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
+                            newZusatzinhaltsstoffe[index].menge = parseFloat(e.target.value) || 0;
+                            setFormData(prev => ({
+                              ...prev,
+                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
+                            }));
+                          }}
+                          inputProps={{ min: 0, step: 0.1 }}
+                        />
+                      </Grid>
+                      <Grid item xs={6} sm={2}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>Einheit</InputLabel>
+                          <Select
+                            value={zutat.einheit || 'gramm'}
+                            onChange={(e) => {
+                              const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
+                              newZusatzinhaltsstoffe[index].einheit = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                zusatzinhaltsstoffe: newZusatzinhaltsstoffe
+                              }));
+                            }}
+                          >
+                            <MenuItem value="gramm">g</MenuItem>
+                            <MenuItem value="prozent">%</MenuItem>
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid item xs={12} sm={3}>
+                        <TextField
+                          label="Hinweise"
+                          size="small"
+                          value={zutat.hinweise || ''}
+                          onChange={(e) => {
+                            const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
+                            newZusatzinhaltsstoffe[index].hinweise = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
+                            }));
+                          }}
+                          placeholder="optional"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={1}>
+                        <IconButton
+                          color="error"
+                          onClick={() => {
+                            const newZusatzinhaltsstoffe = formData.zusatzinhaltsstoffe.filter((_, i) => i !== index);
+                            setFormData(prev => ({
+                              ...prev,
+                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
+                            }));
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                ))}
+                
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      zusatzinhaltsstoffe: [
+                        ...prev.zusatzinhaltsstoffe,
+                        { inhaltsstoffName: '', menge: 0, einheit: 'gramm', hinweise: '' }
+                      ]
+                    }));
+                  }}
+                  variant="outlined"
+                  size="small"
+                >
+                  Zusatzinhaltsstoff hinzufügen
+                </Button>
+              </Box>
             </Grid>
             
             {/* Produktbeschreibung Sektion */}

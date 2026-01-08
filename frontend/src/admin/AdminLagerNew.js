@@ -100,12 +100,13 @@ const AdminLager = () => {
     fertigprodukte: [],
     rohseifen: [],
     duftoele: [],
-    verpackungen: []
+    verpackungen: [],
+    zusatzinhaltsstoffe: []
   });
 
   // Search Hook für die aktuelle Tab-Daten mit Filter für aktive/inaktive Items
   const getCurrentTabData = () => {
-    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen'];
+    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe'];
     const rawData = data[tabNames[activeTab]] || [];
     
     // Filter für aktive/inaktive Items anwenden
@@ -178,7 +179,8 @@ const AdminLager = () => {
         { key: 'fertigprodukte', url: '/portfolio?includeUnavailable=true' },
         { key: 'rohseifen', url: '/rohseife?includeUnavailable=true' },
         { key: 'duftoele', url: '/duftoele?includeUnavailable=true' },
-        { key: 'verpackungen', url: '/verpackungen?includeUnavailable=true' }
+        { key: 'verpackungen', url: '/verpackungen?includeUnavailable=true' },
+        { key: 'zusatzinhaltsstoffe', url: '/zusatzinhaltsstoffe?includeUnavailable=true' }
       ];
 
       const newData = {};
@@ -410,6 +412,14 @@ const AdminLager = () => {
         einheit = 'Stück';
         aktuellerBestand = item.aktuellVorrat || 0;
         break;
+      case 'zusatzinhaltsstoffe':
+        einheit = 'g (Gramm)';
+        if (item.bestand && typeof item.bestand === 'object') {
+          aktuellerBestand = item.bestand.menge || 0;
+        } else {
+          aktuellerBestand = item.aktuellVorrat || 0;
+        }
+        break;
       default:
         einheit = 'Einheiten';
         aktuellerBestand = item.verfuegbareMenge || item.aktuellVorrat || 0;
@@ -429,6 +439,9 @@ const AdminLager = () => {
         break;
       case 'verpackungen':
         backendTyp = 'verpackungen';
+        break;
+      case 'zusatzinhaltsstoffe':
+        backendTyp = 'zusatzinhaltsstoff';
         break;
       default:
         backendTyp = typ;
@@ -478,6 +491,13 @@ const AdminLager = () => {
           kategorie: item.kategorie || '',
           lieferant: item.lieferant || '',
           chargenNr: item.chargenNr || ''
+        };
+      case 'zusatzinhaltsstoffe':
+        return {
+          typ: item.typ || '',
+          lieferant: item.lieferant || '',
+          artikelNummer: item.artikelNummer || '',
+          dosierungHinweise: item.dosierung?.hinweise || ''
         };
       default:
         return {};
@@ -957,6 +977,21 @@ const AdminLager = () => {
         { key: 'mindestbestand', label: 'Mindestbestand', width: '120px' },
         { key: 'actions', label: 'Aktionen', width: '120px' }
       ]
+    },
+    {
+      label: 'Zusatzinhaltsstoffe',
+      key: 'zusatzinhaltsstoffe',
+      icon: '🧪',
+      columns: [
+        { key: 'bezeichnung', label: 'Bezeichnung', width: '200px' },
+        { key: 'typ', label: 'Typ', width: '120px' },
+        { key: 'beschreibung', label: 'Beschreibung', width: '250px' },
+        { key: 'bestand', label: 'Bestand', width: '100px' },
+        { key: 'preis_pro_gramm', label: 'Preis/g', width: '100px' },
+        { key: 'dosierung', label: 'Dosierung', width: '120px' },
+        { key: 'verfuegbar', label: 'Status', width: '120px' },
+        { key: 'actions', label: 'Aktionen', width: '120px' }
+      ]
     }
   ];
 
@@ -994,6 +1029,45 @@ const AdminLager = () => {
       
       case 'preis_pro_stueck':
         return item.preis_pro_stueck ? `€${item.preis_pro_stueck.toFixed(2)}` : '-';
+      
+      case 'preis_pro_gramm':
+        return item.preisProGramm ? `€${item.preisProGramm.toFixed(4)}` : '-';
+      
+      case 'typ':
+        if (currentTab.key === 'zusatzinhaltsstoffe') {
+          const typLabels = {
+            'aktivkohle': 'Aktivkohle',
+            'peeling': 'Peeling',
+            'farbe': 'Farbe',
+            'duftstoff': 'Duftstoff',
+            'pflegend': 'Pflegend',
+            'sonstiges': 'Sonstiges'
+          };
+          return (
+            <Chip 
+              label={typLabels[item.typ] || item.typ}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+          );
+        }
+        return '-';
+      
+      case 'dosierung':
+        if (currentTab.key === 'zusatzinhaltsstoffe') {
+          return (
+            <Box>
+              <Typography variant="body2">
+                {item.dosierung?.empfohleneProzentzahl || 5}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Max: {item.dosierung?.maximaleMenge || 10}g
+              </Typography>
+            </Box>
+          );
+        }
+        return '-';
       
       case 'gramm':
         return item.gramm ? `${item.gramm}g` : '-';
@@ -1088,6 +1162,37 @@ const AdminLager = () => {
               fontWeight: bestand <= (item.mindestbestand || 0) ? 'bold' : 'normal'
             }}>
               {bestand} Stück
+              {bestand <= (item.mindestbestand || 0) && (
+                <Box 
+                  component="span" 
+                  sx={{ 
+                    ml: 0.5, 
+                    fontSize: '12px',
+                    color: 'error.main'
+                  }}
+                >
+                  ⚠️
+                </Box>
+              )}
+            </Box>
+          );
+        } else if (currentTab.key === 'zusatzinhaltsstoffe') {
+          // Bestand aus bestand-Objekt oder direktem Feld
+          let bestand = 0;
+          if (item.bestand && typeof item.bestand === 'object') {
+            bestand = item.bestand.menge || 0;
+          } else {
+            bestand = item.aktuellVorrat || 0;
+          }
+          
+          return (
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              color: bestand <= (item.mindestbestand || 0) ? 'error.main' : 'text.primary',
+              fontWeight: bestand <= (item.mindestbestand || 0) ? 'bold' : 'normal'
+            }}>
+              {bestand}g
               {bestand <= (item.mindestbestand || 0) && (
                 <Box 
                   component="span" 
