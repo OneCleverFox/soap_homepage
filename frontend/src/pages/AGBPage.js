@@ -5,8 +5,7 @@ import {
   Typography, 
   Box, 
   Paper,
-  Divider,
-  Grid
+  Divider
 } from '@mui/material';
 
 const AGBPage = () => {

@@ -17,7 +17,7 @@ const ImpressumPage = () => {
     vatId, 
     ceo, 
     legalForm,
-    fullAddress,
+    fullAddress: _fullAddress,
     email,
     phone,
     loading,

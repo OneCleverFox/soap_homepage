@@ -31,11 +31,13 @@ import {
   Switch,
   Tabs,
   Tab,
-  useTheme,
-  useMediaQuery,
-  IconButton,
   Stack,
-  Collapse
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   Email,
@@ -45,9 +47,7 @@ import {
   Refresh,
   TrendingUp,
   PendingActions,
-  Assignment,
-  ExpandMore,
-  ExpandLess
+  Assignment
 } from '@mui/icons-material';
 import api from '../services/api';
 import stockEventService from '../services/stockEventService';
@@ -58,10 +58,10 @@ const AdminInquiries = () => {
   
   // Standardisierte Admin-States
   const {
-    loading, setLoading,
-    error, setError,
-    success, setSuccess,
-    snackbar, showSnackbar, hideSnackbar,
+    loading,
+    error,
+    setSuccess,
+    showSnackbar,
     handleAsyncOperation
   } = useAdminState();
   
@@ -81,7 +81,7 @@ const AdminInquiries = () => {
   const [convertToOrder, setConvertToOrder] = useState(true);
   const [currentTab, setCurrentTab] = useState(0);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [expandedCard, setExpandedCard] = useState(null);
+  const [_expandedCard, _setExpandedCard] = useState(null);
 
   // Anfragen laden mit React Hook Pattern
   const loadInquiries = useCallback(async () => {
@@ -173,7 +173,7 @@ const AdminInquiries = () => {
     // loadStats wird separat aufgerufen, um Race Conditions zu vermeiden
     const timer = setTimeout(() => loadStats(), 100);
     return () => clearTimeout(timer);
-  }, [loadInquiries]);
+  }, [loadInquiries, loadStats]);
   
   // Separater Effect für Badge-Reset nur wenn wirklich Aktionen durchgeführt wurden
   useEffect(() => {
@@ -345,64 +345,181 @@ const AdminInquiries = () => {
       {stats && (
         <Grid container spacing={isMobile ? 2 : 3} sx={{ mb: isMobile ? 3 : 4 }}>
           <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
-                  <PendingActions color="warning" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
-                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
-                    <Typography variant={isMobile ? "h6" : "h5"}>{stats.pendingCount || 0}</Typography>
-                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
-                      Ausstehend
-                    </Typography>
-                  </Box>
-                </Box>
+            <Card 
+              sx={{ 
+                background: 'linear-gradient(135deg, rgba(255, 152, 0, 0.8) 0%, rgba(245, 124, 0, 0.8) 100%)',
+                color: 'white',
+                height: isMobile ? 'auto' : '100px'
+              }}
+            >
+              <CardContent sx={{ 
+                p: isMobile ? 1.5 : 2, 
+                '&:last-child': { pb: isMobile ? 1.5 : 2 },
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center',
+                minHeight: isMobile ? '80px' : 'auto'
+              }}>
+                {!isMobile && (
+                  <PendingActions sx={{ mb: 0.5, fontSize: 24, opacity: 0.9 }} />
+                )}
+                <Typography 
+                  variant={isMobile ? "h4" : "h5"}
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: isMobile ? '2rem' : '1.75rem',
+                    lineHeight: 1
+                  }}
+                >
+                  {stats.pendingCount || 0}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "body2" : "caption"}
+                  sx={{ 
+                    fontSize: isMobile ? '0.75rem' : '0.7rem',
+                    opacity: 0.9,
+                    fontWeight: 500
+                  }}
+                >
+                  Ausstehend
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
           
           <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
-                  <CheckCircle color="success" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
-                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
-                    <Typography variant={isMobile ? "h6" : "h5"}>{(stats.acceptedCount || 0) + (stats.convertedCount || 0)}</Typography>
-                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
-                      Angenommen
-                    </Typography>
-                  </Box>
-                </Box>
+            <Card 
+              sx={{ 
+                background: 'linear-gradient(135deg, rgba(76, 175, 80, 0.8) 0%, rgba(46, 125, 50, 0.8) 100%)',
+                color: 'white',
+                height: isMobile ? 'auto' : '100px'
+              }}
+            >
+              <CardContent sx={{ 
+                p: isMobile ? 1.5 : 2, 
+                '&:last-child': { pb: isMobile ? 1.5 : 2 },
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center',
+                minHeight: isMobile ? '80px' : 'auto'
+              }}>
+                {!isMobile && (
+                  <CheckCircle sx={{ mb: 0.5, fontSize: 24, opacity: 0.9 }} />
+                )}
+                <Typography 
+                  variant={isMobile ? "h4" : "h5"}
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: isMobile ? '2rem' : '1.75rem',
+                    lineHeight: 1
+                  }}
+                >
+                  {(stats.acceptedCount || 0) + (stats.convertedCount || 0)}
+                </Typography>
+                <Typography 
+                  variant={isMobile ? "body2" : "caption"}
+                  sx={{ 
+                    fontSize: isMobile ? '0.75rem' : '0.7rem',
+                    opacity: 0.9,
+                    fontWeight: 500
+                  }}
+                >
+                  Angenommen
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
           
-          <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2, '&:last-child': { pb: isMobile ? 1.5 : 2 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
-                  <Assignment color="primary" sx={{ mr: isMobile ? 0 : 1, mb: isMobile ? 0.5 : 0 }} />
-                  <Box sx={{ textAlign: isMobile ? 'center' : 'left' }}>
-                    <Typography variant={isMobile ? "h6" : "h5"}>{stats.totalCount || 0}</Typography>
-                    <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
-                      Gesamt
-                    </Typography>
-                  </Box>
+          <Grid item xs={12} sm={12} md={6}>
+            <Card 
+              sx={{ 
+                background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.8) 0%, rgba(21, 101, 192, 0.8) 100%)',
+                color: 'white',
+                height: isMobile ? 'auto' : '100px'
+              }}
+            >
+              <CardContent sx={{ 
+                p: isMobile ? 1.5 : 2, 
+                '&:last-child': { pb: isMobile ? 1.5 : 2 },
+                display: 'flex',
+                flexDirection: isMobile ? 'row' : 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                textAlign: 'center'
+              }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flex: 1,
+                  pr: isMobile ? 1 : 1
+                }}>
+                  {!isMobile && (
+                    <Assignment sx={{ mb: 0.5, fontSize: 20, opacity: 0.9 }} />
+                  )}
+                  <Typography 
+                    variant={isMobile ? "h5" : "h6"}
+                    sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: isMobile ? '1.5rem' : '1.25rem'
+                    }}
+                  >
+                    {stats.totalCount || 0}
+                  </Typography>
+                  <Typography 
+                    variant="caption"
+                    sx={{ 
+                      fontSize: isMobile ? '0.7rem' : '0.65rem',
+                      opacity: 0.9,
+                      fontWeight: 500
+                    }}
+                  >
+                    Anfragen
+                  </Typography>
                 </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <TrendingUp color="info" sx={{ mr: 1 }} />
-                  <Box>
-                    <Typography variant="h6">{formatPrice(stats.totalValue)}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Gesamtwert
-                    </Typography>
-                  </Box>
+                
+                <Divider 
+                  orientation="vertical" 
+                  flexItem 
+                  sx={{ 
+                    borderColor: 'rgba(255,255,255,0.3)',
+                    mx: 1
+                  }} 
+                />
+                
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  flex: 1,
+                  pl: isMobile ? 1 : 1
+                }}>
+                  {!isMobile && (
+                    <TrendingUp sx={{ mb: 0.5, fontSize: 20, opacity: 0.9 }} />
+                  )}
+                  <Typography 
+                    variant={isMobile ? "h5" : "h6"}
+                    sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: isMobile ? '1.5rem' : '1.25rem'
+                    }}
+                  >
+                    {formatPrice(stats.totalValue)}
+                  </Typography>
+                  <Typography 
+                    variant="caption"
+                    sx={{ 
+                      fontSize: isMobile ? '0.7rem' : '0.65rem',
+                      opacity: 0.9,
+                      fontWeight: 500
+                    }}
+                  >
+                    Gesamtwert
+                  </Typography>
                 </Box>
               </CardContent>
             </Card>
@@ -410,22 +527,49 @@ const AdminInquiries = () => {
         </Grid>
       )}
 
-      {/* Filter Tabs */}
+      {/* Filter Tabs - Responsive */}
       <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={currentTab}
-          onChange={(e, newValue) => {
-            setCurrentTab(newValue);
-            const filters = ['all', 'pending', 'accepted', 'rejected', 'converted_to_order'];
-            setStatusFilter(filters[newValue]);
-          }}
-        >
-          <Tab label="Alle" />
-          <Tab label="Ausstehend" />
-          <Tab label="Angenommen" />
-          <Tab label="Abgelehnt" />
-          <Tab label="Zu Bestellung" />
-        </Tabs>
+        {isMobile ? (
+          // Mobile Dropdown
+          <Box sx={{ p: 2 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="filter-select-label">Status Filter</InputLabel>
+              <Select
+                labelId="filter-select-label"
+                value={currentTab}
+                label="Status Filter"
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setCurrentTab(newValue);
+                  const filters = ['all', 'pending', 'accepted', 'rejected', 'converted_to_order'];
+                  setStatusFilter(filters[newValue]);
+                }}
+              >
+                <MenuItem value={0}>📋 Alle</MenuItem>
+                <MenuItem value={1}>⏳ Ausstehend</MenuItem>
+                <MenuItem value={2}>✅ Angenommen</MenuItem>
+                <MenuItem value={3}>❌ Abgelehnt</MenuItem>
+                <MenuItem value={4}>🛒 Zu Bestellung</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        ) : (
+          // Desktop Tabs
+          <Tabs
+            value={currentTab}
+            onChange={(e, newValue) => {
+              setCurrentTab(newValue);
+              const filters = ['all', 'pending', 'accepted', 'rejected', 'converted_to_order'];
+              setStatusFilter(filters[newValue]);
+            }}
+          >
+            <Tab label="Alle" />
+            <Tab label="Ausstehend" />
+            <Tab label="Angenommen" />
+            <Tab label="Abgelehnt" />
+            <Tab label="Zu Bestellung" />
+          </Tabs>
+        )}
       </Paper>
 
       {/* Aktionen */}
@@ -444,73 +588,190 @@ const AdminInquiries = () => {
 
       {/* Anfragen-Tabelle */}
       <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Anfrage-ID</TableCell>
-                <TableCell>Kunde</TableCell>
-                <TableCell>Artikel</TableCell>
-                <TableCell>Wert</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Datum</TableCell>
-                <TableCell>Aktionen</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : filteredInquiries.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    Keine Anfragen gefunden
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredInquiries.map((inquiry) => (
-                  <TableRow key={inquiry._id}>
-                    <TableCell>{inquiry.inquiryId}</TableCell>
-                    <TableCell>
-                      <Box>
-                        <Typography variant="body2" fontWeight="bold">
-                          {inquiry.customer.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {inquiry.customer.email}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      {inquiry.items.length} Artikel
-                    </TableCell>
-                    <TableCell>{formatPrice(inquiry.total)}</TableCell>
-                    <TableCell>
+        {isMobile ? (
+          // Mobile Card Layout
+          <Box sx={{ p: 2 }}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                <CircularProgress />
+              </Box>
+            ) : filteredInquiries.length === 0 ? (
+              <Box sx={{ textAlign: 'center', p: 4 }}>
+                <Typography color="text.secondary">
+                  Keine Anfragen gefunden
+                </Typography>
+              </Box>
+            ) : (
+              <Stack spacing={2}>
+                {filteredInquiries.map((inquiry) => (
+                  <Card 
+                    key={inquiry._id} 
+                    variant="outlined"
+                    sx={{ 
+                      p: 2,
+                      borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: 2,
+                        borderColor: 'primary.main'
+                      }
+                    }}
+                  >
+                    {/* Header mit ID und Status */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      mb: 1
+                    }}>
+                      <Typography 
+                        variant="subtitle2" 
+                        sx={{ fontWeight: 'bold', color: 'primary.main' }}
+                      >
+                        #{inquiry.inquiryId}
+                      </Typography>
                       <Chip
                         label={getStatusLabel(inquiry.status)}
                         color={getStatusColor(inquiry.status)}
                         size="small"
                       />
-                    </TableCell>
-                    <TableCell>{formatDate(inquiry.createdAt)}</TableCell>
-                    <TableCell>
+                    </Box>
+
+                    {/* Kundendaten */}
+                    <Box sx={{ mb: 1.5 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5 }}>
+                        {inquiry.customer.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                        {inquiry.customer.email}
+                      </Typography>
+                    </Box>
+
+                    {/* Bestelldetails */}
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid item xs={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Assignment color="primary" sx={{ fontSize: 18 }} />
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Artikel
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {inquiry.items.length} Stk.
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <TrendingUp color="success" sx={{ fontSize: 18 }} />
+                          <Box>
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Wert
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                              {formatPrice(inquiry.total)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </Grid>
+
+                    {/* Footer mit Datum und Aktionen */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      pt: 1,
+                      borderTop: '1px solid',
+                      borderColor: 'divider'
+                    }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatDate(inquiry.createdAt)}
+                      </Typography>
                       <Button
                         size="small"
                         startIcon={<Visibility />}
                         onClick={() => showInquiryDetails(inquiry.inquiryId)}
+                        sx={{ minWidth: 'auto' }}
                       >
                         Details
                       </Button>
+                    </Box>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        ) : (
+          // Desktop Table Layout
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Anfrage-ID</TableCell>
+                  <TableCell>Kunde</TableCell>
+                  <TableCell>Artikel</TableCell>
+                  <TableCell>Wert</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Datum</TableCell>
+                  <TableCell>Aktionen</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center">
+                      <CircularProgress />
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                ) : filteredInquiries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center">
+                      Keine Anfragen gefunden
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredInquiries.map((inquiry) => (
+                    <TableRow key={inquiry._id}>
+                      <TableCell>{inquiry.inquiryId}</TableCell>
+                      <TableCell>
+                        <Box>
+                          <Typography variant="body2" fontWeight="bold">
+                            {inquiry.customer.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {inquiry.customer.email}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        {inquiry.items.length} Artikel
+                      </TableCell>
+                      <TableCell>{formatPrice(inquiry.total)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={getStatusLabel(inquiry.status)}
+                          color={getStatusColor(inquiry.status)}
+                          size="small"
+                        />
+                      </TableCell>
+                      <TableCell>{formatDate(inquiry.createdAt)}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="small"
+                          startIcon={<Visibility />}
+                          onClick={() => showInquiryDetails(inquiry.inquiryId)}
+                        >
+                          Details
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
 
       {/* Anfrage-Details Dialog */}

@@ -423,6 +423,49 @@ const AdminWarenberechnung = () => {
                     </Card>
                   )}
 
+                  {/* Zusatzinhaltsstoffe */}
+                  {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
+                    <Card variant="outlined">
+                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="subtitle2" color="secondary" gutterBottom>
+                          ⚗️ Zusatzinhaltsstoffe
+                        </Typography>
+                        {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
+                          <Stack spacing={0.5}>
+                            {calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
+                              <Box key={index} display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="body2">
+                                  {zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)
+                                </Typography>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {zutat.gesamtKosten?.toFixed(4)} €
+                                </Typography>
+                              </Box>
+                            ))}
+                            {calculation.zusatzinhaltsstoffeKonfiguration.length > 1 && (
+                              <>
+                                <Divider sx={{ my: 0.5 }} />
+                                <Box display="flex" justifyContent="space-between" alignItems="center">
+                                  <Typography variant="body2" fontWeight="bold">Gesamt:</Typography>
+                                  <Typography variant="body2" fontWeight="bold">
+                                    {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                                  </Typography>
+                                </Box>
+                              </>
+                            )}
+                          </Stack>
+                        ) : (
+                          <Box display="flex" justifyContent="space-between" alignItems="center">
+                            <Typography variant="body2">Zusatzinhaltsstoffe</Typography>
+                            <Typography variant="body2" fontWeight="bold">
+                              {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                            </Typography>
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
                   {/* Verpackung & Energie */}
                   <Card variant="outlined">
                     <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
@@ -635,6 +678,32 @@ const AdminWarenberechnung = () => {
                           <TableCell>{Math.round(calculation.gewichtInGramm / 50)}</TableCell>
                           <TableCell align="right"></TableCell>
                         </TableRow>
+                      </>
+                    )}
+
+                    {/* Zusatzinhaltsstoffe */}
+                    {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
+                      <>
+                        <TableRow>
+                          <TableCell rowSpan={calculation.zusatzinhaltsstoffeKonfiguration?.length + 1 || 2}>
+                            ⚗️ Zusatzinhaltsstoffe
+                          </TableCell>
+                          <TableCell></TableCell>
+                          <TableCell align="right"></TableCell>
+                        </TableRow>
+                        {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
+                          calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
+                            <TableRow key={index}>
+                              <TableCell>{zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)</TableCell>
+                              <TableCell align="right">{zutat.gesamtKosten?.toFixed(4)} €</TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell>Zusatzinhaltsstoffe</TableCell>
+                            <TableCell align="right">{calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €</TableCell>
+                          </TableRow>
+                        )}
                       </>
                     )}
 

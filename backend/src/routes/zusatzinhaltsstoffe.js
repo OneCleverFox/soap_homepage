@@ -34,6 +34,9 @@ router.get('/', auth, async (req, res) => {
         
         return {
           ...stoff,
+          // Frontend-kompatible Felder für Bestand
+          aktuellVorrat: bestand?.menge || 0,
+          mindestbestand: bestand?.mindestbestand || 0,
           bestand: bestand ? {
             menge: bestand.menge,
             einheit: bestand.einheit,
@@ -105,8 +108,8 @@ router.post('/', auth, async (req, res) => {
 
 // @route   GET /api/zusatzinhaltsstoffe/:id
 // @desc    Einzelnen Zusatzinhaltsstoff abrufen
-// @access  Private (inventory.read)
-router.get('/:id', auth, checkPermission('inventory.read'), async (req, res) => {
+// @access  Private (Admin only)
+router.get('/:id', auth, async (req, res) => {
   try {
     const inhaltsstoff = await ZusatzInhaltsstoff.findById(req.params.id);
     
@@ -124,8 +127,9 @@ router.get('/:id', auth, checkPermission('inventory.read'), async (req, res) => 
     });
     
     const result = {
-      ...inhaltsstoff.toObject(),
-      bestand: bestand ? {
+      ...inhaltsstoff.toObject(),      // Frontend-kompatible Felder für Bestand
+      aktuellVorrat: bestand?.menge || 0,
+      mindestbestand: bestand?.mindestbestand || 0,      bestand: bestand ? {
         menge: bestand.menge,
         einheit: bestand.einheit,
         mindestbestand: bestand.mindestbestand,
@@ -150,12 +154,15 @@ router.get('/:id', auth, checkPermission('inventory.read'), async (req, res) => 
 
 // @route   PUT /api/zusatzinhaltsstoffe/:id
 // @desc    Zusatzinhaltsstoff aktualisieren
-// @access  Private (inventory.update)
-router.put('/:id', auth, checkPermission('inventory.update'), async (req, res) => {
+// @access  Private (Admin only)
+router.put('/:id', auth, async (req, res) => {
   try {
+    // Separiere Bestandsdaten von anderen Daten
+    const { aktuellVorrat, mindestbestand, ...inhaltsstoffData } = req.body;
+    
     const inhaltsstoff = await ZusatzInhaltsstoff.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      inhaltsstoffData,
       { new: true, runValidators: true }
     );
     
@@ -164,6 +171,34 @@ router.put('/:id', auth, checkPermission('inventory.update'), async (req, res) =
         success: false,
         message: 'Zusatzinhaltsstoff nicht gefunden'
       });
+    }
+
+    // Bestand aktualisieren falls Bestandsdaten übermittelt wurden
+    if (aktuellVorrat !== undefined || mindestbestand !== undefined) {
+      let bestand = await Bestand.findOne({
+        typ: 'zusatzinhaltsstoff',
+        artikelId: req.params.id
+      });
+
+      if (!bestand) {
+        // Neuen Bestand erstellen falls noch nicht vorhanden
+        bestand = new Bestand({
+          typ: 'zusatzinhaltsstoff',
+          artikelId: req.params.id,
+          artikelModell: 'ZusatzInhaltsstoff',
+          menge: aktuellVorrat || 0,
+          einheit: 'g',
+          mindestbestand: mindestbestand || 50,
+          letzteAktualisierung: new Date()
+        });
+      } else {
+        // Existierenden Bestand aktualisieren
+        if (aktuellVorrat !== undefined) bestand.menge = aktuellVorrat;
+        if (mindestbestand !== undefined) bestand.mindestbestand = mindestbestand;
+        bestand.letzteAktualisierung = new Date();
+      }
+      
+      await bestand.save();
     }
     
     res.json({

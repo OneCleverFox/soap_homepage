@@ -5,8 +5,7 @@ import {
   Typography, 
   Box, 
   Paper,
-  Divider,
-  Grid
+  Divider
 } from '@mui/material';
 
 const WiderrufsrechtPage = () => {
@@ -15,7 +14,7 @@ const WiderrufsrechtPage = () => {
     address, 
     contact, 
     ceo, 
-    fullAddress,
+    fullAddress: _fullAddress,
     email,
     phone,
     loading,
@@ -44,7 +43,7 @@ const WiderrufsrechtPage = () => {
     );
   }
 
-  const firmeName = name || 'Glücksmomente Manufaktur';
+  const _firmeName = name || 'Glücksmomente Manufaktur';
   const inhaber = ceo || 'Ralf Jacob';
   const firmAdresse = address?.street && address?.houseNumber && address?.postalCode && address?.city
     ? `${address.street} ${address.houseNumber}, ${address.postalCode} ${address.city}`

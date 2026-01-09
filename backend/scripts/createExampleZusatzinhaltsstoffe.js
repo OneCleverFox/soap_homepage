@@ -44,9 +44,11 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 36
     },
-    lieferant: 'NaturPur GmbH',
+    hersteller: 'NaturPur GmbH',
     artikelNummer: 'AK-250',
     mindestbestand: 100,
+    preisProGramm: 8.50 / 250,  // Auto-Berechnung
+    preisPro10Gramm: (8.50 / 250) * 10,  // Auto-Berechnung
     verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Keine bekannten Allergene',
@@ -79,9 +81,11 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 24
     },
-    lieferant: 'CosmoPur Naturkosmetik',
+    hersteller: 'CosmoPur Naturkosmetik',
     artikelNummer: 'MP-200',
     mindestbestand: 80,
+    preisProGramm: 12.90 / 200,  // Auto-Berechnung
+    preisPro10Gramm: (12.90 / 200) * 10,  // Auto-Berechnung
     verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Keine bekannten Allergene',
@@ -114,10 +118,10 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 18
     },
-    lieferant: 'Bio-Zentrale München',
+    hersteller: 'Bio-Zentrale München',
     artikelNummer: 'BH-500',
-    mindestbestand: 200,
-    verfuegbar: true,
+    mindestbestand: 200,    preisProGramm: 4.20 / 500,  // Auto-Berechnung
+    preisPro10Gramm: (4.20 / 500) * 10,  // Auto-Berechnung    verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Enthält Gluten',
       hautvertraeglichkeit: 'sehr gut',
@@ -149,9 +153,11 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 24
     },
-    lieferant: 'SuperFoods International',
+    hersteller: 'SuperFoods International',
     artikelNummer: 'SP-100',
     mindestbestand: 50,
+    preisProGramm: 15.80 / 100,  // Auto-Berechnung
+    preisPro10Gramm: (15.80 / 100) * 10,  // Auto-Berechnung
     verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Kann Spuren von Krustentieren enthalten',
@@ -184,9 +190,11 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 24
     },
-    lieferant: 'Rosenfeld Naturprodukte',
-    artikelNummer: 'RK-50',
-    mindestbestand: 25,
+    hersteller: 'Rosenfeld Naturprodukte',
+    artikelNummer: 'RK-150',
+    mindestbestand: 50,
+    preisProGramm: 18.50 / 150,  // Auto-Berechnung
+    preisPro10Gramm: (18.50 / 150) * 10,  // Auto-Berechnung
     verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Kann allergische Reaktionen bei Rosenallergikern auslösen',
@@ -219,9 +227,11 @@ const beispielInhaltsstoffe = [
       luftdicht: true,
       haltbarkeitMonate: 60
     },
-    lieferant: 'Colorant Chemie GmbH',
-    artikelNummer: 'TD-200',
-    mindestbestand: 100,
+    hersteller: 'Colorant Chemie GmbH',
+    artikelNummer: 'TD-500',
+    mindestbestand: 200,
+    preisProGramm: 22.00 / 500,  // Auto-Berechnung
+    preisPro10Gramm: (22.00 / 500) * 10,  // Auto-Berechnung
     verfuegbar: true,
     sicherheit: {
       allergenhinweise: 'Keine bekannten Allergene',

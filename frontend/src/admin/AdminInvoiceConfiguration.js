@@ -267,7 +267,7 @@ const AdminInvoiceConfiguration = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setLoading, showSnackbar]);
 
   const loadVariables = useCallback(async () => {
     try {

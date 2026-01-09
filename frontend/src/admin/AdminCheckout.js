@@ -67,7 +67,7 @@ const AdminCheckout = () => {
     } else {
       setError('');
     }
-  }, [items]);
+  }, [items, setError]);
 
   // Kunden suchen
   const searchCustomers = async (searchValue) => {

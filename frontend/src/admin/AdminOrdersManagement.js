@@ -145,7 +145,7 @@ const AdminOrdersManagement = () => {
 
   // Filter and view state
   const [filters, setFilters] = useState(getInitialFilters());
-  const [stats, setStats] = useState({});
+  const [_stats, _setStats] = useState({});
   const [tabValue, setTabValue] = useState(0);
 
   // Tracking state
@@ -237,7 +237,7 @@ const AdminOrdersManagement = () => {
           }
         });
 
-        setStats({
+        _setStats({
           ...statusStats,
           totalRevenue,
           totalOrders: ordersData.length
@@ -254,7 +254,7 @@ const AdminOrdersManagement = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filters]);
+  }, [filters, setError, setLoading]);
 
   // Load inquiries
   const loadInquiries = useCallback(async () => {
@@ -318,7 +318,7 @@ const AdminOrdersManagement = () => {
         status: statusParam
       }));
     }
-  }, [location.search]); // Entfernt filters.status aus Dependencies
+  }, [location.search, filters.status]); // Added filters.status dependency
 
   // Status update handler
   const handleStatusUpdate = async (orderId, newStatus, note = '', versandData = null) => {
@@ -566,7 +566,7 @@ const AdminOrdersManagement = () => {
   };
 
   // Funktion zur benutzerfreundlichen Darstellung von Objekten
-  const formatDisplayValue = (value) => {
+  const _formatDisplayValue = (value) => {
     if (typeof value === 'string') {
       return value;
     }

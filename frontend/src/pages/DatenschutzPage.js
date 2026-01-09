@@ -19,16 +19,16 @@ const DatenschutzPage = () => {
     vatId, 
     ceo, 
     legalForm,
-    fullAddress,
+    fullAddress: _fullAddress,
     email,
     phone,
     loading,
-    error 
+    error: _error 
   } = useCompany();
-  const [expanded, setExpanded] = useState(false);
+  const [_expanded, _setExpanded] = useState(false);
   
-  const handleChange = (panel) => (event, isExpanded) => {
-    setExpanded(isExpanded ? panel : false);
+  const _handleChange = (panel) => (event, isExpanded) => {
+    _setExpanded(isExpanded ? panel : false);
   };
 
   if (loading) {

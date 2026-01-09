@@ -27,6 +27,13 @@ const verpackungSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  
+  produktlink: {
+    type: String,
+    default: '',
+    trim: true
+  },
+
   // Zusätzliche Felder für bessere Verwaltung
   verfuegbar: {
     type: Boolean,

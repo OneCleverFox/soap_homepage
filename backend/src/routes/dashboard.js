@@ -11,6 +11,7 @@ const Rohseife = require('../models/Rohseife');
 const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
 const Invoice = require('../models/Invoice');
+const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
 
 // @route   GET /api/dashboard/overview
 // @desc    Haupt-Dashboard Übersicht mit allen wichtigen KPIs
@@ -1277,6 +1278,95 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
   } else {
     analyse.probleme.push(`Verpackung "${produkt.verpackung}" nicht gefunden`);
     minProduktion = 0;
+  }
+  
+  // 4. Zusatzinhaltsstoffe analysieren
+  console.log(`🧪 [DEBUG] Produkt ${produkt.name}: zusatzinhaltsstoffe Array:`, produkt.zusatzinhaltsstoffe);
+  if (produkt.zusatzinhaltsstoffe && Array.isArray(produkt.zusatzinhaltsstoffe) && produkt.zusatzinhaltsstoffe.length > 0) {
+    console.log(`🧪 [DEBUG] Starte Zusatzinhaltsstoffe-Analyse für ${produkt.name}: ${produkt.zusatzinhaltsstoffe.length} Stoffe`);
+    for (const zusatz of produkt.zusatzinhaltsstoffe) {
+      console.log(`🧪 [DEBUG] Prüfe Zusatz:`, zusatz);
+      if (zusatz && zusatz.inhaltsstoffName && typeof zusatz.inhaltsstoffName === 'string' && zusatz.inhaltsstoffName.trim() !== '') {
+        console.log(`🧪 [DEBUG] Suche Bestand für Zusatz: ${zusatz.inhaltsstoffName}, ID: ${zusatz.id || zusatz._id}`);
+        
+        // Zuerst den ZusatzInhaltsstoff finden um die richtige ID zu bekommen
+        const zusatzinhaltsstoff = await ZusatzInhaltsstoff.findOne({
+          bezeichnung: zusatz.inhaltsstoffName
+        });
+        
+        if (zusatzinhaltsstoff) {
+          console.log(`🧪 [DEBUG] ZusatzInhaltsstoff gefunden:`, zusatzinhaltsstoff.bezeichnung, zusatzinhaltsstoff._id);
+          
+          // Dann den Bestand mit der korrekten artikelId suchen
+          const bestand = await Bestand.findOne({
+            typ: 'zusatzinhaltsstoff',
+            artikelId: zusatzinhaltsstoff._id
+          });
+          
+          console.log(`🧪 [DEBUG] Bestand gefunden:`, bestand);
+          
+          if (bestand) {
+            // Berechne die benötigte Menge basierend auf der Portfolio-Konfiguration
+            let benoetigt = 0;
+            if (zusatz.menge && typeof zusatz.menge === 'number' && zusatz.menge > 0) {
+              if (zusatz.einheit === 'gramm') {
+                // Direkte Grammangabe - für 50g Seife skalieren
+                benoetigt = Math.round((zusatz.menge * produkt.gramm) / 50);
+              } else if (zusatz.einheit === 'prozent') {
+                // Prozentuale Angabe
+                benoetigt = Math.round((produkt.gramm * zusatz.menge) / 100);
+              } else {
+                // Fallback: als Gramm interpretieren
+                benoetigt = Math.round((zusatz.menge * produkt.gramm) / 50);
+              }
+            } else if (zusatzinhaltsstoff.empfohleneDosierung && typeof zusatzinhaltsstoff.empfohleneDosierung === 'number' && zusatzinhaltsstoff.empfohleneDosierung > 0) {
+              // Fallback zur empfohlenen Dosierung aus ZusatzInhaltsstoff
+              benoetigt = Math.round((produkt.gramm * zusatzinhaltsstoff.empfohleneDosierung) / 100);
+            } else {
+              // Fallback: 1% des Produktgewichts
+              benoetigt = Math.round(produkt.gramm * 0.01);
+            }
+            
+            const verfuegbar = bestand.menge || 0;
+            const maxProduktionZusatz = benoetigt > 0 ? Math.floor(verfuegbar / benoetigt) : 0;
+            
+            console.log(`🧪 [DEBUG] ${zusatz.inhaltsstoffName}: benötigt=${benoetigt}g, verfügbar=${verfuegbar}g, maxProduktion=${maxProduktionZusatz}`);
+            
+            analyse.rohstoffBedarf.push({
+              typ: 'zusatzinhaltsstoff',
+              name: zusatz.inhaltsstoffName,
+              benoetigt: benoetigt,
+              einheit: 'g',
+              verfuegbar: verfuegbar,
+              maxProduktion: maxProduktionZusatz,
+              ausreichend: verfuegbar >= benoetigt,
+              dosierung: zusatz.einheit === 'gramm' ? `${zusatz.menge}g/50g Seife` : 
+                        zusatz.einheit === 'prozent' ? `${zusatz.menge}%` :
+                        zusatzinhaltsstoff.empfohleneDosierung ? `${zusatzinhaltsstoff.empfohleneDosierung}% (empfohlen)` : '1% (Standard)'
+            });
+            
+            if (maxProduktionZusatz < minProduktion) {
+              console.log(`🧪 [DEBUG] Neuer limitierender Faktor: zusatzinhaltsstoff (${maxProduktionZusatz} < ${minProduktion})`);
+              minProduktion = maxProduktionZusatz;
+              analyse.limitierenderFaktor = 'zusatzinhaltsstoff';
+            }
+          } else {
+            console.log(`🧪 [DEBUG] Kein Bestand für ${zusatz.inhaltsstoffName} gefunden - verhindere Produktion`);
+            analyse.probleme.push(`Zusatzinhaltsstoff "${zusatz.inhaltsstoffName}" - Bestand nicht gefunden`);
+            // Zusatzinhaltsstoff ohne Bestand verhindert Produktion
+            minProduktion = 0;
+          }
+        } else {
+          console.log(`🧪 [DEBUG] ZusatzInhaltsstoff "${zusatz.inhaltsstoffName}" nicht in Datenbank gefunden`);
+          analyse.probleme.push(`Zusatzinhaltsstoff "${zusatz.inhaltsstoffName}" nicht definiert`);
+          minProduktion = 0;
+        }
+      } else {
+        console.log(`🧪 [DEBUG] Überspringe ungültigen Zusatz:`, zusatz);
+      }
+    }
+  } else {
+    console.log(`🧪 [DEBUG] Produkt ${produkt.name}: Keine Zusatzinhaltsstoffe definiert`);
   }
   
   // Endgültige maximale Produktion setzen

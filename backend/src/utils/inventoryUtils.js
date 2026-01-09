@@ -1,6 +1,7 @@
 const Bestand = require('../models/Bestand');
 const Portfolio = require('../models/Portfolio');
 const Rohseife = require('../models/Rohseife');
+const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
 
 /**
  * Reduziert den Lagerbestand für ein Produkt (mit einem oder zwei Rohseifen)
@@ -65,12 +66,106 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
         prozent: 100
       });
     }
-    
+
+    // 2.5. Zusatzinhaltsstoffe hinzufügen
+    if (produkt.zusatzinhaltsstoffe && produkt.zusatzinhaltsstoffe.length > 0) {
+      console.log(`🧪 Zusatzinhaltsstoffe für ${produkt.name}: ${produkt.zusatzinhaltsstoffe.length} Stoffe`);
+      
+      for (const zusatzstoff of produkt.zusatzinhaltsstoffe) {
+        const mengeProStuck = zusatzstoff.menge || 0; // Menge pro Stück in g
+        const benotigteGesamtMenge = mengeProStuck * verkaufteMenge;
+        
+        console.log(`   - ${zusatzstoff.inhaltsstoffName}: ${mengeProStuck}g pro Stück × ${verkaufteMenge} = ${benotigteGesamtMenge}g benötigt`);
+        
+        inventoryOperations.push({
+          typ: 'zusatzinhaltsstoff',
+          name: zusatzstoff.inhaltsstoffName,
+          benoetigteMenge: benotigteGesamtMenge,
+          mengeProStuck: mengeProStuck
+        });
+      }
+    }
+
     // 3. Bestandsprüfung und Reduktion durchführen
     const results = [];
     
     for (const operation of inventoryOperations) {
       try {
+        if (operation.typ === 'zusatzinhaltsstoff') {
+          // === ZUSATZINHALTSSTOFF VERARBEITUNG ===
+          
+          // 1. Zusatzinhaltsstoff-Record finden
+          const zusatzstoffRecord = await ZusatzInhaltsstoff.findOne({
+            bezeichnung: operation.name
+          }).lean();
+          
+          if (!zusatzstoffRecord) {
+            console.warn(`⚠️ Zusatzinhaltsstoff "${operation.name}" nicht in Datenbank gefunden`);
+            results.push({
+              inhaltsstoff: operation.name,
+              typ: 'zusatzinhaltsstoff',
+              success: false,
+              error: 'Zusatzinhaltsstoff nicht in Datenbank gefunden',
+              benoetigteMenge: operation.benoetigteMenge,
+              verfuegbareMenge: 0
+            });
+            continue;
+          }
+          
+          // 2. Bestand für diesen Zusatzinhaltsstoff suchen
+          const bestand = await Bestand.findOne({
+            artikelId: zusatzstoffRecord._id,
+            typ: 'zusatzinhaltsstoff'
+          });
+          
+          if (!bestand) {
+            console.warn(`⚠️ Kein Bestandseintrag für Zusatzinhaltsstoff: ${operation.name}`);
+            results.push({
+              inhaltsstoff: operation.name,
+              typ: 'zusatzinhaltsstoff',
+              success: false,
+              error: 'Kein Bestandseintrag gefunden',
+              benoetigteMenge: operation.benoetigteMenge,
+              verfuegbareMenge: 0
+            });
+            continue;
+          }
+          
+          // Prüfe ob genügend Bestand vorhanden
+          if (bestand.menge < operation.benoetigteMenge) {
+            console.warn(`⚠️ Nicht genügend Bestand für ${operation.name}: verfügbar ${bestand.menge}g, benötigt ${operation.benoetigteMenge}g`);
+            results.push({
+              inhaltsstoff: operation.name,
+              typ: 'zusatzinhaltsstoff',
+              success: false,
+              error: 'Nicht genügend Bestand',
+              benoetigteMenge: operation.benoetigteMenge,
+              verfuegbareMenge: bestand.menge
+            });
+            continue;
+          }
+          
+          // Bestand reduzieren (wenn nicht DryRun)
+          if (!dryRun) {
+            bestand.menge -= operation.benoetigteMenge;
+            await bestand.save();
+          }
+          
+          console.log(`✅ Bestand für ${operation.name} ${dryRun ? 'würde reduziert werden' : 'reduziert'}: -${operation.benoetigteMenge}g (${operation.mengeProStuck}g pro Stück), Restbestand: ${bestand.menge - (dryRun ? 0 : operation.benoetigteMenge)}g`);
+          
+          results.push({
+            inhaltsstoff: operation.name,
+            typ: 'zusatzinhaltsstoff',
+            success: true,
+            reduzierung: operation.benoetigteMenge,
+            mengeProStuck: operation.mengeProStuck,
+            neuerBestand: dryRun ? bestand.menge : bestand.menge,
+            verfuegbareMenge: bestand.menge + (dryRun ? 0 : operation.benoetigteMenge)
+          });
+          
+        } else {
+          // === ROHSEIFE VERARBEITUNG (bestehende Logik) ===
+        
         // Bestand für diese Rohseife suchen
         // 1. Rohseife-Record aus der Rohseife-Collection finden
         const rohseifeRecord = await Rohseife.findOne({ 
@@ -81,6 +176,7 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
           console.warn(`⚠️ Rohseife "${operation.rohseifeName}" nicht in Rohseife-Collection gefunden`);
           results.push({
             rohseife: operation.rohseifeName,
+            typ: 'rohseife',
             success: false,
             error: 'Rohseife nicht in Datenbank gefunden',
             benoetigteMenge: operation.benoetigteMenge,
@@ -99,6 +195,7 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
           console.warn(`⚠️ Kein Bestandseintrag für Rohseife: ${operation.rohseifeName}`);
           results.push({
             rohseife: operation.rohseifeName,
+            typ: 'rohseife',
             success: false,
             error: 'Kein Bestandseintrag gefunden',
             benoetigteMenge: operation.benoetigteMenge,
@@ -112,6 +209,7 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
           console.warn(`⚠️ Nicht genügend Bestand für ${operation.rohseifeName}: verfügbar ${bestand.menge}g, benötigt ${operation.benoetigteMenge}g`);
           results.push({
             rohseife: operation.rohseifeName,
+            typ: 'rohseife',
             success: false,
             error: 'Nicht genügend Bestand',
             benoetigteMenge: operation.benoetigteMenge,
@@ -130,6 +228,7 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
         
         results.push({
           rohseife: operation.rohseifeName,
+          typ: 'rohseife',
           success: true,
           reduzierung: operation.benoetigteMenge,
           prozent: operation.prozent,
@@ -137,10 +236,13 @@ async function reduceInventoryForProduct(produktId, verkaufteMenge, options = {}
           verfuegbareMenge: bestand.menge + (dryRun ? 0 : operation.benoetigteMenge)
         });
         
+        } // Ende Rohseife-Verarbeitung
+        
       } catch (operationError) {
-        console.error(`❌ Fehler bei Bestandsreduktion für ${operation.rohseifeName}:`, operationError);
+        console.error(`❌ Fehler bei Bestandsreduktion für ${operation.name || operation.rohseifeName}:`, operationError);
         results.push({
-          rohseife: operation.rohseifeName,
+          [operation.typ === 'zusatzinhaltsstoff' ? 'inhaltsstoff' : 'rohseife']: operation.name || operation.rohseifeName,
+          typ: operation.typ || 'rohseife',
           success: false,
           error: operationError.message,
           benoetigteMenge: operation.benoetigteMenge

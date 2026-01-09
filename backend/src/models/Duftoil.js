@@ -39,6 +39,12 @@ const duftoelSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+  
+  produktlink: {
+    type: String,
+    default: '',
+    trim: true
+  },
   // Zusätzliche Felder für Verwaltung
   verfuegbar: {
     type: Boolean,
