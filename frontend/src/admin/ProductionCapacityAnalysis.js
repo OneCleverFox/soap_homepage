@@ -71,7 +71,8 @@ const ProductionCapacityAnalysis = () => {
     const colors = {
       rohseife: theme.palette.error.main,
       duftoel: theme.palette.warning.main,
-      verpackung: theme.palette.info.main
+      verpackung: theme.palette.info.main,
+      zusatzinhaltsstoff: theme.palette.secondary.main
     };
     return colors[faktor] || theme.palette.grey[500];
   };
@@ -80,7 +81,8 @@ const ProductionCapacityAnalysis = () => {
     const icons = {
       rohseife: <Inventory />,
       duftoel: <Assessment />,
-      verpackung: <Factory />
+      verpackung: <Factory />,
+      zusatzinhaltsstoff: <Warning />
     };
     return icons[faktor] || <Info />;
   };
@@ -89,7 +91,8 @@ const ProductionCapacityAnalysis = () => {
     const labels = {
       rohseife: 'Rohseife',
       duftoel: 'Duftöl',
-      verpackung: 'Verpackung'
+      verpackung: 'Verpackung',
+      zusatzinhaltsstoff: 'Zusatzstoff'
     };
     return labels[faktor] || faktor;
   };
@@ -98,7 +101,8 @@ const ProductionCapacityAnalysis = () => {
     const icons = {
       rohseife: '🧼',
       duftoel: '🌿', 
-      verpackung: '📦'
+      verpackung: '📦',
+      zusatzinhaltsstoff: '⚗️'
     };
     return icons[typ] || '📋';
   };

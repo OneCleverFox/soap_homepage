@@ -56,10 +56,7 @@ const AdminLager = () => {
   
   // Standardisierte Admin-States
   const {
-    loading, setLoading,
-    error, setError,
-    success, setSuccess,
-    handleAsyncOperation
+    loading, setLoading
   } = useAdminState(true);
   
   const [activeTab, setActiveTab] = useState(0);
@@ -128,10 +125,7 @@ const AdminLager = () => {
 
   const {
     searchTerm,
-    setSearchTerm,
-    filteredItems,
-    clearSearch,
-    hasSearchTerm
+    setSearchTerm
   } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung']);
 
   const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
@@ -220,7 +214,7 @@ const AdminLager = () => {
     } finally {
       setLoading(false);
     }
-  }, [makeAPICall]);
+  }, [makeAPICall, setLoading]);
 
   // UseEffect mit Cleanup und Rate Limiting
   useEffect(() => {
@@ -540,7 +534,7 @@ const AdminLager = () => {
   };
 
   // Historie-Dialog öffnen
-  const openHistoryDialog = async (item, typ) => {
+  const openHistoryDialog = async (item) => {
     setSelectedItem(item);
     setHistoryLoading(true);
     setHistoryDialog(true);
@@ -1059,10 +1053,12 @@ const AdminLager = () => {
           return (
             <Box>
               <Typography variant="body2">
-                {item.dosierung?.empfohleneProzentzahl || 5}%
+                {(item.empfohleneDosierung !== undefined && item.empfohleneDosierung !== null) 
+                  ? item.empfohleneDosierung 
+                  : (item.dosierung?.empfohleneProzentzahl || 0.5)}g
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Max: {item.dosierung?.maximaleMenge || 10}g
+                pro 10g Rohseife
               </Typography>
             </Box>
           );

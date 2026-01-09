@@ -111,7 +111,7 @@ const MobileCheckoutPage = () => {
 
     console.log('🔍 Validierung Adressdaten (manuell):', { errors, hasErrors: Object.keys(errors).length > 0 });
     return Object.keys(errors).length === 0;
-  }, [orderData.rechnungsadresse, user]);
+  }, [orderData, user]);
 
   // Validierung bei Änderungen - ohne validateAddressData als Dependency um Endlosschleife zu vermeiden
   useEffect(() => {
@@ -146,9 +146,7 @@ const MobileCheckoutPage = () => {
       console.log('🔍 Validierung Adressdaten (useEffect):', { errors, hasErrors: Object.keys(errors).length > 0 });
       setValidationErrors(errors);
     }
-  }, [activeStep, orderData.rechnungsadresse.vorname, orderData.rechnungsadresse.nachname, 
-      orderData.rechnungsadresse.strasse, orderData.rechnungsadresse.plz, orderData.rechnungsadresse.stadt, 
-      orderData.rechnungsadresse.email, user]);
+  }, [activeStep, orderData, user]);
 
   // Erweiterte Step-Validierung
   const canProceedToNextStep = useCallback(() => {

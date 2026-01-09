@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -13,8 +13,6 @@ import {
   MenuItem,
   Card,
   CardContent,
-  CardActions,
-  CardHeader,
   Chip,
   Alert,
   Accordion,
@@ -27,9 +25,7 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  ListItemSecondaryAction,
   CircularProgress,
-  IconButton,
   Tabs,
   Tab,
   Dialog,
@@ -41,18 +37,15 @@ import {
 import {
   Send as SendIcon,
   Settings as SettingsIcon,
-  Email as EmailIcon,
   Check as CheckIcon,
   Error as ErrorIcon,
   ExpandMore as ExpandMoreIcon,
   Edit as EditIcon,
   Visibility as PreviewIcon,
   Save as SaveIcon,
-  Add as AddIcon,
   Code as CodeIcon,
   FileCopy as FileCopyIcon,
   Refresh as RefreshIcon,
-  Schedule as ScheduleIcon,
   Notifications as NotificationIcon
 } from '@mui/icons-material';
 import api from '../services/api';
@@ -70,12 +63,7 @@ const AdminEmailConfiguration = () => {
   const [templateContent, setTemplateContent] = useState('');
   const [templatePreview, setTemplatePreview] = useState('');
 
-  // E-Mail-Konfigurationen laden
-  useEffect(() => {
-    loadEmailConfig();
-  }, []);
-
-  const loadEmailConfig = async () => {
+  const loadEmailConfig = useCallback(async () => {
     try {
       const response = await api.get('/admin/email-config');
       if (response.data.success) {
@@ -93,17 +81,26 @@ const AdminEmailConfiguration = () => {
         severity: 'error'
       });
     }
-  };
+  }, []);
+
+  // E-Mail-Konfigurationen laden
+  useEffect(() => {
+    loadEmailConfig();
+  }, [loadEmailConfig]);
 
   // Templates von Backend laden
   const loadTemplates = async () => {
     try {
       const response = await api.get('/admin/email-templates');
-      if (response.data.success) {
+      if (response.data.success && response.data.templates) {
         setTemplates(response.data.templates);
+      } else {
+        console.warn('Templates response invalid:', response.data);
+        setTemplates({});
       }
     } catch (error) {
       console.error('Fehler beim Laden der Templates:', error);
+      setTemplates({});
     }
   };
 
@@ -889,36 +886,44 @@ const AdminEmailConfiguration = () => {
           </Alert>
           
           <Grid container spacing={2}>
-            {Object.keys(templates).map((templateKey) => (
-              <Grid item xs={12} md={6} key={templateKey}>
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    {emailTypes.find(t => t.id === templateKey)?.label || templateKey}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Letzte Änderung: {new Date().toLocaleDateString()}
-                  </Typography>
-                  <Box display="flex" gap={1}>
-                    <Button
-                      startIcon={<CodeIcon />}
-                      variant="outlined"
-                      size="small"
-                      onClick={() => openTemplateEditor(templateKey)}
-                    >
-                      Code ansehen
-                    </Button>
-                    <Button
-                      startIcon={<FileCopyIcon />}
-                      variant="outlined"
-                      size="small"
-                      onClick={() => navigator.clipboard.writeText(templates[templateKey])}
-                    >
-                      Kopieren
-                    </Button>
-                  </Box>
-                </Paper>
+            {templates && Object.keys(templates).length > 0 ? (
+              Object.keys(templates).map((templateKey) => (
+                <Grid item xs={12} md={6} key={templateKey}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      {emailTypes.find(t => t.id === templateKey)?.label || templateKey}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      Letzte Änderung: {new Date().toLocaleDateString()}
+                    </Typography>
+                    <Box display="flex" gap={1}>
+                      <Button
+                        startIcon={<CodeIcon />}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => openTemplateEditor(templateKey)}
+                      >
+                        Code ansehen
+                      </Button>
+                      <Button
+                        startIcon={<FileCopyIcon />}
+                        variant="outlined"
+                        size="small"
+                        onClick={() => navigator.clipboard.writeText(templates[templateKey] || '')}
+                      >
+                        Kopieren
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              ))
+            ) : (
+              <Grid item xs={12}>
+                <Alert severity="info">
+                  Keine Templates gefunden. Templates werden geladen...
+                </Alert>
               </Grid>
-            ))}
+            )}
           </Grid>
         </Paper>
       </Grid>

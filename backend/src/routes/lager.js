@@ -6,6 +6,7 @@ const Portfolio = require('../models/Portfolio');
 const Rohseife = require('../models/Rohseife');
 const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
+const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
 const { authenticateToken } = require('../middleware/auth');
 
 // Middleware: Nur Admin darf Lager verwalten
@@ -27,10 +28,16 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
     console.log('🔍 Bestand-Abfrage gestartet...');
     
     // Hole Daten direkt aus den Rohstoff-Collections
-    const [rohseifen, duftoele, verpackungen, produkte] = await Promise.all([
+    const [rohseifen, duftoele, verpackungen, zusatzinhaltsstoffe, produkte] = await Promise.all([
       Rohseife.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
       Duftoil.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
       Verpackung.find().select('_id bezeichnung aktuellVorrat mindestbestand').lean(),
+      // Zusatzinhaltsstoffe aus der Bestand-Collection laden
+      Bestand.find({ typ: 'zusatzinhaltsstoff' }).populate({
+        path: 'artikelId',
+        model: 'ZusatzInhaltsstoff',
+        select: 'bezeichnung'
+      }).lean(),
       Portfolio.find().lean()
     ]);
     
@@ -38,6 +45,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       rohseifen: rohseifen.length,
       duftoele: duftoele.length,
       verpackungen: verpackungen.length,
+      zusatzinhaltsstoffe: zusatzinhaltsstoffe.length,
       produkte: produkte.length
     });
     
@@ -82,6 +90,20 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       typ: 'verpackung'
     }));
     
+    // Formatiere Zusatzinhaltsstoffe
+    const zusatzinhaltsstoffeFormatted = zusatzinhaltsstoffe
+      .filter(z => z.artikelId) // Nur Einträge mit gültiger Referenz
+      .map(z => ({
+        _id: z._id,
+        artikelId: z.artikelId._id,
+        name: z.artikelId.bezeichnung,
+        menge: z.menge,
+        einheit: z.einheit || 'g',
+        mindestbestand: z.mindestbestand,
+        unterMindestbestand: z.menge < z.mindestbestand,
+        typ: 'zusatzinhaltsstoff'
+      }));
+    
     // Formatiere Produkte
     const produkteFormatted = produktBestaende.map(p => ({
       _id: p._id,
@@ -102,6 +124,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
         rohseifen: rohseifenFormatted,
         duftoele: duftoeleFormatted,
         verpackungen: verpackungenFormatted,
+        zusatzinhaltsstoffe: zusatzinhaltsstoffeFormatted,
         produkte: produkteFormatted
       }
     };
@@ -110,6 +133,7 @@ router.get('/bestand', authenticateToken, requireAdmin, async (req, res) => {
       rohseifen: result.data.rohseifen.length,
       duftoele: result.data.duftoele.length,
       verpackungen: result.data.verpackungen.length,
+      zusatzinhaltsstoffe: result.data.zusatzinhaltsstoffe.length,
       produkte: result.data.produkte.length
     });
     
@@ -499,6 +523,72 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                 }
               }
               
+              // 4. ZUSATZINHALTSSTOFFE subtrahieren
+              if (artikel.zusatzinhaltsstoffe && artikel.zusatzinhaltsstoffe.length > 0) {
+                console.log(`  🧪 Zusatzinhaltsstoffe für ${artikel.name}: ${artikel.zusatzinhaltsstoffe.length} Stoffe`);
+                
+                for (const zusatzstoff of artikel.zusatzinhaltsstoffe) {
+                  const mengeProStuck = zusatzstoff.menge || 0; // Menge pro Stück in g
+                  const benoetigt = mengeProStuck * buchungsAnzahl;
+                  
+                  console.log(`    - ${zusatzstoff.inhaltsstoffName}: ${mengeProStuck}g pro Stück × ${buchungsAnzahl} = ${benoetigt}g`);
+                  
+                  // Zusatzinhaltsstoff in der separaten Bestand-Collection finden
+                  const zusatzstoffRecord = await ZusatzInhaltsstoff.findOne({ 
+                    bezeichnung: zusatzstoff.inhaltsstoffName 
+                  });
+                  
+                  if (zusatzstoffRecord) {
+                    const zusatzstoffBestand = await Bestand.findOne({
+                      artikelId: zusatzstoffRecord._id,
+                      typ: 'zusatzinhaltsstoff'
+                    });
+                    
+                    if (zusatzstoffBestand) {
+                      if (zusatzstoffBestand.menge >= benoetigt) {
+                        const zusatzstoffVorher = zusatzstoffBestand.menge;
+                        zusatzstoffBestand.menge -= benoetigt;
+                        zusatzstoffBestand.letzteAktualisierung = new Date();
+                        await zusatzstoffBestand.save();
+                        
+                        rohstoffBewegungen.push({
+                          typ: 'produktion',
+                          artikel: {
+                            typ: 'zusatzinhaltsstoff',
+                            artikelId: zusatzstoffRecord._id,
+                            name: zusatzstoffRecord.bezeichnung
+                          },
+                          menge: -benoetigt,
+                          einheit: 'g',
+                          bestandVorher: zusatzstoffVorher,
+                          bestandNachher: zusatzstoffBestand.menge,
+                          grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                          notizen: `Zusatzinhaltsstoff ${mengeProStuck}g pro Stück - Fertigprodukt-Inventur (ID: ${artikelId})`,
+                          referenz: {
+                            typ: 'fertigprodukt-inventur',
+                            produktId: artikel._id,
+                            produktName: artikel.name,
+                            anzahl: buchungsAnzahl,
+                            zusatzstoff: {
+                              name: zusatzstoff.inhaltsstoffName,
+                              mengeProStuck: mengeProStuck
+                            }
+                          }
+                        });
+                        
+                        console.log(`    ✅ Zusatzinhaltsstoff ${zusatzstoffRecord.bezeichnung}: -${benoetigt}g (${zusatzstoffBestand.menge}g verbleibt)`);
+                      } else {
+                        rohstoffFehler.push(`Nicht genug ${zusatzstoff.inhaltsstoffName}: benötigt ${benoetigt}g, verfügbar ${zusatzstoffBestand.menge}g`);
+                      }
+                    } else {
+                      rohstoffFehler.push(`Kein Bestandseintrag für Zusatzinhaltsstoff "${zusatzstoff.inhaltsstoffName}" gefunden`);
+                    }
+                  } else {
+                    rohstoffFehler.push(`Zusatzinhaltsstoff "${zusatzstoff.inhaltsstoffName}" nicht gefunden`);
+                  }
+                }
+              }
+              
               // Alle Rohstoff-Bewegungen protokollieren
               for (const bewegungData of rohstoffBewegungen) {
                 try {
@@ -721,6 +811,60 @@ router.get('/fertigprodukt-rohstoffe/:produktId', authenticateToken, async (req,
       }
     }
     
+    // 4. Zusatzinhaltsstoffe
+    if (produkt.zusatzinhaltsstoffe && produkt.zusatzinhaltsstoffe.length > 0) {
+      console.log(`🧪 Prüfe Zusatzinhaltsstoffe für ${produkt.name}: ${produkt.zusatzinhaltsstoffe.length} Stoffe`);
+      
+      for (const zusatzstoff of produkt.zusatzinhaltsstoffe) {
+        const mengeProStueck = zusatzstoff.menge || 0; // Menge pro Stück in g
+        
+        console.log(`   - ${zusatzstoff.inhaltsstoffName}: ${mengeProStueck}g pro Stück`);
+        
+        // Zusatzinhaltsstoff in der separaten Bestand-Collection finden
+        const zusatzstoffRecord = await ZusatzInhaltsstoff.findOne({ 
+          bezeichnung: zusatzstoff.inhaltsstoffName 
+        });
+        
+        if (zusatzstoffRecord) {
+          const zusatzstoffBestand = await Bestand.findOne({
+            artikelId: zusatzstoffRecord._id,
+            typ: 'zusatzinhaltsstoff'
+          });
+          
+          if (zusatzstoffBestand) {
+            const proStueck = mengeProStueck;
+            const verfuegbar = zusatzstoffBestand.menge;
+            const maxProduktion = proStueck > 0 ? Math.floor(verfuegbar / proStueck) : 999999;
+            
+            rohstoffe.push({
+              typ: 'zusatzinhaltsstoff',
+              name: zusatzstoffRecord.bezeichnung,
+              proStueck: proStueck,
+              einheit: 'g',
+              verfuegbar: verfuegbar,
+              maxProduktion: maxProduktion,
+              ausreichend: verfuegbar >= proStueck
+            });
+            
+            console.log(`     ✅ Zusatzinhaltsstoff verfügbar: ${verfuegbar}g, benötigt: ${proStueck}g pro Stück, max Produktion: ${maxProduktion}`);
+            
+            if (verfuegbar < proStueck) {
+              verfuegbarkeit.alleVerfuegbar = false;
+              verfuegbarkeit.warnungen.push(`Zusatzinhaltsstoff ${zusatzstoffRecord.bezeichnung}: nur ${verfuegbar}g verfügbar, benötigt ${proStueck}g`);
+            }
+          } else {
+            console.warn(`     ⚠️ Kein Bestandseintrag für Zusatzinhaltsstoff: ${zusatzstoff.inhaltsstoffName}`);
+            verfuegbarkeit.alleVerfuegbar = false;
+            verfuegbarkeit.warnungen.push(`Kein Bestandseintrag für Zusatzinhaltsstoff "${zusatzstoff.inhaltsstoffName}" gefunden`);
+          }
+        } else {
+          console.warn(`     ⚠️ Zusatzinhaltsstoff nicht in Datenbank: ${zusatzstoff.inhaltsstoffName}`);
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push(`Zusatzinhaltsstoff "${zusatzstoff.inhaltsstoffName}" nicht in Datenbank gefunden`);
+        }
+      }
+    }
+    
     // Maximale Produktionsmenge berechnen
     const maxProduktionGesamt = rohstoffe.length > 0 ? Math.min(...rohstoffe.map(r => r.maxProduktion)) : 0;
     
@@ -733,7 +877,8 @@ router.get('/fertigprodukt-rohstoffe/:produktId', authenticateToken, async (req,
           seife: produkt.seife,
           gramm: produkt.gramm,
           aroma: produkt.aroma,
-          verpackung: produkt.verpackung
+          verpackung: produkt.verpackung,
+          zusatzinhaltsstoffe: produkt.zusatzinhaltsstoffe || []
         },
         rohstoffe: rohstoffe,
         verfuegbarkeit: verfuegbarkeit,

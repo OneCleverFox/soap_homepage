@@ -19,9 +19,6 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Collapse
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';

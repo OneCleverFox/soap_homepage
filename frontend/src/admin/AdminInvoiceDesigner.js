@@ -56,7 +56,7 @@ function TabPanel({ children, value, index, ...other }) {
 
 function AdminInvoiceDesigner() {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [tabValue, setTabValue] = useState(0);
   const [template, setTemplate] = useState({

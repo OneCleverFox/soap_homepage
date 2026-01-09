@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -39,7 +38,8 @@ import {
   Delete as DeleteIcon,
   Receipt as ReceiptIcon,
   Search as SearchIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -47,17 +47,25 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
-  marginBottom: theme.spacing(2)
+  marginBottom: theme.spacing(2),
+  [theme.breakpoints.down('md')]: {
+    padding: theme.spacing(1),
+    marginBottom: theme.spacing(1),
+  },
+  [theme.breakpoints.down('sm')]: {
+    padding: theme.spacing(0.5),
+    marginBottom: theme.spacing(0.5),
+  }
 }));
 
 const CreateInvoice = () => {
   // Responsive Detection
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isSmallMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // State Management
   const [customers, setCustomers] = useState([]);
-  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [templates, setTemplates] = useState([]);
   
@@ -402,27 +410,59 @@ const CreateInvoice = () => {
   };
 
   return (
-    <Box sx={{ maxWidth: 1200, margin: 'auto', padding: 2 }}>
-      <Typography variant="h4" gutterBottom>
-        <ReceiptIcon sx={{ mr: 2, verticalAlign: 'middle' }} />
+    <Box sx={{ 
+      maxWidth: '100vw', 
+      margin: 'auto', 
+      padding: isMobile ? 1 : 2,
+      pb: isMobile ? 4 : 2,
+      overflow: 'hidden',
+      boxSizing: 'border-box'
+    }}>
+      <Typography 
+        variant={isMobile ? "h5" : "h4"} 
+        gutterBottom
+        sx={{ 
+          mb: isMobile ? 2 : 3,
+          fontSize: isMobile ? '1.5rem' : '2.125rem'
+        }}
+      >
+        <ReceiptIcon sx={{ 
+          mr: isMobile ? 1 : 2, 
+          verticalAlign: 'middle',
+          fontSize: isMobile ? '1.5rem' : '2rem'
+        }} />
         Rechnung erstellen
       </Typography>
 
       {/* Kunde auswählen */}
       <StyledPaper>
-        <CardHeader 
-          title="1. Kunde auswählen"
-          action={
+        <Box sx={{ p: isMobile ? 2 : 0 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: isMobile ? 'flex-start' : 'center',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? 2 : 0,
+            mb: isMobile ? 2 : 3
+          }}>
+            <Typography variant={isMobile ? "h6" : "h5"} component="h2">
+              1. Kunde auswählen
+            </Typography>
             <Button
               variant={useNewCustomer ? 'contained' : 'outlined'}
               onClick={() => setUseNewCustomer(!useNewCustomer)}
               startIcon={<PersonIcon />}
+              size={isMobile ? "medium" : "small"}
+              sx={{ 
+                alignSelf: isMobile ? 'flex-end' : 'auto',
+                minWidth: isMobile ? 140 : 'auto' 
+              }}
             >
-              {useNewCustomer ? 'Bestehender Kunde' : 'Neuer Kunde'}
+              {useNewCustomer ? (isMobile ? 'Bestehend' : 'Bestehender Kunde') : (isMobile ? 'Neu' : 'Neuer Kunde')}
             </Button>
-          }
-        />
-        <CardContent>
+          </Box>
+        </Box>
+        <CardContent sx={{ pt: isMobile ? 0 : 2 }}>
           {!useNewCustomer ? (
             <Autocomplete
               options={customers}
@@ -442,8 +482,8 @@ const CreateInvoice = () => {
               )}
             />
           ) : (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={2}>
+            <Grid container spacing={isSmallMobile ? 1 : 2}>
+              <Grid item xs={12} sm={6} md={2}>
                 <FormControl fullWidth>
                   <InputLabel>Anrede</InputLabel>
                   <Select
@@ -456,7 +496,7 @@ const CreateInvoice = () => {
                   </Select>
                 </FormControl>
               </Grid>
-              <Grid item xs={12} md={5}>
+              <Grid item xs={12} sm={6} md={5}>
                 <TextField
                   fullWidth
                   label="Vorname"
@@ -480,7 +520,7 @@ const CreateInvoice = () => {
                   onChange={(e) => setNewCustomer(prev => ({ ...prev, company: e.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} md={8}>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
                   required
@@ -489,7 +529,7 @@ const CreateInvoice = () => {
                   onChange={(e) => setNewCustomer(prev => ({ ...prev, street: e.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} md={2}>
+              <Grid item xs={6} sm={4} md={2}>
                 <TextField
                   fullWidth
                   required
@@ -498,7 +538,7 @@ const CreateInvoice = () => {
                   onChange={(e) => setNewCustomer(prev => ({ ...prev, postalCode: e.target.value }))}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={6} sm={8} md={4}>
                 <TextField
                   fullWidth
                   required
@@ -516,6 +556,14 @@ const CreateInvoice = () => {
                   onChange={(e) => setNewCustomer(prev => ({ ...prev, email: e.target.value }))}
                 />
               </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Telefon"
+                  value={newCustomer.phone}
+                  onChange={(e) => setNewCustomer(prev => ({ ...prev, phone: e.target.value }))}
+                />
+              </Grid>
             </Grid>
           )}
         </CardContent>
@@ -523,15 +571,31 @@ const CreateInvoice = () => {
 
       {/* Artikel hinzufügen */}
       <StyledPaper>
-        <CardHeader 
-          title="2. Artikel hinzufügen"
-          action={
-            <Box>
+        <Box sx={{ p: isMobile ? 2 : 0 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'flex-start',
+            flexDirection: 'column',
+            gap: isMobile ? 2 : 3,
+            mb: isMobile ? 2 : 3
+          }}>
+            <Typography variant={isMobile ? "h6" : "h5"} component="h2">
+              2. Artikel hinzufügen
+            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              gap: 1, 
+              width: '100%',
+              flexDirection: isMobile ? 'column' : 'row'
+            }}>
               <Button
                 variant="outlined"
                 startIcon={<SearchIcon />}
                 onClick={() => setProductSearchOpen(true)}
-                sx={{ mr: 1 }}
+                size="medium"
+                fullWidth={isMobile}
+                sx={{ fontSize: '0.9rem' }}
               >
                 Produkt suchen
               </Button>
@@ -539,172 +603,232 @@ const CreateInvoice = () => {
                 variant="outlined"
                 startIcon={<AddIcon />}
                 onClick={addCustomProduct}
+                size="medium"
+                fullWidth={isMobile}
+                sx={{ fontSize: '0.9rem' }}
               >
                 Eigenes Produkt
               </Button>
             </Box>
-          }
-        />
-        <CardContent>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Artikel</TableCell>
-                  <TableCell>Beschreibung</TableCell>
-                  <TableCell width={100}>Menge</TableCell>
-                  <TableCell width={120}>Einzelpreis</TableCell>
-                  <TableCell width={120}>Gesamtpreis</TableCell>
-                  <TableCell width={60}>Aktionen</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {invoiceItems.map((item, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      {item.productId ? (
-                        <Box>
-                          <Typography variant="subtitle2">{item.name}</Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            SKU: {item.sku}
-                          </Typography>
-                        </Box>
-                      ) : (
+          </Box>
+        </Box>
+        <CardContent sx={{ pt: 0 }}>
+          {!isMobile ? (
+            // Desktop Tabellen-Ansicht
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Artikel</TableCell>
+                    <TableCell>Beschreibung</TableCell>
+                    <TableCell width={100}>Menge</TableCell>
+                    <TableCell width={120}>Einzelpreis</TableCell>
+                    <TableCell width={120}>Gesamtpreis</TableCell>
+                    <TableCell width={60}>Aktionen</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {invoiceItems.map((item, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        {item.productId ? (
+                          <Box>
+                            <Typography variant="subtitle2">{item.name}</Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              SKU: {item.sku}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <TextField
+                            size="small"
+                            value={item.name}
+                            onChange={(e) => updateCustomProduct(index, 'name', e.target.value)}
+                            placeholder="Produktname"
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {item.productId ? (
+                          <Typography variant="body2">{item.description}</Typography>
+                        ) : (
+                          <TextField
+                            size="small"
+                            multiline
+                            rows={2}
+                            value={item.description}
+                            onChange={(e) => updateCustomProduct(index, 'description', e.target.value)}
+                            placeholder="Beschreibung"
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <TextField
                           size="small"
-                          value={item.name}
-                          onChange={(e) => updateCustomProduct(index, 'name', e.target.value)}
-                          placeholder="Produktname"
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItemQuantity(index, e.target.value)}
+                          inputProps={{ min: 1 }}
                         />
-                      )}
-                    </TableCell>
-                    <TableCell>
+                      </TableCell>
+                      <TableCell>
+                        <TextField
+                          size="small"
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItemPrice(index, e.target.value)}
+                          inputProps={{ step: 0.01, min: 0 }}
+                          InputProps={{ endAdornment: '€' }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="subtitle2">
+                          {(item.quantity * item.unitPrice).toFixed(2)}€
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <IconButton
+                          color="error"
+                          onClick={() => removeItem(index)}
+                          size="small"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {invoiceItems.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        <Typography variant="body2" color="textSecondary">
+                          Noch keine Artikel hinzugefügt
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            // Mobile Karten-Ansicht
+            <Box>
+              {invoiceItems.length === 0 ? (
+                <Typography variant="body2" color="textSecondary" align="center" sx={{ py: 4 }}>
+                  Noch keine Artikel hinzugefügt
+                </Typography>
+              ) : (
+                invoiceItems.map((item, index) => (
+                  <Card 
+                    key={index} 
+                    variant="outlined" 
+                    sx={{ 
+                      mb: 2, 
+                      p: 2,
+                      background: 'rgba(255,255,255,0.7)'
+                    }}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box sx={{ flex: 1, mr: 1 }}>
+                          {item.productId ? (
+                            <Box>
+                              <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                                {item.name}
+                              </Typography>
+                              <Typography variant="caption" color="textSecondary">
+                                SKU: {item.sku}
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={item.name}
+                              onChange={(e) => updateCustomProduct(index, 'name', e.target.value)}
+                              placeholder="Produktname"
+                              sx={{ mb: 1 }}
+                            />
+                          )}
+                        </Box>
+                        <IconButton
+                          color="error"
+                          onClick={() => removeItem(index)}
+                          size="large"
+                          sx={{ 
+                            minWidth: 44,
+                            minHeight: 44
+                          }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                      
                       {item.productId ? (
-                        <Typography variant="body2">{item.description}</Typography>
+                        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
+                          {item.description}
+                        </Typography>
                       ) : (
                         <TextField
+                          fullWidth
                           size="small"
                           multiline
                           rows={2}
                           value={item.description}
                           onChange={(e) => updateCustomProduct(index, 'description', e.target.value)}
                           placeholder="Beschreibung"
+                          sx={{ mt: 1 }}
                         />
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        size="small"
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateItemQuantity(index, e.target.value)}
-                        inputProps={{ min: 1 }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        size="small"
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) => updateItemPrice(index, e.target.value)}
-                        inputProps={{ step: 0.01, min: 0 }}
-                        InputProps={{ endAdornment: '€' }}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="subtitle2">
-                        {(item.quantity * item.unitPrice).toFixed(2)}€
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <IconButton
-                        color="error"
-                        onClick={() => removeItem(index)}
-                        size={isMobile ? "medium" : "small"}
-                        sx={{ 
-                          minWidth: isMobile ? 44 : 'auto',
-                          minHeight: isMobile ? 44 : 'auto'
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {invoiceItems.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center">
-                      <Typography variant="body2" color="textSecondary">
-                        Noch keine Artikel hinzugefügt
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                    </Box>
+                    
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="textSecondary">
+                          Menge
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItemQuantity(index, e.target.value)}
+                          inputProps={{ min: 1 }}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="textSecondary">
+                          Einzelpreis
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItemPrice(index, e.target.value)}
+                          inputProps={{ step: 0.01, min: 0 }}
+                          InputProps={{ endAdornment: '€' }}
+                        />
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography variant="caption" color="textSecondary">
+                          Gesamtpreis
+                        </Typography>
+                        <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
+                          {(item.quantity * item.unitPrice).toFixed(2)}€
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Card>
+                ))
+              )}
+            </Box>
+          )}
         </CardContent>
       </StyledPaper>
 
       {/* Summen und Optionen */}
       <Grid container spacing={2}>
-        <Grid item xs={12} md={8}>
-          <StyledPaper>
-            <CardHeader title="3. Zusätzliche Optionen" />
-            <CardContent>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    label="Versandkosten"
-                    type="number"
-                    value={shippingCost}
-                    onChange={(e) => setShippingCost(e.target.value)}
-                    inputProps={{ step: 0.01, min: 0 }}
-                    InputProps={{ endAdornment: '€' }}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Rechnungsvorlage</InputLabel>
-                    <Select
-                      value={selectedTemplate}
-                      onChange={(e) => setSelectedTemplate(e.target.value)}
-                    >
-                      {templates.map(template => (
-                        <MenuItem key={template._id} value={template._id}>
-                          {template.name} {template.isDefault && '(Standard)'}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    label="Notizen für Kunde (erscheint auf der Rechnung)"
-                    value={notes.customer}
-                    onChange={(e) => setNotes(prev => ({ ...prev, customer: e.target.value }))}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    label="Interne Notizen (nicht sichtbar für Kunde)"
-                    value={notes.internal}
-                    onChange={(e) => setNotes(prev => ({ ...prev, internal: e.target.value }))}
-                  />
-                </Grid>
-              </Grid>
-            </CardContent>
-          </StyledPaper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
+        {/* Mobile: Zusammenfassung zuerst */}
+        <Grid item xs={12} md={4} order={{ xs: 1, md: 2 }}>
           <StyledPaper>
             <CardHeader title="Zusammenfassung" />
             <CardContent>
@@ -732,10 +856,22 @@ const CreateInvoice = () => {
                     />
                   }
                   label={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      📧 E-Mail an Kunde senden
+                    <Box sx={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 1,
+                      flexWrap: isMobile ? 'wrap' : 'nowrap'
+                    }}>
+                      <span>📧 E-Mail an Kunde senden</span>
                       {(useNewCustomer ? newCustomer.email : selectedCustomer?.email) && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          sx={{ 
+                            wordBreak: isMobile ? 'break-all' : 'normal',
+                            fontSize: isMobile ? '0.7rem' : '0.75rem'
+                          }}
+                        >
                           ({useNewCustomer ? newCustomer.email : selectedCustomer?.email})
                         </Typography>
                       )}
@@ -757,9 +893,70 @@ const CreateInvoice = () => {
                 onClick={createInvoice}
                 disabled={saving || invoiceItems.length === 0}
                 startIcon={<ReceiptIcon />}
+                sx={{ 
+                  minHeight: isMobile ? 56 : 'auto',
+                  fontSize: isMobile ? '1.1rem' : '1rem'
+                }}
               >
                 {saving ? 'Erstelle Rechnung...' : 'Rechnung erstellen'}
               </Button>
+            </CardContent>
+          </StyledPaper>
+        </Grid>
+
+        {/* Mobile: Optionen danach */}
+        <Grid item xs={12} md={8} order={{ xs: 2, md: 1 }}>
+          <StyledPaper>
+            <CardHeader title="3. Zusätzliche Optionen" />
+            <CardContent>
+              <Grid container spacing={isSmallMobile ? 1 : 2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Versandkosten"
+                    type="number"
+                    value={shippingCost}
+                    onChange={(e) => setShippingCost(e.target.value)}
+                    inputProps={{ step: 0.01, min: 0 }}
+                    InputProps={{ endAdornment: '€' }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Rechnungsvorlage</InputLabel>
+                    <Select
+                      value={selectedTemplate}
+                      onChange={(e) => setSelectedTemplate(e.target.value)}
+                    >
+                      {templates.map(template => (
+                        <MenuItem key={template._id} value={template._id}>
+                          {template.name} {template.isDefault && '(Standard)'}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={isMobile ? 2 : 3}
+                    label="Notizen für Kunde (erscheint auf der Rechnung)"
+                    value={notes.customer}
+                    onChange={(e) => setNotes(prev => ({ ...prev, customer: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={isMobile ? 2 : 2}
+                    label="Interne Notizen (nicht sichtbar für Kunde)"
+                    value={notes.internal}
+                    onChange={(e) => setNotes(prev => ({ ...prev, internal: e.target.value }))}
+                  />
+                </Grid>
+              </Grid>
             </CardContent>
           </StyledPaper>
         </Grid>
@@ -771,29 +968,64 @@ const CreateInvoice = () => {
         onClose={() => setProductSearchOpen(false)}
         maxWidth="md"
         fullWidth
+        fullScreen={isSmallMobile}
       >
-        <DialogTitle>Produkt auswählen</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="h6">Produkt auswählen</Typography>
+            {isSmallMobile && (
+              <IconButton onClick={() => setProductSearchOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            )}
+          </Box>
+        </DialogTitle>
         <DialogContent>
           {console.log('🔍 [FRONTEND] Dialog Content - Produkte:', products.length)}
-          <Grid container spacing={1}>
+          <Grid container spacing={isSmallMobile ? 1 : 2}>
             {products.length === 0 ? (
               <Grid item xs={12}>
-                <Typography>Keine Produkte verfügbar</Typography>
+                <Typography align="center" sx={{ py: 4 }}>
+                  Keine Produkte verfügbar
+                </Typography>
               </Grid>
             ) : products.map(product => (
               <Grid item xs={12} sm={6} md={4} key={product._id}>
                 <Card 
-                  sx={{ cursor: 'pointer', '&:hover': { boxShadow: 4 } }}
+                  sx={{ 
+                    cursor: 'pointer', 
+                    '&:hover': { boxShadow: 4 },
+                    minHeight: isMobile ? 'auto' : 120
+                  }}
                   onClick={() => addProduct(product)}
                 >
-                  <CardContent>
-                    <Typography variant="subtitle2" gutterBottom>
+                  <CardContent sx={{ p: isSmallMobile ? 2 : 3 }}>
+                    <Typography 
+                      variant="subtitle2" 
+                      gutterBottom
+                      sx={{ 
+                        fontSize: isSmallMobile ? '1rem' : '0.875rem',
+                        fontWeight: 'bold'
+                      }}
+                    >
                       {product.name}
                     </Typography>
-                    <Typography variant="body2" color="textSecondary">
+                    <Typography 
+                      variant="body2" 
+                      color="primary"
+                      sx={{ 
+                        fontSize: isSmallMobile ? '1.1rem' : '0.875rem',
+                        fontWeight: 'bold'
+                      }}
+                    >
                       {product.preis?.toFixed(2)}€
                     </Typography>
-                    <Typography variant="caption" display="block">
+                    <Typography 
+                      variant="caption" 
+                      display="block"
+                      color="textSecondary"
+                      sx={{ fontSize: isSmallMobile ? '0.8rem' : '0.75rem' }}
+                    >
                       {product.kategorie}
                     </Typography>
                   </CardContent>

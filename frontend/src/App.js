@@ -28,7 +28,6 @@ const EmailVerificationPage = lazy(() => import('./pages/EmailVerificationPage')
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ResponsiveCartPage = lazy(() => import('./components/responsive/ResponsiveCartPage'));
-const TestCompanyInfoPage = lazy(() => import('./pages/TestCompanyInfoPage'));
 const ResponsiveCheckoutPage = lazy(() => import('./components/responsive/ResponsiveCheckoutPage'));
 const ResponsiveProfilePage = lazy(() => import('./components/responsive/ResponsiveProfilePage'));
 const CustomerInquiries = lazy(() => import('./pages/CustomerInquiries'));
@@ -126,7 +125,6 @@ function App() {
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
                       <Route path="/about" element={<AboutPage />} />
                       <Route path="/contact" element={<ContactPage />} />
-                      <Route path="/test-company-info" element={<TestCompanyInfoPage />} />
                       <Route path="/login" element={<LoginPage />} />
                       <Route path="/register" element={<RegisterPage />} />
                       <Route path="/forgot-password" element={<ForgotPasswordPage />} />

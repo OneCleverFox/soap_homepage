@@ -140,6 +140,25 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       });
       
       await berechnung.save();
+      
+      // 🧪 Zusatzinhaltsstoffe-Kosten berechnen (NEU)
+      console.log(`🧪 Berechne Zusatzinhaltsstoffe-Kosten für "${portfolio.name}"...`);
+      if (portfolio.zusatzinhaltsstoffe && portfolio.zusatzinhaltsstoffe.length > 0) {
+        try {
+          const zusatzErgebnis = await ZusatzinhaltsstoffeService.aktualisiereWarenberechnung(portfolio._id);
+          if (zusatzErgebnis.success) {
+            console.log(`✅ Zusatzinhaltsstoffe-Kosten hinzugefügt: ${(zusatzErgebnis.warenberechnung.zusatzinhaltsstoffeKostenGesamt || 0).toFixed(4)}€`);
+            berechnung = zusatzErgebnis.warenberechnung;
+          } else {
+            console.warn(`⚠️ Fehler bei Zusatzinhaltsstoffe-Berechnung: ${zusatzErgebnis.error}`);
+          }
+        } catch (zusatzError) {
+          console.error('❌ Fehler bei Zusatzinhaltsstoffe-Berechnung:', zusatzError);
+        }
+      } else {
+        console.log(`ℹ️ Keine Zusatzinhaltsstoffe für "${portfolio.name}" definiert`);
+      }
+      
       berechnung = await Warenberechnung.findById(berechnung._id).populate('portfolioProdukt');
     }
     

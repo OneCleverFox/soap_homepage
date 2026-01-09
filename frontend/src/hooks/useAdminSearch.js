@@ -7,7 +7,7 @@ import { useState, useMemo } from 'react';
  * @param {number} debounceDelay - Debounce-Delay in ms (default: 300)
  * @returns {Object} Search state und filtered items
  */
-export const useAdminSearch = (items = [], searchFields = ['name'], debounceDelay = 300) => {
+export const useAdminSearch = (items = [], searchFields = ['name'], _debounceDelay = 300) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Gefilterte Items basierend auf Suchbegriff

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -34,8 +34,6 @@ import {
 import {
   Receipt as ReceiptIcon,
   Visibility as ViewIcon,
-  Edit as EditIcon,
-  Email as EmailIcon,
   Download as DownloadIcon,
   MoreVert as MoreVertIcon,
   Add as AddIcon,
@@ -96,13 +94,15 @@ const InvoiceList = () => {
     paidAmount: 0
   });
 
-  // Lade Rechnungen
-  useEffect(() => {
-    loadInvoices();
-    loadStats();
-  }, [page, rowsPerPage, filters]);
+  const showSnackbar = useCallback((message, severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
 
-  const loadInvoices = async () => {
+  const closeSnackbar = useCallback(() => {
+    setSnackbar({ open: false, message: '', severity: 'success' });
+  }, []);
+
+  const loadInvoices = useCallback(async () => {
     setLoading(true);
     try {
       console.log('🔍 [INVOICE LIST] Lade Rechnungen...');
@@ -160,7 +160,13 @@ const InvoiceList = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, page, rowsPerPage, setLoading, showSnackbar]);
+
+  // Lade Rechnungen
+  useEffect(() => {
+    loadInvoices();
+    loadStats();
+  }, [page, rowsPerPage, filters, loadInvoices]);
 
   const loadStats = async () => {
     try {
@@ -250,7 +256,7 @@ const InvoiceList = () => {
     }
   };
 
-  const updateInvoiceStatus = async (invoiceId, newStatus) => {
+  const _updateInvoiceStatus = async (invoiceId, newStatus) => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceId}/status`, {
         method: 'PATCH',
@@ -409,7 +415,7 @@ const InvoiceList = () => {
   };
 
   // Verbesserte PDF-Download-Funktion mit Fehlerbehandlung
-  const downloadStoredInvoice = async (invoiceId) => {
+  const _downloadStoredInvoice = async (invoiceId) => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceId}/pdf`, {
         headers: {
@@ -510,14 +516,6 @@ const InvoiceList = () => {
   const closeActionMenu = () => {
     setActionMenuAnchor(null);
     setActionMenuInvoice(null);
-  };
-
-  const showSnackbar = (message, severity = 'info') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const closeSnackbar = () => {
-    setSnackbar({ open: false, message: '', severity: 'success' });
   };
 
   return (
@@ -681,7 +679,7 @@ const InvoiceList = () => {
               </Box>
             ) : (
               <Box spacing={2}>
-                {invoices.map((invoice, index) => (
+                {invoices.map((invoice, _index) => (
                   <Card 
                     key={invoice._id} 
                     variant="outlined" 

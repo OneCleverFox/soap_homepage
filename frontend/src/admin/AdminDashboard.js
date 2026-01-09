@@ -213,7 +213,7 @@ const AdminDashboard = () => {
   };
 
   // Hilfsfunktion für intelligente Farblogik
-  const getCardColor = (title, value, subtitle) => {
+  const getCardColor = (title, value) => {
     switch (title) {
       case 'Fertigprodukte ohne Bestand':
         return value > 0 ? 'error' : 'success'; // Rot wenn Bestand fehlt, Grün wenn ok
@@ -837,14 +837,16 @@ const AdminDashboard = () => {
                                   <Chip 
                                     label={
                                       produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
-                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' : 'Verpackung'
+                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' :
+                                      produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'Zusatzstoff' : 'Verpackung'
                                     }
                                     size="small"
                                     sx={{ 
                                       fontSize: '0.65rem',
                                       height: 18,
                                       backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
-                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 'info.main',
+                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 
+                                                      produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'secondary.main' : 'info.main',
                                       color: 'white',
                                       fontWeight: 'medium',
                                       '& .MuiChip-label': { px: 1 }
@@ -976,12 +978,14 @@ const AdminDashboard = () => {
                                   <Chip 
                                     label={
                                       produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
-                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' : 'Verpackung'
+                                      produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' :
+                                      produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'Zusatzstoff' : 'Verpackung'
                                     }
                                     size="small"
                                     sx={{
                                       backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
-                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 'info.main',
+                                                      produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 
+                                                      produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'secondary.main' : 'info.main',
                                       color: 'white',
                                       fontWeight: 'medium'
                                     }}

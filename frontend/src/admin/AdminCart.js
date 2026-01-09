@@ -23,8 +23,7 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Stack,
-  Snackbar
+  Stack
 } from '@mui/material';
 import {
   ShoppingCart as CartIcon,
@@ -47,17 +46,12 @@ const AdminCart = () => {
   // Standardisierte Admin-States
   const {
     loading, setLoading,
-    error, setError,
-    success, setSuccess,
-    snackbar, showSnackbar, hideSnackbar,
-    handleAsyncOperation
+    showSnackbar
   } = useAdminState();
   
   const [cartData, setCartData] = useState({ items: [], total: 0, itemCount: 0 });
   const [updating, setUpdating] = useState(false);
   const [swipeStates, setSwipeStates] = useState({});
-
-  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
   // Swipe-Funktionalität für mobile Ansicht - ohne preventDefault
   const handleTouchStart = (itemId, e) => {
@@ -222,7 +216,7 @@ const AdminCart = () => {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, getSafePrice, getSafeTotal]);
+  }, [setLoading, showSnackbar, getSafePrice, getSafeTotal]);
 
   const updateQuantity = async (produktId, newQuantity) => {
     if (newQuantity <= 0) {
@@ -401,7 +395,7 @@ const AdminCart = () => {
     return () => {
       unsubscribe();
     };
-  }, [user, loadAdminCart, getAvailableTotal]);
+  }, [user, loadAdminCart, getAvailableTotal, showSnackbar]);
 
   if (loading) {
     return (

@@ -79,6 +79,25 @@ const zusatzInhaltsstoffSchema = new mongoose.Schema({
     }
   },
   
+  // Neue Dosierungsfelder (in Gramm pro 10g Seife)
+  minDosierung: {
+    type: Number,
+    default: 0.1,
+    min: 0
+  },
+  
+  empfohleneDosierung: {
+    type: Number,
+    default: 0.5,
+    min: 0
+  },
+  
+  maxDosierung: {
+    type: Number,
+    default: 1.0,
+    min: 0
+  },
+  
   // Physische Eigenschaften
   eigenschaften: {
     farbe: {
@@ -132,7 +151,7 @@ const zusatzInhaltsstoffSchema = new mongoose.Schema({
     trim: true
   },
   
-  artikelNummer: {
+  produktlink: {
     type: String,
     default: '',
     trim: true

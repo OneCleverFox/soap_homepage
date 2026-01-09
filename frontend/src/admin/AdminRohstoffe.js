@@ -41,15 +41,21 @@ import {
   Delete as DeleteIcon,
   Add as AddIcon,
   Refresh as RefreshIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  OpenInNew as OpenInNewIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE = process.env.NODE_ENV === 'development' 
+  ? 'http://localhost:5000/api' 
+  : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
 
 // Axios Interceptor für Token
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
+  if (!token) {
+    console.warn('🚨 Kein Token gefunden in localStorage');
+  }
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -62,9 +68,7 @@ const AdminRohstoffe = () => {
   const {
     loading, setLoading,
     error, setError,
-    success, setSuccess,
-    // eslint-disable-next-line no-unused-vars
-    handleAsyncOperation
+    success, setSuccess
   } = useAdminState();
   
   const [currentTab, setCurrentTab] = useState(0);
@@ -133,7 +137,6 @@ const AdminRohstoffe = () => {
       let tabIndex = 0;
       if (tab === 'duftoele') tabIndex = 1;
       else if (tab === 'verpackungen') tabIndex = 2;
-      else if (tab === 'zusatzinhaltsstoffe') tabIndex = 3;
       else if (tab === 'rohseifen') tabIndex = 0;
       
       setCurrentTab(tabIndex);
@@ -244,12 +247,26 @@ const AdminRohstoffe = () => {
     });
   };
 
+  // Hilfsfunktion um Objektwerte zu Strings zu konvertieren
+  const sanitizeFormData = (data) => {
+    const sanitized = { ...data };
+    Object.keys(sanitized).forEach(key => {
+      if (sanitized[key] && typeof sanitized[key] === 'object' && sanitized[key].constructor === Object) {
+        // Konvertiere Objekte zu leerem String oder zu JSON falls gewünscht
+        sanitized[key] = '';
+      } else if (sanitized[key] === null || sanitized[key] === undefined) {
+        sanitized[key] = '';
+      }
+    });
+    return sanitized;
+  };
+
   const handleOpenDialog = (mode, item = null) => {
     setDialogMode(mode);
     setSelectedItem(item);
     
     if (mode === 'edit' && item) {
-      setFormData(item);
+      setFormData(sanitizeFormData(item));
     } else {
       // Initialize empty form based on current tab
       if (currentTab === 0) {
@@ -260,6 +277,7 @@ const AdminRohstoffe = () => {
           ekPreis: 0,
           farbe: '',
           lieferant: '',
+          produktlink: '',
           aktuellVorrat: 1000,
           mindestbestand: 100,
           verfuegbar: true
@@ -272,6 +290,7 @@ const AdminRohstoffe = () => {
           ekPreis: 0,
           tropfenProMl: 20,
           hersteller: '',
+          produktlink: '',
           duftrichtung: 'blumig',
           intensitaet: 'mittel',
           empfohlungProSeife: 5,
@@ -292,11 +311,33 @@ const AdminRohstoffe = () => {
           groesse: '',
           material: 'karton',
           farbe: '',
+          hersteller: '',
+          produktlink: '',
           maximalGewicht: 0,
           aktuellVorrat: 0,
           mindestbestand: 0,
           notizen: '',
           verfuegbar: true
+        });
+      } else if (currentTab === 3) {
+        setFormData({
+          bezeichnung: '',
+          typ: 'pflegend',
+          hersteller: '',
+          produktlink: '',
+          beschreibung: '',
+          wirkung: '',
+          eigenschaften: '',
+          minDosierung: 0.1,
+          empfohleneDosierung: 0.5,
+          maxDosierung: 1.0,
+          gesamtInGramm: 100,
+          ekPreis: 0,
+          preisProGramm: 0,
+          aktuellVorrat: 0,
+          mindestbestand: 50,
+          verfuegbar: true,
+          sicherheit: ''
         });
       }
     }
@@ -311,29 +352,15 @@ const AdminRohstoffe = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    const newValue = type === 'checkbox' ? checked : value;
+    // Sicherstellen dass value niemals undefined/null ist für textareas
+    const cleanValue = value === null || value === undefined ? '' : String(value);
+    const newValue = type === 'checkbox' ? checked : cleanValue;
     
     setFormData(prev => {
-      let updated = { ...prev };
-      
-      // Handle verschachtelte Eigenschaften (z.B. "dosierung.empfohleneZusatzmenge")
-      if (name.includes('.')) {
-        const keys = name.split('.');
-        let current = updated;
-        
-        // Erstelle verschachtelte Objekte falls sie nicht existieren
-        for (let i = 0; i < keys.length - 1; i++) {
-          if (!current[keys[i]]) {
-            current[keys[i]] = {};
-          }
-          current = current[keys[i]];
-        }
-        
-        // Setze den Wert
-        current[keys[keys.length - 1]] = newValue;
-      } else {
-        updated[name] = newValue;
-      }
+      const updated = {
+        ...prev,
+        [name]: newValue
+      };
       
       // Automatische Berechnung für Rohseife: preisProGramm
       if (currentTab === 0 && (name === 'gesamtInGramm' || name === 'ekPreis')) {
@@ -378,16 +405,6 @@ const AdminRohstoffe = () => {
         }
       }
       
-      // Automatische Berechnung für Zusatzinhaltsstoffe: kostenProGramm
-      if (currentTab === 3 && (name === 'packungsgroesse' || name === 'einkaufspreis')) {
-        const packungsgroesse = name === 'packungsgroesse' ? parseFloat(newValue) : parseFloat(prev.packungsgroesse || 1);
-        const einkaufspreis = name === 'einkaufspreis' ? parseFloat(newValue) : parseFloat(prev.einkaufspreis || 0);
-        
-        if (packungsgroesse > 0 && einkaufspreis >= 0) {
-          updated.kostenProGramm = parseFloat((einkaufspreis / packungsgroesse).toFixed(4));
-        }
-      }
-      
       return updated;
     });
   };
@@ -396,24 +413,36 @@ const AdminRohstoffe = () => {
     setError(null);
     setSuccess(null);
     
+    // Entferne _id und andere MongoDB-interne Felder aus den Request-Daten
+    const { _id, __v, createdAt: _createdAt, updatedAt: _updatedAt, ...cleanFormData } = formData;
+    
     try {
       const endpoint = currentTab === 0 ? 'rohseife' : 
                       currentTab === 1 ? 'duftoele' : 
-                      currentTab === 2 ? 'verpackungen' :
-                      'zusatzinhaltsstoffe';
+                      currentTab === 2 ? 'verpackungen' : 'zusatzinhaltsstoffe';
       
       if (dialogMode === 'create') {
-        await axios.post(`${API_BASE}/${endpoint}`, formData, { headers: getAuthHeaders() });
+        await axios.post(`${API_BASE}/${endpoint}`, cleanFormData, { headers: getAuthHeaders() });
         setSuccess('Erfolgreich erstellt!');
       } else {
-        await axios.put(`${API_BASE}/${endpoint}/${selectedItem._id}`, formData, { headers: getAuthHeaders() });
+        await axios.put(`${API_BASE}/${endpoint}/${selectedItem._id}`, cleanFormData, { headers: getAuthHeaders() });
         setSuccess('Erfolgreich aktualisiert!');
       }
       
       handleCloseDialog();
       loadData();
     } catch (err) {
-      setError('Fehler beim Speichern: ' + (err.response?.data?.message || err.message));
+      console.error('❌ Fehler beim Speichern:', err);
+      console.error('📤 Clean Request Data (ohne _id):', cleanFormData);
+      console.error('🔑 Headers:', getAuthHeaders());
+      
+      if (err.response?.status === 403) {
+        setError('Zugriff verweigert - möglicherweise ist Ihr Login abgelaufen. Bitte loggen Sie sich erneut ein.');
+      } else if (err.response?.status === 401) {
+        setError('Nicht autorisiert - bitte loggen Sie sich erneut ein.');
+      } else {
+        setError('Fehler beim Speichern: ' + (err.response?.data?.message || err.message));
+      }
     }
   };
 
@@ -425,8 +454,7 @@ const AdminRohstoffe = () => {
     try {
       const endpoint = currentTab === 0 ? 'rohseife' : 
                       currentTab === 1 ? 'duftoele' : 
-                      currentTab === 2 ? 'verpackungen' :
-                      'zusatzinhaltsstoffe';
+                      currentTab === 2 ? 'verpackungen' : 'zusatzinhaltsstoffe';
       
       await axios.delete(`${API_BASE}/${endpoint}/${id}`, { headers: getAuthHeaders() });
       setSuccess('Erfolgreich gelöscht!');
@@ -547,6 +575,7 @@ const AdminRohstoffe = () => {
               <TableCell align="right">Vorrat (g)</TableCell>
               <TableCell align="right">Mindestbestand</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell align="center">Link</TableCell>
               <TableCell align="center">Aktionen</TableCell>
             </TableRow>
           </TableHead>
@@ -568,6 +597,18 @@ const AdminRohstoffe = () => {
                   />
                 </TableCell>
                 <TableCell align="center">
+                  {item.produktlink && (
+                    <IconButton 
+                      size="small" 
+                      color="info"
+                      onClick={() => window.open(item.produktlink, '_blank')}
+                      title="Produktlink öffnen"
+                    >
+                      <OpenInNewIcon />
+                    </IconButton>
+                  )}
+                </TableCell>
+                <TableCell align="center">
                   <IconButton 
                     size="small" 
                     color="primary"
@@ -587,7 +628,7 @@ const AdminRohstoffe = () => {
             ))}
             {filteredData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={11} align="center" sx={{ py: 3 }}>
                   <Typography variant="body2" color="textSecondary">
                     {searchTerm ? 
                       `Keine Rohseifen gefunden, die "${searchTerm}" entsprechen.` :
@@ -707,6 +748,7 @@ const AdminRohstoffe = () => {
               <TableCell align="right">Kosten/Tropfen</TableCell>
               <TableCell align="right">Vorrat (Tropfen)</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell align="center">Link</TableCell>
               <TableCell align="center">Aktionen</TableCell>
             </TableRow>
           </TableHead>
@@ -727,6 +769,18 @@ const AdminRohstoffe = () => {
                     color={item.verfuegbar ? 'success' : 'error'}
                     size="small"
                   />
+                </TableCell>
+                <TableCell align="center">
+                  {item.produktlink && (
+                    <IconButton 
+                      size="small" 
+                      color="info"
+                      onClick={() => window.open(item.produktlink, '_blank')}
+                      title="Produktlink öffnen"
+                    >
+                      <OpenInNewIcon />
+                    </IconButton>
+                  )}
                 </TableCell>
                 <TableCell align="center">
                   <IconButton 
@@ -848,6 +902,7 @@ const AdminRohstoffe = () => {
               <TableCell align="right">Kosten/Stück (€)</TableCell>
               <TableCell align="right">Vorrat</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell align="center">Link</TableCell>
               <TableCell align="center">Aktionen</TableCell>
             </TableRow>
           </TableHead>
@@ -866,6 +921,18 @@ const AdminRohstoffe = () => {
                     color={item.verfuegbar ? 'success' : 'error'}
                     size="small"
                   />
+                </TableCell>
+                <TableCell align="center">
+                  {item.produktlink && (
+                    <IconButton 
+                      size="small" 
+                      color="info"
+                      onClick={() => window.open(item.produktlink, '_blank')}
+                      title="Produktlink öffnen"
+                    >
+                      <OpenInNewIcon />
+                    </IconButton>
+                  )}
                 </TableCell>
                 <TableCell align="center">
                   <IconButton 
@@ -903,37 +970,88 @@ const AdminRohstoffe = () => {
                 <Stack spacing={1.5}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <Typography variant="h6" component="div">
-                      {item.name}
+                      {item.bezeichnung}
                     </Typography>
-                    <Chip 
-                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
-                      color={item.verfuegbar ? 'success' : 'error'}
-                      size="small"
-                    />
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                      <Chip 
+                        label={item.typ} 
+                        color="primary"
+                        size="small"
+                        variant="outlined"
+                      />
+                      <Chip 
+                        label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                        color={item.verfuegbar ? 'success' : 'error'}
+                        size="small"
+                      />
+                    </Box>
                   </Box>
+                  
+                  {item.beschreibung && (
+                    <Typography variant="body2" color="textSecondary">
+                      {item.beschreibung}
+                    </Typography>
+                  )}
                   
                   <Divider />
                   
                   <Stack spacing={0.5}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Hersteller:</Typography>
+                      <Typography variant="body2" color="textSecondary">Typ:</Typography>
                       <Typography variant="body2">{item.typ}</Typography>
                     </Box>
-                    {item.dosierung?.empfohleneZusatzmenge && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Hersteller:</Typography>
+                      <Typography variant="body2">{item.hersteller}</Typography>
+                    </Box>
+                    {item.produktlink && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="textSecondary">Dosierung:</Typography>
-                        <Typography variant="body2">{item.dosierung.empfohleneZusatzmenge}% {item.dosierung.einheit}</Typography>
+                        <Typography variant="body2" color="textSecondary">Produktlink:</Typography>
+                        <Typography 
+                          variant="body2" 
+                          component="a" 
+                          href={item.produktlink} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          sx={{ 
+                            color: 'primary.main', 
+                            textDecoration: 'none',
+                            '&:hover': { textDecoration: 'underline' }
+                          }}
+                        >
+                          🔗 Link
+                        </Typography>
                       </Box>
                     )}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Kosten/Gramm:</Typography>
-                      <Typography variant="body2">{item.kostenProGramm?.toFixed(4)} €</Typography>
+                      <Typography variant="body2" color="textSecondary">EK-Preis:</Typography>
+                      <Typography variant="body2">{item.ekPreis?.toFixed(2)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Preis/g:</Typography>
+                      <Typography variant="body2">{item.preisProGramm?.toFixed(4)} €</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Dosierung:</Typography>
+                      <Typography variant="body2">
+                        {(item.empfohleneDosierung !== undefined && item.empfohleneDosierung !== null) 
+                          ? item.empfohleneDosierung 
+                          : (item.dosierung?.empfohleneProzentzahl || 0.5)}g (pro 10g)
+                      </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="textSecondary">Vorrat:</Typography>
-                      <Typography variant="body2">
-                        {item.aktuellVorrat} {item.einheit || 'g'}
+                      <Typography 
+                        variant="body2" 
+                        fontWeight={(item.bestand?.menge || 0) < (item.bestand?.mindestbestand || 0) ? 'bold' : 'normal'}
+                        color={(item.bestand?.menge || 0) < (item.bestand?.mindestbestand || 0) ? 'error' : 'inherit'}
+                      >
+                        {item.bestand?.menge || 0} g
                       </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Mindestbestand:</Typography>
+                      <Typography variant="body2">{item.bestand?.mindestbestand || 0} g</Typography>
                     </Box>
                   </Stack>
                   
@@ -964,6 +1082,18 @@ const AdminRohstoffe = () => {
               </CardContent>
             </Card>
           ))}
+          {filteredData.length === 0 && (
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="textSecondary" align="center">
+                  {searchTerm ? 
+                    `Keine Zusatzinhaltsstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                    'Keine Zusatzinhaltsstoffe verfügbar.'
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
+          )}
         </Stack>
       );
     }
@@ -974,11 +1104,15 @@ const AdminRohstoffe = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>Name</TableCell>
+              <TableCell>Bezeichnung</TableCell>
+              <TableCell>Typ</TableCell>
               <TableCell>Hersteller</TableCell>
-              <TableCell>Dosierung</TableCell>
-              <TableCell align="right">Kosten/Gramm (€)</TableCell>
-              <TableCell align="right">Vorrat</TableCell>
+              <TableCell>Produktlink</TableCell>
+              <TableCell align="right">EK-Preis (€)</TableCell>
+              <TableCell align="right">Preis/g (€)</TableCell>
+              <TableCell align="center">Dosierung (g pro 10g)</TableCell>
+              <TableCell align="right">Vorrat (g)</TableCell>
+              <TableCell align="right">Mindestbestand</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="center">Aktionen</TableCell>
             </TableRow>
@@ -986,16 +1120,53 @@ const AdminRohstoffe = () => {
           <TableBody>
             {filteredData.map((item) => (
               <TableRow key={item._id}>
-                <TableCell>{item.name}</TableCell>
-                <TableCell>{item.typ}</TableCell>
+                <TableCell>{item.bezeichnung}</TableCell>
                 <TableCell>
-                  {item.dosierung?.empfohleneZusatzmenge ? 
-                    `${item.dosierung.empfohleneZusatzmenge}% ${item.dosierung.einheit}` : 
-                    '-'
-                  }
+                  <Chip 
+                    label={item.typ} 
+                    color="primary"
+                    size="small"
+                    variant="outlined"
+                  />
                 </TableCell>
-                <TableCell align="right">{item.kostenProGramm?.toFixed(4)}</TableCell>
-                <TableCell align="right">{item.aktuellVorrat} {item.einheit || 'g'}</TableCell>
+                <TableCell>{item.hersteller}</TableCell>
+                <TableCell>
+                  {item.produktlink ? (
+                    <a 
+                      href={item.produktlink} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ 
+                        color: '#1976d2', 
+                        textDecoration: 'none',
+                        fontSize: '14px'
+                      }}
+                    >
+                      🔗 Produkt
+                    </a>
+                  ) : (
+                    <Typography variant="body2" color="textSecondary" sx={{ fontSize: '14px' }}>-</Typography>
+                  )}
+                </TableCell>
+                <TableCell align="right">{item.ekPreis?.toFixed(2)}</TableCell>
+                <TableCell align="right">{item.preisProGramm?.toFixed(4)}</TableCell>
+                <TableCell align="center">
+                  <Typography variant="body2">
+                    {(item.empfohleneDosierung !== undefined && item.empfohleneDosierung !== null) 
+                      ? item.empfohleneDosierung 
+                      : (item.dosierung?.empfohleneProzentzahl || 0.5)}g
+                  </Typography>
+                </TableCell>
+                <TableCell 
+                  align="right"
+                  sx={{
+                    fontWeight: (item.bestand?.menge || 0) < (item.bestand?.mindestbestand || 0) ? 'bold' : 'normal',
+                    color: (item.bestand?.menge || 0) < (item.bestand?.mindestbestand || 0) ? 'error.main' : 'inherit'
+                  }}
+                >
+                  {item.bestand?.menge || 0}
+                </TableCell>
+                <TableCell align="right">{item.bestand?.mindestbestand || 0}</TableCell>
                 <TableCell>
                   <Chip 
                     label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
@@ -1021,6 +1192,18 @@ const AdminRohstoffe = () => {
                 </TableCell>
               </TableRow>
             ))}
+            {filteredData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={11} align="center" sx={{ py: 3 }}>
+                  <Typography variant="body2" color="textSecondary">
+                    {searchTerm ? 
+                      `Keine Zusatzinhaltsstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                      'Keine Zusatzinhaltsstoffe verfügbar.'
+                    }
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -1083,6 +1266,18 @@ const AdminRohstoffe = () => {
               value={formData.lieferant || ''}
               onChange={handleInputChange}
               placeholder="z.B. Seifenprofis"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Produktlink / Weblink"
+              name="produktlink"
+              value={formData.produktlink || ''}
+              onChange={handleInputChange}
+              placeholder="https://... (Link zur Bezugsquelle)"
+              helperText="Optional: Link zum Produkt beim Lieferant"
             />
           </Grid>
 
@@ -1282,6 +1477,18 @@ const AdminRohstoffe = () => {
               value={formData.hersteller || ''}
               onChange={handleInputChange}
               placeholder="z.B. Seifenprofis"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Produktlink / Weblink"
+              name="produktlink"
+              value={formData.produktlink || ''}
+              onChange={handleInputChange}
+              placeholder="https://... (Link zur Bezugsquelle)"
+              helperText="Optional: Link zum Produkt beim Hersteller"
             />
           </Grid>
 
@@ -1666,12 +1873,36 @@ const AdminRohstoffe = () => {
               </Select>
             </FormControl>
           </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Hersteller"
+              name="hersteller"
+              value={formData.hersteller || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. Boxprofi"
+            />
+          </Grid>
+          <Grid item xs={isMobile ? 12 : 6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Produktlink / Weblink"
+              name="produktlink"
+              value={formData.produktlink || ''}
+              onChange={handleInputChange}
+              placeholder="https://... (Link zur Bezugsquelle)"
+              helperText="Optional: Link zum Produkt beim Hersteller"
+            />
+          </Grid>
         </Grid>
       );
     } else if (currentTab === 3) {
       // Zusatzinhaltsstoffe Form
       return (
-        <Grid container spacing={isMobile ? 1.5 : 2}>
+        <Grid container spacing={2}>
+          {/* Grundinformationen */}
           <Grid item xs={12}>
             <Typography variant="subtitle2" color="textSecondary" gutterBottom>
               Grundinformationen
@@ -1681,34 +1912,54 @@ const AdminRohstoffe = () => {
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Name *"
-              name="name"
-              value={formData.name || ''}
+              label="Bezeichnung *"
+              name="bezeichnung"
+              value={formData.bezeichnung || ''}
               onChange={handleInputChange}
               required
-              placeholder="z.B. Aktivkohle, Moon Peeling, Haferflocken"
+              placeholder="z.B. Sheabutter, Kakaobutter, Bienenwachs"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
+          <Grid item xs={6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>Typ *</InputLabel>
+              <Select
+                name="typ"
+                value={formData.typ || 'pflegend'}
+                onChange={handleInputChange}
+                label="Typ *"
+                required
+              >
+                <MenuItem value="aktivkohle">⚫ Aktivkohle</MenuItem>
+                <MenuItem value="peeling">🧴 Peeling</MenuItem>
+                <MenuItem value="farbe">🎨 Farbe</MenuItem>
+                <MenuItem value="duftstoff">🌸 Duftstoff</MenuItem>
+                <MenuItem value="pflegend">🧴 Pflegend</MenuItem>
+                <MenuItem value="sonstiges">❓ Sonstiges</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Hersteller/Bezugsquelle"
-              name="typ"
-              value={formData.typ || ''}
+              label="Hersteller"
+              name="hersteller"
+              value={formData.hersteller || ''}
               onChange={handleInputChange}
-              placeholder="z.B. Mountain Rose Herbs, Dragonspice"
+              placeholder="z.B. Behawe"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Einheit"
-              name="einheit"
-              value={formData.einheit || 'g'}
+              label="Produktlink / Weblink"
+              name="produktlink"
+              value={formData.produktlink || ''}
               onChange={handleInputChange}
-              placeholder="g, ml, Stück"
+              placeholder="https://... (Link zur Bezugsquelle)"
+              helperText="Optional: Link zum Produkt beim Hersteller"
             />
           </Grid>
           <Grid item xs={12}>
@@ -1725,178 +1976,200 @@ const AdminRohstoffe = () => {
             />
           </Grid>
 
-          {/* Dosierung */}
+          {/* Eigenschaften */}
           <Grid item xs={12}>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              Dosierung
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Eigenschaften und Wirkung
             </Typography>
           </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Empfohlene Zusatzmenge"
-              name="dosierung.empfohleneZusatzmenge"
-              type="number"
-              value={formData.dosierung?.empfohleneZusatzmenge || ''}
+              label="Hauptwirkung"
+              name="wirkung"
+              value={formData.wirkung || ''}
               onChange={handleInputChange}
-              inputProps={{ step: '0.1' }}
+              multiline
+              rows={2}
+              placeholder="z.B. feuchtigkeitsspendend, pflegend"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
-            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-              <InputLabel>Dosierung Einheit</InputLabel>
-              <Select
-                name="dosierung.einheit"
-                value={formData.dosierung?.einheit || 'prozent'}
-                onChange={handleInputChange}
-              >
-                <MenuItem value="prozent">% (Prozent)</MenuItem>
-                <MenuItem value="gramm">Gramm pro 100g Seife</MenuItem>
-                <MenuItem value="teelöffel">Teelöffel</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
+          <Grid item xs={12}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Max. Dosierung"
-              name="dosierung.maximaleZusatzmenge"
-              type="number"
-              value={formData.dosierung?.maximaleZusatzmenge || ''}
+              label="Eigenschaften"
+              name="eigenschaften"
+              value={formData.eigenschaften || ''}
               onChange={handleInputChange}
-              inputProps={{ step: '0.1' }}
+              placeholder="z.B. reich an Vitamin E, antibakteriell"
             />
           </Grid>
 
-          {/* Kosten und Lager */}
+          {/* Dosierung */}
           <Grid item xs={12}>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              Kosten & Lager
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Dosierungsrichtlinien
             </Typography>
           </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
+          <Grid item xs={4}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Einkaufspreis (€)"
-              name="einkaufspreis"
+              label="Min. Dosierung (g)"
+              name="minDosierung"
               type="number"
-              value={formData.einkaufspreis || 0}
+              value={formData.minDosierung || 0.1}
               onChange={handleInputChange}
-              inputProps={{ step: '0.01' }}
+              inputProps={{ step: '0.01', min: 0 }}
+              helperText="Pro 10g Rohseife"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
+          <Grid item xs={4}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Packungsgröße"
-              name="packungsgroesse"
+              label="Empf. Dosierung (g)"
+              name="empfohleneDosierung"
               type="number"
-              value={formData.packungsgroesse || ''}
+              value={formData.empfohleneDosierung || 0.5}
               onChange={handleInputChange}
-              inputProps={{ step: '0.1' }}
-              helperText={`in ${formData.einheit || 'g'}`}
+              inputProps={{ step: '0.01', min: 0 }}
+              helperText="Pro 10g Rohseife"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 4}>
+          <Grid item xs={4}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Kosten/Gramm (€)"
-              name="kostenProGramm"
+              label="Max. Dosierung (g)"
+              name="maxDosierung"
               type="number"
-              value={formData.kostenProGramm || 0}
+              value={formData.maxDosierung || 1.0}
               onChange={handleInputChange}
+              inputProps={{ step: '0.01', min: 0 }}
+              helperText="Pro 10g Rohseife"
+            />
+          </Grid>
+
+          {/* Preisinformationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Preisinformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Gesamt in Gramm *"
+              name="gesamtInGramm"
+              type="number"
+              value={formData.gesamtInGramm || 100}
+              onChange={handleInputChange}
+              onFocus={(e) => {
+                e.target.select();
+              }}
+              required
+              inputProps={{ min: 1 }}
+              helperText="Packungsgröße"
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="EK-Preis (€) *"
+              name="ekPreis"
+              type="number"
+              value={formData.ekPreis || 0}
+              onChange={handleInputChange}
+              onFocus={(e) => {
+                e.target.select();
+              }}
+              inputProps={{ step: '0.01', min: 0 }}
+              required
+              helperText="Einkaufspreis"
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Preis pro Gramm (€)"
+              name="preisProGramm"
+              type="number"
+              value={formData.preisProGramm || 0}
               inputProps={{ step: '0.0001' }}
-              helperText="Wird automatisch berechnet"
               disabled
+              helperText="Automatisch berechnet"
+              sx={{ 
+                '& .MuiInputBase-input.Mui-disabled': { 
+                  WebkitTextFillColor: 'rgba(0, 0, 0, 0.87)' 
+                } 
+              }}
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
+
+          {/* Lagerverwaltung */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Lagerverwaltung
+            </Typography>
+          </Grid>
+          <Grid item xs={4}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Aktueller Vorrat"
+              label="Aktueller Vorrat (g) *"
               name="aktuellVorrat"
               type="number"
               value={formData.aktuellVorrat || 0}
               onChange={handleInputChange}
-              inputProps={{ step: '0.1' }}
-              helperText={`in ${formData.einheit || 'g'}`}
+              onFocus={(e) => {
+                e.target.select();
+              }}
+              required
+              inputProps={{ min: 0 }}
+              helperText="Aktuell auf Lager"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
+          <Grid item xs={4}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
-              label="Mindestbestand"
+              label="Mindestbestand (g)"
               name="mindestbestand"
               type="number"
-              value={formData.mindestbestand || 0}
+              value={formData.mindestbestand || 50}
               onChange={handleInputChange}
+              onFocus={(e) => {
+                e.target.select();
+              }}
+              inputProps={{ min: 0 }}
+              helperText="Warngrenze"
             />
           </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
+          <Grid item xs={4}>
             <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-              <InputLabel>Verfügbar</InputLabel>
+              <InputLabel>Verfügbarkeit *</InputLabel>
               <Select
                 name="verfuegbar"
                 value={formData.verfuegbar === undefined ? true : formData.verfuegbar}
                 onChange={handleInputChange}
+                label="Verfügbarkeit *"
               >
-                <MenuItem value={true}>Ja</MenuItem>
-                <MenuItem value={false}>Nein</MenuItem>
+                <MenuItem value={true}>✓ Verfügbar</MenuItem>
+                <MenuItem value={false}>✗ Nicht verfügbar</MenuItem>
               </Select>
             </FormControl>
           </Grid>
 
-          {/* Eigenschaften */}
+          {/* Sicherheit und Lagerung */}
           <Grid item xs={12}>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              Eigenschaften
-            </Typography>
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              size={isMobile ? "small" : "medium"}
-              label="Farbe"
-              name="eigenschaften.farbe"
-              value={formData.eigenschaften?.farbe || ''}
-              onChange={handleInputChange}
-              placeholder="z.B. schwarz, grau, weiß"
-            />
-          </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
-            <TextField
-              fullWidth
-              size={isMobile ? "small" : "medium"}
-              label="Wasserlöslichkeit"
-              name="eigenschaften.wasserloeslichkeit"
-              value={formData.eigenschaften?.wasserloeslichkeit || ''}
-              onChange={handleInputChange}
-              placeholder="hoch, mittel, niedrig"
-            />
-          </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
-            <TextField
-              fullWidth
-              size={isMobile ? "small" : "medium"}
-              label="Hauttyp"
-              name="eigenschaften.hauttyp"
-              value={formData.eigenschaften?.hauttyp || ''}
-              onChange={handleInputChange}
-              placeholder="alle, fettig, trocken, empfindlich"
-            />
-          </Grid>
-
-          {/* Sicherheit */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              Sicherheit & Hinweise
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Sicherheit und Lagerung
             </Typography>
           </Grid>
           <Grid item xs={12}>
@@ -1904,39 +2177,13 @@ const AdminRohstoffe = () => {
               fullWidth
               size={isMobile ? "small" : "medium"}
               label="Sicherheitshinweise"
-              name="sicherheit.hinweise"
-              value={formData.sicherheit?.hinweise || ''}
+              name="sicherheit"
+              value={formData.sicherheit || ''}
               onChange={handleInputChange}
               multiline
               rows={2}
-              placeholder="Wichtige Sicherheitshinweise..."
+              placeholder="z.B. Von direkter Sonneneinstrahlung fernhalten, Allergiehinweise..."
             />
-          </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
-            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-              <InputLabel>Allergene vorhanden</InputLabel>
-              <Select
-                name="sicherheit.allergene"
-                value={formData.sicherheit?.allergene || false}
-                onChange={handleInputChange}
-              >
-                <MenuItem value={false}>Nein</MenuItem>
-                <MenuItem value={true}>Ja</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={isMobile ? 12 : 6}>
-            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-              <InputLabel>Gefahrstoff</InputLabel>
-              <Select
-                name="sicherheit.gefahrstoff"
-                value={formData.sicherheit?.gefahrstoff || false}
-                onChange={handleInputChange}
-              >
-                <MenuItem value={false}>Nein</MenuItem>
-                <MenuItem value={true}>Ja</MenuItem>
-              </Select>
-            </FormControl>
           </Grid>
         </Grid>
       );
@@ -2012,7 +2259,7 @@ const AdminRohstoffe = () => {
             currentTab === 0 ? "Suche nach Rohseifen (Name, Farbe, Lieferant, Preis...)" :
             currentTab === 1 ? "Suche nach Duftölen (Name, Hersteller, Duftrichtung...)" :
             currentTab === 2 ? "Suche nach Verpackungen (Name, Material, Form, Größe...)" :
-            "Suche nach Zusatzinhaltsstoffen (Name, Typ, Dosierung, Eigenschaften...)"
+            "Suche nach Zusatzinhaltsstoffen (Name, Typ, Hersteller, Wirkung...)"
           }
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}

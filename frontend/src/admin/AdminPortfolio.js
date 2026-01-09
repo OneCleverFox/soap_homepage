@@ -1389,7 +1389,7 @@ const AdminPortfolio = () => {
                   Zusätzliche Inhaltsstoffe für dieses Produkt:
                 </Typography>
                 
-                {formData.zusatzinhaltsstoffe.map((zutat, index) => (
+                {(formData.zusatzinhaltsstoffe || []).map((zutat, index) => (
                   <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                     <Grid container spacing={2} alignItems="center">
                       <Grid item xs={12} sm={4}>
@@ -1398,8 +1398,13 @@ const AdminPortfolio = () => {
                           <Select
                             value={zutat.inhaltsstoffName || ''}
                             onChange={(e) => {
+                              const selectedInhaltsstoff = zusatzinhaltsstoffeOptions.find(option => option.bezeichnung === e.target.value);
                               const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
                               newZusatzinhaltsstoffe[index].inhaltsstoffName = e.target.value;
+                              // Automatisch empfohlene Dosierung setzen
+                              if (selectedInhaltsstoff && selectedInhaltsstoff.empfohleneDosierung) {
+                                newZusatzinhaltsstoffe[index].menge = selectedInhaltsstoff.empfohleneDosierung;
+                              }
                               setFormData(prev => ({
                                 ...prev,
                                 zusatzinhaltsstoffe: newZusatzinhaltsstoffe
@@ -1407,7 +1412,7 @@ const AdminPortfolio = () => {
                             }}
                           >
                             {zusatzinhaltsstoffeOptions.map(option => (
-                              <MenuItem key={option._id} value={option.name}>{option.name}</MenuItem>
+                              <MenuItem key={option._id} value={option.bezeichnung}>{option.bezeichnung}</MenuItem>
                             ))}
                           </Select>
                         </FormControl>

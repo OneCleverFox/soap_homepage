@@ -13,9 +13,9 @@ import {
 import { useCompanyInfo } from '../../hooks/useCompanyInfo';
 
 const Footer = () => {
-  const { companyInfo, loading } = useCompanyInfo();
+  const { companyInfo, loading: _loading } = useCompanyInfo();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   // Fallback-Daten falls API noch lädt oder fehlschlägt
   const name = companyInfo.name || 'Glücksmomente Manufaktur';

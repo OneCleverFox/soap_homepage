@@ -10,9 +10,6 @@ import {
   useMediaQuery,
   FormControlLabel,
   Switch,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,8 +17,8 @@ import {
   Divider,
   Chip
 } from '@mui/material';
-import { Close, ExpandMore, Settings, Info } from '@mui/icons-material';
-import cookieManager from '../../utils/cookieManager';
+import { Close, Settings, Info } from '@mui/icons-material';
+import _cookieManager from '../../utils/cookieManager';
 
 const CookieConsent = () => {
   const [showBanner, setShowBanner] = useState(false);
