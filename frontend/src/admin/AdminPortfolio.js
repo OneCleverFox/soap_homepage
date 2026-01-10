@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Button,
-  Card,
-  CardContent,
-  CardActions,
-  Grid,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -17,614 +17,190 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Switch,
-  FormControlLabel,
-  Alert,
-  Snackbar,
-  Chip,
+  Grid,
+  Typography,
   IconButton,
-  ImageList,
-  ImageListItem,
-  ImageListItemBar,
-  Tooltip,
-  CircularProgress,
+  Chip,
+  Box,
+  Alert,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemIcon,
+  Divider,
   useMediaQuery,
   useTheme,
-  LinearProgress
+  FormControlLabel,
+  Switch,
+  Checkbox,
+  FormHelperText,
+  Card,
+  CardContent,
+  CardMedia,
+  CardActions
 } from '@mui/material';
 import {
-  Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  PhotoCamera as PhotoCameraIcon,
-  Image as ImageIcon,
-  DeleteForever as DeleteForeverIcon
+  Add as AddIcon,
+  Menu as MenuIcon,
+  LocalShipping,
+  ShoppingCart,
+  Category,
+  Description,
+  Upload as UploadIcon,
+  CameraAlt as CameraIcon,
+  MoreVert as MoreVertIcon
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../services/api';
-import LazyImage from '../components/LazyImage';
-
-// Utility-Funktion für Cache-Invalidation
-const invalidateProductsCache = () => {
-  try {
-    // SessionStorage Cache leeren
-    sessionStorage.removeItem('cachedProducts');
-    
-    // Force Reload Flag setzen
-    sessionStorage.setItem('forceProductsReload', 'true');
-    
-    console.log('🧹 Products cache invalidated with force reload flag');
-    
-    // Zusätzlich Backend-Cache invalidieren via API
-    api.get('/portfolio/debug/invalidate-cache')
-      .then(() => console.log('✅ Backend cache also invalidated'))
-      .catch(err => console.warn('⚠️ Backend cache invalidation failed:', err));
-    
-    // Event feuern für reaktive Updates
-    window.dispatchEvent(new CustomEvent('inventoryUpdated'));
-    console.log('📡 Inventory update event dispatched');
-    
-    return true;
-  } catch (e) {
-    console.warn('⚠️ Could not invalidate products cache:', e);
-    return false;
-  }
-};
+import portfolioAdminService from '../services/portfolioAdminService';
 
 const AdminPortfolio = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
-  const [products, setProducts] = useState([]);
+  // State für Portfolio Items
+  const [portfolioItems, setPortfolioItems] = useState([]);
+  const [filteredItems, setFilteredItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [stats, setStats] = useState(null);
-  const [uploadingImage, setUploadingImage] = useState(null);
+  const [error, setError] = useState(null);
 
-  // State für Produktformular
-  const [formData, setFormData] = useState({
+  // Navigation State
+  const [selectedCategory, setSelectedCategory] = useState('alle');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Options für Dropdowns
+  const [seifenOptions, setSeifenOptions] = useState([]);
+  const [aromaOptions, setAromaOptions] = useState([]);
+  const [seifenformOptions, setSeifenformOptions] = useState([]);
+  const [verpackungOptions, setVerpackungOptions] = useState([]);
+  const [giessformOptions, setGiessformOptions] = useState([]);
+  const [giesswerkstoffOptions, setGiesswerkstoffOptions] = useState([]);
+
+  // Dialog für neue Items
+  const [showCreateAroma, setShowCreateAroma] = useState(false);
+  const [showCreateSeife, setShowCreateSeife] = useState(false);
+  const [newAromaName, setNewAromaName] = useState('');
+  const [newAromaDescription, setNewAromaDescription] = useState('');
+  const [newSeifeName, setNewSeifeName] = useState('');
+  const [newSeifeDescription, setSeifeDescription] = useState('');
+
+  // Bild-Upload States
+  const [uploadingImages, setUploadingImages] = useState({});
+
+  // Kategorien für Navigation
+  const categories = [
+    { id: 'alle', label: 'Alle Produkte', icon: Category },
+    { id: 'seife', label: 'Seifen', icon: LocalShipping },
+    { id: 'werkstuck', label: 'Werkstücke', icon: ShoppingCart }
+  ];
+
+  // Initialwerte für Formular
+  const initialFormData = {
+    kategorie: '',
     name: '',
-    seife: '',
     gramm: '',
+    preis: '',
+    seife: '',
     aroma: '',
     seifenform: '',
-    zusatz: '',
-    optional: '',
     verpackung: '',
-    aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
-    reihenfolge: 0, // Wird beim Öffnen des Dialogs automatisch gesetzt
-    // Erweiterte Rohseifen-Konfiguration
-    rohseifenKonfiguration: {
-      verwendeZweiRohseifen: false,
-      seife2: '',
-      gewichtVerteilung: {
-        seife1Prozent: 50,
-        seife2Prozent: 50
-      }
+    giessform: '',
+    giesswerkstoff: '',
+    optional: '',
+    reihenfolge: '',
+    aktiv: true,
+    istMischung: false,
+    rohseifenKonfiguration: null,
+    abmessungen: {
+      laenge: '',
+      breite: '',
+      hoehe: ''
     },
-    // Beschreibungsfelder
     beschreibung: {
       kurz: '',
       lang: '',
       inhaltsstoffe: '',
-      anwendung: '',
-      besonderheiten: ''
-    },
-    // Zusatzinhaltsstoffe
-    zusatzinhaltsstoffe: []
-  });
+      anwendung: ''
+    }
+  };
 
-  // State für dynamische Optionen
-  const [seifenOptions, setSeifenOptions] = useState([]);
-  const [aromaOptions, setAromaOptions] = useState(['Vanille', 'Sandelholz', 'Minze', 'Yasmin', 'Lavendel']);
-  const [seifenformOptions, setSeifenformOptions] = useState([]);
-  const [verpackungOptions, setVerpackungOptions] = useState([]);
-  const [zusatzinhaltsstoffeOptions, setZusatzinhaltsstoffeOptions] = useState([]);
-  
-  // State für neue Einträge Dialog
-  const [newEntryDialog, setNewEntryDialog] = useState({ open: false, type: '', value: '' });
+  const [formData, setFormData] = useState(initialFormData);
 
-  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  // Portfolio Items laden
+  useEffect(() => {
+    loadPortfolioItems();
+    loadOptions();
+  }, []);
 
-  // Auth-Header für API-Aufrufe
-  const getAuthHeaders = () => ({
-    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-    'Content-Type': 'application/json'
-  });
+  // Items nach Kategorie filtern
+  useEffect(() => {
+    if (selectedCategory === 'alle') {
+      setFilteredItems(portfolioItems);
+    } else {
+      setFilteredItems(portfolioItems.filter(item => item.kategorie === selectedCategory));
+    }
+  }, [portfolioItems, selectedCategory]);
 
-  const getAuthHeadersFormData = () => ({
-    'Authorization': `Bearer ${localStorage.getItem('token')}`
-  });
-
-  const loadProducts = useCallback(async () => {
+  const loadPortfolioItems = async () => {
     try {
-      const response = await fetch(`${API_BASE}/admin/portfolio`, {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setProducts(data.data);
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error) {
-      showSnackbar('Fehler beim Laden der Produkte: ' + error.message, 'error');
+      setLoading(true);
+      const response = await portfolioAdminService.getAll();
+      setPortfolioItems(response.data || []);
+    } catch (err) {
+      console.error('Fehler beim Laden der Portfolio Items:', err);
+      setError('Fehler beim Laden der Portfolio Items');
     } finally {
       setLoading(false);
     }
-  }, [API_BASE]);
+  };
 
-  // Lade dynamische Optionen (optimiert)
-  const loadOptions = useCallback(async () => {
+  const loadOptions = async () => {
     try {
-      console.log('🚀 Loading options from optimized endpoint...');
+      // Seife-spezifische Optionen
+      const [rohseifen, duftoele, seifenformen, verpackungen] = await Promise.all([
+        portfolioAdminService.getSeifenOptions(),
+        fetch('/api/duftoele').then(res => res.json()).then(data => data.data?.map(item => item.bezeichnung) || []).catch(() => []),
+        portfolioAdminService.getSeifenformOptions(),
+        portfolioAdminService.getVerpackungOptions()
+      ]);
       
-      // 🚀 PERFORMANCE: Alle Optionen in einem Call
-      const response = await fetch(`${API_BASE}/admin/portfolio/options`, {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        const { rohseifen, verpackungen, duftoele } = data.data;
-        
-        // Rohseifen verarbeiten
-        const seifenList = rohseifen.map(item => item.bezeichnung);
-        setSeifenOptions([...new Set(seifenList)]);
+      setSeifenOptions(rohseifen || []);
+      setAromaOptions(duftoele || []);
+      setSeifenformOptions(seifenformen || []);
+      setVerpackungOptions(verpackungen || []);
 
-        // Verpackungen verarbeiten  
-        const verpackungList = verpackungen.map(item => item.bezeichnung);
-        const existingVerpackungen = [...new Set(products.map(p => p.verpackung).filter(Boolean))];
-        const orphanedVerpackungen = existingVerpackungen.filter(v => !verpackungList.includes(v));
-        
-        if (orphanedVerpackungen.length > 0) {
-          console.warn('⚠️ Veraltete Verpackungen in Portfolio gefunden:', orphanedVerpackungen);
-        }
-        
-        const allVerpackungOptions = [...verpackungList, ...orphanedVerpackungen.map(v => `${v} (VERALTET)`)];
-        setVerpackungOptions([...new Set(allVerpackungOptions)]);
-
-        // Duftöle verarbeiten
-        const aromaList = duftoele.map(item => item.bezeichnung);
-        const existingAromen = [...new Set(products.map(p => p.aroma).filter(Boolean))];
-        const filteredExistingAromen = existingAromen.filter(a => !aromaList.includes(a));
-        
-        setAromaOptions([...new Set([...aromaList, ...filteredExistingAromen])]);
-        
-        // Zusatzinhaltsstoffe laden
-        const zusatzinhaltsstoffeResponse = await fetch(`${API_BASE}/zusatzinhaltsstoffe?includeUnavailable=true`, {
-          headers: getAuthHeaders()
-        });
-        const zusatzinhaltsstoffeData = await zusatzinhaltsstoffeResponse.json();
-        
-        if (zusatzinhaltsstoffeData.success) {
-          setZusatzinhaltsstoffeOptions(zusatzinhaltsstoffeData.data);
-        }
-        
-        console.log('✅ Options loaded successfully from optimized endpoint');
-      }
-    } catch (error) {
-      console.warn('Failed to load from optimized endpoint, falling back to individual calls');
-      // Fallback zu alten einzelnen Calls falls neue Route nicht verfügbar
-      await loadOptionsLegacy();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products]);
-  
-  // Legacy-Fallback (für Rückwärtskompatibilität)
-  const loadOptionsLegacy = async () => {
-    try {
-      // Rohseifen laden (inkl. inaktive für Produktplanung)
-      const rohseifeResponse = await fetch(`${API_BASE}/rohseife?includeUnavailable=true`, {
-        headers: getAuthHeaders()
-      });
-      const rohseifeData = await rohseifeResponse.json();
-      
-      if (rohseifeData.success) {
-        const seifenList = rohseifeData.data.map(item => item.bezeichnung);
-        setSeifenOptions([...new Set(seifenList)]); // Duplikate entfernen
-      }
-
-      // Nur echte Verpackungen laden (nicht gemischte Rohstoffe)
-      const verpackungResponse = await fetch(`${API_BASE}/verpackungen?includeUnavailable=true`, {
-        headers: getAuthHeaders()
-      });
-      const verpackungData = await verpackungResponse.json();
-      
-      if (verpackungData.success) {
-        const verpackungList = verpackungData.data.map(item => item.bezeichnung);
-        
-        // ⚠️ DATENBANK-KONSISTENZ: Nur DB-Verpackungen als primäre Optionen
-        const primaryOptions = verpackungList;
-        
-        // Bestehende Verpackungen aus Produkten prüfen (für Datenbereinigung)
-        const existingVerpackungen = [...new Set(products.map(p => p.verpackung).filter(Boolean))];
-        const orphanedVerpackungen = existingVerpackungen.filter(v => !verpackungList.includes(v));
-        
-        // Warnung wenn veraltete Verpackungen gefunden werden
-        if (orphanedVerpackungen.length > 0) {
-          console.warn('⚠️ Veraltete Verpackungen in Portfolio gefunden:', orphanedVerpackungen);
-          console.warn('Diese sollten in der Verpackungen-Verwaltung angelegt oder Produkte aktualisiert werden.');
-        }
-        
-        // Primäre DB-Optionen + veraltete (für Bearbeitung bestehender Produkte)
-        const allOptions = [...primaryOptions, ...orphanedVerpackungen.map(v => `${v} (VERALTET)`)];
-        setVerpackungOptions([...new Set(allOptions)]);
-      }
-
-      // Nur echte Duftöle laden (nicht gemischte Rohstoffe)  
-      const duftoelResponse = await fetch(`${API_BASE}/duftoele?includeUnavailable=true`, {
-        headers: getAuthHeaders()
-      });
-      const duftoelData = await duftoelResponse.json();
-      
-      if (duftoelData.success) {
-        const aromaList = duftoelData.data.map(item => item.bezeichnung);
-        
-        // Bestehende Aromen aus Produkten hinzufügen (falls nicht in DB)
-        const existingAromen = [...new Set(products.map(p => p.aroma).filter(Boolean))];
-        const filteredExistingAromen = existingAromen.filter(a => !aromaList.includes(a));
-        
-        setAromaOptions([...new Set([...aromaList, ...filteredExistingAromen])]);
-      }
-
-      // Seifenformen aus bestehenden Produkten extrahieren und mit Standards kombinieren
-      const existingForms = [...new Set(products.map(p => p.seifenform).filter(Boolean))];
-      const defaultForms = ['quadratisch', 'Bienenwabe', 'Fight Club', 'Soap länglich'];
-      setSeifenformOptions([...new Set([...defaultForms, ...existingForms])]);
-
-    } catch (error) {
-      console.error('Fehler beim Laden der Optionen:', error);
+      // Werkstück-spezifische Optionen werden später implementiert
+      setGiessformOptions([]);
+      setGiesswerkstoffOptions([]);
+    } catch (err) {
+      console.error('Fehler beim Laden der Optionen:', err);
     }
   };
 
-  // Neue Option erstellen
-  const createNewOption = async (type, value) => {
-    try {
-      let endpoint = '';
-      let payload = {};
-      
-      switch (type) {
-        case 'seifenform':
-          // Seifenformen werden nur lokal zur Liste hinzugefügt
-          setSeifenformOptions(prev => [...new Set([...prev, value])]);
-          setFormData(prev => ({ ...prev, seifenform: value }));
-          setNewEntryDialog({ open: false, type: '', value: '' });
-          return;
-          
-        case 'verpackung':
-          endpoint = '/verpackungen';
-          payload = {
-            bezeichnung: value,
-            form: 'sonstiges',
-            menge: 100,
-            kostenInEuro: 0.10,
-            kostenProStueck: 0.001,
-            verfuegbar: true,
-            aktuellVorrat: 0,
-            mindestbestand: 10
-          };
-          break;
-          
-        case 'seife':
-          endpoint = '/rohseife';
-          payload = {
-            bezeichnung: value,
-            typ: 'Seife',
-            bestand: 0,
-            mindestbestand: 5,
-            einheit: 'kg',
-            preis: 0,
-            verfuegbar: true
-          };
-          break;
-          
-        default:
-          return;
-      }
-      
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        showSnackbar(`Neue ${type === 'verpackung' ? 'Verpackung' : 'Seife'} erstellt!`, 'success');
-        
-        // Optionen neu laden
-        await loadOptions();
-        
-        // Formular-Wert setzen
-        const fieldName = type === 'seife' ? 'seife' : type;
-        setFormData(prev => ({ ...prev, [fieldName]: value }));
-        
-        setNewEntryDialog({ open: false, type: '', value: '' });
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error) {
-      showSnackbar(`Fehler beim Erstellen: ${error.message}`, 'error');
+  const handleCategorySelect = (categoryId) => {
+    setSelectedCategory(categoryId);
+    if (isMobile) {
+      setMobileMenuOpen(false);
     }
-  };
-
-  const loadStats = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_BASE}/admin/portfolio/stats`, {
-        headers: getAuthHeaders()
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setStats(data.data);
-      }
-    } catch (error) {
-      console.error('Fehler beim Laden der Statistiken:', error);
-    }
-  }, [API_BASE]);
-
-  useEffect(() => {
-    const userRole = user?.rolle || user?.role;
-    if (user && userRole === 'admin') {
-      loadProducts();
-      loadStats();
-    }
-  }, [user, loadProducts, loadStats]);
-
-  // Separater useEffect für das Laden der Optionen nach dem Laden der Produkte
-  useEffect(() => {
-    if (products.length > 0) {
-      loadOptions();
-    }
-  }, [products, loadOptions]);
-
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  // Funktion zur Berechnung der nächsten verfügbaren Reihenfolge-Nummer
-  const getNextAvailableOrder = () => {
-    if (products.length === 0) {
-      return 0; // Erstes Produkt bekommt Reihenfolge 0
-    }
-    
-    // Finde die höchste Reihenfolge-Nummer und addiere 1
-    const maxOrder = Math.max(...products.map(p => p.reihenfolge || 0));
-    return maxOrder + 1;
-  };
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      seife: '',
-      gramm: '',
-      aroma: '',
-      seifenform: '',
-      zusatz: '',
-      optional: '',
-      verpackung: '',
-      aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
-      reihenfolge: getNextAvailableOrder(), // ✅ Automatisch nächste verfügbare Nummer
-      // Erweiterte Rohseifen-Konfiguration
-      rohseifenKonfiguration: {
-        verwendeZweiRohseifen: false,
-        seife2: '',
-        gewichtVerteilung: {
-          seife1Prozent: 50,
-          seife2Prozent: 50
-        }
-      },
-      // Beschreibungsfelder
-      beschreibung: {
-        kurz: '',
-        lang: '',
-        inhaltsstoffe: '',
-        anwendung: '',
-        besonderheiten: ''
-      }
-    });
-    setEditingProduct(null);
-  };
-
-  const handleOpenDialog = async (product = null) => {
-    if (product) {
-      // 🔍 DEBUG: Zeige Produkt-Daten beim Dialog-Öffnen
-      console.log('🔍 DIALOG ÖFFNEN - Original Product Data:', product);
-      console.log('🔍 DIALOG ÖFFNEN - Rohseifen-Konfiguration:', product.rohseifenKonfiguration);
-      
-      // Bei Edit: Aktuelle Daten vom Server holen um sicherzustellen, dass wir die neuesten Daten haben
-      let currentProduct = product;
-      if (product._id) {
-        try {
-          const response = await fetch(`${API_BASE}/admin/portfolio/${product._id}`, {
-            headers: getAuthHeaders()
-          });
-          const data = await response.json();
-          if (data.success && data.data) {
-            currentProduct = data.data;
-            console.log('🔍 DIALOG ÖFFNEN - Aktuelle Server-Daten:', currentProduct);
-            console.log('🔍 DIALOG ÖFFNEN - Server Rohseifen-Konfiguration:', currentProduct.rohseifenKonfiguration);
-          }
-        } catch (error) {
-          console.warn('Fehler beim Laden aktueller Produktdaten:', error);
-          // Bei Fehler verwenden wir die übergebenen Daten
-        }
-      }
-      
-      // Erst die Optionen mit den Produktwerten erweitern
-      if (currentProduct.seifenform && !seifenformOptions.includes(currentProduct.seifenform)) {
-        setSeifenformOptions(prev => [...prev, currentProduct.seifenform]);
-      }
-      if (currentProduct.verpackung && !verpackungOptions.includes(currentProduct.verpackung)) {
-        setVerpackungOptions(prev => [...prev, currentProduct.verpackung]);
-      }
-      if (currentProduct.seife && !seifenOptions.includes(currentProduct.seife)) {
-        setSeifenOptions(prev => [...prev, currentProduct.seife]);
-      }
-      if (currentProduct.aroma && !aromaOptions.includes(currentProduct.aroma)) {
-        setAromaOptions(prev => [...prev, currentProduct.aroma]);
-      }
-      
-      setFormData({
-        name: product.name,
-        seife: product.seife,
-        gramm: product.gramm.toString(),
-        aroma: product.aroma,
-        seifenform: product.seifenform,
-        zusatz: product.zusatz || '',
-        optional: product.optional || '',
-        verpackung: product.verpackung,
-        aktiv: product.aktiv,
-        reihenfolge: product.reihenfolge.toString(),
-        // 🧪 Erweiterte Rohseifen-Konfiguration laden - mit Debug
-        rohseifenKonfiguration: {
-          verwendeZweiRohseifen: currentProduct.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
-          seife2: currentProduct.rohseifenKonfiguration?.seife2 || '',
-          gewichtVerteilung: {
-            seife1Prozent: currentProduct.rohseifenKonfiguration?.gewichtVerteilung?.seife1Prozent || 50,
-            seife2Prozent: currentProduct.rohseifenKonfiguration?.gewichtVerteilung?.seife2Prozent || 50
-          }
-        },
-        // Beschreibungsfelder laden
-        beschreibung: {
-          kurz: product.beschreibung?.kurz || '',
-          lang: product.beschreibung?.lang || '',
-          inhaltsstoffe: product.beschreibung?.inhaltsstoffe || '',
-          anwendung: product.beschreibung?.anwendung || '',
-          besonderheiten: product.beschreibung?.besonderheiten || ''
-        },
-        // Zusatzinhaltsstoffe laden
-        zusatzinhaltsstoffe: product.zusatzinhaltsstoffe || []
-      });
-      
-      console.log('🔍 DIALOG ÖFFNEN - FormData gesetzt mit verwendeZweiRohseifen:', 
-        currentProduct.rohseifenKonfiguration?.verwendeZweiRohseifen);
-      
-      setEditingProduct(currentProduct);
-    } else {
-      // Für neue Produkte: automatisch nächste Reihenfolge setzen
-      const nextOrder = getNextAvailableOrder();
-      setFormData({
-        name: '',
-        seife: '',
-        gramm: '',
-        aroma: '',
-        seifenform: '',
-        zusatz: '',
-        optional: '',
-        verpackung: '',
-        aktiv: false, // ✅ Neue Produkte standardmäßig inaktiv
-        reihenfolge: nextOrder.toString(), // ✅ Automatisch nächste verfügbare Nummer
-        // Beschreibungsfelder
-        beschreibung: {
-          kurz: '',
-          lang: '',
-          inhaltsstoffe: '',
-          anwendung: '',
-          besonderheiten: ''
-        },
-        // Zusatzinhaltsstoffe
-        zusatzinhaltsstoffe: []
-      });
-      setEditingProduct(null);
-    }
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    resetForm();
   };
 
   const handleInputChange = (e) => {
-    const { name, value, checked, type } = e.target;
-    
-    // 🔍 DEBUG: Zeige alle Input-Events
-    console.log('🔍 INPUT CHANGE EVENT:', {
-      name,
-      value,
-      checked,
-      type,
-      target: e.target,
-      eventType: e.type
-    });
-    
-    // Prüfen, ob "Neu erstellen..." ausgewählt wurde
-    if (value === '__CREATE_NEW__') {
-      handleCreateNew(name);
-      return;
-    }
-    
-    // Prüfen, ob es sich um ein Beschreibungsfeld handelt
-    if (name.startsWith('beschreibung.')) {
-      const fieldName = name.split('.')[1]; // z.B. 'kurz' aus 'beschreibung.kurz'
+    const { name, value, type, checked } = e.target;
+
+    if (name.includes('.')) {
+      const [parent, child] = name.split('.');
       setFormData(prev => ({
         ...prev,
-        beschreibung: {
-          ...prev.beschreibung,
-          [fieldName]: value
+        [parent]: {
+          ...prev[parent],
+          [child]: type === 'checkbox' ? checked : value
         }
       }));
-    }
-    // Prüfen, ob es sich um Rohseifen-Konfiguration handelt
-    else if (name.startsWith('rohseifenKonfiguration.')) {
-      console.log('🔍 ROHSEIFEN KONFIGURATION EVENT:', { name, value, checked, type });
-      
-      const fieldParts = name.split('.'); // z.B. ['rohseifenKonfiguration', 'gewichtVerteilung', 'seife1Prozent']
-      
-      if (fieldParts.length === 2) {
-        // Direkte Felder wie 'rohseifenKonfiguration.verwendeZweiRohseifen'
-        const fieldName = fieldParts[1];
-        
-        console.log('🔍 ROHSEIFEN DIREKT-FELD UPDATE:', {
-          fieldName,
-          oldValue: formData.rohseifenKonfiguration[fieldName],
-          newValue: type === 'checkbox' ? checked : value
-        });
-        
-        setFormData(prev => {
-          const newData = {
-            ...prev,
-            rohseifenKonfiguration: {
-              ...prev.rohseifenKonfiguration,
-              [fieldName]: type === 'checkbox' ? checked : value
-            }
-          };
-          console.log('🔍 NEUE FORMDATA nach Rohseifen-Update:', newData);
-          return newData;
-        });
-      } else if (fieldParts.length === 3) {
-        // Verschachtelte Felder wie 'rohseifenKonfiguration.gewichtVerteilung.seife1Prozent'
-        const groupName = fieldParts[1]; // 'gewichtVerteilung'
-        const fieldName = fieldParts[2]; // 'seife1Prozent'
-        
-        setFormData(prev => ({
-          ...prev,
-          rohseifenKonfiguration: {
-            ...prev.rohseifenKonfiguration,
-            [groupName]: {
-              ...prev.rohseifenKonfiguration[groupName],
-              [fieldName]: type === 'number' ? parseFloat(value) || 0 : value
-            }
-          }
-        }));
-      }
-    }
-    else {
+    } else {
       setFormData(prev => ({
         ...prev,
         [name]: type === 'checkbox' ? checked : value
@@ -632,1026 +208,1116 @@ const AdminPortfolio = () => {
     }
   };
 
-  // Navigation zu entsprechender Admin-Seite für neuen Eintrag
-  const handleCreateNew = (type) => {
-    // Dialog schließen damit der Benutzer weiß, dass navigiert wird
-    setOpenDialog(false);
+  const handleNew = () => {
+    setEditingItem(null);
+    setFormData(initialFormData);
+    setOpen(true);
+  };
+
+  const handleEdit = (item) => {
+    setEditingItem(item);
     
-    switch (type) {
-      case 'verpackung':
-        showSnackbar('Weiterleitung zur Verpackungen-Verwaltung...', 'info');
-        setTimeout(() => navigate('/admin/rohstoffe?tab=verpackungen&action=create&autoOpen=true'), 1000);
-        break;
-      case 'seife':
-        showSnackbar('Weiterleitung zur Rohseifen-Verwaltung...', 'info');
-        setTimeout(() => navigate('/admin/rohstoffe?tab=rohseifen&action=create&autoOpen=true'), 1000);
-        break;
-      case 'aroma':
-        showSnackbar('Weiterleitung zur Duftöl-Verwaltung...', 'info');
-        setTimeout(() => navigate('/admin/rohstoffe?tab=duftoele&action=create&autoOpen=true'), 1000);
-        break;
-      case 'seifenform':
-        // Für Seifenformen zeigen wir weiterhin den Dialog, da diese nicht in Rohstoffe verwaltet werden
-        setNewEntryDialog({ open: true, type: 'seifenform', value: '' });
-        setOpenDialog(true); // Dialog wieder öffnen
-        break;
-      default:
-        console.log('Unbekannter Typ:', type);
-    }
-  };
-
-  // Handler um das Dialog zu schließen
-  const handleCloseNewEntryDialog = () => {
-    setNewEntryDialog({ open: false, type: '', value: '' });
-  };
-
-  // Handler um neue Option zu speichern
-  const handleSaveNewEntry = async () => {
-    const { type, value } = newEntryDialog;
-    if (!value.trim()) return;
-
-    try {
-      await createNewOption(type, value);
-      showSnackbar(`Neue ${type === 'seifenform' ? 'Seifenform' : 'Verpackung'} erfolgreich erstellt!`);
-      
-      // Option in FormData setzen
-      setFormData(prev => ({ ...prev, [type]: value }));
-      
-      // Dialog schließen
-      handleCloseNewEntryDialog();
-    } catch (error) {
-      showSnackbar(`Fehler beim Erstellen: ${error.message}`, 'error');
-    }
+    // Vollständige Datenstruktur für das Bearbeiten
+    const editFormData = {
+      ...initialFormData,
+      kategorie: item.kategorie || '',
+      name: item.name || '',
+      gramm: item.gramm || '',
+      preis: item.preis || '',
+      seife: item.seife || '',
+      aroma: item.aroma || '',
+      seifenform: item.seifenform || '',
+      verpackung: item.verpackung || '',
+      giessform: item.giessform || '',
+      giesswerkstoff: item.giesswerkstoff || '',
+      optional: item.optional || '',
+      reihenfolge: item.reihenfolge || '',
+      aktiv: item.aktiv !== undefined ? item.aktiv : true,
+      istMischung: item.istMischung || false,
+      rohseifenKonfiguration: item.rohseifenKonfiguration || null,
+      abmessungen: {
+        laenge: (item.abmessungen && item.abmessungen.laenge) || '',
+        breite: (item.abmessungen && item.abmessungen.breite) || '',
+        hoehe: (item.abmessungen && item.abmessungen.hoehe) || ''
+      },
+      beschreibung: {
+        kurz: (item.beschreibung && item.beschreibung.kurz) || '',
+        lang: (item.beschreibung && item.beschreibung.lang) || '',
+        inhaltsstoffe: (item.beschreibung && item.beschreibung.inhaltsstoffe) || '',
+        anwendung: (item.beschreibung && item.beschreibung.anwendung) || ''
+      }
+    };
+    
+    setFormData(editFormData);
+    setOpen(true);
   };
 
   const handleSubmit = async () => {
     try {
-      // 🔍 DEBUG: Zeige aktuelle formData vor dem Speichern
-      console.log('🔍 PORTFOLIO SUBMIT - FormData vor Speicherung:', JSON.stringify(formData, null, 2));
-      console.log('🔍 PORTFOLIO SUBMIT - Rohseifen-Konfiguration:', formData.rohseifenKonfiguration);
-      
-      // 🔍 VALIDIERUNG: Prüfe Verpackung vor Speicherung
-      const verpackungName = formData.verpackung;
-      
-      // Prüfe ob Verpackung als "VERALTET" markiert ist
-      if (verpackungName && verpackungName.includes('(VERALTET)')) {
-        const confirmed = window.confirm(
-          `⚠️ Sie verwenden eine veraltete Verpackung: "${verpackungName}"\n\n` +
-          'Diese Verpackung existiert nicht mehr in der Verpackungen-Verwaltung und kann Probleme ' +
-          'in der Warenberechnung verursachen.\n\n' +
-          'Möchten Sie trotzdem speichern?\n\n' +
-          '💡 Empfehlung: Wählen Sie eine aktuelle Verpackung aus oder legen Sie die Verpackung ' +
-          'in der Verpackungen-Verwaltung an.'
-        );
-        
-        if (!confirmed) {
-          return;
-        }
-      }
-      
-      // Prüfe ob Verpackung in verfügbaren Optionen ist (ohne VERALTET-Markierung)
-      const verfuegbareVerpackungen = verpackungOptions.filter(v => !v.includes('(VERALTET)'));
-      if (verpackungName && !verfuegbareVerpackungen.includes(verpackungName) && !verpackungName.includes('(VERALTET)')) {
-        showSnackbar('⚠️ Bitte wählen Sie eine verfügbare Verpackung aus.', 'error');
-        return;
-      }
-      
-      const url = editingProduct 
-        ? `${API_BASE}/admin/portfolio/${editingProduct._id}`
-        : `${API_BASE}/admin/portfolio`;
-      
-      const method = editingProduct ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: getAuthHeaders(),
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        showSnackbar(data.message);
-        
-        // Cache invalidieren und Updates propagieren
-        invalidateProductsCache();
-        
-        // Warte kurz damit Cache-Clear vor neuem Laden passiert
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Erst die Produkte neu laden, dann den Dialog schließen
-        await loadProducts();
-        await loadStats();
-        
-        // Dialog schließen nachdem die neuen Daten geladen sind
-        handleCloseDialog();
+      if (editingItem) {
+        await portfolioAdminService.update(editingItem._id, formData);
       } else {
-        throw new Error(data.message);
+        await portfolioAdminService.create(formData);
       }
-    } catch (error) {
-      showSnackbar('Fehler beim Speichern: ' + error.message, 'error');
+      
+      setOpen(false);
+      loadPortfolioItems();
+      setFormData(initialFormData);
+    } catch (err) {
+      console.error('Fehler beim Speichern:', err);
+      setError('Fehler beim Speichern des Portfolio Items');
     }
   };
 
-  const handleDelete = async (productId) => {
-    if (!window.confirm('Sind Sie sicher, dass Sie dieses Produkt löschen möchten?')) {
-      return;
+  const handleDelete = async (id) => {
+    if (window.confirm('Sind Sie sicher, dass Sie dieses Portfolio Item löschen möchten?')) {
+      try {
+        await portfolioAdminService.delete(id);
+        loadPortfolioItems();
+      } catch (err) {
+        console.error('Fehler beim Löschen:', err);
+        setError('Fehler beim Löschen des Portfolio Items');
+      }
     }
+  };
 
+  const handleCancel = () => {
+    setOpen(false);
+    setFormData(initialFormData);
+    setEditingItem(null);
+  };
+
+  const handleCreateNewAroma = async () => {
+    if (!newAromaName.trim()) return;
+    
     try {
-      const response = await fetch(`${API_BASE}/admin/portfolio/${productId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
+      await fetch('/api/duftoele', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bezeichnung: newAromaName.trim(),
+          beschreibung: newAromaDescription.trim()
+        })
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        showSnackbar(data.message);
-        
-        // Cache invalidieren und Updates propagieren
-        invalidateProductsCache();
-        
-        loadProducts();
-        loadStats();
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error) {
-      showSnackbar('Fehler beim Löschen: ' + error.message, 'error');
+      
+      setShowCreateAroma(false);
+      setNewAromaName('');
+      setNewAromaDescription('');
+      loadOptions();
+      
+      setFormData(prev => ({
+        ...prev,
+        aroma: newAromaName.trim()
+      }));
+    } catch (err) {
+      console.error('Fehler beim Erstellen des Duftöls:', err);
+      setError('Fehler beim Erstellen des neuen Duftöls');
     }
   };
 
-  const handleImageUpload = async (productId, file, isHauptbild = false) => {
-    setUploadingImage(productId);
+  const handleCreateNewSeife = async () => {
+    if (!newSeifeName.trim()) return;
+    
+    try {
+      await fetch('/api/rohseife', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: newSeifeName.trim(),
+          beschreibung: newSeifeDescription.trim()
+        })
+      });
+      
+      setShowCreateSeife(false);
+      setNewSeifeName('');
+      setSeifeDescription('');
+      loadOptions();
+      
+      setFormData(prev => ({
+        ...prev,
+        seife: newSeifeName.trim()
+      }));
+    } catch (err) {
+      console.error('Fehler beim Erstellen der Rohseife:', err);
+      setError('Fehler beim Erstellen der neuen Rohseife');
+    }
+  };
+
+  // Bild-Upload Funktionen
+  const handleImageUpload = async (productId, file, imageType = 'hauptbild') => {
+    if (!file) return;
+    
+    setUploadingImages(prev => ({ ...prev, [`${productId}_${imageType}`]: true }));
+    
     try {
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('isHauptbild', isHauptbild.toString());
-      formData.append('alt_text', `${products.find(p => p._id === productId)?.name} Produktbild`);
-
-      const response = await fetch(`${API_BASE}/admin/portfolio/${productId}/upload-image`, {
-        method: 'POST',
-        headers: getAuthHeadersFormData(),
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        showSnackbar(data.message);
-        loadProducts();
-      } else {
-        throw new Error(data.message);
-      }
-    } catch (error) {
-      showSnackbar('Fehler beim Upload: ' + error.message, 'error');
+      formData.append('isHauptbild', imageType === 'hauptbild' ? 'true' : 'false');  // Backend erwartet isHauptbild
+      
+      await portfolioAdminService.uploadImage(productId, formData);
+      loadPortfolioItems(); // Neu laden um aktualisierte Bilder zu zeigen
+    } catch (err) {
+      console.error('Fehler beim Upload:', err);
+      setError('Fehler beim Hochladen des Bildes');
     } finally {
-      setUploadingImage(null);
+      setUploadingImages(prev => ({ ...prev, [`${productId}_${imageType}`]: false }));
     }
   };
 
-  const handleImageDelete = async (productId, imageType, imageIndex = null) => {
-    if (!window.confirm('Sind Sie sicher, dass Sie dieses Bild löschen möchten?')) {
-      return;
-    }
-
-    try {
-      const url = imageIndex !== null 
-        ? `${API_BASE}/admin/portfolio/${productId}/image/${imageType}/${imageIndex}`
-        : `${API_BASE}/admin/portfolio/${productId}/image/${imageType}`;
-
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        showSnackbar(data.message);
-        loadProducts();
-      } else {
-        throw new Error(data.message);
+  const handleImageDelete = async (productId, imageType, imageIndex = '') => {
+    if (window.confirm('Möchten Sie dieses Bild wirklich löschen?')) {
+      try {
+        await portfolioAdminService.deleteImage(productId, imageType, imageIndex);
+        loadPortfolioItems();
+      } catch (err) {
+        console.error('Fehler beim Löschen:', err);
+        setError('Fehler beim Löschen des Bildes');
       }
-    } catch (error) {
-      showSnackbar('Fehler beim Löschen: ' + error.message, 'error');
     }
   };
 
-  const getImageUrl = (imageUrl) => {
-    if (!imageUrl) return null;
-    // Base64-Bilder direkt zurückgeben
-    if (imageUrl.startsWith('data:image/')) return imageUrl;
-    return imageUrl.startsWith('/api/') ? `${API_BASE.replace('/api', '')}${imageUrl}` : imageUrl;
-  };
-
-  const userRole = user?.rolle || user?.role;
-  if (!user || userRole !== 'admin') {
-    return (
-      <Box p={3}>
-        <Alert severity="error">
-          Sie haben keine Berechtigung für den Admin-Bereich.
-        </Alert>
-      </Box>
-    );
-  }
+  // Render Navigation
+  const renderNavigation = () => (
+    <List>
+      <ListItem>
+        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+          Portfolio Kategorien
+        </Typography>
+      </ListItem>
+      <Divider />
+      {categories.map((category) => {
+        const IconComponent = category.icon;
+        const count = category.id === 'alle' 
+          ? portfolioItems.length 
+          : portfolioItems.filter(item => item.kategorie === category.id).length;
+        
+        return (
+          <ListItem key={category.id} disablePadding>
+            <ListItemButton
+              selected={selectedCategory === category.id}
+              onClick={() => handleCategorySelect(category.id)}
+            >
+              <ListItemIcon>
+                <IconComponent />
+              </ListItemIcon>
+              <ListItemText 
+                primary={category.label}
+                secondary={`${count} Artikel`}
+              />
+            </ListItemButton>
+          </ListItem>
+        );
+      })}
+    </List>
+  );
 
   if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-        <CircularProgress />
-      </Box>
-    );
+    return <Typography>Laden...</Typography>;
   }
 
   return (
-    <Box p={isMobile ? 2 : 3}>
-      {/* Upload Progress */}
-      {uploadingImage && (
-        <Box mb={2}>
-          <LinearProgress />
-          <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
-            Bild wird optimiert und hochgeladen...
-          </Typography>
+    <Box sx={{ display: 'flex' }}>
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <Box sx={{ width: 240, flexShrink: 0, bgcolor: 'grey.50', borderRight: '1px solid', borderColor: 'divider' }}>
+          {renderNavigation()}
         </Box>
       )}
 
-      <Box 
-        display="flex" 
-        flexDirection={isMobile ? 'column' : 'row'}
-        justifyContent="space-between" 
-        alignItems={isMobile ? 'stretch' : 'center'}
-        mb={3}
-        gap={isMobile ? 2 : 0}
-      >
-        <Typography variant={isMobile ? "h5" : "h4"} component="h1">
-          Portfolio-Verwaltung
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          size={isMobile ? "medium" : "large"}
-          fullWidth={isMobile}
+      {/* Mobile Menu Button */}
+      {isMobile && (
+        <IconButton
+          onClick={() => setMobileMenuOpen(true)}
+          sx={{ position: 'fixed', top: 16, left: 16, zIndex: 1200 }}
         >
-          Neues Produkt
-        </Button>
-      </Box>
-
-      {/* Statistiken */}
-      {stats && (
-        <Grid container spacing={isMobile ? 1 : 2} mb={3}>
-          <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Gesamt
-                </Typography>
-                <Typography variant={isMobile ? "h6" : "h5"}>
-                  {stats.totalProducts}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Aktiv
-                </Typography>
-                <Typography variant={isMobile ? "h6" : "h5"} color="primary">
-                  {stats.activeProducts}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Mit Bilder
-                </Typography>
-                <Typography variant={isMobile ? "h6" : "h5"} color="success.main">
-                  {stats.productsWithImages}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                <Typography color="textSecondary" gutterBottom variant={isMobile ? "caption" : "body2"}>
-                  Ohne Bilder
-                </Typography>
-                <Typography variant={isMobile ? "h6" : "h5"} color="warning.main">
-                  {stats.productsWithoutImages}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+          <MenuIcon />
+        </IconButton>
       )}
 
-      {/* Produktliste */}
-      <Grid container spacing={isMobile ? 2 : 3}>
-        {products.map((product) => (
-          <Grid item xs={12} sm={6} md={6} lg={4} key={product._id}>
-            <Card>
-              {/* Hauptbild mit LazyImage */}
-              {product.bilder?.hauptbild ? (
-                <Box position="relative">
-                  <LazyImage
-                    src={getImageUrl(product.bilder.hauptbild)}
-                    alt={product.bilder.alt_text || product.name}
-                    height={isMobile ? 150 : 200}
-                    objectFit="cover"
-                  />
-                  <IconButton
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      bgcolor: 'rgba(255,255,255,0.8)',
-                      '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
-                    }}
-                    onClick={() => handleImageDelete(product._id, 'hauptbild')}
-                  >
-                    <DeleteForeverIcon fontSize="small" />
-                  </IconButton>
-                </Box>
-              ) : (
-                <Box
-                  height={isMobile ? 150 : 200}
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  bgcolor="grey.100"
-                >
-                  <Typography color="textSecondary" variant="body2">
-                    Kein Hauptbild
-                  </Typography>
-                </Box>
-              )}
+      {/* Mobile Drawer */}
+      <Drawer
+        anchor="left"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        sx={{ display: { xs: 'block', md: 'none' } }}
+        PaperProps={{ sx: { width: '50vw', minWidth: 200 } }}
+      >
+        {renderNavigation()}
+      </Drawer>
 
-              <CardContent sx={{ p: isMobile ? 1.5 : 2 }}>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                  <Typography variant="h6" component="h2">
-                    {product.name}
-                  </Typography>
-                  <Box display="flex" gap={1}>
-                    <Chip
-                      size="small"
-                      label={product.aktiv ? 'Aktiv' : 'Inaktiv'}
-                      color={product.aktiv ? 'success' : 'default'}
+      {/* Main Content */}
+      <Box sx={{ flexGrow: 1, p: 3 }}>
+        <Paper sx={{ p: 3 }}>
+          {/* Header */}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                Portfolio Verwaltung
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {selectedCategory === 'alle' ? 'Alle Produkte' : 
+                 categories.find(c => c.id === selectedCategory)?.label} 
+                ({filteredItems.length} Artikel)
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleNew}
+            >
+              Neues Produkt
+            </Button>
+          </Box>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Cards Grid */}
+          <Grid container spacing={3}>
+            {filteredItems.map((item) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
+                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  {/* Product Image mit Upload */}
+                  <Box sx={{ position: 'relative' }}>
+                    <CardMedia
+                      component="img"
+                      height="200"
+                      image={item.bilder?.hauptbild 
+                        ? item.bilder.hauptbild  // Direkte Base64-Data-URL nutzen
+                        : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPktlaW4gQmlsZDwvdGV4dD48L3N2Zz4='
+                      }
+                      alt={item.name}
+                      sx={{ objectFit: 'cover' }}
+                      onError={(e) => {
+                        console.log('Bild konnte nicht geladen werden:', item.bilder?.hauptbild);
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPktlaW4gQmlsZDwvdGV4dD48L3N2Zz4=';
+                      }}
                     />
-                    <Chip
-                      size="small"
-                      label={`#${product.reihenfolge}`}
-                      variant="outlined"
-                    />
+                    
+                    {/* Hauptbild Upload Button */}
+                    <Box sx={{ 
+                      position: 'absolute', 
+                      top: 8, 
+                      right: 8, 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: 1
+                    }}>
+                      <input
+                        id={`hauptbild-upload-${item._id}`}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) handleImageUpload(item._id, file, 'hauptbild');
+                        }}
+                      />
+                      <label htmlFor={`hauptbild-upload-${item._id}`}>
+                        <IconButton 
+                          component="span" 
+                          size="small"
+                          sx={{ 
+                            bgcolor: 'rgba(255,255,255,0.9)', 
+                            '&:hover': { bgcolor: 'white' }
+                          }}
+                          disabled={uploadingImages[`${item._id}_hauptbild`]}
+                        >
+                          <CameraIcon fontSize="small" />
+                        </IconButton>
+                      </label>
+                      
+                      {item.bilder?.hauptbild && (
+                        <IconButton 
+                          size="small"
+                          sx={{ 
+                            bgcolor: 'rgba(255,255,255,0.9)', 
+                            '&:hover': { bgcolor: 'white' }
+                          }}
+                          onClick={() => handleImageDelete(item._id, 'hauptbild')}
+                        >
+                          <DeleteIcon fontSize="small" color="error" />
+                        </IconButton>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-
-                <Typography color="textSecondary" gutterBottom>
-                  {product.seife} • {product.aroma} • {product.gramm}g
-                </Typography>
-
-                <Typography variant="body2" color="textSecondary" mb={2}>
-                  Form: {product.seifenform} | Verpackung: {product.verpackung}
-                </Typography>
-
-                {/* Galerie-Bilder */}
-                {product.bilder?.galerie?.length > 0 && (
-                  <Box mb={2}>
-                    <Typography variant="caption" display="block" gutterBottom>
-                      Galerie ({product.bilder.galerie.length} Bilder):
+                  
+                  <CardContent sx={{ flexGrow: 1, p: 2 }}>
+                    {/* Category Badge */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Chip 
+                        label={item.kategorie || 'Unbekannt'} 
+                        size="small"
+                        color={item.kategorie === 'seife' ? 'primary' : 'secondary'}
+                      />
+                      <Chip 
+                        label={item.aktiv ? 'Aktiv' : 'Inaktiv'} 
+                        size="small"
+                        color={item.aktiv ? 'success' : 'default'}
+                      />
+                    </Box>
+                    
+                    {/* Product Name */}
+                    <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold', mb: 1, fontSize: '1.1rem' }}>
+                      {item.name}
                     </Typography>
-                    <ImageList cols={isMobile ? 2 : 3} rowHeight={isMobile ? 50 : 60}>
-                      {product.bilder.galerie.map((img, index) => (
-                        <ImageListItem key={index}>
-                          <LazyImage
-                            src={getImageUrl(img.url)}
-                            alt={img.alt_text}
-                            height={isMobile ? 50 : 60}
-                            objectFit="cover"
-                          />
-                          <ImageListItemBar
-                            actionIcon={
+                    
+                    {/* Product Details */}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {item.kategorie === 'seife' && (
+                        <>
+                          {item.seife} • {item.aroma} • {item.gramm}g
+                        </>
+                      )}
+                      {item.kategorie === 'werkstuck' && (
+                        <>
+                          {item.gramm}g<br/>
+                          {item.abmessungen && (
+                            <>Abmessungen: {item.abmessungen.laenge}x{item.abmessungen.breite}x{item.abmessungen.hoehe}cm</>
+                          )}
+                        </>
+                      )}
+                    </Typography>
+                    
+                    {/* Price */}
+                    <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
+                      €{item.preis}
+                    </Typography>
+                    
+                    {/* Gallery Images Upload */}
+                    {item.bilder?.galerie && item.bilder.galerie.length > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                          Galerie ({item.bilder.galerie.length}):
+                        </Typography>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: 1, maxWidth: '100%' }}>
+                          {item.bilder.galerie.slice(0, 4).map((img, index) => (
+                            <Box key={index} sx={{ position: 'relative' }}>
+                              <img 
+                                src={img.url || img}  // Base64-Data-URL direkt aus Datenbank
+                                alt={`Galerie ${index + 1}`}
+                                style={{
+                                  width: '100%',
+                                  aspectRatio: '1',
+                                  objectFit: 'cover',
+                                  borderRadius: '4px',
+                                  border: '1px solid #ddd'
+                                }}
+                              />
                               <IconButton
                                 size="small"
-                                sx={{ color: 'rgba(255, 255, 255, 0.54)' }}
-                                onClick={() => handleImageDelete(product._id, 'galerie', index)}
+                                sx={{ 
+                                  position: 'absolute',
+                                  top: -8,
+                                  right: -8,
+                                  width: 16,
+                                  height: 16,
+                                  bgcolor: 'error.main',
+                                  color: 'white',
+                                  '&:hover': { bgcolor: 'error.dark' }
+                                }}
+                                onClick={() => handleImageDelete(item._id, 'galerie', index)}
                               >
-                                <DeleteIcon fontSize="small" />
+                                <DeleteIcon sx={{ fontSize: 10 }} />
                               </IconButton>
-                            }
+                            </Box>
+                          ))}
+                          {/* Upload Button für Galerie */}
+                          <input
+                            id={`galerie-upload-${item._id}`}
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              Array.from(e.target.files).forEach(file => {
+                                handleImageUpload(item._id, file, 'galerie');
+                              });
+                            }}
                           />
-                        </ImageListItem>
-                      ))}
-                    </ImageList>
-                  </Box>
-                )}
-              </CardContent>
-
-              <CardActions sx={{ flexWrap: 'wrap', p: isMobile ? 1 : 1.5, gap: isMobile ? 0.5 : 0 }}>
-                <Button
-                  size="small"
-                  startIcon={!isMobile && <EditIcon />}
-                  onClick={() => handleOpenDialog(product)}
-                  fullWidth={isMobile}
-                >
-                  {isMobile ? <EditIcon /> : 'Bearbeiten'}
-                </Button>
-                
-                {/* Bild-Upload */}
-                <Tooltip title="Hauptbild hochladen">
-                  <IconButton
-                    component="label"
-                    size="small"
-                    disabled={uploadingImage === product._id}
-                  >
-                    {uploadingImage === product._id ? (
-                      <CircularProgress size={20} />
-                    ) : (
-                      <PhotoCameraIcon />
+                          <label htmlFor={`galerie-upload-${item._id}`}>
+                            <Box sx={{ 
+                              width: '100%',
+                              aspectRatio: '1',
+                              border: '2px dashed #ccc',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              '&:hover': { borderColor: 'primary.main' }
+                            }}>
+                              <AddIcon sx={{ fontSize: 16, color: 'grey.600' }} />
+                            </Box>
+                          </label>
+                        </Box>
+                      </Box>
                     )}
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*"
-                      onChange={(e) => {
-                        if (e.target.files[0]) {
-                          handleImageUpload(product._id, e.target.files[0], true);
-                        }
-                      }}
-                    />
-                  </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Galerie-Bild hinzufügen">
-                  <IconButton
-                    component="label"
-                    size="small"
-                    disabled={uploadingImage === product._id}
-                  >
-                    <ImageIcon />
-                    <input
-                      type="file"
-                      hidden
-                      accept="image/*"
-                      onChange={(e) => {
-                        if (e.target.files[0]) {
-                          handleImageUpload(product._id, e.target.files[0], false);
-                        }
-                      }}
-                    />
-                  </IconButton>
-                </Tooltip>
-
-                <Button
-                  size="small"
-                  startIcon={<DeleteIcon />}
-                  color="error"
-                  onClick={() => handleDelete(product._id)}
-                >
-                  Löschen
-                </Button>
-              </CardActions>
-            </Card>
+                  </CardContent>
+                  
+                  <CardActions sx={{ p: 2, pt: 0 }}>
+                    <Button
+                      size="small"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEdit(item)}
+                      variant="outlined"
+                      sx={{ mr: 1 }}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDelete(item._id)}
+                      color="error"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
 
-      {products.length === 0 && (
-        <Box textAlign="center" py={8}>
-          <Typography variant="h6" color="textSecondary" gutterBottom>
-            Noch keine Produkte vorhanden
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
-          >
-            Erstes Produkt erstellen
-          </Button>
-        </Box>
-      )}
+          {filteredItems.length === 0 && (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" color="text.secondary">
+                Keine Produkte gefunden
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {selectedCategory === 'alle' 
+                  ? 'Es wurden noch keine Produkte erstellt.' 
+                  : `Keine Produkte in der Kategorie "${categories.find(c => c.id === selectedCategory)?.label}" gefunden.`
+                }
+              </Typography>
+              <Button 
+                variant="outlined" 
+                startIcon={<AddIcon />} 
+                onClick={handleNew}
+                sx={{ mt: 2 }}
+              >
+                Erstes Produkt erstellen
+              </Button>
+            </Box>
+          )}
+        </Paper>
+      </Box>
 
-      {/* Dialog für Produkt erstellen/bearbeiten */}
-      <Dialog 
-        open={openDialog} 
-        onClose={handleCloseDialog} 
-        maxWidth="md" 
+      {/* Hauptdialog für Produkt erstellen/bearbeiten */}
+      <Dialog
+        open={open}
+        onClose={handleCancel}
+        maxWidth="md"
         fullWidth
-        fullScreen={isMobile}
+        PaperProps={{ sx: { height: '90vh' } }}
       >
         <DialogTitle>
-          {editingProduct ? 'Produkt bearbeiten' : 'Neues Produkt erstellen'}
+          {editingItem ? 'Produkt bearbeiten' : 'Neues Produkt erstellen'}
         </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Produktname"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Seifentyp</InputLabel>
+        <DialogContent sx={{ pt: 3 }}>
+          <Grid container spacing={2}>
+            {/* Kategorie Auswahl als erstes */}
+            <Grid item xs={12}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
+                Produktkategorie auswählen
+              </Typography>
+              <FormControl fullWidth required>
+                <InputLabel>Kategorie</InputLabel>
                 <Select
-                  name="seife"
-                  value={formData.seife}
+                  name="kategorie"
+                  value={formData.kategorie}
                   onChange={handleInputChange}
-                  label="Seifentyp"
-                  required
+                  label="Kategorie"
                 >
-                  {seifenOptions.map(option => (
-                    <MenuItem key={option} value={option}>{option}</MenuItem>
-                  ))}
+                  <MenuItem value="seife">Seife</MenuItem>
+                  <MenuItem value="werkstuck">Werkstück (Gips/Deko)</MenuItem>
                 </Select>
+                <FormHelperText>
+                  Wählen Sie zuerst die Produktkategorie. Je nach Auswahl werden unterschiedliche Felder angezeigt.
+                </FormHelperText>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Gewicht (g)"
-                name="gramm"
-                type="number"
-                value={formData.gramm}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            
-            {/* 🧪 ERWEITERTE ROHSEIFEN-KONFIGURATION */}
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
-                🧪 Rohseifen-Konfiguration (Debug: {formData.rohseifenKonfiguration.verwendeZweiRohseifen ? 'AKTIV' : 'INAKTIV'})
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.rohseifenKonfiguration.verwendeZweiRohseifen}
-                    onChange={handleInputChange}
-                    name="rohseifenKonfiguration.verwendeZweiRohseifen"
-                  />
-                }
-                label="Dieses Produkt verwendet zwei verschiedene Rohseifen"
-              />
-            </Grid>
-            
-            {/* Zweite Rohseife nur anzeigen wenn aktiviert */}
-            {formData.rohseifenKonfiguration.verwendeZweiRohseifen && (
+
+            {/* Gemeinsame Grundfelder für alle Kategorien */}
+            {formData.kategorie && (
               <>
-                <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Zweite Rohseife</InputLabel>
-                    <Select
-                      name="rohseifenKonfiguration.seife2"
-                      value={formData.rohseifenKonfiguration.seife2}
-                      onChange={handleInputChange}
-                      label="Zweite Rohseife"
-                      required
-                    >
-                      {seifenOptions
-                        .filter(option => option !== formData.seife) // Keine Doppelung
-                        .map(option => (
-                          <MenuItem key={option} value={option}>{option}</MenuItem>
-                        ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Gewichtsverteilung
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                    Grundinformationen
                   </Typography>
                 </Grid>
                 
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Produktname"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                    helperText="Name des Produkts"
+                  />
+                </Grid>
+
                 <Grid item xs={12} sm={3}>
                   <TextField
                     fullWidth
-                    label={`${formData.seife || 'Seife 1'} (%)`}
-                    name="rohseifenKonfiguration.gewichtVerteilung.seife1Prozent"
+                    label="Gewicht (g)"
+                    name="gramm"
                     type="number"
-                    value={formData.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value) || 0;
-                      handleInputChange(e);
-                      // Automatisch zweite Seife anpassen
-                      setFormData(prev => ({
-                        ...prev,
-                        rohseifenKonfiguration: {
-                          ...prev.rohseifenKonfiguration,
-                          gewichtVerteilung: {
-                            ...prev.rohseifenKonfiguration.gewichtVerteilung,
-                            seife2Prozent: 100 - value
-                          }
-                        }
-                      }));
-                    }}
-                    inputProps={{ min: 0, max: 100 }}
-                    helperText={`${Math.round(formData.gramm * formData.rohseifenKonfiguration.gewichtVerteilung.seife1Prozent / 100)}g`}
+                    value={formData.gramm}
+                    onChange={handleInputChange}
+                    required
+                    inputProps={{ min: 1 }}
+                    helperText="Gewicht in Gramm"
                   />
                 </Grid>
-                
+
                 <Grid item xs={12} sm={3}>
                   <TextField
                     fullWidth
-                    label={`${formData.rohseifenKonfiguration.seife2 || 'Seife 2'} (%)`}
-                    name="rohseifenKonfiguration.gewichtVerteilung.seife2Prozent"
+                    label="Preis (€)"
+                    name="preis"
                     type="number"
-                    value={formData.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent}
-                    onChange={(e) => {
-                      const value = parseFloat(e.target.value) || 0;
-                      handleInputChange(e);
-                      // Automatisch erste Seife anpassen
-                      setFormData(prev => ({
-                        ...prev,
-                        rohseifenKonfiguration: {
-                          ...prev.rohseifenKonfiguration,
-                          gewichtVerteilung: {
-                            ...prev.rohseifenKonfiguration.gewichtVerteilung,
-                            seife1Prozent: 100 - value
-                          }
-                        }
-                      }));
-                    }}
-                    inputProps={{ min: 0, max: 100 }}
-                    helperText={`${Math.round(formData.gramm * formData.rohseifenKonfiguration.gewichtVerteilung.seife2Prozent / 100)}g`}
+                    value={formData.preis}
+                    onChange={handleInputChange}
+                    required
+                    inputProps={{ min: 0, step: 0.01 }}
+                    helperText="Verkaufspreis"
                   />
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Alert severity="info" sx={{ mt: 1 }}>
-                    <strong>Gewichtsverteilung:</strong> Die beiden Prozentwerte sollten zusammen 100% ergeben.
-                    Das Gesamtgewicht von {formData.gramm}g wird entsprechend aufgeteilt.
-                  </Alert>
                 </Grid>
               </>
             )}
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Aroma</InputLabel>
-                <Select
-                  name="aroma"
-                  value={formData.aroma}
-                  onChange={handleInputChange}
-                  label="Aroma"
-                  required
-                >
-                  {aromaOptions.map(option => (
-                    <MenuItem key={option} value={option}>{option}</MenuItem>
-                  ))}
-                  <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                    + Neues Duftöl erstellen...
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Seifenform</InputLabel>
-                <Select
-                  name="seifenform"
-                  value={formData.seifenform}
-                  onChange={handleInputChange}
-                  label="Seifenform"
-                  required
-                >
-                  {seifenformOptions.map(option => (
-                    <MenuItem key={option} value={option}>{option}</MenuItem>
-                  ))}
-                  <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                    + Neue Seifenform erstellen...
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControl fullWidth>
-                <InputLabel>Verpackung</InputLabel>
-                <Select
-                  name="verpackung"
-                  value={formData.verpackung}
-                  onChange={handleInputChange}
-                  label="Verpackung"
-                  required
-                >
-                  {verpackungOptions.map(option => (
-                    <MenuItem key={option} value={option}>{option}</MenuItem>
-                  ))}
-                  <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
-                    + Neue Verpackung erstellen...
-                  </MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Zusatz"
-                name="zusatz"
-                value={formData.zusatz}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Optional"
-                name="optional"
-                value={formData.optional}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            
-            {/* Zusatzinhaltsstoffe Sektion */}
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
-                🧬 Zusatzinhaltsstoffe
-              </Typography>
-            </Grid>
-            
-            <Grid item xs={12}>
-              <Box sx={{ border: '1px solid #e0e0e0', borderRadius: 1, p: 2 }}>
-                <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                  Zusätzliche Inhaltsstoffe für dieses Produkt:
-                </Typography>
+
+            {/* Seife-spezifische Felder */}
+            {formData.kategorie === 'seife' && (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                    Seife-Konfiguration
+                  </Typography>
+                </Grid>
                 
-                {(formData.zusatzinhaltsstoffe || []).map((zutat, index) => (
-                  <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    <Grid container spacing={2} alignItems="center">
-                      <Grid item xs={12} sm={4}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Inhaltsstoff</InputLabel>
-                          <Select
-                            value={zutat.inhaltsstoffName || ''}
-                            onChange={(e) => {
-                              const selectedInhaltsstoff = zusatzinhaltsstoffeOptions.find(option => option.bezeichnung === e.target.value);
-                              const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
-                              newZusatzinhaltsstoffe[index].inhaltsstoffName = e.target.value;
-                              // Automatisch empfohlene Dosierung setzen
-                              if (selectedInhaltsstoff && selectedInhaltsstoff.empfohleneDosierung) {
-                                newZusatzinhaltsstoffe[index].menge = selectedInhaltsstoff.empfohleneDosierung;
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Rohseife</InputLabel>
+                    <Select
+                      name="seife"
+                      value={formData.seife}
+                      onChange={(e) => {
+                        if (e.target.value === '__CREATE_NEW__') {
+                          setShowCreateSeife(true);
+                        } else {
+                          handleInputChange(e);
+                        }
+                      }}
+                      label="Rohseife"
+                      required
+                    >
+                      {seifenOptions.map(option => (
+                        <MenuItem key={option} value={option}>{option}</MenuItem>
+                      ))}
+                      <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
+                        + Neue Rohseife erstellen...
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Aroma</InputLabel>
+                    <Select
+                      name="aroma"
+                      value={formData.aroma}
+                      onChange={(e) => {
+                        if (e.target.value === '__CREATE_NEW__') {
+                          setShowCreateAroma(true);
+                        } else {
+                          handleInputChange(e);
+                        }
+                      }}
+                      label="Aroma"
+                      required
+                    >
+                      {aromaOptions.map(option => (
+                        <MenuItem key={option} value={option}>{option}</MenuItem>
+                      ))}
+                      <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
+                        + Neues Duftöl erstellen...
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Seifenform</InputLabel>
+                    <Select
+                      name="seifenform"
+                      value={formData.seifenform}
+                      onChange={handleInputChange}
+                      label="Seifenform"
+                      required
+                    >
+                      {seifenformOptions.map(option => (
+                        <MenuItem key={option} value={option}>{option}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Verpackung</InputLabel>
+                    <Select
+                      name="verpackung"
+                      value={formData.verpackung}
+                      onChange={handleInputChange}
+                      label="Verpackung"
+                      required
+                    >
+                      {verpackungOptions.map(option => (
+                        <MenuItem key={option} value={option}>{option}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Rohseifen-Konfiguration für Mix-Seifen */}
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={formData.istMischung || false}
+                        onChange={(e) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            istMischung: e.target.checked,
+                            rohseifenKonfiguration: e.target.checked ? {
+                              seife1: prev.seife || '',
+                              seife2: '',
+                              gewichtVerteilung: {
+                                seife1Prozent: 50,
+                                seife2Prozent: 50
                               }
-                              setFormData(prev => ({
-                                ...prev,
-                                zusatzinhaltsstoffe: newZusatzinhaltsstoffe
-                              }));
-                            }}
-                          >
-                            {zusatzinhaltsstoffeOptions.map(option => (
-                              <MenuItem key={option._id} value={option.bezeichnung}>{option.bezeichnung}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid item xs={6} sm={2}>
-                        <TextField
-                          label="Menge"
-                          type="number"
-                          size="small"
-                          value={zutat.menge || ''}
-                          onChange={(e) => {
-                            const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
-                            newZusatzinhaltsstoffe[index].menge = parseFloat(e.target.value) || 0;
-                            setFormData(prev => ({
-                              ...prev,
-                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
-                            }));
-                          }}
-                          inputProps={{ min: 0, step: 0.1 }}
-                        />
-                      </Grid>
-                      <Grid item xs={6} sm={2}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel>Einheit</InputLabel>
-                          <Select
-                            value={zutat.einheit || 'gramm'}
-                            onChange={(e) => {
-                              const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
-                              newZusatzinhaltsstoffe[index].einheit = e.target.value;
-                              setFormData(prev => ({
-                                ...prev,
-                                zusatzinhaltsstoffe: newZusatzinhaltsstoffe
-                              }));
-                            }}
-                          >
-                            <MenuItem value="gramm">g</MenuItem>
-                            <MenuItem value="prozent">%</MenuItem>
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                      <Grid item xs={12} sm={3}>
-                        <TextField
-                          label="Hinweise"
-                          size="small"
-                          value={zutat.hinweise || ''}
-                          onChange={(e) => {
-                            const newZusatzinhaltsstoffe = [...formData.zusatzinhaltsstoffe];
-                            newZusatzinhaltsstoffe[index].hinweise = e.target.value;
-                            setFormData(prev => ({
-                              ...prev,
-                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
-                            }));
-                          }}
-                          placeholder="optional"
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={1}>
-                        <IconButton
-                          color="error"
-                          onClick={() => {
-                            const newZusatzinhaltsstoffe = formData.zusatzinhaltsstoffe.filter((_, i) => i !== index);
-                            setFormData(prev => ({
-                              ...prev,
-                              zusatzinhaltsstoffe: newZusatzinhaltsstoffe
-                            }));
-                          }}
+                            } : null
+                          }));
+                        }}
+                        name="istMischung"
+                      />
+                    }
+                    label="Dieses Produkt ist eine Mischung aus zwei Rohseifen"
+                  />
+                </Grid>
+
+                {formData.istMischung && (
+                  <>
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Erste Rohseife</InputLabel>
+                        <Select
+                          name="rohseifenKonfiguration.seife1"
+                          value={formData.rohseifenKonfiguration?.seife1 || formData.seife || ''}
+                          onChange={handleInputChange}
+                          label="Erste Rohseife"
+                          required
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Grid>
+                          {seifenOptions.map(option => (
+                            <MenuItem key={option} value={option}>{option}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
-                  </Box>
-                ))}
+                    
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Zweite Rohseife</InputLabel>
+                        <Select
+                          name="rohseifenKonfiguration.seife2"
+                          value={formData.rohseifenKonfiguration?.seife2 || ''}
+                          onChange={handleInputChange}
+                          label="Zweite Rohseife"
+                          required
+                        >
+                          {seifenOptions
+                            .filter(option => option !== formData.rohseifenKonfiguration?.seife1)
+                            .map(option => (
+                              <MenuItem key={option} value={option}>{option}</MenuItem>
+                            ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label={`${formData.rohseifenKonfiguration?.seife1 || 'Seife 1'} (%)`}
+                        name="rohseifenKonfiguration.gewichtVerteilung.seife1Prozent"
+                        type="number"
+                        value={formData.rohseifenKonfiguration?.gewichtVerteilung?.seife1Prozent || 50}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          handleInputChange(e);
+                          setFormData(prev => ({
+                            ...prev,
+                            rohseifenKonfiguration: {
+                              ...prev.rohseifenKonfiguration,
+                              gewichtVerteilung: {
+                                ...prev.rohseifenKonfiguration?.gewichtVerteilung,
+                                seife2Prozent: 100 - value
+                              }
+                            }
+                          }));
+                        }}
+                        inputProps={{ min: 0, max: 100 }}
+                        helperText={`${Math.round(formData.gramm * (formData.rohseifenKonfiguration?.gewichtVerteilung?.seife1Prozent || 50) / 100)}g`}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label={`${formData.rohseifenKonfiguration?.seife2 || 'Seife 2'} (%)`}
+                        name="rohseifenKonfiguration.gewichtVerteilung.seife2Prozent"
+                        type="number"
+                        value={formData.rohseifenKonfiguration?.gewichtVerteilung?.seife2Prozent || 50}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          handleInputChange(e);
+                          setFormData(prev => ({
+                            ...prev,
+                            rohseifenKonfiguration: {
+                              ...prev.rohseifenKonfiguration,
+                              gewichtVerteilung: {
+                                ...prev.rohseifenKonfiguration?.gewichtVerteilung,
+                                seife1Prozent: 100 - value
+                              }
+                            }
+                          }));
+                        }}
+                        inputProps={{ min: 0, max: 100 }}
+                        helperText={`${Math.round(formData.gramm * (formData.rohseifenKonfiguration?.gewichtVerteilung?.seife2Prozent || 50) / 100)}g`}
+                      />
+                    </Grid>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Werkstück-spezifische Felder */}
+            {formData.kategorie === 'werkstuck' && (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                    Werkstück-Konfiguration
+                  </Typography>
+                </Grid>
                 
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      zusatzinhaltsstoffe: [
-                        ...prev.zusatzinhaltsstoffe,
-                        { inhaltsstoffName: '', menge: 0, einheit: 'gramm', hinweise: '' }
-                      ]
-                    }));
-                  }}
-                  variant="outlined"
-                  size="small"
-                >
-                  Zusatzinhaltsstoff hinzufügen
-                </Button>
-              </Box>
-            </Grid>
-            
-            {/* Produktbeschreibung Sektion */}
-            <Grid item xs={12}>
-              <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
-                📝 Produktbeschreibung
-              </Typography>
-            </Grid>
-            
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Gießform</InputLabel>
+                    <Select
+                      name="giessform"
+                      value={formData.giessform}
+                      onChange={handleInputChange}
+                      label="Gießform"
+                      required
+                    >
+                      {giessformOptions.map(option => (
+                        <MenuItem key={option._id} value={option._id}>
+                          {option.name} ({option.material})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Gießwerkstoff</InputLabel>
+                    <Select
+                      name="giesswerkstoff"
+                      value={formData.giesswerkstoff}
+                      onChange={handleInputChange}
+                      label="Gießwerkstoff"
+                      required
+                    >
+                      {giesswerkstoffOptions.map(option => (
+                        <MenuItem key={option._id} value={option._id}>
+                          {option.typ} - {option.bezeichnung}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="subtitle1" sx={{ mt: 1, mb: 1 }}>
+                    Abmessungen
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Länge (cm)"
+                    name="abmessungen.laenge"
+                    type="number"
+                    value={formData.abmessungen?.laenge || ''}
+                    onChange={handleInputChange}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Breite (cm)"
+                    name="abmessungen.breite"
+                    type="number"
+                    value={formData.abmessungen?.breite || ''}
+                    onChange={handleInputChange}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Höhe (cm)"
+                    name="abmessungen.hoehe"
+                    type="number"
+                    value={formData.abmessungen?.hoehe || ''}
+                    onChange={handleInputChange}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+              </>
+            )}
+
+            {/* Gemeinsame Felder für alle Kategorien */}
+            {formData.kategorie && (
+              <>
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                    Allgemeine Einstellungen
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Zusatz/Optional"
+                    name="optional"
+                    value={formData.optional}
+                    onChange={handleInputChange}
+                    helperText="Zusätzliche Informationen oder Besonderheiten"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Reihenfolge"
+                    name="reihenfolge"
+                    type="number"
+                    value={formData.reihenfolge}
+                    onChange={handleInputChange}
+                    helperText="Position in der Produktliste"
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.aktiv}
+                        onChange={handleInputChange}
+                        name="aktiv"
+                      />
+                    }
+                    label="Produkt ist aktiv und sichtbar im Shop"
+                  />
+                </Grid>
+
+                {/* Beschreibungsfelder für alle Kategorien */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                    Produktbeschreibung
+                  </Typography>
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Kurzbeschreibung"
+                    name="beschreibung.kurz"
+                    value={formData.beschreibung.kurz}
+                    onChange={handleInputChange}
+                    multiline
+                    rows={2}
+                    helperText="Kurze Produktbeschreibung für Übersichten"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Lange Beschreibung"
+                    name="beschreibung.lang"
+                    value={formData.beschreibung.lang}
+                    onChange={handleInputChange}
+                    multiline
+                    rows={2}
+                    helperText="Detaillierte Produktbeschreibung"
+                  />
+                </Grid>
+
+                {formData.kategorie === 'seife' && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Inhaltsstoffe"
+                      name="beschreibung.inhaltsstoffe"
+                      value={formData.beschreibung.inhaltsstoffe}
+                      onChange={handleInputChange}
+                      multiline
+                      rows={2}
+                      helperText="Liste der Inhaltsstoffe"
+                    />
+                  </Grid>
+                )}
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Anwendung/Pflegehinweise"
+                    name="beschreibung.anwendung"
+                    value={formData.beschreibung.anwendung}
+                    onChange={handleInputChange}
+                    multiline
+                    rows={2}
+                    helperText={formData.kategorie === 'seife' ? 'Anwendungshinweise für die Seife' : 'Pflegehinweise für das Werkstück'}
+                  />
+                </Grid>
+              </>
+            )}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancel} color="secondary">
+            Abbrechen
+          </Button>
+          <Button onClick={handleSubmit} color="primary" variant="contained">
+            {editingItem ? 'Aktualisieren' : 'Erstellen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create New Aroma Dialog */}
+      <Dialog
+        open={showCreateAroma}
+        onClose={() => setShowCreateAroma(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Neues Duftöl erstellen</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Kurze Beschreibung"
-                name="beschreibung.kurz"
-                value={formData.beschreibung.kurz}
-                onChange={handleInputChange}
+                label="Name des Duftöls"
+                value={newAromaName}
+                onChange={(e) => setNewAromaName(e.target.value)}
+                placeholder="z.B. Lavendel-Bergamotte"
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Beschreibung"
+                value={newAromaDescription}
+                onChange={(e) => setNewAromaDescription(e.target.value)}
                 multiline
                 rows={2}
-                inputProps={{ maxLength: 200 }}
-                helperText={`${formData.beschreibung.kurz.length}/200 Zeichen - Wird auf Produktkarten angezeigt`}
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Ausführliche Beschreibung"
-                name="beschreibung.lang"
-                value={formData.beschreibung.lang}
-                onChange={handleInputChange}
-                multiline
-                rows={4}
-                helperText="Detaillierte Produktbeschreibung für die Produktdetailseite"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Inhaltsstoffe"
-                name="beschreibung.inhaltsstoffe"
-                value={formData.beschreibung.inhaltsstoffe}
-                onChange={handleInputChange}
-                multiline
-                rows={3}
-                helperText="Alle verwendeten Inhaltsstoffe auflisten"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Anwendung"
-                name="beschreibung.anwendung"
-                value={formData.beschreibung.anwendung}
-                onChange={handleInputChange}
-                multiline
-                rows={3}
-                helperText="Anwendungshinweise für das Produkt"
-              />
-            </Grid>
-            
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Besonderheiten"
-                name="beschreibung.besonderheiten"
-                value={formData.beschreibung.besonderheiten}
-                onChange={handleInputChange}
-                helperText="Besondere Eigenschaften (z.B. Vegan, Handmade, Ohne Palmöl)"
-              />
-            </Grid>
-            
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label="Reihenfolge"
-                name="reihenfolge"
-                type="number"
-                value={formData.reihenfolge}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={formData.aktiv}
-                    onChange={handleInputChange}
-                    name="aktiv"
-                  />
-                }
-                label="Aktiv"
+                placeholder="Kurze Beschreibung des Duftes"
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>
+          <Button onClick={() => setShowCreateAroma(false)} color="secondary">
             Abbrechen
           </Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {editingProduct ? 'Aktualisieren' : 'Erstellen'}
+          <Button 
+            onClick={handleCreateNewAroma} 
+            color="primary" 
+            variant="contained"
+            disabled={!newAromaName.trim()}
+          >
+            Duftöl erstellen
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog für neue Einträge erstellen */}
-      <Dialog open={newEntryDialog.open} onClose={handleCloseNewEntryDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Neue {newEntryDialog.type === 'seifenform' ? 'Seifenform' : 'Verpackung'} erstellen
-        </DialogTitle>
+      {/* Create New Seife Dialog */}
+      <Dialog
+        open={showCreateSeife}
+        onClose={() => setShowCreateSeife(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Neue Rohseife erstellen</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label={newEntryDialog.type === 'seifenform' ? 'Seifenform Name' : 'Verpackung Name'}
-            fullWidth
-            variant="outlined"
-            value={newEntryDialog.value}
-            onChange={(e) => setNewEntryDialog(prev => ({ ...prev, value: e.target.value }))}
-            sx={{ mt: 2 }}
-          />
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Name der Rohseife"
+                value={newSeifeName}
+                onChange={(e) => setNewSeifeName(e.target.value)}
+                placeholder="z.B. Bio Olivenöl-Basis"
+                required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Beschreibung"
+                value={newSeifeDescription}
+                onChange={(e) => setSeifeDescription(e.target.value)}
+                multiline
+                rows={2}
+                placeholder="Kurze Beschreibung der Seifenbasis"
+              />
+            </Grid>
+          </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseNewEntryDialog}>
+          <Button onClick={() => setShowCreateSeife(false)} color="secondary">
             Abbrechen
           </Button>
-          <Button onClick={handleSaveNewEntry} variant="contained" disabled={!newEntryDialog.value.trim()}>
-            Erstellen
+          <Button 
+            onClick={handleCreateNewSeife} 
+            color="primary" 
+            variant="contained"
+            disabled={!newSeifeName.trim()}
+          >
+            Rohseife erstellen
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar für Nachrichten */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
-      >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 };
