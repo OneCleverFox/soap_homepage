@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -15,7 +15,16 @@ import {
   IconButton,
   useMediaQuery,
   useTheme,
-  Skeleton
+  Skeleton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  ListItemIcon,
+  Divider,
+  Fab,
+  Badge
 } from '@mui/material';
 import {
   Inventory as WeightIcon,
@@ -26,7 +35,12 @@ import {
   Add as AddIcon,
   Remove as RemoveIcon,
   Inventory2 as InventoryIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Soap as SoapIcon,
+  Handyman as WerkstuckIcon,
+  Build as BuildIcon,
+  FilterList as FilterIcon,
+  Clear as ClearIcon
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,20 +57,145 @@ const ProductsPage = React.memo(() => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   
   const { user } = useAuth();
   const { addToCart } = useCart();
   const { isOnline: _isOnline, isSlowConnection: _isSlowConnection } = useNetworkStatus();
+  
+  // URL-Parameter für Kategorie
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kategorieFromURL = searchParams.get('kategorie') || 'alle';
+  
   const [products, setProducts] = useState([]);
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [selectedKategorie, setSelectedKategorie] = useState(kategorieFromURL);
+  const [categoryCounts, setCategoryCounts] = useState({ alle: 0, seife: 0, werkstuck: 0 });
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [initialLoading, setInitialLoading] = useState(true); // Für initiales Skeleton
-  const [textDataLoaded, setTextDataLoaded] = useState(false); // 🚀 Text-First Loading
-  const [imagesLoading, setImagesLoading] = useState(true); // 🖼️ Images Loading State  
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [textDataLoaded, setTextDataLoaded] = useState(false);
+  const [imagesLoading, setImagesLoading] = useState(true);
   const [error, setError] = useState('');
-  const [quantities, setQuantities] = useState({}); // { productId: quantity }
-  const [_retryCount, setRetryCount] = useState(0); // Für Retry-Logik
+  const [quantities, setQuantities] = useState({});
+  const [_retryCount, setRetryCount] = useState(0);
 
-  // Optimierte fetchProducts Funktion mit Retry-Mechanismus und Progressive Loading
+  // Kategorien-Definition
+  const kategorien = [
+    { 
+      key: 'alle', 
+      label: 'Alle Produkte', 
+      icon: FilterIcon,
+      beschreibung: 'Zeige alle verfügbaren Produkte' 
+    },
+    { 
+      key: 'seife', 
+      label: 'Handgemachte Seifen', 
+      icon: SoapIcon,
+      beschreibung: 'Natürliche Seifen aus hochwertigen Rohstoffen' 
+    },
+    { 
+      key: 'werkstuck', 
+      label: 'Gips-Werkstücke', 
+      icon: BuildIcon,
+      beschreibung: 'Kunstvolle Gips-Abgüsse und Dekorationen' 
+    }
+  ];
+
+  // Kategorien-Sidebar-Komponente
+  const CategorySidebar = ({ mobile = false }) => (
+    <Box>
+      <Typography 
+        variant="h6" 
+        sx={{ 
+          mb: 2, 
+          fontWeight: 'bold',
+          color: 'text.primary',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}
+      >
+        <FilterIcon />
+        Kategorien
+      </Typography>
+      
+      <List sx={{ p: 0 }}>
+        {kategorien.map((kategorie) => {
+          const count = categoryCounts[kategorie.key] || 0;
+          const IconComponent = kategorie.icon;
+          
+          return (
+            <ListItem key={kategorie.key} disablePadding sx={{ mb: 1 }}>
+              <ListItemButton
+                onClick={() => handleKategorieChange(kategorie.key)}
+                selected={selectedKategorie === kategorie.key}
+                sx={{
+                  borderRadius: 2,
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
+                    '&:hover': {
+                      bgcolor: 'primary.dark',
+                    }
+                  },
+                  '&:hover': {
+                    bgcolor: selectedKategorie === kategorie.key 
+                      ? 'primary.dark' 
+                      : 'action.hover',
+                  }
+                }}
+              >
+                <ListItemIcon sx={{ 
+                  color: selectedKategorie === kategorie.key 
+                    ? 'primary.contrastText' 
+                    : 'text.primary',
+                  minWidth: 40 
+                }}>
+                  <IconComponent />
+                </ListItemIcon>
+                <ListItemText 
+                  primary={
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography variant="body2" fontWeight="bold">
+                        {kategorie.label}
+                      </Typography>
+                      <Badge badgeContent={count} color="secondary" sx={{
+                        '& .MuiBadge-badge': {
+                          color: selectedKategorie === kategorie.key ? 'primary.main' : 'secondary.contrastText',
+                          backgroundColor: selectedKategorie === kategorie.key ? 'primary.contrastText' : 'secondary.main'
+                        }
+                      }} />
+                    </Box>
+                  }
+                  secondary={!mobile && (
+                    <Typography variant="caption" color="text.secondary">
+                      {kategorie.beschreibung}
+                    </Typography>
+                  )}
+                />
+              </ListItemButton>
+            </ListItem>
+          );
+        })}
+      </List>
+      
+      {selectedKategorie !== 'alle' && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Button
+            variant="outlined"
+            fullWidth
+            startIcon={<ClearIcon />}
+            onClick={() => handleKategorieChange('alle')}
+            size="small"
+          >
+            Filter zurücksetzen
+          </Button>
+        </>
+      )}
+    </Box>
+  );
   const fetchProducts = useCallback(async (isBackgroundUpdate = false, retryAttempt = 0) => {
     try {
       if (!isBackgroundUpdate) {
@@ -80,6 +219,15 @@ const ProductsPage = React.memo(() => {
       // ⚡ PROGRESSIVE UPDATE: Zeige sofort verfügbare Daten
       if (productsData.length > 0) {
         setProducts(productsData);
+        
+        // Kategorienanzahl berechnen
+        const counts = {
+          alle: productsData.length,
+          seife: productsData.filter(p => (p.kategorie || 'seife') === 'seife').length,
+          werkstuck: productsData.filter(p => p.kategorie === 'werkstuck').length
+        };
+        setCategoryCounts(counts);
+        
         setTextDataLoaded(true); // 📝 Text ist da - Cards können sofort angezeigt werden
         setInitialLoading(false);
         // Starte Image-Loading nach kurzer Verzögerung
@@ -138,6 +286,25 @@ const ProductsPage = React.memo(() => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Produkte nach Kategorie filtern
+  useEffect(() => {
+    if (products.length === 0) return;
+    
+    let filtered = products;
+    if (selectedKategorie !== 'alle') {
+      filtered = products.filter(product => (product.kategorie || 'seife') === selectedKategorie);
+    }
+    
+    setFilteredProducts(filtered);
+  }, [products, selectedKategorie]);
+
+  // Kategorie-Wechsel
+  const handleKategorieChange = (kategorie) => {
+    setSelectedKategorie(kategorie);
+    setSearchParams(kategorie !== 'alle' ? { kategorie } : {});
+    setMobileDrawerOpen(false);
+  };
 
   // Mengenauswahl für jedes Produkt initialisieren
   useEffect(() => {
@@ -459,35 +626,97 @@ const ProductsPage = React.memo(() => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
-      {/* Header */}
-      <Box textAlign="center" mb={isMobile ? 3 : 6}>
-        <Typography 
-          variant={isMobile ? "h4" : "h3"}
-          component="h1" 
-          gutterBottom
-          sx={{ 
-            fontWeight: 'bold',
-            background: 'linear-gradient(45deg, #2E7D32, #4CAF50)',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            textFillColor: 'transparent'
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Desktop Sidebar */}
+      {!isMobile && !isTablet && (
+        <Box
+          sx={{
+            width: 300,
+            flexShrink: 0,
+            bgcolor: 'background.paper',
+            borderRight: '1px solid',
+            borderColor: 'divider',
+            p: 3,
+            position: 'sticky',
+            top: 0,
+            height: '100vh',
+            overflowY: 'auto'
           }}
         >
-          Unsere handgemachten Naturseifen
-        </Typography>
-        <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
-          Premium Qualität aus natürlichen Zutaten
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {products.length} einzigartige Seifen-Kreationen verfügbar
+          <CategorySidebar />
+        </Box>
+      )}
+
+      {/* Mobile Category Filter FAB */}
+      {(isMobile || isTablet) && (
+        <Fab
+          color="primary"
+          aria-label="Kategorien filtern"
+          sx={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: 1200
+          }}
+          onClick={() => setMobileDrawerOpen(true)}
+        >
+          <FilterIcon />
+        </Fab>
+      )}
+
+      {/* Mobile Drawer */}
+      <Drawer
+        anchor="right"
+        open={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: 320,
+            p: 3
+          }
+        }}
+      >
+        <CategorySidebar mobile />
+      </Drawer>
+
+      {/* Main Content */}
+      <Box sx={{ flexGrow: 1 }}>
+        <Container maxWidth="xl" sx={{ py: isMobile ? 2 : 4 }}>
+          {/* Header */}
+          <Box textAlign="center" mb={isMobile ? 3 : 6}>
+            <Typography 
+              variant={isMobile ? "h4" : "h3"}
+              component="h1" 
+              gutterBottom
+              sx={{ 
+                fontWeight: 'bold',
+                background: 'linear-gradient(45deg, #2E7D32, #4CAF50)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                textFillColor: 'transparent'
+              }}
+            >
+              {selectedKategorie === 'seife' ? 'Handgemachte Naturseifen' :
+               selectedKategorie === 'werkstuck' ? 'Gips-Werkstücke' :
+               'Unsere Produktpalette'}
+            </Typography>
+            <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
+              {selectedKategorie === 'seife' ? 'Premium Qualität aus natürlichen Zutaten' :
+               selectedKategorie === 'werkstuck' ? 'Kunstvolle Gips-Abgüsse und Dekorationen' :
+               'Seifen und Werkstücke aus eigener Herstellung'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {filteredProducts.length} {selectedKategorie === 'alle' ? 'Produkte' : 
+               selectedKategorie === 'seife' ? 'Seifen' : 'Werkstücke'} verfügbar
+            </Typography>
+          </Box>
         </Typography>
       </Box>
 
-      {/* Produktkarten */}
-      <Grid container spacing={isMobile ? 2 : 4}>
-        {products.map((product, index) => (
+          {/* Produktkarten */}
+          <Grid container spacing={isMobile ? 2 : 4}>
+            {filteredProducts.map((product, index) => (
           <Grid item xs={12} sm={6} md={4} key={product._id}>
             <Fade in={true} timeout={300} style={{ transitionDelay: `${Math.min(index * 50, 200)}ms` }}>
               <Card 
@@ -844,21 +1073,38 @@ const ProductsPage = React.memo(() => {
               </Card>
             </Fade>
           </Grid>
-        ))}
-      </Grid>
+            ))}
+          </Grid>
 
-      {/* Keine Produkte verfügbar */}
-      {products.length === 0 && !loading && (
-        <Box textAlign="center" py={8}>
-          <Typography variant="h5" gutterBottom>
-            Keine Produkte verfügbar
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Zurzeit sind keine Produkte im Portfolio vorhanden.
-          </Typography>
-        </Box>
-      )}
-    </Container>
+          {/* Keine Produkte verfügbar */}
+          {filteredProducts.length === 0 && !loading && (
+            <Box textAlign="center" py={8}>
+              <Typography variant="h5" gutterBottom>
+                {selectedKategorie === 'alle' 
+                  ? 'Keine Produkte verfügbar'
+                  : `Keine ${selectedKategorie === 'seife' ? 'Seifen' : 'Werkstücke'} verfügbar`
+                }
+              </Typography>
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+                {selectedKategorie === 'alle'
+                  ? 'Zurzeit sind keine Produkte im Portfolio vorhanden.'
+                  : `Zurzeit sind keine ${selectedKategorie === 'seife' ? 'Seifen' : 'Werkstücke'} verfügbar.`
+                }
+              </Typography>
+              {selectedKategorie !== 'alle' && (
+                <Button
+                  variant="outlined"
+                  onClick={() => handleKategorieChange('alle')}
+                  startIcon={<FilterIcon />}
+                >
+                  Alle Kategorien anzeigen
+                </Button>
+              )}
+            </Box>
+          )}
+        </Container>
+      </Box>
+    </Box>
   );
 });
 
