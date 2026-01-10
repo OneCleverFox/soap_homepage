@@ -48,6 +48,14 @@ const portfolioSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  // Produktkategorie für Filterung
+  kategorie: {
+    type: String,
+    required: true,
+    enum: ['seife', 'werkstuck'],
+    default: 'seife',
+    index: true // Index für bessere Performance bei Filterung
+  },
   seifenform: {
     type: String,
     required: true,
