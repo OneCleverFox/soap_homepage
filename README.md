@@ -1397,11 +1397,263 @@ Dieses Projekt steht unter der [MIT License](LICENSE).
 
 ---
 
+## 🏢 Technische Dokumentation
+
+### CompanyContext - Zentrale Unternehmensdatenverwaltung
+
+#### Überblick
+Das `CompanyContext` System ermöglicht die zentrale Verwaltung aller Unternehmensdaten im gesamten Frontend. Alle Daten werden einmalig aus der Datenbank (InvoiceTemplate) geladen und stehen dann allen Komponenten zur Verfügung.
+
+#### Vorteile
+- **Zentrale Datenhaltung**: Alle Unternehmensdaten an einem Ort
+- **Automatische Aktualisierung**: Änderungen in der DB werden sofort im Frontend sichtbar
+- **Performance**: Einmaliger API-Aufruf für alle Komponenten
+- **Einfache Wartung**: Daten nur einmal in der Rechnungsvorlage ändern
+
+#### Architektur
+```
+Backend: InvoiceTemplate (MongoDB) 
+    ↓
+API: /api/company-info 
+    ↓
+Frontend: CompanyContext 
+    ↓
+Komponenten: useCompany()
+```
+
+#### Verwendung im Code
+```javascript
+import { useCompany } from '../contexts/CompanyContext';
+
+const MyComponent = () => {
+  const {
+    companyData,    // Vollständige Rohdaten
+    loading,        // Ladestatus
+    error,          // Fehlerstatus
+    name,           // Firmenname
+    address,        // Vollständige Adresse (Objekt)
+    contact,        // Kontaktdaten (Objekt)
+    vatId,          // USt-IdNr.
+    fullAddress,    // Formatierte Adresse (String)
+    refetch         // Daten neu laden
+  } = useCompany();
+
+  if (loading) return <div>Laden...</div>;
+  if (error) return <div>Fehler: {error}</div>;
+
+  return (
+    <div>
+      <h1>{name}</h1>
+      <p>{fullAddress}</p>
+    </div>
+  );
+};
+```
+
+### 📦 Verpackungs-Datenkonsistenz zwischen Portfolio und Warenberechnung
+
+#### Problem-Analyse
+Die Warenberechnung und Portfolio-Verwaltung verwendeten unterschiedliche Ansätze für Verpackungsdaten, was zu Inkonsistenzen führen konnte:
+
+**Portfolio-Verwaltung (VORHER)**
+```javascript
+// Lud auch veraltete Verpackungen aus bestehenden Produkten
+const existingVerpackungen = products.map(p => p.verpackung);
+const filteredExisting = existingVerpackungen.filter(v => !verpackungList.includes(v));
+setVerpackungOptions([...verpackungList, ...filteredExisting]);
+```
+
+**Warenberechnung**
+```javascript
+// Lud alle Verpackungen, fand aber veraltete möglicherweise nicht
+const verpackungList = await Verpackung.find();
+const verpackung = verpackungList.find(v => v.bezeichnung === portfolio.verpackung);
+```
+
+#### ✅ Implementierte Lösung
+
+**1. Konsistente Datenquelle im Frontend**
+```javascript
+// Portfolio-Verwaltung: Primäre DB-Optionen + markierte veraltete
+const primaryOptions = verpackungList;
+const orphanedVerpackungen = existingVerpackungen.filter(v => !verpackungList.includes(v));
+
+// Warnung bei veralteten Verpackungen
+if (orphanedVerpackungen.length > 0) {
+  console.warn('⚠️ Veraltete Verpackungen in Portfolio gefunden:', orphanedVerpackungen);
+}
+
+// Veraltete werden markiert für Sichtbarkeit
+const allOptions = [...primaryOptions, ...orphanedVerpackungen.map(v => `${v} (VERALTET)`)];
+```
+
+**2. Verbesserte Backend-Validierung**
+```javascript
+// Warenberechnung: Nur verfügbare Verpackungen laden
+const verpackungList = await Verpackung.find({ verfuegbar: true });
+const verpackung = verpackungList.find(v => v.bezeichnung === portfolio.verpackung);
+
+// Warnung bei fehlender Verpackung
+if (!verpackung && portfolio.verpackung) {
+  console.warn(`⚠️ Verpackung "${portfolio.verpackung}" für Portfolio "${portfolio.name}" nicht in DB gefunden`);
+}
+```
+
+**3. Frontend-Validierung beim Speichern**
+```javascript
+// Prüfung veralteter Verpackungen
+if (verpackungName && verpackungName.includes('(VERALTET)')) {
+  const confirmed = window.confirm(
+    '⚠️ Sie verwenden eine veraltete Verpackung...\n' +
+    'Möchten Sie trotzdem speichern?'
+  );
+  if (!confirmed) return;
+}
+```
+
+**4. Konsistenz-Check-Script**
+- **Datei**: `backend/scripts/checkPortfolioVerpackungKonsistenz.js`
+- **Zweck**: Überprüft alle Portfolio-Produkte auf Verpackungskonsistenz
+- **Verwendung**: `node scripts/checkPortfolioVerpackungKonsistenz.js`
+
+#### 🎯 Vorteile der Lösung
+
+1. **Gemeinsame Datenquelle**: Beide Systeme verwenden die Verpackungen-Datenbank als autoritäre Quelle
+2. **Sichtbare Validierung**: Veraltete Verpackungen werden als "(VERALTET)" markiert
+3. **Präventive Warnungen**: Nutzer werden vor dem Speichern veralteter Daten gewarnt
+4. **Automatische Überwachung**: Script kann regelmäßig zur Datenqualitätsprüfung genutzt werden
+5. **Besseres Logging**: Backend loggt fehlende Verpackungen für Admin-Nachverfolgung
+
+#### 🛠️ Wartung & Monitoring
+
+**Regelmäßige Konsistenz-Prüfung**
+```bash
+node scripts/checkPortfolioVerpackungKonsistenz.js
+```
+
+**Typische Wartungsaufgaben**
+1. Neue Verpackung in Verpackungen-Verwaltung anlegen
+2. Portfolio-Produkte mit veralteten Verpackungen aktualisieren  
+3. Nicht mehr verfügbare Verpackungen deaktivieren (nicht löschen)
+
+### 🔧 Performance Optimierungen
+
+#### Bildoptimierung
+- **WebP-Konvertierung**: Automatische Konvertierung für 95% kleinere Dateien
+- **Sharp Integration**: Server-side Bildverarbeitung
+- **Lazy Loading**: Bilder werden nur bei Bedarf geladen
+- **Responsive Images**: Verschiedene Größen für verschiedene Viewports
+
+#### Caching-Strategien
+```javascript
+// Cache-Manager Implementation
+const { cacheManager } = require('../utils/cacheManager');
+
+// Portfolio-Cache mit TTL
+const getCachedPortfolio = async () => {
+  const cacheKey = 'portfolio_list';
+  const cached = await cacheManager.get(cacheKey);
+  
+  if (cached) {
+    return cached;
+  }
+  
+  const portfolio = await Portfolio.find();
+  await cacheManager.set(cacheKey, portfolio, 300); // 5min TTL
+  return portfolio;
+};
+```
+
+#### Database Optimierungen
+- **Indexierung**: Optimierte Indices für häufige Queries
+- **Aggregation Pipelines**: Effiziente Datenverarbeitung
+- **Projection**: Nur benötigte Felder laden
+- **Populate Optimization**: Selektives Laden von Referenzen
+
+### 🐛 Debugging & Troubleshooting
+
+#### Common Issues
+
+**1. MongoDB Connection Issues**
+```javascript
+// Debug MongoDB Connection
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connected successfully');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err);
+});
+```
+
+**2. PayPal Integration Problems**
+```javascript
+// Debug PayPal Environment
+console.log('PayPal Environment:', process.env.PAYPAL_ENVIRONMENT);
+console.log('PayPal Client ID exists:', !!process.env.PAYPAL_CLIENT_ID);
+```
+
+**3. Email Service Issues**
+```javascript
+// Test Email Configuration
+const testEmail = async () => {
+  try {
+    await emailService.sendTestEmail('test@example.com');
+    console.log('✅ Email service working');
+  } catch (error) {
+    console.error('❌ Email service error:', error);
+  }
+};
+```
+
+#### Log Analysis
+```bash
+# View Backend Logs
+npm run logs:view
+
+# Filter Error Logs
+npm run logs:errors
+
+# Clear Application Cache
+npm run cache:clear
+```
+
+#### Performance Monitoring
+```javascript
+// API Response Time Logging
+const logResponseTime = (req, res, next) => {
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`✅ API call: ${req.path} took ${duration}ms`);
+  });
+  
+  next();
+};
+```
+
+---
+
+## 📋 Dokumentations-Richtlinien
+
+> **⚠️ WICHTIG**: Alle detaillierten technischen Dokumentationen, die nicht zur README.md gehören, sollen in den `docs/` Ordner abgelegt werden. Dieser Ordner wird durch die .gitignore nicht versioniert und dient als lokaler Arbeitsbereich für ausführliche Notizen, Debug-Logs und temporäre Dokumentationen.
+
+Die **README.md** bleibt die zentrale und einzige versionierte Dokumentation des Projekts und enthält alle essentiellen Informationen für:
+- Projekt-Überblick und Features
+- Installation und Setup
+- API-Dokumentation  
+- Deployment-Anweisungen
+- Technische Highlights
+- Troubleshooting-Guides
+
+---
+
 <div align="center">
 
 **🏭 Status**: In Production ✅  
-**📦 Version**: 2.0.0  
-**📅 Last Updated**: 20. Oktober 2025
+**📦 Version**: 2.1.0  
+**📅 Last Updated**: 10. Januar 2026
 
 **Entwickelt mit ❤️ für Glücksmomente-Manufaktur**
 

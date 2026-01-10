@@ -60,8 +60,13 @@ temp/
 DEBUG_*.md
 TEST_*.md
 
-# Dokumentation - Wichtige Dateien NICHT ignorieren
-# README.md, docs/, und Produktions-relevante .md werden committed
+# Dokumentation
+# docs/ Ordner wird ignoriert - alle Dokumentationen sind in README.md konsolidiert
+docs/
+
+# WICHTIG: Alle Dokumentationen, die nicht zur README.md gehören,
+# sollen in den docs/ Ordner abgelegt werden (wird nicht versioniert)
+# README.md bleibt die zentrale und einzige versionierte Dokumentation
 
 # Environment vault files
 !.env.vault
