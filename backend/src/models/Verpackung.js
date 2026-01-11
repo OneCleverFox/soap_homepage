@@ -34,6 +34,12 @@ const verpackungSchema = new mongoose.Schema({
     trim: true
   },
 
+  bild: {
+    type: String,
+    default: '',
+    trim: true
+  },
+
   // Zusätzliche Felder für bessere Verwaltung
   verfuegbar: {
     type: Boolean,

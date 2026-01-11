@@ -7,6 +7,8 @@ const Rohseife = require('../models/Rohseife');
 const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
 const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
+const Giessform = require('../models/Giessform');
+const Giesswerkstoff = require('../models/Giesswerkstoff');
 const { authenticateToken } = require('../middleware/auth');
 
 // Middleware: Nur Admin darf Lager verwalten
@@ -644,6 +646,75 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
         }
         break;
         
+      case 'zusatzinhaltsstoff':
+        artikel = await ZusatzInhaltsstoff.findById(artikelId);
+        modelName = 'ZusatzInhaltsstoff';
+        if (artikel) {
+          // Zusatzinhaltsstoffe verwenden die Bestand-Collection
+          let bestand = await Bestand.findOne({ 
+            typ: 'zusatzinhaltsstoff', 
+            artikelId: artikelId 
+          });
+          
+          if (!bestand) {
+            // Erstelle neuen Bestand-Eintrag falls nicht vorhanden
+            bestand = new Bestand({
+              typ: 'zusatzinhaltsstoff',
+              artikelId: artikelId,
+              artikelModell: 'ZusatzInhaltsstoff',
+              menge: 0,
+              einheit: 'g',
+              mindestbestand: artikel.mindestbestand || 0
+            });
+          }
+          
+          vorherBestand = bestand.menge || 0;
+          const neueMenge = parseFloat(neuerBestand);
+          
+          bestand.menge = neueMenge;
+          bestand.letzteAenderung = {
+            datum: new Date(),
+            grund: 'inventur',
+            menge: neueMenge - vorherBestand,
+            vorher: vorherBestand,
+            nachher: neueMenge
+          };
+          if (notizen) {
+            bestand.notizen = notizen;
+          }
+          await bestand.save();
+        }
+        break;
+        
+      case 'giessform':
+        artikel = await Giessform.findById(artikelId);
+        modelName = 'Giessform';
+        if (artikel) {
+          // Gießformen haben normalerweise Anzahl statt Bestand
+          vorherBestand = artikel.anzahl || 1;
+          artikel.anzahl = parseFloat(neuerBestand);
+          artikel.letzteInventur = new Date();
+          if (notizen) {
+            artikel.notizen = notizen;
+          }
+          await artikel.save();
+        }
+        break;
+        
+      case 'giesswerkstoff':
+        artikel = await Giesswerkstoff.findById(artikelId);
+        modelName = 'Giesswerkstoff';
+        if (artikel) {
+          vorherBestand = artikel.aktuellerBestand || 0;
+          artikel.aktuellerBestand = parseFloat(neuerBestand);
+          artikel.letzteInventur = new Date();
+          if (notizen) {
+            artikel.notizen = notizen;
+          }
+          await artikel.save();
+        }
+        break;
+        
       default:
         return res.status(400).json({
           success: false,
@@ -664,6 +735,9 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
       let bewegungsTyp = typ;
       if (typ === 'verpackungen') bewegungsTyp = 'verpackung';
       if (typ === 'fertigprodukt') bewegungsTyp = 'produkt';
+      if (typ === 'zusatzinhaltsstoff') bewegungsTyp = 'zusatzinhaltsstoff';
+      if (typ === 'giessform') bewegungsTyp = 'giessform';
+      if (typ === 'giesswerkstoff') bewegungsTyp = 'giesswerkstoff';
       
       const bewegung = new Bewegung({
         typ: 'inventur',

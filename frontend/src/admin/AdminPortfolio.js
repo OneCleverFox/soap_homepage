@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Button,
   Dialog,
   DialogTitle,
@@ -49,10 +43,7 @@ import {
   LocalShipping,
   ShoppingCart,
   Category,
-  Description,
-  Upload as UploadIcon,
-  CameraAlt as CameraIcon,
-  MoreVert as MoreVertIcon
+  CameraAlt as CameraIcon
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
 
@@ -112,7 +103,7 @@ const AdminPortfolio = () => {
     giesswerkstoff: '',
     optional: '',
     reihenfolge: '',
-    aktiv: true,
+    aktiv: false,
     istMischung: false,
     rohseifenKonfiguration: null,
     abmessungen: {
@@ -173,9 +164,14 @@ const AdminPortfolio = () => {
       setSeifenformOptions(seifenformen || []);
       setVerpackungOptions(verpackungen || []);
 
-      // Werkstück-spezifische Optionen werden später implementiert
-      setGiessformOptions([]);
-      setGiesswerkstoffOptions([]);
+      // Werkstück-spezifische Optionen
+      const [giessformen, giesswerkstoff] = await Promise.all([
+        portfolioAdminService.getGiessformOptions(),
+        portfolioAdminService.getGiesswerkstoffOptions()
+      ]);
+      
+      setGiessformOptions(giessformen || []);
+      setGiesswerkstoffOptions(giesswerkstoff || []);
     } catch (err) {
       console.error('Fehler beim Laden der Optionen:', err);
     }
@@ -232,7 +228,7 @@ const AdminPortfolio = () => {
       giesswerkstoff: item.giesswerkstoff || '',
       optional: item.optional || '',
       reihenfolge: item.reihenfolge || '',
-      aktiv: item.aktiv !== undefined ? item.aktiv : true,
+      aktiv: item.aktiv !== undefined ? item.aktiv : false,
       istMischung: item.istMischung || false,
       rohseifenKonfiguration: item.rohseifenKonfiguration || null,
       abmessungen: {
@@ -254,10 +250,27 @@ const AdminPortfolio = () => {
 
   const handleSubmit = async () => {
     try {
-      if (editingItem) {
-        await portfolioAdminService.update(editingItem._id, formData);
+      // Bereite die Daten basierend auf der Kategorie vor
+      const submitData = { ...formData };
+      
+      if (formData.kategorie === 'werkstuck') {
+        // Für Werkstücke: Setze Seifenfelder auf leere Strings
+        submitData.seife = '';
+        submitData.aroma = '';
+        submitData.seifenform = '';
+        submitData.verpackung = '';
+        submitData.zusatz = '';
+        submitData.optional = '';
       } else {
-        await portfolioAdminService.create(formData);
+        // Für Seifen: Setze Werkstückfelder auf null
+        submitData.giessform = null;
+        submitData.giesswerkstoff = null;
+      }
+      
+      if (editingItem) {
+        await portfolioAdminService.update(editingItem._id, submitData);
+      } else {
+        await portfolioAdminService.create(submitData);
       }
       
       setOpen(false);
@@ -594,74 +607,73 @@ const AdminPortfolio = () => {
                     </Typography>
                     
                     {/* Gallery Images Upload */}
-                    {item.bilder?.galerie && item.bilder.galerie.length > 0 && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                          Galerie ({item.bilder.galerie.length}):
-                        </Typography>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: 1, maxWidth: '100%' }}>
-                          {item.bilder.galerie.slice(0, 4).map((img, index) => (
-                            <Box key={index} sx={{ position: 'relative' }}>
-                              <img 
-                                src={img.url || img}  // Base64-Data-URL direkt aus Datenbank
-                                alt={`Galerie ${index + 1}`}
-                                style={{
-                                  width: '100%',
-                                  aspectRatio: '1',
-                                  objectFit: 'cover',
-                                  borderRadius: '4px',
-                                  border: '1px solid #ddd'
-                                }}
-                              />
-                              <IconButton
-                                size="small"
-                                sx={{ 
-                                  position: 'absolute',
-                                  top: -8,
-                                  right: -8,
-                                  width: 16,
-                                  height: 16,
-                                  bgcolor: 'error.main',
-                                  color: 'white',
-                                  '&:hover': { bgcolor: 'error.dark' }
-                                }}
-                                onClick={() => handleImageDelete(item._id, 'galerie', index)}
-                              >
-                                <DeleteIcon sx={{ fontSize: 10 }} />
-                              </IconButton>
-                            </Box>
-                          ))}
-                          {/* Upload Button für Galerie */}
-                          <input
-                            id={`galerie-upload-${item._id}`}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            style={{ display: 'none' }}
-                            onChange={(e) => {
-                              Array.from(e.target.files).forEach(file => {
-                                handleImageUpload(item._id, file, 'galerie');
-                              });
-                            }}
-                          />
-                          <label htmlFor={`galerie-upload-${item._id}`}>
-                            <Box sx={{ 
-                              width: '100%',
-                              aspectRatio: '1',
-                              border: '2px dashed #ccc',
-                              borderRadius: '4px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              cursor: 'pointer',
-                              '&:hover': { borderColor: 'primary.main' }
-                            }}>
-                              <AddIcon sx={{ fontSize: 16, color: 'grey.600' }} />
-                            </Box>
-                          </label>
-                        </Box>
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Galerie ({item.bilder?.galerie?.length || 0}):
+                      </Typography>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: 1, maxWidth: '100%' }}>
+                        {/* Vorhandene Galeriebilder */}
+                        {item.bilder?.galerie && item.bilder.galerie.slice(0, 4).map((img, index) => (
+                          <Box key={index} sx={{ position: 'relative' }}>
+                            <img 
+                              src={img.url || img}  // Base64-Data-URL direkt aus Datenbank
+                              alt={`Galerie ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                aspectRatio: '1',
+                                objectFit: 'cover',
+                                borderRadius: '4px',
+                                border: '1px solid #ddd'
+                              }}
+                            />
+                            <IconButton
+                              size="small"
+                              sx={{ 
+                                position: 'absolute',
+                                top: -8,
+                                right: -8,
+                                width: 16,
+                                height: 16,
+                                bgcolor: 'error.main',
+                                color: 'white',
+                                '&:hover': { bgcolor: 'error.dark' }
+                              }}
+                              onClick={() => handleImageDelete(item._id, 'galerie', index)}
+                            >
+                              <DeleteIcon sx={{ fontSize: 10 }} />
+                            </IconButton>
+                          </Box>
+                        ))}
+                        {/* Upload Button für Galerie */}
+                        <input
+                          id={`galerie-upload-${item._id}`}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            Array.from(e.target.files).forEach(file => {
+                              handleImageUpload(item._id, file, 'galerie');
+                            });
+                          }}
+                        />
+                        <label htmlFor={`galerie-upload-${item._id}`}>
+                          <Box sx={{ 
+                            width: item.bilder?.galerie?.length > 0 ? '100%' : '50%',
+                            aspectRatio: '1',
+                            border: '2px dashed #ccc',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            '&:hover': { borderColor: 'primary.main' }
+                          }}>
+                            <AddIcon sx={{ fontSize: 16, color: 'grey.600' }} />
+                          </Box>
+                        </label>
                       </Box>
-                    )}
+                    </Box>
                   </CardContent>
                   
                   <CardActions sx={{ p: 2, pt: 0 }}>
@@ -1034,7 +1046,7 @@ const AdminPortfolio = () => {
                     >
                       {giessformOptions.map(option => (
                         <MenuItem key={option._id} value={option._id}>
-                          {option.name} ({option.material})
+                          {option.inventarnummer} - {option.name} - {option.form}, {option.material}
                         </MenuItem>
                       ))}
                     </Select>
@@ -1053,7 +1065,7 @@ const AdminPortfolio = () => {
                     >
                       {giesswerkstoffOptions.map(option => (
                         <MenuItem key={option._id} value={option._id}>
-                          {option.typ} - {option.bezeichnung}
+                          {option.bezeichnung} - {option.typ} ({option.konsistenz})
                         </MenuItem>
                       ))}
                     </Select>

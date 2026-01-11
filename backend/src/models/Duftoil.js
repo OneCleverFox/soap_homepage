@@ -45,6 +45,13 @@ const duftoelSchema = new mongoose.Schema({
     default: '',
     trim: true
   },
+
+  bild: {
+    type: String,
+    default: '',
+    trim: true
+  },
+
   // Zusätzliche Felder für Verwaltung
   verfuegbar: {
     type: Boolean,

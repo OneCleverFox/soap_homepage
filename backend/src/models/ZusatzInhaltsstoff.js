@@ -157,6 +157,12 @@ const zusatzInhaltsstoffSchema = new mongoose.Schema({
     trim: true
   },
   
+  bild: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  
   // Mindestbestand für Warnungen
   mindestbestand: {
     type: Number,

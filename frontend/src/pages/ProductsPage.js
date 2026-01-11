@@ -23,8 +23,7 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
-  Fab,
-  Badge
+  Fab
 } from '@mui/material';
 import {
   Inventory as WeightIcon,
@@ -37,7 +36,6 @@ import {
   Inventory2 as InventoryIcon,
   Warning as WarningIcon,
   Soap as SoapIcon,
-  Handyman as WerkstuckIcon,
   Build as BuildIcon,
   FilterList as FilterIcon,
   Clear as ClearIcon
@@ -106,17 +104,18 @@ const ProductsPage = React.memo(() => {
   const CategorySidebar = ({ mobile = false }) => (
     <Box>
       <Typography 
-        variant="h6" 
+        variant={mobile ? "h6" : "subtitle1"}
         sx={{ 
-          mb: 2, 
-          fontWeight: 'bold',
+          mb: mobile ? 2 : 1.5, 
+          fontWeight: 600,
           color: 'text.primary',
           display: 'flex',
           alignItems: 'center',
-          gap: 1
+          gap: 1,
+          fontSize: mobile ? '1.1rem' : '0.95rem'
         }}
       >
-        <FilterIcon />
+        <FilterIcon fontSize={mobile ? 'medium' : 'small'} />
         Kategorien
       </Typography>
       
@@ -126,50 +125,83 @@ const ProductsPage = React.memo(() => {
           const IconComponent = kategorie.icon;
           
           return (
-            <ListItem key={kategorie.key} disablePadding sx={{ mb: 1 }}>
+            <ListItem key={kategorie.key} disablePadding sx={{ mb: mobile ? 1 : 0.5 }}>
               <ListItemButton
                 onClick={() => handleKategorieChange(kategorie.key)}
                 selected={selectedKategorie === kategorie.key}
                 sx={{
-                  borderRadius: 2,
+                  borderRadius: mobile ? 2 : 1.5,
+                  py: mobile ? 1.5 : 1,
+                  px: mobile ? 2 : 1.5,
+                  transition: 'all 0.2s ease',
                   '&.Mui-selected': {
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
+                    bgcolor: 'primary.50', // Sanfterer Hintergrund
+                    color: 'primary.700', // Dunklerer Text für besseren Kontrast
+                    borderLeft: '3px solid',
+                    borderColor: 'primary.main',
                     '&:hover': {
-                      bgcolor: 'primary.dark',
+                      bgcolor: 'primary.100',
                     }
                   },
                   '&:hover': {
                     bgcolor: selectedKategorie === kategorie.key 
-                      ? 'primary.dark' 
-                      : 'action.hover',
+                      ? 'primary.100' 
+                      : 'grey.100',
+                    transform: 'translateX(2px)' // Subtile Hover-Animation
                   }
                 }}
               >
                 <ListItemIcon sx={{ 
                   color: selectedKategorie === kategorie.key 
-                    ? 'primary.contrastText' 
-                    : 'text.primary',
-                  minWidth: 40 
+                    ? 'primary.600' 
+                    : 'text.secondary',
+                  minWidth: mobile ? 40 : 32
                 }}>
-                  <IconComponent />
+                  <IconComponent fontSize={mobile ? 'medium' : 'small'} />
                 </ListItemIcon>
                 <ListItemText 
                   primary={
                     <Box display="flex" justifyContent="space-between" alignItems="center">
-                      <Typography variant="body2" fontWeight="bold">
+                      <Typography 
+                        variant={mobile ? "body2" : "caption"} 
+                        fontWeight={selectedKategorie === kategorie.key ? 600 : 500}
+                        sx={{ 
+                          fontSize: mobile ? '0.9rem' : '0.8rem',
+                          lineHeight: 1.3
+                        }}
+                      >
                         {kategorie.label}
                       </Typography>
-                      <Badge badgeContent={count} color="secondary" sx={{
-                        '& .MuiBadge-badge': {
-                          color: selectedKategorie === kategorie.key ? 'primary.main' : 'secondary.contrastText',
-                          backgroundColor: selectedKategorie === kategorie.key ? 'primary.contrastText' : 'secondary.main'
-                        }
-                      }} />
+                      <Chip 
+                        label={count}
+                        size="small"
+                        sx={{
+                          height: mobile ? 20 : 18,
+                          fontSize: mobile ? '0.7rem' : '0.65rem',
+                          fontWeight: 600,
+                          bgcolor: selectedKategorie === kategorie.key 
+                            ? 'primary.200' 
+                            : 'grey.200',
+                          color: selectedKategorie === kategorie.key 
+                            ? 'primary.800' 
+                            : 'grey.700',
+                          '& .MuiChip-label': {
+                            px: mobile ? 1 : 0.75
+                          }
+                        }}
+                      />
                     </Box>
                   }
                   secondary={!mobile && (
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      sx={{ 
+                        fontSize: '0.7rem',
+                        lineHeight: 1.2,
+                        mt: 0.3
+                      }}
+                    >
                       {kategorie.beschreibung}
                     </Typography>
                   )}
@@ -182,13 +214,22 @@ const ProductsPage = React.memo(() => {
       
       {selectedKategorie !== 'alle' && (
         <>
-          <Divider sx={{ my: 2 }} />
+          <Divider sx={{ my: mobile ? 2 : 1.5, borderColor: 'grey.200' }} />
           <Button
             variant="outlined"
             fullWidth
             startIcon={<ClearIcon />}
             onClick={() => handleKategorieChange('alle')}
-            size="small"
+            size={mobile ? "medium" : "small"}
+            sx={{
+              borderColor: 'grey.300',
+              color: 'text.secondary',
+              '&:hover': {
+                borderColor: 'grey.400',
+                bgcolor: 'grey.50'
+              },
+              fontSize: mobile ? '0.85rem' : '0.75rem'
+            }}
           >
             Filter zurücksetzen
           </Button>
@@ -573,7 +614,7 @@ const ProductsPage = React.memo(() => {
               textFillColor: 'transparent'
             }}
           >
-            Unsere handgemachten Naturseifen
+            Unsere handgemachten Seifen
           </Typography>
           <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
             Premium Qualität aus natürlichen Zutaten
@@ -626,21 +667,23 @@ const ProductsPage = React.memo(() => {
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <>
       {/* Desktop Sidebar */}
       {!isMobile && !isTablet && (
         <Box
           sx={{
-            width: 300,
-            flexShrink: 0,
-            bgcolor: 'background.paper',
+            position: 'fixed',
+            left: 0,
+            top: 64, // Unter der Navbar
+            width: 240, // Schmaler: 240px statt 300px
+            height: 'calc(100vh - 64px)',
+            bgcolor: 'grey.50', // Sanfterer Hintergrund
             borderRight: '1px solid',
-            borderColor: 'divider',
-            p: 3,
-            position: 'sticky',
-            top: 0,
-            height: '100vh',
-            overflowY: 'auto'
+            borderColor: 'grey.200', // Sanftere Borderfarbe
+            p: 2, // Weniger Padding
+            overflowY: 'auto',
+            zIndex: 1100,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.04)' // Subtiler Schatten
           }}
         >
           <CategorySidebar />
@@ -652,26 +695,29 @@ const ProductsPage = React.memo(() => {
         <Fab
           color="primary"
           aria-label="Kategorien filtern"
+          size="small"
           sx={{
             position: 'fixed',
-            top: 16,
-            right: 16,
-            zIndex: 1200
+            top: 72, // Unter der Navbar mit mehr Abstand
+            left: 12, // Etwas weniger Abstand zum Rand
+            zIndex: 1000 // Unter der Navbar aber über Content
           }}
           onClick={() => setMobileDrawerOpen(true)}
         >
-          <FilterIcon />
+          <FilterIcon fontSize="small" />
         </Fab>
       )}
 
       {/* Mobile Drawer */}
       <Drawer
-        anchor="right"
+        anchor="left"
         open={mobileDrawerOpen}
         onClose={() => setMobileDrawerOpen(false)}
         sx={{
           '& .MuiDrawer-paper': {
-            width: 320,
+            width: '50vw', // 50% der Bildschirmbreite
+            maxWidth: 300, // Maximal 300px auf größeren Bildschirmen
+            minWidth: 250, // Mindestens 250px für Lesbarkeit
             p: 3
           }
         }}
@@ -680,8 +726,18 @@ const ProductsPage = React.memo(() => {
       </Drawer>
 
       {/* Main Content */}
-      <Box sx={{ flexGrow: 1 }}>
-        <Container maxWidth="xl" sx={{ py: isMobile ? 2 : 4 }}>
+      <Container 
+        maxWidth="xl" 
+        sx={{ 
+          py: isMobile ? 2 : 4,
+          ...((!isMobile && !isTablet) && {
+            marginLeft: '240px' // Angepasst für schmalere Sidebar
+          }),
+          ...((isMobile || isTablet) && {
+            marginTop: '60px' // Platz für Mobile Filter Button
+          })
+        }}
+      >
           {/* Header */}
           <Box textAlign="center" mb={isMobile ? 3 : 6}>
             <Typography 
@@ -711,8 +767,6 @@ const ProductsPage = React.memo(() => {
                selectedKategorie === 'seife' ? 'Seifen' : 'Werkstücke'} verfügbar
             </Typography>
           </Box>
-        </Typography>
-      </Box>
 
           {/* Produktkarten */}
           <Grid container spacing={isMobile ? 2 : 4}>
@@ -1103,9 +1157,8 @@ const ProductsPage = React.memo(() => {
             </Box>
           )}
         </Container>
-      </Box>
-    </Box>
-  );
+      </>
+    );
 });
 
 export default ProductsPage;

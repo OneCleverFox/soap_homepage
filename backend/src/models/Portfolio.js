@@ -9,8 +9,17 @@ const portfolioSchema = new mongoose.Schema({
   },
   seife: {
     type: String,
-    required: true,
-    trim: true
+    validate: {
+      validator: function(v) {
+        // Wenn es ein Werkstück ist, ist ein leerer String ok
+        if (this.kategorie === 'werkstuck') return true;
+        // Wenn es eine Seife ist, muss ein Wert vorhanden sein
+        return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
+      },
+      message: 'Seife ist für Seifen-Kategorie erforderlich'
+    },
+    trim: true,
+    default: ''
   },
   gramm: {
     type: Number,
@@ -45,8 +54,15 @@ const portfolioSchema = new mongoose.Schema({
   },
   aroma: {
     type: String,
-    required: true,
-    trim: true
+    validate: {
+      validator: function(v) {
+        if (this.kategorie === 'werkstuck') return true;
+        return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
+      },
+      message: 'Aroma ist für Seifen-Kategorie erforderlich'
+    },
+    trim: true,
+    default: ''
   },
   // Produktkategorie für Filterung
   kategorie: {
@@ -58,8 +74,15 @@ const portfolioSchema = new mongoose.Schema({
   },
   seifenform: {
     type: String,
-    required: true,
-    trim: true
+    validate: {
+      validator: function(v) {
+        if (this.kategorie === 'werkstuck') return true;
+        return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
+      },
+      message: 'Seifenform ist für Seifen-Kategorie erforderlich'
+    },
+    trim: true,
+    default: ''
   },
   zusatz: {
     type: String,
@@ -99,9 +122,53 @@ const portfolioSchema = new mongoose.Schema({
   
   verpackung: {
     type: String,
-    required: true,
-    trim: true
+    validate: {
+      validator: function(v) {
+        if (this.kategorie === 'werkstuck') return true;
+        return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
+      },
+      message: 'Verpackung ist für Seifen-Kategorie erforderlich'
+    },
+    trim: true,
+    default: ''
   },
+  
+  // Werkstück-spezifische Felder
+  giessform: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Giessform',
+    required: function() { return this.kategorie === 'werkstuck'; }
+  },
+  giesswerkstoff: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Giesswerkstoff',
+    required: function() { return this.kategorie === 'werkstuck'; }
+  },
+  
+  // Abmessungen (für beide Kategorien nutzbar)
+  abmessungen: {
+    laenge: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    breite: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    hoehe: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    einheit: {
+      type: String,
+      default: 'cm',
+      enum: ['mm', 'cm', 'm']
+    }
+  },
+  
   // Preis
   preis: {
     type: Number,
