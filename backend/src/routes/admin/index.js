@@ -9,6 +9,7 @@ const invoicesRoutes = require('./invoices');
 const emailRoutes = require('./email');
 const kundenRoutes = require('./kunden');
 const usersRoutes = require('./users');
+const rohstoffeRoutes = require('./rohstoffe');
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ router.use('/invoices', invoicesRoutes);
 router.use('/email', emailRoutes); // Für /email-config, /email-templates
 router.use('/kunden', kundenRoutes);
 router.use('/users', usersRoutes);
+router.use('/rohstoffe', rohstoffeRoutes);
 
 // Legacy-Kompatibilität für E-Mail-Konfiguration
 router.use('/email-config', emailRoutes); // Direkte Weiterleitung 

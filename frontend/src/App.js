@@ -143,6 +143,16 @@ function App() {
                         } 
                       />
                       
+                      {/* Admin Rohstoffe Route with normal Navbar */}
+                      <Route 
+                        path="/admin/rohstoffe" 
+                        element={
+                          <ProtectedRoute requiredRole="admin">
+                            <AdminRohstoffe />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      
                       {/* Legal Pages */}
                       <Route path="/impressum" element={<ImpressumPage />} />
                       <Route path="/datenschutz" element={<DatenschutzPage />} />

@@ -62,6 +62,7 @@ const AdminLager = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [showInactiveItems, setShowInactiveItems] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState({ seifen: false, werkstucke: false }); // Toggle für jede Kategorie
   
   // Dialog States
   const [inventurDialog, setInventurDialog] = useState(false);
@@ -98,23 +99,42 @@ const AdminLager = () => {
     rohseifen: [],
     duftoele: [],
     verpackungen: [],
-    zusatzinhaltsstoffe: []
+    zusatzinhaltsstoffe: [],
+    giessformen: [],
+    giesswerkstoff: []
   });
 
   // Search Hook für die aktuelle Tab-Daten mit Filter für aktive/inaktive Items
   const getCurrentTabData = () => {
-    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe'];
+    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe', 'giessformen', 'giesswerkstoff'];
     const rawData = data[tabNames[activeTab]] || [];
     
     // Filter für aktive/inaktive Items anwenden
-    const filteredData = rawData.filter(item => {
+    let filteredData = rawData.filter(item => {
       const isActive = activeTab === 0 ? item.aktiv : item.verfuegbar;
       return showInactiveItems ? !isActive : isActive;
     });
     
+    // Kategorie-Filter für Fertigprodukte (Tab 0) anwenden
+    if (activeTab === 0 && (categoryFilter.seifen || categoryFilter.werkstucke)) {
+      filteredData = filteredData.filter(item => {
+        if (categoryFilter.seifen && categoryFilter.werkstucke) {
+          // Beide Filter aktiv: zeige alle
+          return true;
+        } else if (categoryFilter.seifen) {
+          // Nur Seifen-Filter aktiv
+          return item.kategorie === 'seife';
+        } else if (categoryFilter.werkstucke) {
+          // Nur Werkstück-Filter aktiv
+          return item.kategorie === 'werkstuck';
+        }
+        return true;
+      });
+    }
+    
     // Debug-Log
     if (activeTab === 0) { // Nur für Fertigprodukte
-      console.log(`🔍 Filter Debug - Tab: ${tabNames[activeTab]}, Show Inactive: ${showInactiveItems}`);
+      console.log(`🔍 Filter Debug - Tab: ${tabNames[activeTab]}, Show Inactive: ${showInactiveItems}, Seifen: ${categoryFilter.seifen}, Werkstücke: ${categoryFilter.werkstucke}`);
       console.log(`📊 Raw Data: ${rawData.length}, Filtered: ${filteredData.length}`);
       console.log(`✅ Active items: ${rawData.filter(item => item.aktiv).length}`);
       console.log(`❌ Inactive items: ${rawData.filter(item => !item.aktiv).length}`);
@@ -174,7 +194,9 @@ const AdminLager = () => {
         { key: 'rohseifen', url: '/rohseife?includeUnavailable=true' },
         { key: 'duftoele', url: '/duftoele?includeUnavailable=true' },
         { key: 'verpackungen', url: '/verpackungen?includeUnavailable=true' },
-        { key: 'zusatzinhaltsstoffe', url: '/zusatzinhaltsstoffe?includeUnavailable=true' }
+        { key: 'zusatzinhaltsstoffe', url: '/zusatzinhaltsstoffe?includeUnavailable=true' },
+        { key: 'giessformen', url: '/admin/rohstoffe/giessformen' },
+        { key: 'giesswerkstoff', url: '/admin/rohstoffe/giesswerkstoff' }
       ];
 
       const newData = {};
@@ -286,6 +308,13 @@ const AdminLager = () => {
     const cleanup = subscribeToUpdates();
     return cleanup;
   }, [subscribeToUpdates]);
+  
+  // Reset kategorie filter wenn Tab gewechselt wird
+  useEffect(() => {
+    if (activeTab !== 0) {
+      setCategoryFilter({ seifen: false, werkstucke: false });
+    }
+  }, [activeTab]);
 
   // 🔄 Event-basierte Reaktivität: State-Änderungen triggern Updates
   const updateSingleProductType = useCallback((produktTyp, artikelId, newData) => {
@@ -414,6 +443,14 @@ const AdminLager = () => {
           aktuellerBestand = item.aktuellVorrat || 0;
         }
         break;
+      case 'giessformen':
+        einheit = 'Stück';
+        aktuellerBestand = item.anzahl || 1; // Gießformen sind meist einzelne Items
+        break;
+      case 'giesswerkstoff':
+        einheit = item.einheit || 'g';
+        aktuellerBestand = item.aktuellerBestand || 0;
+        break;
       default:
         einheit = 'Einheiten';
         aktuellerBestand = item.verfuegbareMenge || item.aktuellVorrat || 0;
@@ -436,6 +473,12 @@ const AdminLager = () => {
         break;
       case 'zusatzinhaltsstoffe':
         backendTyp = 'zusatzinhaltsstoff';
+        break;
+      case 'giessformen':
+        backendTyp = 'giessform';
+        break;
+      case 'giesswerkstoff':
+        backendTyp = 'giesswerkstoff';
         break;
       default:
         backendTyp = typ;
@@ -492,6 +535,22 @@ const AdminLager = () => {
           lieferant: item.lieferant || '',
           artikelNummer: item.artikelNummer || '',
           dosierungHinweise: item.dosierung?.hinweise || ''
+        };
+      case 'giessformen':
+        return {
+          inventarnummer: item.inventarnummer || '',
+          form: item.form || '',
+          material: item.material || '',
+          volumenMl: item.volumenMl || '',
+          zustand: item.zustand || ''
+        };
+      case 'giesswerkstoff':
+        return {
+          typ: item.typ || '',
+          kategorie: item.kategorie || '',
+          konsistenz: item.konsistenz || '',
+          lieferant: item.lieferant || '',
+          artikelnummer: item.artikelnummer || ''
         };
       default:
         return {};
@@ -674,6 +733,15 @@ const AdminLager = () => {
             break;
           case 'verpackungen':
             produktTyp = 'verpackungen';
+            break;
+          case 'zusatzinhaltsstoff':
+            produktTyp = 'zusatzinhaltsstoffe';
+            break;
+          case 'giessform':
+            produktTyp = 'giessformen';
+            break;
+          case 'giesswerkstoff':
+            produktTyp = 'giesswerkstoff';
             break;
           default:
             console.warn('Unbekannter Produkttyp:', inventurForm.typ);
@@ -920,6 +988,7 @@ const AdminLager = () => {
       columns: [
         { key: 'bilder', label: 'Bild', width: '80px' },
         { key: 'name', label: 'Produktname', width: '200px' },
+        { key: 'kategorie', label: 'Kategorie', width: '120px' },
         { key: 'seife', label: 'Seife', width: '120px' },
         { key: 'aroma', label: 'Aroma', width: '120px' },
         { key: 'gramm', label: 'Gewicht', width: '80px' },
@@ -986,6 +1055,36 @@ const AdminLager = () => {
         { key: 'verfuegbar', label: 'Status', width: '120px' },
         { key: 'actions', label: 'Aktionen', width: '120px' }
       ]
+    },
+    {
+      label: 'Gießformen',
+      key: 'giessformen',
+      icon: '🥻',
+      columns: [
+        { key: 'inventarnummer', label: 'Inventar-Nr.', width: '120px' },
+        { key: 'name', label: 'Name', width: '200px' },
+        { key: 'form', label: 'Form', width: '120px' },
+        { key: 'material', label: 'Material', width: '120px' },
+        { key: 'volumenMl', label: 'Volumen (ml)', width: '120px' },
+        { key: 'zustand', label: 'Zustand', width: '120px' },
+        { key: 'verfuegbar', label: 'Status', width: '120px' },
+        { key: 'actions', label: 'Aktionen', width: '120px' }
+      ]
+    },
+    {
+      label: 'Gießwerkstoffe',
+      key: 'giesswerkstoff',
+      icon: '🧋',
+      columns: [
+        { key: 'bezeichnung', label: 'Bezeichnung', width: '200px' },
+        { key: 'typ', label: 'Typ', width: '120px' },
+        { key: 'konsistenz', label: 'Konsistenz', width: '120px' },
+        { key: 'bestand', label: 'Bestand', width: '100px' },
+        { key: 'preis_pro_einheit', label: 'Preis/Einheit', width: '120px' },
+        { key: 'einheit', label: 'Einheit', width: '80px' },
+        { key: 'verfuegbar', label: 'Status', width: '120px' },
+        { key: 'actions', label: 'Aktionen', width: '120px' }
+      ]
     }
   ];
 
@@ -1027,6 +1126,80 @@ const AdminLager = () => {
       case 'preis_pro_gramm':
         return item.preisProGramm ? `€${item.preisProGramm.toFixed(4)}` : '-';
       
+      case 'preis_pro_einheit':
+        return item.preisProEinheit ? `€${item.preisProEinheit.toFixed(2)}` : '-';
+      
+      case 'inventarnummer':
+        return item.inventarnummer || '-';
+      
+      case 'form':
+        if (currentTab.key === 'giessformen') {
+          const formLabels = {
+            'rund': 'Rund',
+            'oval': 'Oval', 
+            'quadratisch': 'Quadratisch',
+            'rechteckig': 'Rechteckig',
+            'herz': 'Herz',
+            'stern': 'Stern',
+            'blume': 'Blume',
+            'tier': 'Tier',
+            'figur': 'Figur',
+            'abstrakt': 'Abstrakt',
+            'sonstiges': 'Sonstiges'
+          };
+          return (
+            <Chip 
+              label={formLabels[item.form] || item.form}
+              size="small"
+              color="secondary"
+              variant="outlined"
+            />
+          );
+        }
+        return '-';
+      
+      case 'material':
+        return item.material || '-';
+      
+      case 'volumenMl':
+        return item.volumenMl ? `${item.volumenMl}ml` : '-';
+      
+      case 'zustand':
+        if (currentTab.key === 'giessformen') {
+          const zustandColors = {
+            'neu': 'success',
+            'gut': 'primary', 
+            'gebraucht': 'warning',
+            'beschaedigt': 'error',
+            'repariert': 'info'
+          };
+          return (
+            <Chip 
+              label={item.zustand || 'unbekannt'}
+              size="small"
+              color={zustandColors[item.zustand] || 'default'}
+              variant="outlined"
+            />
+          );
+        }
+        return '-';
+      
+      case 'konsistenz':
+        if (currentTab.key === 'giesswerkstoff') {
+          return (
+            <Chip 
+              label={item.konsistenz || 'unbekannt'}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+          );
+        }
+        return '-';
+      
+      case 'einheit':
+        return item.einheit || '-';
+      
       case 'typ':
         if (currentTab.key === 'zusatzinhaltsstoffe') {
           const typLabels = {
@@ -1067,6 +1240,31 @@ const AdminLager = () => {
       
       case 'gramm':
         return item.gramm ? `${item.gramm}g` : '-';
+      
+      case 'kategorie':
+        if (currentTab.key === 'fertigprodukte' && item.kategorie) {
+          const kategorieLabels = {
+            'seife': 'Seife',
+            'werkstuck': 'Werkstück'
+          };
+          const kategorieColors = {
+            'seife': 'primary',
+            'werkstuck': 'secondary'
+          };
+          const kategorieIcons = {
+            'seife': '🧼',
+            'werkstuck': '🎨'
+          };
+          return (
+            <Chip 
+              label={`${kategorieIcons[item.kategorie] || ''} ${kategorieLabels[item.kategorie] || item.kategorie}`}
+              size="small"
+              color={kategorieColors[item.kategorie] || 'default'}
+              variant="outlined"
+            />
+          );
+        }
+        return '-';
       
       case 'bestand':
         // Je nach Produkttyp verschiedene Bestandsfelder und Einheiten anzeigen
@@ -1189,6 +1387,42 @@ const AdminLager = () => {
               fontWeight: bestand <= (item.mindestbestand || 0) ? 'bold' : 'normal'
             }}>
               {bestand}g
+              {bestand <= (item.mindestbestand || 0) && (
+                <Box 
+                  component="span" 
+                  sx={{ 
+                    ml: 0.5, 
+                    fontSize: '12px',
+                    color: 'error.main'
+                  }}
+                >
+                  ⚠️
+                </Box>
+              )}
+            </Box>
+          );
+        } else if (currentTab.key === 'giessformen') {
+          // Gießformen haben meist eine feste Anzahl (meist 1)
+          const anzahl = item.anzahl || 1;
+          return (
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center'
+            }}>
+              {anzahl} Stück
+            </Box>
+          );
+        } else if (currentTab.key === 'giesswerkstoff') {
+          const bestand = item.aktuellerBestand || 0;
+          const einheit = item.einheit || 'g';
+          return (
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              color: bestand <= (item.mindestbestand || 0) ? 'error.main' : 'text.primary',
+              fontWeight: bestand <= (item.mindestbestand || 0) ? 'bold' : 'normal'
+            }}>
+              {bestand}{einheit}
               {bestand <= (item.mindestbestand || 0) && (
                 <Box 
                   component="span" 
@@ -1453,6 +1687,36 @@ const AdminLager = () => {
                   : (activeTab === 0 ? 'Aktive Produkte' : 'Verfügbare Items')
                 }
               </Button>
+              
+              {/* Kategorie-Filter nur für Fertigprodukte (Tab 0) */}
+              {activeTab === 0 && (
+                <>
+                  <Button
+                    variant={categoryFilter.seifen ? "contained" : "outlined"}
+                    color={categoryFilter.seifen ? "secondary" : "primary"}
+                    size={isMobile ? "medium" : "small"}
+                    onClick={() => setCategoryFilter(prev => ({ ...prev, seifen: !prev.seifen }))}
+                    sx={{ 
+                      width: isMobile ? '100%' : 'auto',
+                      justifyContent: isMobile ? 'center' : 'flex-start'
+                    }}
+                  >
+                    🧼 Seifen
+                  </Button>
+                  <Button
+                    variant={categoryFilter.werkstucke ? "contained" : "outlined"}
+                    color={categoryFilter.werkstucke ? "secondary" : "primary"}
+                    size={isMobile ? "medium" : "small"}
+                    onClick={() => setCategoryFilter(prev => ({ ...prev, werkstucke: !prev.werkstucke }))}
+                    sx={{ 
+                      width: isMobile ? '100%' : 'auto',
+                      justifyContent: isMobile ? 'center' : 'flex-start'
+                    }}
+                  >
+                    🎨 Werkstücke
+                  </Button>
+                </>
+              )}
               
               <Chip
                 size={isMobile ? "medium" : "small"}

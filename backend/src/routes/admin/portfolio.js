@@ -66,6 +66,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
+      kategorie,
       name,
       seife,
       gramm,
@@ -74,12 +75,18 @@ router.post('/', async (req, res) => {
       zusatz,
       optional,
       verpackung,
+      giessform,
+      giesswerkstoff,
       aktiv,
       reihenfolge,
+      preis,
       beschreibung,
       zusatzinhaltsstoffe,
-      rohseifenKonfiguration
+      rohseifenKonfiguration,
+      abmessungen
     } = req.body;
+
+    console.log('🔍 Portfolio Create Request:', { kategorie, name, giessform, giesswerkstoff });
 
     // Prüfen ob Name bereits existiert
     const existingProduct = await Portfolio.findOne({ name });
@@ -92,16 +99,21 @@ router.post('/', async (req, res) => {
 
     // Neues Produkt erstellen
     const newProduct = new Portfolio({
+      kategorie: kategorie || 'seife',
       name,
-      seife,
+      seife: seife || '',
       gramm: parseInt(gramm),
-      aroma,
-      seifenform,
+      aroma: aroma || '',
+      seifenform: seifenform || '',
       zusatz: zusatz || '',
       optional: optional || '',
-      verpackung,
+      verpackung: verpackung || '',
+      giessform: giessform || null,
+      giesswerkstoff: giesswerkstoff || null,
+      preis: parseFloat(preis) || 0,
       aktiv: aktiv !== undefined ? aktiv : false,
       reihenfolge: parseInt(reihenfolge) || 0,
+      abmessungen: abmessungen || { laenge: 0, breite: 0, hoehe: 0, einheit: 'cm' },
       beschreibung: beschreibung || {
         kurz: '',
         lang: '',

@@ -54,6 +54,12 @@ const rohseifeSchema = new mongoose.Schema({
     trim: true
   },
 
+  bild: {
+    type: String,
+    default: '',
+    trim: true
+  },
+
   mindestbestand: {
     type: Number,
     default: 100

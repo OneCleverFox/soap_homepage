@@ -47,12 +47,12 @@ const giesswerkstoffSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['kg', 'g', 'l', 'ml', 'stueck', 'packung'],
-    default: 'kg'
+    default: 'g'
   },
   mindestbestand: {
     type: Number,
     required: true,
-    default: 1,
+    default: 1000,
     min: 0
   },
   maximalbestand: {
@@ -87,6 +87,23 @@ const giesswerkstoffSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  produktlink: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  
+  bild: {
+    type: String,
+    default: '',
+    trim: true
+  },
+  
+  // Legacy field for backward compatibility - might exist as string in old data
+  zusatzstoffe: {
+    type: mongoose.Schema.Types.Mixed,
+    default: ''
+  },
   
   // Mischungseigenschaften
   mischverhaeltnisse: [{
@@ -113,119 +130,66 @@ const giesswerkstoffSchema = new mongoose.Schema({
   
   // Standard-Mischverhältnis (häufigste Verwendung)
   standardMischung: {
-    wasserVerhaeltnis: {
-      type: Number,
-      min: 0,
-      default: null // z.B. 0.5 für 1:0.5 Verhältnis
-    },
-    zusatzstoffe: [{
-      bezeichnung: {
-        type: String,
-        trim: true
-      },
-      anteil: {
-        type: Number,
-        min: 0 // Anteil in Prozent
-      },
-      einheit: {
-        type: String,
-        enum: ['prozent', 'gramm_pro_kg', 'ml_pro_l'],
-        default: 'prozent'
-      }
-    }]
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        wasserVerhaeltnis: null,
+        zusatzstoffe: []
+      };
+    }
   },
   
   // Verarbeitungszeiten
   verarbeitungszeit: {
-    topfzeit: {
-      type: Number,
-      default: null // Minuten
-    },
-    haertungszeit: {
-      type: Number,
-      default: null // Minuten bis entformbar
-    },
-    vollhaertung: {
-      type: Number,
-      default: null // Stunden bis vollständig ausgehärtet
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        topfzeit: null,
+        haertungszeit: null,
+        vollhaertung: null
+      };
     }
   },
   
   // Qualitätseigenschaften
   eigenschaften: {
-    haerte: {
-      type: String,
-      enum: ['sehr_weich', 'weich', 'mittel', 'hart', 'sehr_hart'],
-      default: 'mittel'
-    },
-    oberflaeche: {
-      type: String,
-      enum: ['glatt', 'rau', 'poroes', 'strukturiert'],
-      default: 'glatt'
-    },
-    schrumpf: {
-      type: Number,
-      default: null // Prozent Schrumpfung
-    },
-    wasserfest: {
-      type: Boolean,
-      default: false
-    },
-    uv_bestaendig: {
-      type: Boolean,
-      default: false
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        haerte: 'mittel',
+        oberflaeche: 'glatt',
+        schrumpf: null,
+        wasserfest: false,
+        uv_bestaendig: false
+      };
     }
   },
   
   // Lagerung und Haltbarkeit
   lagerung: {
-    temperaturMin: {
-      type: Number,
-      default: null // °C
-    },
-    temperaturMax: {
-      type: Number,
-      default: null // °C
-    },
-    luftfeuchtigkeit: {
-      type: String,
-      default: '',
-      trim: true
-    },
-    haltbarkeitMonate: {
-      type: Number,
-      default: 12,
-      min: 1
-    },
-    lagerort: {
-      type: String,
-      default: '',
-      trim: true
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        temperaturMin: null,
+        temperaturMax: null,
+        luftfeuchtigkeit: '',
+        haltbarkeitMonate: 12,
+        lagerort: ''
+      };
     }
   },
   
   // Sicherheit und Gesundheit
   sicherheit: {
-    gefahrenstoff: {
-      type: Boolean,
-      default: false
-    },
-    hPictogramme: [{
-      type: String,
-      enum: ['GHS01', 'GHS02', 'GHS03', 'GHS04', 'GHS05', 'GHS06', 'GHS07', 'GHS08', 'GHS09']
-    }],
-    rSaetze: [{
-      type: String,
-      trim: true
-    }],
-    sSaetze: [{
-      type: String,
-      trim: true
-    }],
-    schutzausruestung: {
-      type: String,
-      default: '',
-      trim: true
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        gefahrenstoff: false,
+        hPictogramme: [],
+        rSaetze: [],
+        sSaetze: [],
+        schutzausruestung: ''
+      };
     }
   },
   
@@ -250,19 +214,13 @@ const giesswerkstoffSchema = new mongoose.Schema({
   
   // Verwendungsstatistik
   verbrauchsstatistik: {
-    letzteVerwendung: {
-      type: Date,
-      default: null
-    },
-    verwendungenGesamt: {
-      type: Number,
-      default: 0,
-      min: 0
-    },
-    durchschnittProVerwendung: {
-      type: Number,
-      default: 0,
-      min: 0 // Durchschnittsverbrauch pro Verwendung
+    type: mongoose.Schema.Types.Mixed,
+    default: function() {
+      return {
+        letzteVerwendung: null,
+        verwendungenGesamt: 0,
+        durchschnittProVerwendung: 0
+      };
     }
   },
   
@@ -347,10 +305,13 @@ giesswerkstoffSchema.pre('save', function(next) {
     // Hier könnte komplexere Logik stehen
   }
   
+  // Ensure lagerung is an object before accessing properties
+  const lagerung = typeof this.lagerung === 'object' ? this.lagerung : {};
+  
   // Ablaufdatum setzen wenn nicht vorhanden
-  if (!this.ablaufdatum && this.lagerung.haltbarkeitMonate) {
+  if (!this.ablaufdatum && lagerung.haltbarkeitMonate) {
     const heute = new Date();
-    this.ablaufdatum = new Date(heute.setMonth(heute.getMonth() + this.lagerung.haltbarkeitMonate));
+    this.ablaufdatum = new Date(heute.setMonth(heute.getMonth() + lagerung.haltbarkeitMonate));
   }
   
   next();
@@ -391,6 +352,16 @@ giesswerkstoffSchema.statics.findBaldAbgelaufen = function(tage = 30) {
 // Instance-Methoden
 giesswerkstoffSchema.methods.verbrauchHinzufuegen = function(menge, zweck = '') {
   this.aktuellerBestand = Math.max(0, this.aktuellerBestand - menge);
+  
+  // Ensure verbrauchsstatistik is an object
+  if (typeof this.verbrauchsstatistik !== 'object') {
+    this.verbrauchsstatistik = {
+      letzteVerwendung: null,
+      verwendungenGesamt: 0,
+      durchschnittProVerwendung: 0
+    };
+  }
+  
   this.verbrauchsstatistik.letzteVerwendung = new Date();
   this.verbrauchsstatistik.verwendungenGesamt += 1;
   
@@ -416,15 +387,18 @@ giesswerkstoffSchema.methods.getMischungsInfo = function(gewuenschteMenge = 1) {
     einheit: this.einheit
   };
   
-  if (this.standardMischung.wasserVerhaeltnis) {
+  // Ensure standardMischung is an object
+  const standardMischung = typeof this.standardMischung === 'object' ? this.standardMischung : {};
+  
+  if (standardMischung.wasserVerhaeltnis) {
     info.wasser = {
-      menge: gewuenschteMenge * this.standardMischung.wasserVerhaeltnis,
+      menge: gewuenschteMenge * standardMischung.wasserVerhaeltnis,
       einheit: this.einheit === 'kg' ? 'l' : 'ml'
     };
   }
   
-  if (this.standardMischung.zusatzstoffe && this.standardMischung.zusatzstoffe.length > 0) {
-    info.zusatzstoffe = this.standardMischung.zusatzstoffe.map(zusatz => ({
+  if (standardMischung.zusatzstoffe && Array.isArray(standardMischung.zusatzstoffe) && standardMischung.zusatzstoffe.length > 0) {
+    info.zusatzstoffe = standardMischung.zusatzstoffe.map(zusatz => ({
       name: zusatz.bezeichnung,
       menge: this.berechneMengeFuerZusatz(gewuenschteMenge, zusatz),
       einheit: zusatz.einheit

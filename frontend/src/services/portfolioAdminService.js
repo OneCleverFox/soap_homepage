@@ -107,6 +107,33 @@ export const portfolioAdminService = {
     return data.success ? data.data.map(item => item.name) : [];
   },
 
+  // Werkstück-spezifische Options
+  async getGiessformOptions() {
+    try {
+      const response = await fetch(`${API_BASE}/admin/rohstoffe/giessformen`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      return data.success ? data.data.filter(item => item.verfuegbar) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Gießformen:', error);
+      return [];
+    }
+  },
+
+  async getGiesswerkstoffOptions() {
+    try {
+      const response = await fetch(`${API_BASE}/admin/rohstoffe/giesswerkstoff`, {
+        headers: getAuthHeaders()
+      });
+      const data = await response.json();
+      return data.success ? data.data.filter(item => item.verfuegbar) : [];
+    } catch (error) {
+      console.error('Fehler beim Laden der Gießwerkstoffe:', error);
+      return [];
+    }
+  },
+
   // Helper Methoden
   calculateNextOrder(products) {
     if (products.length === 0) return 1;

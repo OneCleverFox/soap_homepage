@@ -84,6 +84,15 @@ const giessformSchema = new mongoose.Schema({
     trim: true,
     default: ''
   },
+  produktlink: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  bild: {
+    type: String, // base64 encoded image
+    default: ''
+  },
   
   // Zustand und Verfügbarkeit (immer neu bei Anschaffung)
   zustand: {
