@@ -273,9 +273,23 @@ router.put('/giesswerkstoff/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Bereinige leere Strings für Objekt-Felder
+    const updateData = { ...req.body };
+    
+    // Bereinige mischkonfiguration - leerer String zu korrektem Objekt
+    if (updateData.mischkonfiguration === '') {
+      updateData.mischkonfiguration = {
+        berechnungsFaktor: 1.5,
+        schwundProzent: 5,
+        zusaetzlichesMaterial: []
+      };
+    }
+    
+    console.log('🔄 Cleaned update data:', updateData);
+    
     const updatedWerkstoff = await Giesswerkstoff.findByIdAndUpdate(
       id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 

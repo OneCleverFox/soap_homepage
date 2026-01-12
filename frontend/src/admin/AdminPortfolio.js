@@ -43,7 +43,8 @@ import {
   LocalShipping,
   ShoppingCart,
   Category,
-  CameraAlt as CameraIcon
+  CameraAlt as CameraIcon,
+  FilterList as FilterIcon
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
 
@@ -450,37 +451,66 @@ const AdminPortfolio = () => {
         </Box>
       )}
 
-      {/* Mobile Menu Button */}
+      {/* Fixiertes Filter-Symbol (Mobile) */}
       {isMobile && (
         <IconButton
           onClick={() => setMobileMenuOpen(true)}
-          sx={{ position: 'fixed', top: 16, left: 16, zIndex: 1200 }}
+          sx={{ 
+            position: 'fixed', 
+            top: 70, 
+            left: 16, 
+            zIndex: 1000,
+            bgcolor: 'primary.main',
+            color: 'white',
+            boxShadow: 3,
+            width: 48,
+            height: 48,
+            '&:hover': {
+              bgcolor: 'primary.dark'
+            }
+          }}
         >
-          <MenuIcon />
+          <FilterIcon />
         </IconButton>
       )}
 
-      {/* Mobile Drawer */}
+      {/* Filter Drawer (50% Breite) */}
       <Drawer
         anchor="left"
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         sx={{ display: { xs: 'block', md: 'none' } }}
-        PaperProps={{ sx: { width: '50vw', minWidth: 200 } }}
+        PaperProps={{ 
+          sx: { 
+            width: '50vw',
+            minWidth: 200,
+            maxWidth: 300
+          } 
+        }}
       >
         {renderNavigation()}
       </Drawer>
 
       {/* Main Content */}
-      <Box sx={{ flexGrow: 1, p: 3 }}>
-        <Paper sx={{ p: 3 }}>
+      <Box sx={{ flexGrow: 1, p: { xs: 0, sm: 2, md: 3 } }}>
+        <Paper sx={{ p: { xs: 1.5, sm: 2, md: 3 }, m: { xs: 0, sm: 0 }, borderRadius: { xs: 0, sm: 1 } }}>
           {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: { xs: 1.5, sm: 0 },
+            mb: { xs: 2, md: 3 } 
+          }}>
             <Box>
-              <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              <Typography variant="h5" sx={{ 
+                fontWeight: 'bold',
+                fontSize: { xs: '1.25rem', sm: '1.5rem' }
+              }}>
                 Portfolio Verwaltung
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.875rem', sm: '0.875rem' } }}>
                 {selectedCategory === 'alle' ? 'Alle Produkte' : 
                  categories.find(c => c.id === selectedCategory)?.label} 
                 ({filteredItems.length} Artikel)
@@ -488,10 +518,13 @@ const AdminPortfolio = () => {
             </Box>
             <Button
               variant="contained"
-              startIcon={<AddIcon />}
+              startIcon={isMobile ? null : <AddIcon />}
               onClick={handleNew}
+              size={isMobile ? 'small' : 'medium'}
+              fullWidth={isMobile}
+              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
             >
-              Neues Produkt
+              {isMobile ? '+ Neues Produkt' : 'Neues Produkt'}
             </Button>
           </Box>
 
@@ -502,7 +535,7 @@ const AdminPortfolio = () => {
           )}
 
           {/* Cards Grid */}
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
             {filteredItems.map((item) => (
               <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -510,7 +543,7 @@ const AdminPortfolio = () => {
                   <Box sx={{ position: 'relative' }}>
                     <CardMedia
                       component="img"
-                      height="200"
+                      sx={{ height: { xs: 180, sm: 200 } }}
                       image={item.bilder?.hauptbild 
                         ? item.bilder.hauptbild  // Direkte Base64-Data-URL nutzen
                         : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPktlaW4gQmlsZDwvdGV4dD48L3N2Zz4='
@@ -571,7 +604,7 @@ const AdminPortfolio = () => {
                     </Box>
                   </Box>
                   
-                  <CardContent sx={{ flexGrow: 1, p: 2 }}>
+                  <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2 } }}>
                     {/* Category Badge */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                       <Chip 
@@ -587,12 +620,17 @@ const AdminPortfolio = () => {
                     </Box>
                     
                     {/* Product Name */}
-                    <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold', mb: 1, fontSize: '1.1rem' }}>
+                    <Typography variant="h6" component="h3" sx={{ 
+                      fontWeight: 'bold', 
+                      mb: 1, 
+                      fontSize: { xs: '1rem', sm: '1.1rem' },
+                      lineHeight: 1.3
+                    }}>
                       {item.name}
                     </Typography>
                     
                     {/* Product Details */}
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontSize: { xs: '0.8rem', sm: '0.875rem' } }}>
                       {item.kategorie === 'seife' && (
                         <>
                           {item.seife} • {item.aroma} • {item.gramm}g
@@ -609,16 +647,19 @@ const AdminPortfolio = () => {
                     </Typography>
                     
                     {/* Price */}
-                    <Typography variant="h6" color="primary" sx={{ fontWeight: 'bold' }}>
+                    <Typography variant="h6" color="primary" sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                    }}>
                       €{item.preis}
                     </Typography>
                     
                     {/* Gallery Images Upload */}
                     <Box sx={{ mt: 1 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                         Galerie ({item.bilder?.galerie?.length || 0}):
                       </Typography>
-                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: 1, maxWidth: '100%' }}>
+                      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(50px, 1fr))', gap: { xs: 0.5, sm: 1 }, maxWidth: '100%' }}>
                         {/* Vorhandene Galeriebilder */}
                         {item.bilder?.galerie && item.bilder.galerie.slice(0, 4).map((img, index) => (
                           <Box key={index} sx={{ position: 'relative' }}>
@@ -683,20 +724,25 @@ const AdminPortfolio = () => {
                     </Box>
                   </CardContent>
                   
-                  <CardActions sx={{ p: 2, pt: 0 }}>
+                  <CardActions sx={{ p: { xs: 1, sm: 2 }, pt: 0, gap: 0.5 }}>
                     <Button
                       size="small"
-                      startIcon={<EditIcon />}
+                      startIcon={isMobile ? null : <EditIcon />}
                       onClick={() => handleEdit(item)}
                       variant="outlined"
-                      sx={{ mr: 1 }}
+                      fullWidth={isMobile}
+                      sx={{ 
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        py: { xs: 0.5, sm: 0.75 }
+                      }}
                     >
-                      Bearbeiten
+                      {isMobile ? 'Edit' : 'Bearbeiten'}
                     </Button>
                     <IconButton
                       size="small"
                       onClick={() => handleDelete(item._id)}
                       color="error"
+                      sx={{ minWidth: { xs: 36, sm: 40 } }}
                     >
                       <DeleteIcon />
                     </IconButton>
