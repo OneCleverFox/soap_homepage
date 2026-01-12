@@ -28,7 +28,9 @@ import {
   useTheme,
   Card,
   CardContent,
-  Stack
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import api from '../services/api';
 
@@ -46,12 +48,17 @@ const getRundungsLabel = (option) => {
 
 const AdminWarenberechnung = () => {
   const [portfolioProducts, setPortfolioProducts] = useState([]);
+  const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [calculation, setCalculation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editValues, setEditValues] = useState({});
+  
+  // Filter States
+  const [categoryFilter, setCategoryFilter] = useState('alle'); // 'alle', 'seife', 'werkstuck'
+  const [statusFilter, setStatusFilter] = useState('alle'); // 'alle', 'aktiv', 'inaktiv'
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -89,6 +96,32 @@ const AdminWarenberechnung = () => {
     }
   }, [selectedProduct, calculateProductCosts]);
 
+  // Filter-Logik für Produkte
+  useEffect(() => {
+    let filtered = [...portfolioProducts];
+
+    // Kategorie-Filter
+    if (categoryFilter === 'seife') {
+      filtered = filtered.filter(product => product.kategorie !== 'werkstuck');
+    } else if (categoryFilter === 'werkstuck') {
+      filtered = filtered.filter(product => product.kategorie === 'werkstuck');
+    }
+
+    // Status-Filter
+    if (statusFilter === 'aktiv') {
+      filtered = filtered.filter(product => product.aktiv === true);
+    } else if (statusFilter === 'inaktiv') {
+      filtered = filtered.filter(product => product.aktiv !== true);
+    }
+
+    setFilteredProducts(filtered);
+
+    // Wenn das aktuelle Produkt herausgefiltert wurde, wähle das erste verfügbare
+    if (selectedProduct && !filtered.find(p => p._id === selectedProduct._id)) {
+      setSelectedProduct(filtered.length > 0 ? filtered[0] : null);
+    }
+  }, [portfolioProducts, categoryFilter, statusFilter, selectedProduct]);
+
   const loadPortfolioProducts = async () => {
     try {
       setLoading(true);
@@ -117,7 +150,7 @@ const AdminWarenberechnung = () => {
   };
 
   const handleProductChange = (event) => {
-    const product = portfolioProducts.find(p => p._id === event.target.value);
+    const product = filteredProducts.find(p => p._id === event.target.value);
     setSelectedProduct(product);
   };
 
@@ -265,6 +298,57 @@ const AdminWarenberechnung = () => {
     );
   }
 
+  if (filteredProducts.length === 0 && portfolioProducts.length > 0) {
+    return (
+      <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
+          📊 Warenberechnung
+        </Typography>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>Filter & Produktauswahl</Typography>
+          <Stack direction={isMobile ? "column" : "row"} spacing={2} sx={{ mb: 3 }}>
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Kategorie:
+              </Typography>
+              <ToggleButtonGroup
+                value={categoryFilter}
+                exclusive
+                onChange={(event, newValue) => newValue && setCategoryFilter(newValue)}
+                size="small"
+              >
+                <ToggleButton value="alle">Alle</ToggleButton>
+                <ToggleButton value="seife">🧼 Seifen</ToggleButton>
+                <ToggleButton value="werkstuck">🏺 Werkstücke</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Status:
+              </Typography>
+              <ToggleButtonGroup
+                value={statusFilter}
+                exclusive
+                onChange={(event, newValue) => newValue && setStatusFilter(newValue)}
+                size="small"
+              >
+                <ToggleButton value="alle">Alle</ToggleButton>
+                <ToggleButton value="aktiv">✅ Aktiv</ToggleButton>
+                <ToggleButton value="inaktiv">🚫 Inaktiv</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          </Stack>
+          <Alert severity="info">
+            Keine Produkte entsprechen den ausgewählten Filtern. 
+            ({portfolioProducts.length} Produkte insgesamt verfügbar)
+            <br />
+            Ändern Sie die Filter-Einstellungen, um Produkte anzuzeigen.
+          </Alert>
+        </Paper>
+      </Container>
+    );
+  }
+
   if (portfolioProducts.length === 0) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
@@ -285,20 +369,81 @@ const AdminWarenberechnung = () => {
       </Typography>
 
       <Paper sx={{ p: isMobile ? 1.5 : 3, mb: isMobile ? 2 : 3 }}>
-        <FormControl fullWidth size={isMobile ? "small" : "medium"}>
-          <InputLabel>Produkt auswählen</InputLabel>
-          <Select
-            value={selectedProduct?._id || ''}
-            onChange={handleProductChange}
-            label="Produkt auswählen"
-          >
-            {portfolioProducts.map((product) => (
-              <MenuItem key={product._id} value={product._id}>
-                {product.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Grid container spacing={2}>
+          {/* Filter Buttons */}
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom>
+              Filter & Produktauswahl
+            </Typography>
+            <Stack direction={isMobile ? "column" : "row"} spacing={2} sx={{ mb: 3 }}>
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Kategorie:
+                </Typography>
+                <ToggleButtonGroup
+                  value={categoryFilter}
+                  exclusive
+                  onChange={(event, newValue) => newValue && setCategoryFilter(newValue)}
+                  size="small"
+                >
+                  <ToggleButton value="alle">Alle</ToggleButton>
+                  <ToggleButton value="seife">🧼 Seifen</ToggleButton>
+                  <ToggleButton value="werkstuck">🏺 Werkstücke</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Status:
+                </Typography>
+                <ToggleButtonGroup
+                  value={statusFilter}
+                  exclusive
+                  onChange={(event, newValue) => newValue && setStatusFilter(newValue)}
+                  size="small"
+                >
+                  <ToggleButton value="alle">Alle</ToggleButton>
+                  <ToggleButton value="aktiv">✅ Aktiv</ToggleButton>
+                  <ToggleButton value="inaktiv">🚫 Inaktiv</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            </Stack>
+          </Grid>
+          
+          {/* Produktauswahl */}
+          <Grid item xs={12}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+              <InputLabel>
+                Produkt auswählen ({filteredProducts.length} von {portfolioProducts.length})
+              </InputLabel>
+              <Select
+                value={selectedProduct?._id || ''}
+                onChange={handleProductChange}
+                label={`Produkt auswählen (${filteredProducts.length} von ${portfolioProducts.length})`}
+              >
+                {filteredProducts.map((product) => (
+                  <MenuItem 
+                    key={product._id} 
+                    value={product._id}
+                    sx={{
+                      opacity: product.aktiv ? 1 : 0.6,
+                      fontStyle: product.aktiv ? 'normal' : 'italic'
+                    }}
+                  >
+                    {product.kategorie === 'werkstuck' ? '🏺' : '🧼'} 
+                    {product.name}
+                    {!product.aktiv && ' (INAKTIV)'}
+                    <Chip 
+                      label={product.kategorie === 'werkstuck' ? 'Werkstück' : 'Seife'}
+                      size="small"
+                      color={product.kategorie === 'werkstuck' ? 'secondary' : 'primary'}
+                      sx={{ ml: 1, fontSize: '0.75rem' }}
+                    />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
       </Paper>
 
       {calculation && (
@@ -368,114 +513,191 @@ const AdminWarenberechnung = () => {
               {isMobile ? (
                 // Mobile Card View
                 <Stack spacing={1.5}>
-                  {/* Rohseifen */}
-                  <Card variant="outlined">
-                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                      <Typography variant="subtitle2" color="primary" gutterBottom>
-                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
-                      </Typography>
-                      <Stack spacing={1}>
-                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                          <Typography variant="body2">{calculation.rohseifeName}</Typography>
-                          <Typography variant="body2" fontWeight="bold">
-                            {calculation.rohseifeKosten?.toFixed(2)} €
+                  {/* Komponenten je nach Kategorie */}
+                  {selectedProduct.kategorie === 'seife' ? (
+                    <>
+                      {/* Rohseifen */}
+                      <Card variant="outlined">
+                        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
                           </Typography>
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
-                            `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
-                            `${calculation.gewichtInGramm}g`}
-                        </Typography>
-                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
-                          <>
+                          <Stack spacing={1}>
                             <Box display="flex" justifyContent="space-between" alignItems="center">
-                              <Typography variant="body2">{calculation.rohseifenKonfiguration.rohseife2Name}</Typography>
+                              <Typography variant="body2">{calculation.rohseifeName}</Typography>
                               <Typography variant="body2" fontWeight="bold">
-                                {calculation.rohseife2Kosten?.toFixed(2)} €
+                                {calculation.rohseifeKosten?.toFixed(2)} €
                               </Typography>
                             </Box>
                             <Typography variant="caption" color="text.secondary">
-                              Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                              Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
+                                `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
+                                `${calculation.gewichtInGramm}g`}
                             </Typography>
-                          </>
-                        )}
-                      </Stack>
-                    </CardContent>
-                  </Card>
-
-                  {/* Duftstoff */}
-                  {calculation.duftoelName && calculation.duftoelName !== '' && (
-                    <Card variant="outlined">
-                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                        <Typography variant="subtitle2" color="primary" gutterBottom>
-                          Duftstoff
-                        </Typography>
-                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                          <Typography variant="body2">{calculation.duftoelName}</Typography>
-                          <Typography variant="body2" fontWeight="bold">
-                            {calculation.duftoelKosten?.toFixed(2)} €
-                          </Typography>
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          Tropfen/Seife: {Math.round(calculation.gewichtInGramm / 50)}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {/* Zusatzinhaltsstoffe */}
-                  {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
-                    <Card variant="outlined">
-                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                        <Typography variant="subtitle2" color="secondary" gutterBottom>
-                          ⚗️ Zusatzinhaltsstoffe
-                        </Typography>
-                        {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
-                          <Stack spacing={0.5}>
-                            {calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
-                              <Box key={index} display="flex" justifyContent="space-between" alignItems="center">
-                                <Typography variant="body2">
-                                  {zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)
-                                </Typography>
-                                <Typography variant="body2" fontWeight="bold">
-                                  {zutat.gesamtKosten?.toFixed(4)} €
-                                </Typography>
-                              </Box>
-                            ))}
-                            {calculation.zusatzinhaltsstoffeKonfiguration.length > 1 && (
+                            {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
                               <>
-                                <Divider sx={{ my: 0.5 }} />
                                 <Box display="flex" justifyContent="space-between" alignItems="center">
-                                  <Typography variant="body2" fontWeight="bold">Gesamt:</Typography>
+                                  <Typography variant="body2">{calculation.rohseifenKonfiguration.rohseife2Name}</Typography>
                                   <Typography variant="body2" fontWeight="bold">
-                                    {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                                    {calculation.rohseife2Kosten?.toFixed(2)} €
                                   </Typography>
                                 </Box>
+                                <Typography variant="caption" color="text.secondary">
+                                  Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                                </Typography>
                               </>
                             )}
                           </Stack>
-                        ) : (
-                          <Box display="flex" justifyContent="space-between" alignItems="center">
-                            <Typography variant="body2">Zusatzinhaltsstoffe</Typography>
-                            <Typography variant="body2" fontWeight="bold">
-                              {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                        </CardContent>
+                      </Card>
+
+                      {/* Duftstoff */}
+                      {calculation.duftoelName && calculation.duftoelName !== '' && (
+                        <Card variant="outlined">
+                          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="subtitle2" color="primary" gutterBottom>
+                              Duftstoff
                             </Typography>
-                          </Box>
-                        )}
-                      </CardContent>
-                    </Card>
+                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                              <Typography variant="body2">{calculation.duftoelName}</Typography>
+                              <Typography variant="body2" fontWeight="bold">
+                                {calculation.duftoelKosten?.toFixed(2)} €
+                              </Typography>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Tropfen/Seife: {Math.round(calculation.gewichtInGramm / 50)}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Zusatzinhaltsstoffe */}
+                      {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
+                        <Card variant="outlined">
+                          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="subtitle2" color="secondary" gutterBottom>
+                              ⚗️ Zusatzinhaltsstoffe
+                            </Typography>
+                            {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
+                              <Stack spacing={0.5}>
+                                {calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
+                                  <Box key={index} display="flex" justifyContent="space-between" alignItems="center">
+                                    <Typography variant="body2">
+                                      {zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)
+                                    </Typography>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {zutat.gesamtKosten?.toFixed(4)} €
+                                    </Typography>
+                                  </Box>
+                                ))}
+                                {calculation.zusatzinhaltsstoffeKonfiguration.length > 1 && (
+                                  <>
+                                    <Divider sx={{ my: 0.5 }} />
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                      <Typography variant="body2" fontWeight="bold">Gesamt:</Typography>
+                                      <Typography variant="body2" fontWeight="bold">
+                                        {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                                      </Typography>
+                                    </Box>
+                                  </>
+                                )}
+                              </Stack>
+                            ) : (
+                              <Box display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="body2">Zusatzinhaltsstoffe</Typography>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €
+                                </Typography>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Gießwerkstoff für Werkstücke */}
+                      <Card variant="outlined">
+                        <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            🏺 Gießwerkstoff
+                          </Typography>
+                          <Stack spacing={1}>
+                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                              <Typography variant="body2">{calculation.giesswerkstoffName || 'Standard'}</Typography>
+                              <Typography variant="body2" fontWeight="bold">
+                                {calculation.giesswerkstoffKosten?.toFixed(2)} €
+                              </Typography>
+                            </Box>
+                            <Typography variant="caption" color="text.secondary">
+                              Volumen: {selectedProduct.volumenInMl || 0} ml
+                            </Typography>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+
+                      {/* Gießzusatzstoffe */}
+                      {calculation.giesszusatzstoffeKostenGesamt > 0 && (
+                        <Card variant="outlined">
+                          <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                            <Typography variant="subtitle2" color="secondary" gutterBottom>
+                              🧪 Gießzusatzstoffe
+                            </Typography>
+                            {calculation.giesszusatzstoffeKonfiguration && calculation.giesszusatzstoffeKonfiguration.length > 0 ? (
+                              <Stack spacing={0.5}>
+                                {calculation.giesszusatzstoffeKonfiguration.map((zutat, index) => (
+                                  <Box key={index} display="flex" justifyContent="space-between" alignItems="center">
+                                    <Typography variant="body2">
+                                      {zutat.giesszusatzstoffName} ({zutat.menge?.toFixed(1)}ml)
+                                    </Typography>
+                                    <Typography variant="body2" fontWeight="bold">
+                                      {zutat.gesamtKosten?.toFixed(4)} €
+                                    </Typography>
+                                  </Box>
+                                ))}
+                                {calculation.giesszusatzstoffeKonfiguration.length > 1 && (
+                                  <>
+                                    <Divider sx={{ my: 0.5 }} />
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                      <Typography variant="body2" fontWeight="bold">Gesamt:</Typography>
+                                      <Typography variant="body2" fontWeight="bold">
+                                        {calculation.giesszusatzstoffeKostenGesamt?.toFixed(4)} €
+                                      </Typography>
+                                    </Box>
+                                  </>
+                                )}
+                              </Stack>
+                            ) : (
+                              <Box display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="body2">Gießzusatzstoffe</Typography>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {calculation.giesszusatzstoffeKostenGesamt?.toFixed(4)} €
+                                </Typography>
+                              </Box>
+                            )}
+                          </CardContent>
+                        </Card>
+                      )}
+                    </>
                   )}
 
                   {/* Verpackung & Energie */}
                   <Card variant="outlined">
                     <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                       <Typography variant="subtitle2" color="primary" gutterBottom>
-                        Verpackung & Extras
+                        {selectedProduct.kategorie === 'seife' ? 'Verpackung & Extras' : 'Form & Extras'}
                       </Typography>
                       <Stack spacing={0.5}>
                         <Box display="flex" justifyContent="space-between">
-                          <Typography variant="caption">Seifenform:</Typography>
-                          <Typography variant="caption">{selectedProduct.seifenform || 'Standard'} (0,10 €)</Typography>
+                          <Typography variant="caption">
+                            {selectedProduct.kategorie === 'seife' ? 'Seifenform:' : 'Gießform:'}
+                          </Typography>
+                          <Typography variant="caption">
+                            {selectedProduct.kategorie === 'seife' 
+                              ? `${selectedProduct.seifenform || 'Standard'} (0,10 €)`
+                              : `${selectedProduct.giessform || calculation.giessformName || 'Standard'} (${calculation.giessformKosten?.toFixed(2) || '0.10'} €)`
+                            }
+                          </Typography>
                         </Box>
                         <Box display="flex" justifyContent="space-between">
                           <Typography variant="caption">Zusatz:</Typography>
@@ -634,95 +856,157 @@ const AdminWarenberechnung = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {/* Rohseifen */}
-                    <TableRow>
-                      <TableCell rowSpan={calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 4 : 2}>
-                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
-                      </TableCell>
-                      <TableCell>{calculation.rohseifeName}</TableCell>
-                      <TableCell align="right">{calculation.rohseifeKosten?.toFixed(2)} €</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>
-                        Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
-                          `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
-                          `${calculation.gewichtInGramm}g`}
-                      </TableCell>
-                      <TableCell align="right"></TableCell>
-                    </TableRow>
-                    {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
+                    {/* Komponenten je nach Kategorie */}
+                    {selectedProduct.kategorie === 'seife' ? (
                       <>
+                        {/* Rohseifen */}
                         <TableRow>
-                          <TableCell>{calculation.rohseifenKonfiguration.rohseife2Name}</TableCell>
-                          <TableCell align="right">{calculation.rohseife2Kosten?.toFixed(2)} €</TableCell>
+                          <TableCell rowSpan={calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 4 : 2}>
+                            {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 'Rohseifen-Mischung' : 'Seife'}
+                          </TableCell>
+                          <TableCell>{calculation.rohseifeName}</TableCell>
+                          <TableCell align="right">{calculation.rohseifeKosten?.toFixed(2)} €</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell>
-                            Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                            Menge: {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen ? 
+                              `${calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife1Gramm || 0}g` : 
+                              `${calculation.gewichtInGramm}g`}
                           </TableCell>
                           <TableCell align="right"></TableCell>
                         </TableRow>
-                      </>
-                    )}
-
-                    {/* Duftstoff */}
-                    {calculation.duftoelName && calculation.duftoelName !== '' && (
-                      <>
-                        <TableRow>
-                          <TableCell>Duftstoff</TableCell>
-                          <TableCell>{calculation.duftoelName}</TableCell>
-                          <TableCell align="right">{calculation.duftoelKosten?.toFixed(2)} €</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Tropfen / Seife</TableCell>
-                          <TableCell>{Math.round(calculation.gewichtInGramm / 50)}</TableCell>
-                          <TableCell align="right"></TableCell>
-                        </TableRow>
-                      </>
-                    )}
-
-                    {/* Zusatzinhaltsstoffe */}
-                    {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
-                      <>
-                        <TableRow>
-                          <TableCell rowSpan={calculation.zusatzinhaltsstoffeKonfiguration?.length + 1 || 2}>
-                            ⚗️ Zusatzinhaltsstoffe
-                          </TableCell>
-                          <TableCell></TableCell>
-                          <TableCell align="right"></TableCell>
-                        </TableRow>
-                        {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
-                          calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
-                            <TableRow key={index}>
-                              <TableCell>{zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)</TableCell>
-                              <TableCell align="right">{zutat.gesamtKosten?.toFixed(4)} €</TableCell>
+                        {calculation.rohseifenKonfiguration?.verwendeZweiRohseifen && (
+                          <>
+                            <TableRow>
+                              <TableCell>{calculation.rohseifenKonfiguration.rohseife2Name}</TableCell>
+                              <TableCell align="right">{calculation.rohseife2Kosten?.toFixed(2)} €</TableCell>
                             </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell>Zusatzinhaltsstoffe</TableCell>
-                            <TableCell align="right">{calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €</TableCell>
-                          </TableRow>
+                            <TableRow>
+                              <TableCell>
+                                Menge: {calculation.rohseifenKonfiguration.gewichtVerteilung?.rohseife2Gramm || 0}g
+                              </TableCell>
+                              <TableCell align="right"></TableCell>
+                            </TableRow>
+                          </>
                         )}
+
+                        {/* Duftstoff */}
+                        {calculation.duftoelName && calculation.duftoelName !== '' && (
+                          <>
+                            <TableRow>
+                              <TableCell>Duftstoff</TableCell>
+                              <TableCell>{calculation.duftoelName}</TableCell>
+                              <TableCell align="right">{calculation.duftoelKosten?.toFixed(2)} €</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell>Tropfen / Seife</TableCell>
+                              <TableCell>{Math.round(calculation.gewichtInGramm / 50)}</TableCell>
+                              <TableCell align="right"></TableCell>
+                            </TableRow>
+                          </>
+                        )}
+
+                        {/* Zusatzinhaltsstoffe */}
+                        {calculation.zusatzinhaltsstoffeKostenGesamt > 0 && (
+                          <>
+                            <TableRow>
+                              <TableCell rowSpan={calculation.zusatzinhaltsstoffeKonfiguration?.length + 1 || 2}>
+                                ⚗️ Zusatzinhaltsstoffe
+                              </TableCell>
+                              <TableCell></TableCell>
+                              <TableCell align="right"></TableCell>
+                            </TableRow>
+                            {calculation.zusatzinhaltsstoffeKonfiguration && calculation.zusatzinhaltsstoffeKonfiguration.length > 0 ? (
+                              calculation.zusatzinhaltsstoffeKonfiguration.map((zutat, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{zutat.inhaltsstoffName} ({zutat.menge?.toFixed(1)}g)</TableCell>
+                                  <TableCell align="right">{zutat.gesamtKosten?.toFixed(4)} €</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell>Zusatzinhaltsstoffe</TableCell>
+                                <TableCell align="right">{calculation.zusatzinhaltsstoffeKostenGesamt?.toFixed(4)} €</TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        )}
+
+                        {/* Leere Zeile */}
+                        <TableRow>
+                          <TableCell colSpan={3}>&nbsp;</TableCell>
+                        </TableRow>
+
+                        {/* Verpackung */}
+                        <TableRow>
+                          <TableCell>Seifenform</TableCell>
+                          <TableCell>{selectedProduct.seifenform || 'Standard'}</TableCell>
+                          <TableCell align="right">0,10 €</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Zusatz</TableCell>
+                          <TableCell>{selectedProduct.zusatz || 0}</TableCell>
+                          <TableCell align="right"></TableCell>
+                        </TableRow>
+                      </>
+                    ) : (
+                      <>
+                        {/* Gießwerkstoff für Werkstücke */}
+                        <TableRow>
+                          <TableCell>🏺 Gießwerkstoff</TableCell>
+                          <TableCell>{calculation.giesswerkstoffName || 'Standard'}</TableCell>
+                          <TableCell align="right">{calculation.giesswerkstoffKosten?.toFixed(2)} €</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Volumen</TableCell>
+                          <TableCell>{selectedProduct.volumenInMl || 0} ml</TableCell>
+                          <TableCell align="right"></TableCell>
+                        </TableRow>
+
+                        {/* Gießzusatzstoffe */}
+                        {calculation.giesszusatzstoffeKostenGesamt > 0 && (
+                          <>
+                            <TableRow>
+                              <TableCell rowSpan={calculation.giesszusatzstoffeKonfiguration?.length + 1 || 2}>
+                                🧪 Gießzusatzstoffe
+                              </TableCell>
+                              <TableCell></TableCell>
+                              <TableCell align="right"></TableCell>
+                            </TableRow>
+                            {calculation.giesszusatzstoffeKonfiguration && calculation.giesszusatzstoffeKonfiguration.length > 0 ? (
+                              calculation.giesszusatzstoffeKonfiguration.map((zutat, index) => (
+                                <TableRow key={index}>
+                                  <TableCell>{zutat.giesszusatzstoffName} ({zutat.menge?.toFixed(1)}ml)</TableCell>
+                                  <TableCell align="right">{zutat.gesamtKosten?.toFixed(4)} €</TableCell>
+                                </TableRow>
+                              ))
+                            ) : (
+                              <TableRow>
+                                <TableCell>Gießzusatzstoffe</TableCell>
+                                <TableCell align="right">{calculation.giesszusatzstoffeKostenGesamt?.toFixed(4)} €</TableCell>
+                              </TableRow>
+                            )}
+                          </>
+                        )}
+
+                        {/* Leere Zeile */}
+                        <TableRow>
+                          <TableCell colSpan={3}>&nbsp;</TableCell>
+                        </TableRow>
+
+                        {/* Gießform */}
+                        <TableRow>
+                          <TableCell>🍱 Gießform</TableCell>
+                          <TableCell>{selectedProduct.giessform || calculation.giessformName || 'Standard'}</TableCell>
+                          <TableCell align="right">{calculation.giessformKosten?.toFixed(2) || '0.10'} €</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Verwendungen</TableCell>
+                          <TableCell>{calculation.giessformVerwendungen || 50}</TableCell>
+                          <TableCell align="right"></TableCell>
+                        </TableRow>
                       </>
                     )}
-
-                    {/* Leere Zeile */}
-                    <TableRow>
-                      <TableCell colSpan={3}>&nbsp;</TableCell>
-                    </TableRow>
-
-                    {/* Verpackung */}
-                    <TableRow>
-                      <TableCell>Seifenform</TableCell>
-                      <TableCell>{selectedProduct.seifenform || 'Standard'}</TableCell>
-                      <TableCell align="right">0,10 €</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Zusatz</TableCell>
-                      <TableCell>{selectedProduct.zusatz || 0}</TableCell>
-                      <TableCell align="right"></TableCell>
-                    </TableRow>
                     <TableRow>
                       <TableCell>Optional</TableCell>
                       <TableCell>{selectedProduct.optional || 0}</TableCell>

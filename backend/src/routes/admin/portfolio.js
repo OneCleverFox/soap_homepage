@@ -1,6 +1,7 @@
 const express = require('express');
 const Portfolio = require('../../models/Portfolio');
 const { optimizeMainImage } = require('../../middleware/imageOptimization');
+const { authenticateToken } = require('../../middleware/auth');
 const ZusatzinhaltsstoffeService = require('../../services/zusatzinhaltsstoffeService');
 const multer = require('multer');
 const path = require('path');
@@ -207,15 +208,20 @@ router.put('/:id', async (req, res) => {
     // Daten aktualisieren
     const allowedFields = [
       'name', 'seife', 'gramm', 'aroma', 'seifenform', 
-      'zusatz', 'optional', 'verpackung', 'aktiv', 'reihenfolge', 'preis'
+      'zusatz', 'optional', 'verpackung', 'aktiv', 'reihenfolge', 'preis',
+      'giesswerkstoff', 'giessform', 'kategorie'
     ];
 
     allowedFields.forEach(field => {
       if (updateData[field] !== undefined) {
         if (field === 'gramm' || field === 'reihenfolge') {
-          product[field] = parseInt(updateData[field]);
+          const numValue = parseInt(updateData[field]);
+          product[field] = isNaN(numValue) ? undefined : numValue;
         } else if (field === 'preis') {
           product[field] = parseFloat(updateData[field]);
+        } else if (field === 'giesswerkstoff' || field === 'giessform') {
+          // Für Werkstück-Felder: null/undefined-Werte explizit setzen
+          product[field] = updateData[field] || undefined;
         } else {
           product[field] = updateData[field];
         }
@@ -252,6 +258,16 @@ router.put('/:id', async (req, res) => {
       console.log('🗺 PORTFOLIO UPDATE - Erhalte Zusatzinhaltsstoffe:', updateData.zusatzinhaltsstoffe);
       product.zusatzinhaltsstoffe = updateData.zusatzinhaltsstoffe;
       console.log('🗺 PORTFOLIO UPDATE - Setze Zusatzinhaltsstoffe:', product.zusatzinhaltsstoffe);
+    }
+
+    // Gießwerkstoff-Konfiguration separat handhaben
+    if (updateData.giesswerkstoffKonfiguration) {
+      console.log('🏺 PORTFOLIO UPDATE - Erhalte Gießwerkstoff-Konfiguration:', updateData.giesswerkstoffKonfiguration);
+      product.giesswerkstoffKonfiguration = {
+        berechnungsFaktor: updateData.giesswerkstoffKonfiguration.berechnungsFaktor || 1.5,
+        schwundProzent: updateData.giesswerkstoffKonfiguration.schwundProzent || 5
+      };
+      console.log('🏺 PORTFOLIO UPDATE - Setze Gießwerkstoff-Konfiguration:', product.giesswerkstoffKonfiguration);
     }
 
     const updatedProduct = await product.save();

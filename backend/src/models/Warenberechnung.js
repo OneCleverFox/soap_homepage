@@ -13,10 +13,17 @@ const warenberechnungSchema = new mongoose.Schema({
     required: true
   },
   
-  // Rohstoff-Referenzen (Namen)
+  // Produktkategorie: 'seife' oder 'werkstuck'
+  kategorie: {
+    type: String,
+    enum: ['seife', 'werkstuck'],
+    default: 'seife'
+  },
+  
+  // Seifen-spezifische Felder
   rohseifeName: {
     type: String,
-    required: true
+    required: function() { return this.kategorie === 'seife'; }
   },
   // Erweiterte Rohseifen-Konfiguration
   rohseifenKonfiguration: {
@@ -45,7 +52,17 @@ const warenberechnungSchema = new mongoose.Schema({
   },
   verpackungName: {
     type: String,
-    required: true
+    required: function() { return this.kategorie === 'seife'; }
+  },
+  
+  // Werkstück-spezifische Felder
+  giesswerkstoffName: {
+    type: String,
+    default: ''
+  },
+  giessformName: {
+    type: String,
+    default: ''
   },
   
   // Gewicht und Mengen
@@ -55,7 +72,7 @@ const warenberechnungSchema = new mongoose.Schema({
     default: 50
   },
   
-  // Fixe Kosten (berechnet aus Rohstoffen)
+  // Seifen-spezifische Kosten
   rohseifeKosten: {
     type: Number,
     default: 0
@@ -69,6 +86,55 @@ const warenberechnungSchema = new mongoose.Schema({
     default: 0
   },
   verpackungKosten: {
+    type: Number,
+    default: 0
+  },
+  
+  // Werkstück-spezifische Kosten
+  giesswerkstoffKosten: {
+    type: Number,
+    default: 0
+  },
+  giesszusatzstoffeKosten: {
+    type: Number,
+    default: 0
+  },
+  giessformKosten: {
+    type: Number,
+    default: 0
+  },
+  giessformVerwendungen: {
+    type: Number,
+    default: 50
+  },
+  
+  // Gießzusatzstoffe-Konfiguration für Werkstücke
+  giesszusatzstoffeKonfiguration: [{
+    giesszusatzstoffName: {
+      type: String,
+      required: true
+    },
+    menge: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    einheit: {
+      type: String,
+      enum: ['ml', 'prozent'],
+      default: 'ml'
+    },
+    kostenProEinheit: {
+      type: Number,
+      default: 0
+    },
+    gesamtKosten: {
+      type: Number,
+      default: 0
+    }
+  }],
+  
+  giesszusatzstoffeKostenGesamt: {
     type: Number,
     default: 0
   },
@@ -184,19 +250,32 @@ const warenberechnungSchema = new mongoose.Schema({
 
 // Pre-save Hook: Berechnungen durchführen
 warenberechnungSchema.pre('save', function(next) {
-  // Zusatzinhaltsstoffe-Gesamtkosten berechnen
+  // Zusatzinhaltsstoffe-Gesamtkosten berechnen (für Seifen)
   this.zusatzinhaltsstoffeKostenGesamt = this.zusatzinhaltsstoffeKonfiguration.reduce((sum, zutat) => {
     return sum + (zutat.gesamtKosten || 0);
   }, 0);
   
-  // Zwischensumme EK - berücksichtigt zweite Rohseife und Zusatzinhaltsstoffe
-  this.zwischensummeEK = 
-    this.rohseifeKosten + 
-    this.rohseife2Kosten +
-    this.duftoelKosten + 
-    this.verpackungKosten + 
-    this.energieKosten +
-    this.zusatzinhaltsstoffeKostenGesamt;
+  // Gießzusatzstoffe-Gesamtkosten berechnen (für Werkstücke)
+  this.giesszusatzstoffeKostenGesamt = this.giesszusatzstoffeKonfiguration.reduce((sum, zutat) => {
+    return sum + (zutat.gesamtKosten || 0);
+  }, 0);
+  
+  // Zwischensumme EK - berücksichtigt sowohl Seifen- als auch Werkstück-Kosten
+  if (this.kategorie === 'werkstuck') {
+    this.zwischensummeEK = 
+      this.giesswerkstoffKosten + 
+      this.giesszusatzstoffeKostenGesamt +
+      this.giessformKosten +
+      this.energieKosten;
+  } else {
+    this.zwischensummeEK = 
+      this.rohseifeKosten + 
+      this.rohseife2Kosten +
+      this.duftoelKosten + 
+      this.verpackungKosten + 
+      this.energieKosten +
+      this.zusatzinhaltsstoffeKostenGesamt;
+  }
   
   // Pauschale (EK * Faktor)
   this.pauschale = this.zwischensummeEK * this.pauschaleFaktor;

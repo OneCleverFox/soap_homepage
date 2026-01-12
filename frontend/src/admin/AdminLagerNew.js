@@ -34,7 +34,11 @@ import {
   DialogContent,
   DialogActions,
   AppBar,
-  Toolbar
+  Toolbar,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import {
   Inventory as InventoryIcon,
@@ -93,6 +97,9 @@ const AdminLager = () => {
   // Rohstoff-Info für Fertigprodukte
   const [rohstoffInfo, setRohstoffInfo] = useState(null);
   
+  // Gießwerkstoff-Info für Werkstücke
+  const [giesswerkstoffInfo, setGiesswerkstoffInfo] = useState(null);
+  
   // Data states für alle Produkttypen
   const [data, setData] = useState({
     fertigprodukte: [],
@@ -101,12 +108,13 @@ const AdminLager = () => {
     verpackungen: [],
     zusatzinhaltsstoffe: [],
     giessformen: [],
-    giesswerkstoff: []
+    giesswerkstoff: [],
+    giesszusatzstoffe: []
   });
 
   // Search Hook für die aktuelle Tab-Daten mit Filter für aktive/inaktive Items
   const getCurrentTabData = () => {
-    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe', 'giessformen', 'giesswerkstoff'];
+    const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe', 'giessformen', 'giesswerkstoff', 'giesszusatzstoffe'];
     const rawData = data[tabNames[activeTab]] || [];
     
     // Filter für aktive/inaktive Items anwenden
@@ -196,7 +204,8 @@ const AdminLager = () => {
         { key: 'verpackungen', url: '/verpackungen?includeUnavailable=true' },
         { key: 'zusatzinhaltsstoffe', url: '/zusatzinhaltsstoffe?includeUnavailable=true' },
         { key: 'giessformen', url: '/admin/rohstoffe/giessformen' },
-        { key: 'giesswerkstoff', url: '/admin/rohstoffe/giesswerkstoff' }
+        { key: 'giesswerkstoff', url: '/admin/rohstoffe/giesswerkstoff' },
+        { key: 'giesszusatzstoffe', url: '/lager/admin/rohstoffe/giesszusatzstoffe' }
       ];
 
       const newData = {};
@@ -359,6 +368,25 @@ const AdminLager = () => {
     }
   }, [makeAPICall]);
 
+  // Nur Gießwerkstoff-Daten aktualisieren (optimiert)
+  const refreshGiesswerkstoffData = useCallback(async () => {
+    try {
+      console.log('🎨 Aktualisiere nur Gießwerkstoff-Daten...');
+      
+      const giesswerkstoffResponse = await makeAPICall('/admin/rohstoffe/giesswerkstoff');
+
+      setData(prevData => ({
+        ...prevData,
+        giesswerkstoff: giesswerkstoffResponse?.data || prevData.giesswerkstoff
+      }));
+      
+      console.log('✅ Gießwerkstoff-Daten reaktiv aktualisiert');
+      
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren der Gießwerkstoff-Daten:', error);
+    }
+  }, [makeAPICall]);
+
   // Rohstoff-Informationen für Fertigprodukt laden
   const loadRohstoffInfo = useCallback(async (produktId) => {
     try {
@@ -394,6 +422,36 @@ const AdminLager = () => {
     } catch (error) {
       console.error('Fehler beim Laden der Rohstoff-Info:', error);
       setRohstoffInfo(null);
+    }
+  }, [API_BASE]);
+
+  // Gießwerkstoff-Informationen für Werkstück laden
+  const loadGiesswerkstoffInfo = useCallback(async (produktId) => {
+    try {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🎨 Debug - Loading Gießwerkstoff Info for:', produktId);
+      }
+      
+      const response = await fetch(`${API_BASE}/lager/werkstuck-giesswerkstoff/${produktId}`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setGiesswerkstoffInfo(result.data);
+          console.log('✅ Gießwerkstoff-Info geladen:', result.data);
+        } else {
+          console.error('Fehler beim Laden der Gießwerkstoff-Info:', result.message);
+          setGiesswerkstoffInfo(null);
+        }
+      } else {
+        console.error('API-Fehler beim Laden der Gießwerkstoff-Info:', response.status);
+        setGiesswerkstoffInfo(null);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Gießwerkstoff-Info:', error);
+      setGiesswerkstoffInfo(null);
     }
   }, [API_BASE]);
 
@@ -451,6 +509,10 @@ const AdminLager = () => {
         einheit = item.einheit || 'g';
         aktuellerBestand = item.aktuellerBestand || 0;
         break;
+      case 'giesszusatzstoffe':
+        einheit = item.einheit || 'ml';
+        aktuellerBestand = item.aktuellerBestand || 0;
+        break;
       default:
         einheit = 'Einheiten';
         aktuellerBestand = item.verfuegbareMenge || item.aktuellVorrat || 0;
@@ -480,6 +542,9 @@ const AdminLager = () => {
       case 'giesswerkstoff':
         backendTyp = 'giesswerkstoff';
         break;
+      case 'giesszusatzstoffe':
+        backendTyp = 'giesszusatzstoff';
+        break;
       default:
         backendTyp = typ;
     }
@@ -497,15 +562,25 @@ const AdminLager = () => {
         preis: item.preis || item.preis_pro_kg || item.preis_pro_ml || item.preis_pro_stueck || 0,
         mindestbestand: item.mindestbestand || 0,
         verfuegbar: item.aktiv !== undefined ? item.aktiv : item.verfuegbar,
+        kategorie: item.kategorie || '', // 🎯 KRITISCH: Kategorie für Werkstück-Erkennung
         zusatzinfo: getZusatzinfo(item, typ)
       }
     });
     
     // Bei Fertigprodukten: Rohstoff-Informationen laden
     if (backendTyp === 'fertigprodukt') {
-      loadRohstoffInfo(item._id);
+      if (item.kategorie === 'werkstuck') {
+        // Bei Werkstücken: Gießwerkstoff-Informationen laden
+        loadGiesswerkstoffInfo(item._id);
+        setRohstoffInfo(null);
+      } else {
+        // Bei regulären Fertigprodukten: Rohstoff-Informationen laden
+        loadRohstoffInfo(item._id);
+        setGiesswerkstoffInfo(null);
+      }
     } else {
       setRohstoffInfo(null);
+      setGiesswerkstoffInfo(null);
     }
     
     setInventurDialog(true);
@@ -552,44 +627,101 @@ const AdminLager = () => {
           lieferant: item.lieferant || '',
           artikelnummer: item.artikelnummer || ''
         };
+      case 'giesszusatzstoffe':
+        return {
+          typ: item.typ || '',
+          kategorie: item.kategorie || '',
+          lieferant: item.lieferant || '',
+          artikelnummer: item.artikelnummer || '',
+          beschreibung: item.beschreibung || ''
+        };
       default:
         return {};
     }
   };
 
-  // 🚨 Rohstoff-Validierung für Fertigprodukte
+  // 🚨 Rohstoff-Validierung für Fertigprodukte und Gießwerkstoff-Validierung für Werkstücke
   const validateRohstoffVerfuegbarkeit = () => {
-    if (inventurForm.typ !== 'fertigprodukt' || !rohstoffInfo) {
+    if (inventurForm.typ !== 'fertigprodukt') {
       return { isValid: true, errors: [] };
     }
     
-    const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
-    const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
-    
-    // Bei negativen oder null Buchungen (weniger oder gleich Fertigprodukte) ist alles ok
-    if (buchungsAnzahl <= 0) {
-      return { isValid: true, errors: [] };
-    }
-    
-    const errors = [];
-    
-    for (const rohstoff of rohstoffInfo.rohstoffe) {
-      const benoetigt = rohstoff.proStueck * buchungsAnzahl;
-      if (rohstoff.verfuegbar < benoetigt) {
-        errors.push({
-          name: rohstoff.name,
-          benoetigt: benoetigt,
-          verfuegbar: rohstoff.verfuegbar,
-          einheit: rohstoff.einheit,
-          fehlend: benoetigt - rohstoff.verfuegbar
-        });
+    // Fertigprodukt-Seife: Rohstoff-Validierung
+    if (rohstoffInfo && inventurForm.produktDetails?.kategorie !== 'werkstuck') {
+      const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
+      const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
+      
+      // Bei negativen oder null Buchungen ist alles ok
+      if (buchungsAnzahl <= 0) {
+        return { isValid: true, errors: [] };
       }
+      
+      const errors = [];
+      
+      for (const rohstoff of rohstoffInfo.rohstoffe) {
+        const benoetigt = rohstoff.proStueck * buchungsAnzahl;
+        
+        // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+        const istUnbegrenzt = rohstoff.unbegrenzterVorrat === true || 
+                             rohstoff.name?.toLowerCase().includes('wasser') ||
+                             rohstoff.name?.toLowerCase().includes('leitungswasser');
+        
+        if (!istUnbegrenzt && rohstoff.verfuegbar < benoetigt) {
+          errors.push({
+            name: rohstoff.name,
+            benoetigt: benoetigt,
+            verfuegbar: rohstoff.verfuegbar,
+            einheit: rohstoff.einheit,
+            fehlend: benoetigt - rohstoff.verfuegbar
+          });
+        }
+      }
+      
+      return { 
+        isValid: errors.length === 0, 
+        errors: errors 
+      };
     }
     
-    return { 
-      isValid: errors.length === 0, 
-      errors: errors 
-    };
+    // Werkstück: Gießwerkstoff-Validierung
+    if (giesswerkstoffInfo && inventurForm.produktDetails?.kategorie === 'werkstuck') {
+      const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
+      const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
+      
+      // Bei negativen oder null Buchungen ist alles ok
+      if (buchungsAnzahl <= 0) {
+        return { isValid: true, errors: [] };
+      }
+      
+      const errors = [];
+      
+      for (const giesswerkstoff of giesswerkstoffInfo.giesswerkstoff) {
+        const benoetigt = giesswerkstoff.proStueck * buchungsAnzahl;
+        
+        // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+        const istUnbegrenzt = giesswerkstoff.unbegrenzterVorrat === true || 
+                             giesswerkstoff.name?.toLowerCase().includes('wasser') ||
+                             giesswerkstoff.name?.toLowerCase().includes('leitungswasser');
+        
+        if (!istUnbegrenzt && giesswerkstoff.verfuegbar < benoetigt) {
+          errors.push({
+            name: giesswerkstoff.name,
+            benoetigt: benoetigt,
+            verfuegbar: giesswerkstoff.verfuegbar,
+            einheit: giesswerkstoff.einheit,
+            fehlend: benoetigt - giesswerkstoff.verfuegbar
+          });
+        }
+      }
+      
+      return { 
+        isValid: errors.length === 0, 
+        errors: errors 
+      };
+    }
+    
+    return { isValid: true, errors: [] };
+
   };
 
   // Historie-Dialog öffnen
@@ -625,46 +757,96 @@ const AdminLager = () => {
     try {
       setSaving(true);
       
-      // 🚨 WICHTIG: Bei Fertigprodukten erst Rohstoff-Verfügbarkeit prüfen
+      // 🚨 WICHTIG: Bei Fertigprodukten/Werkstücken erst Verfügbarkeit prüfen
       if (inventurForm.typ === 'fertigprodukt') {
         const neueAnzahl = parseFloat(inventurForm.neuerBestand);
         const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
         
-        // Nur bei positiven Buchungen (mehr Fertigprodukte) Rohstoffe prüfen
+        // Nur bei positiven Buchungen prüfen
         if (buchungsAnzahl > 0) {
-          if (!rohstoffInfo) {
-            toast.error('Rohstoff-Informationen nicht verfügbar. Bitte laden Sie die Seite neu.');
-            return;
-          }
           
-          // Prüfe jeden Rohstoff
-          const rohstoffMangel = [];
-          
-          for (const rohstoff of rohstoffInfo.rohstoffe) {
-            const benoetigt = rohstoff.proStueck * buchungsAnzahl;
-            if (rohstoff.verfuegbar < benoetigt) {
-              rohstoffMangel.push({
-                name: rohstoff.name,
-                benoetigt: benoetigt,
-                verfuegbar: rohstoff.verfuegbar,
-                einheit: rohstoff.einheit,
-                fehlend: benoetigt - rohstoff.verfuegbar
-              });
+          // Werkstück: Gießwerkstoff-Verfügbarkeit prüfen
+          if (inventurForm.produktDetails?.kategorie === 'werkstuck' && giesswerkstoffInfo) {
+            const giesswerkstoffMangel = [];
+            
+            for (const giesswerkstoff of giesswerkstoffInfo.giesswerkstoff) {
+              const benoetigt = giesswerkstoff.proStueck * buchungsAnzahl;
+              
+              // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+              const istUnbegrenzt = giesswerkstoff.unbegrenzterVorrat === true || 
+                                   giesswerkstoff.name?.toLowerCase().includes('wasser') ||
+                                   giesswerkstoff.name?.toLowerCase().includes('leitungswasser');
+              
+              if (!istUnbegrenzt && giesswerkstoff.verfuegbar < benoetigt) {
+                giesswerkstoffMangel.push({
+                  name: giesswerkstoff.name,
+                  benoetigt: benoetigt,
+                  verfuegbar: giesswerkstoff.verfuegbar,
+                  einheit: giesswerkstoff.einheit,
+                  fehlend: benoetigt - giesswerkstoff.verfuegbar
+                });
+              }
+            }
+            
+            if (giesswerkstoffMangel.length > 0) {
+              console.error('❌ Gießwerkstoff-Mangel erkannt:', giesswerkstoffMangel);
+              
+              const mangelnachricht = giesswerkstoffMangel.map(gm => 
+                `${gm.name}: ${gm.fehlend} ${gm.einheit} fehlen (benötigt: ${gm.benoetigt}, verfügbar: ${gm.verfuegbar})`
+              ).join('\n');
+              
+              toast.error(
+                `❌ Inventur nicht möglich!\n\nNicht genügend Gießwerkstoffe verfügbar:\n${mangelnachricht}\n\nBitte erst Gießwerkstoffe nachbestellen.`,
+                {
+                  duration: 8000,
+                  style: {
+                    background: '#f8d7da',
+                    color: '#721c24'
+                  }
+                }
+              );
+              return;
             }
           }
           
-          // Falls Rohstoffe fehlen: Speichern verhindern
-          if (rohstoffMangel.length > 0) {
-            console.error('❌ Rohstoff-Mangel erkannt:', rohstoffMangel);
+          // Reguläre Fertigprodukt-Seife: Rohstoff-Verfügbarkeit prüfen
+          else if (inventurForm.produktDetails?.kategorie !== 'werkstuck' && rohstoffInfo) {
+            if (!rohstoffInfo) {
+              toast.error('Rohstoff-Informationen nicht verfügbar. Bitte laden Sie die Seite neu.');
+              return;
+            }
             
-            // Detaillierte Fehlermeldung
-            const mangelnachricht = rohstoffMangel.map(rm => 
-              `${rm.name}: ${rm.fehlend} ${rm.einheit} fehlen (benötigt: ${rm.benoetigt}, verfügbar: ${rm.verfuegbar})`
-            ).join('\n');
+            const rohstoffMangel = [];
             
-            toast.error(
-              `❌ Inventur nicht möglich!\n\nNicht genügend Rohstoffe verfügbar:\n${mangelnachricht}\n\nBitte erst Rohstoffe nachbestellen.`,
-              {
+            for (const rohstoff of rohstoffInfo.rohstoffe) {
+              const benoetigt = rohstoff.proStueck * buchungsAnzahl;
+              
+              // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+              const istUnbegrenzt = rohstoff.unbegrenzterVorrat === true || 
+                                   rohstoff.name?.toLowerCase().includes('wasser') ||
+                                   rohstoff.name?.toLowerCase().includes('leitungswasser');
+              
+              if (!istUnbegrenzt && rohstoff.verfuegbar < benoetigt) {
+                rohstoffMangel.push({
+                  name: rohstoff.name,
+                  benoetigt: benoetigt,
+                  verfuegbar: rohstoff.verfuegbar,
+                  einheit: rohstoff.einheit,
+                  fehlend: benoetigt - rohstoff.verfuegbar
+                });
+              }
+            }
+            
+            if (rohstoffMangel.length > 0) {
+              console.error('❌ Rohstoff-Mangel erkannt:', rohstoffMangel);
+              
+              const mangelnachricht = rohstoffMangel.map(rm => 
+                `${rm.name}: ${rm.fehlend} ${rm.einheit} fehlen (benötigt: ${rm.benoetigt}, verfügbar: ${rm.verfuegbar})`
+              ).join('\n');
+              
+              toast.error(
+                `❌ Inventur nicht möglich!\n\nNicht genügend Rohstoffe verfügbar:\n${mangelnachricht}\n\nBitte erst Rohstoffe nachbestellen.`,
+                {
                 duration: 8000,
                 style: {
                   maxWidth: '500px',
@@ -674,35 +856,44 @@ const AdminLager = () => {
             );
             
             return; // Inventur abbrechen
+            }
           }
           
-          // Zusätzliche Warnung bei kritischen Beständen
-          const kritischeRohstoffe = rohstoffInfo.rohstoffe.filter(rohstoff => {
-            const benoetigt = rohstoff.proStueck * buchungsAnzahl;
-            const verbleibt = rohstoff.verfuegbar - benoetigt;
-            return verbleibt >= 0 && verbleibt < rohstoff.proStueck * 2; // Weniger als 2 Produktionen übrig
-          });
-          
-          if (kritischeRohstoffe.length > 0) {
-            const kritischNachricht = kritischeRohstoffe.map(kr => 
-              `${kr.name}: Nur noch ${kr.verfuegbar - (kr.proStueck * buchungsAnzahl)} ${kr.einheit} übrig`
-            ).join('\n');
+          // Zusätzliche Warnung bei kritischen Beständen (nur bei regulären Fertigprodukten)
+          if (inventurForm.produktDetails?.kategorie !== 'werkstuck' && rohstoffInfo) {
+            const kritischeRohstoffe = rohstoffInfo.rohstoffe.filter(rohstoff => {
+              const benoetigt = rohstoff.proStueck * buchungsAnzahl;
+              const verbleibt = rohstoff.verfuegbar - benoetigt;
+              
+              // Unbegrenzte Materialien sind nie kritisch
+              const istUnbegrenzt = rohstoff.unbegrenzterVorrat === true || 
+                                   rohstoff.name?.toLowerCase().includes('wasser') ||
+                                   rohstoff.name?.toLowerCase().includes('leitungswasser');
+              
+              return !istUnbegrenzt && verbleibt >= 0 && verbleibt < rohstoff.proStueck * 2; // Weniger als 2 Produktionen übrig
+            });
             
-            // Warnung aber erlauben
-            toast(
-              `⚠️ Warnung: Kritische Rohstoff-Bestände!\n\n${kritischNachricht}\n\nBitte bald nachbestellen.`,
-              {
-                duration: 6000,
-                icon: '⚠️',
-                style: {
-                  maxWidth: '500px',
-                  whiteSpace: 'pre-line',
-                  backgroundColor: '#fff3cd',
-                  borderLeft: '4px solid #ffc107',
-                  color: '#856404'
+            if (kritischeRohstoffe.length > 0) {
+              const kritischNachricht = kritischeRohstoffe.map(kr => 
+                `${kr.name}: Nur noch ${kr.verfuegbar - (kr.proStueck * buchungsAnzahl)} ${kr.einheit} übrig`
+              ).join('\n');
+              
+              // Warnung aber erlauben
+              toast(
+                `⚠️ Warnung: Kritische Rohstoff-Bestände!\n\n${kritischNachricht}\n\nBitte bald nachbestellen.`,
+                {
+                  duration: 6000,
+                  icon: '⚠️',
+                  style: {
+                    maxWidth: '500px',
+                    whiteSpace: 'pre-line',
+                    backgroundColor: '#fff3cd',
+                    borderLeft: '4px solid #ffc107',
+                    color: '#856404'
+                  }
                 }
-              }
-            );
+              );
+            }
           }
         }
       }
@@ -742,6 +933,9 @@ const AdminLager = () => {
             break;
           case 'giesswerkstoff':
             produktTyp = 'giesswerkstoff';
+            break;
+          case 'giesszusatzstoff':
+            produktTyp = 'giesszusatzstoffe';
             break;
           default:
             console.warn('Unbekannter Produkttyp:', inventurForm.typ);
@@ -813,14 +1007,25 @@ const AdminLager = () => {
         
         // 🔄 MODERNE REAKTIVITÄT: Nur betroffene Daten aktualisieren statt alles neu zu laden
         if (inventurForm.typ === 'fertigprodukt') {
-          console.log('🔄 Fertigprodukt-Inventur: Aktualisiere gezielt Rohstoff-Daten...');
+          console.log('🔄 Fertigprodukt-Inventur: Aktualisiere gezielt Daten...');
           
-          // Statt alle Daten neu zu laden, nur Rohstoffe aktualisieren
-          await refreshRohstoffData();
-          
-          // Update auch die Rohstoff-Info falls Dialog offen ist
-          if (rohstoffInfo && rohstoffInfo.produkt && rohstoffInfo.produkt.id === inventurForm.artikelId) {
-            await loadRohstoffInfo(inventurForm.artikelId);
+          // Für Werkstücke: Gießwerkstoff-Daten aktualisieren
+          if (inventurForm.produktDetails?.kategorie === 'werkstuck') {
+            // Statt alle Daten neu zu laden, nur Gießwerkstoff-Daten aktualisieren
+            await refreshGiesswerkstoffData();
+            
+            // Update auch die Gießwerkstoff-Info falls Dialog offen ist
+            if (giesswerkstoffInfo && giesswerkstoffInfo.produkt && giesswerkstoffInfo.produkt.id === inventurForm.artikelId) {
+              await loadGiesswerkstoffInfo(inventurForm.artikelId);
+            }
+          } else {
+            // Für reguläre Fertigprodukte: Rohstoff-Daten aktualisieren
+            await refreshRohstoffData();
+            
+            // Update auch die Rohstoff-Info falls Dialog offen ist
+            if (rohstoffInfo && rohstoffInfo.produkt && rohstoffInfo.produkt.id === inventurForm.artikelId) {
+              await loadRohstoffInfo(inventurForm.artikelId);
+            }
           }
         } else {
           // Bei anderen Produkttypen: Nur den betroffenen Typ im State aktualisieren
@@ -1079,6 +1284,21 @@ const AdminLager = () => {
         { key: 'bezeichnung', label: 'Bezeichnung', width: '200px' },
         { key: 'typ', label: 'Typ', width: '120px' },
         { key: 'konsistenz', label: 'Konsistenz', width: '120px' },
+        { key: 'bestand', label: 'Bestand', width: '100px' },
+        { key: 'preis_pro_einheit', label: 'Preis/Einheit', width: '120px' },
+        { key: 'einheit', label: 'Einheit', width: '80px' },
+        { key: 'verfuegbar', label: 'Status', width: '120px' },
+        { key: 'actions', label: 'Aktionen', width: '120px' }
+      ]
+    },
+    {
+      label: 'Gießzusatzstoffe',
+      key: 'giesszusatzstoffe',
+      icon: '💧',
+      columns: [
+        { key: 'bezeichnung', label: 'Bezeichnung', width: '200px' },
+        { key: 'typ', label: 'Typ', width: '120px' },
+        { key: 'beschreibung', label: 'Beschreibung', width: '250px' },
         { key: 'bestand', label: 'Bestand', width: '100px' },
         { key: 'preis_pro_einheit', label: 'Preis/Einheit', width: '120px' },
         { key: 'einheit', label: 'Einheit', width: '80px' },
@@ -1522,116 +1742,93 @@ const AdminLager = () => {
         </Typography>
       </Box>
 
-      {/* Info-Card - Reduziert */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Alert severity="info">
-            Fertigprodukte mit "Aktiv" (grün) 
-            sind für Kunden im Frontend sichtbar. 
-            "Inaktiv" (rot) bedeutet nicht sichtbar für Kunden.
-          </Alert>
-        </CardContent>
-      </Card>
+      {/* Info-Card - Nur Desktop */}
+      {!isMobile && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Alert severity="info">
+              Fertigprodukte mit "Aktiv" (grün) 
+              sind für Kunden im Frontend sichtbar. 
+              "Inaktiv" (rot) bedeutet nicht sichtbar für Kunden.
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Tabs - Mobile Best Practice */}
+      {/* Navigation - Responsive */}
       <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={(e, newValue) => {
-            setActiveTab(newValue);
-            setShowInactiveItems(false); // Reset Filter beim Tabwechsel
-            setSearchTerm(''); // Reset Suche beim Tabwechsel
-          }}
-          variant={isMobile ? "fullWidth" : "fullWidth"}
-          sx={{
-            '& .MuiTab-root': {
-              minWidth: isMobile ? 0 : 'auto',
-              minHeight: isMobile ? 72 : 48,
-              fontSize: isMobile ? '0.75rem' : '1rem',
-              padding: isMobile ? '6px 4px' : '12px 16px',
-              textTransform: 'none'
-            },
-            '& .MuiTabs-flexContainer': {
-              justifyContent: 'space-between'
-            }
-          }}
-        >
-          {tabs.map((tab, index) => {
-            const mobileLabels = {
-              'fertigprodukte': 'Produkte',
-              'rohseifen': 'Seifen', 
-              'duftoele': 'Düfte',
-              'verpackungen': 'Verpack.'
-            };
-            
-            return (
+        {isMobile ? (
+          // Mobile: Dropdown-Auswahl
+          <Box sx={{ p: 2 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel id="lager-category-select-label">Lager-Kategorie</InputLabel>
+              <Select
+                labelId="lager-category-select-label"
+                id="lager-category-select"
+                value={activeTab}
+                label="Lager-Kategorie"
+                onChange={(e) => {
+                  setActiveTab(e.target.value);
+                  setShowInactiveItems(false);
+                  setSearchTerm('');
+                }}
+                sx={{ bgcolor: 'background.paper' }}
+              >
+                {tabs.map((tab, index) => (
+                  <MenuItem key={tab.key} value={index}>
+                    {tab.icon} {tab.label} ({data[tab.key]?.length || 0})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        ) : (
+          // Desktop: Normale Tabs
+          <Tabs
+            value={activeTab}
+            onChange={(e, newValue) => {
+              setActiveTab(newValue);
+              setShowInactiveItems(false);
+              setSearchTerm('');
+            }}
+            variant="fullWidth"
+            sx={{
+              '& .MuiTab-root': {
+                minWidth: 'auto',
+                minHeight: 48,
+                fontSize: '1rem',
+                padding: '12px 16px',
+                textTransform: 'none'
+              },
+              '& .MuiTabs-flexContainer': {
+                justifyContent: 'space-between'
+              }
+            }}
+          >
+            {tabs.map((tab, index) => (
               <Tab
                 key={tab.key}
                 label={
-                  isMobile ? (
-                    // Mobile: Ultra-kompakt - kein horizontales Scrollen
-                    <Box sx={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center', 
-                      gap: 0.3,
-                      width: '100%'
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
-                        <span style={{ fontSize: '1rem' }}>{tab.icon}</span>
-                        <Chip
-                          label={data[tab.key]?.length || 0}
-                          size="small"
-                          color={activeTab === index ? "primary" : "default"}
-                          sx={{ 
-                            height: 18, 
-                            fontSize: '0.65rem',
-                            '& .MuiChip-label': { px: 0.5 }
-                          }}
-                        />
-                      </Box>
-                      <Typography 
-                        variant="caption" 
-                        sx={{ 
-                          fontSize: '0.7rem', 
-                          lineHeight: 1,
-                          fontWeight: activeTab === index ? 600 : 400,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          maxWidth: '100%'
-                        }}
-                      >
-                        {mobileLabels[tab.key] || tab.label}
-                      </Typography>
-                    </Box>
-                  ) : (
-                    // Desktop: Normale Darstellung
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <span>{tab.icon}</span>
-                      <span>{tab.label}</span>
-                      <Chip
-                        label={data[tab.key]?.length || 0}
-                        size="small"
-                        color={activeTab === index ? "primary" : "default"}
-                      />
-                    </Box>
-                  )
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    <Chip
+                      label={data[tab.key]?.length || 0}
+                      size="small"
+                      color={activeTab === index ? "primary" : "default"}
+                    />
+                  </Box>
                 }
-                sx={{
-                  flex: isMobile ? 1 : 'none',
-                  maxWidth: isMobile ? '25%' : 'none'
-                }}
               />
-            );
-          })}
-        </Tabs>
+            ))}
+          </Tabs>
+        )}
       </Paper>
 
       {/* Erweiterte Suche */}
       <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Stack spacing={2}>
+        <CardContent sx={{ p: isMobile ? 2 : 3 }}>
+          <Stack spacing={isMobile ? 1.5 : 2}>
             <TextField
               fullWidth
               size={isMobile ? "small" : "medium"}
@@ -1666,25 +1863,27 @@ const AdminLager = () => {
             {/* Filter für aktive/inaktive Items */}
             <Box sx={{ 
               display: 'flex', 
-              gap: 1, 
+              gap: isMobile ? 0.5 : 1, 
               alignItems: 'center', 
               flexWrap: 'wrap',
-              flexDirection: isMobile ? 'column' : 'row'
+              flexDirection: isMobile ? 'row' : 'row'
             }}>
               <Button
                 variant={showInactiveItems ? "contained" : "outlined"}
                 color={showInactiveItems ? "warning" : "primary"}
-                size={isMobile ? "medium" : "small"}
+                size="small"
                 startIcon={showInactiveItems ? <VisibilityOffIcon /> : <VisibilityIcon />}
                 onClick={() => setShowInactiveItems(!showInactiveItems)}
                 sx={{ 
-                  width: isMobile ? '100%' : 'auto',
-                  justifyContent: isMobile ? 'center' : 'flex-start'
+                  fontSize: isMobile ? '0.75rem' : '0.875rem',
+                  px: isMobile ? 1 : 2,
+                  py: isMobile ? 0.5 : 1,
+                  minWidth: 'auto'
                 }}
               >
                 {showInactiveItems 
-                  ? (activeTab === 0 ? 'Inaktive Produkte' : 'Nicht verfügbare Items')
-                  : (activeTab === 0 ? 'Aktive Produkte' : 'Verfügbare Items')
+                  ? (activeTab === 0 ? (isMobile ? 'Inaktiv' : 'Inaktive Produkte') : (isMobile ? 'Nicht verfügbar' : 'Nicht verfügbare Items'))
+                  : (activeTab === 0 ? (isMobile ? 'Aktiv' : 'Aktive Produkte') : (isMobile ? 'Verfügbar' : 'Verfügbare Items'))
                 }
               </Button>
               
@@ -1694,11 +1893,13 @@ const AdminLager = () => {
                   <Button
                     variant={categoryFilter.seifen ? "contained" : "outlined"}
                     color={categoryFilter.seifen ? "secondary" : "primary"}
-                    size={isMobile ? "medium" : "small"}
+                    size="small"
                     onClick={() => setCategoryFilter(prev => ({ ...prev, seifen: !prev.seifen }))}
                     sx={{ 
-                      width: isMobile ? '100%' : 'auto',
-                      justifyContent: isMobile ? 'center' : 'flex-start'
+                      fontSize: isMobile ? '0.75rem' : '0.875rem',
+                      px: isMobile ? 1 : 2,
+                      py: isMobile ? 0.5 : 1,
+                      minWidth: 'auto'
                     }}
                   >
                     🧼 Seifen
@@ -1706,11 +1907,13 @@ const AdminLager = () => {
                   <Button
                     variant={categoryFilter.werkstucke ? "contained" : "outlined"}
                     color={categoryFilter.werkstucke ? "secondary" : "primary"}
-                    size={isMobile ? "medium" : "small"}
+                    size="small"
                     onClick={() => setCategoryFilter(prev => ({ ...prev, werkstucke: !prev.werkstucke }))}
                     sx={{ 
-                      width: isMobile ? '100%' : 'auto',
-                      justifyContent: isMobile ? 'center' : 'flex-start'
+                      fontSize: isMobile ? '0.75rem' : '0.875rem',
+                      px: isMobile ? 1 : 2,
+                      py: isMobile ? 0.5 : 1,
+                      minWidth: 'auto'
                     }}
                   >
                     🎨 Werkstücke
@@ -1719,13 +1922,16 @@ const AdminLager = () => {
               )}
               
               <Chip
-                size={isMobile ? "medium" : "small"}
-                label={`${currentData.length} von ${data[currentTab.key]?.length || 0} Items`}
+                size="small"
+                label={`${currentData.length} von ${data[currentTab.key]?.length || 0}`}
                 color="primary"
                 variant="outlined"
                 sx={{ 
-                  width: isMobile ? '100%' : 'auto',
-                  justifyContent: isMobile ? 'center' : 'flex-start'
+                  fontSize: isMobile ? '0.7rem' : '0.75rem',
+                  height: isMobile ? 24 : 'auto',
+                  '& .MuiChip-label': {
+                    px: isMobile ? 0.5 : 1
+                  }
                 }}
               />
             </Box>
@@ -1785,35 +1991,36 @@ const AdminLager = () => {
               </CardContent>
             </Card>
           ) : (
-            currentData.map((item, index) => (
-              <Card 
-                key={item._id || index}
-                sx={{ 
-                  opacity: (currentTab.key === 'fertigprodukte' && !item.aktiv) || 
-                          (currentTab.key !== 'fertigprodukte' && !item.verfuegbar) ? 0.6 : 1,
-                  '&:active': { transform: 'scale(0.98)' }
-                }}
-              >
-                <CardContent sx={{ pb: 1, px: isMobile ? 1.5 : 2, py: isMobile ? 1.5 : 2 }}>
-                  {/* Header mit Name und Status */}
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ flex: 1, mr: 1 }}>
-                      <Typography variant="h6" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
-                        {item.name}
-                      </Typography>
-                      {item.beschreibung && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                          {typeof item.beschreibung === 'object' 
-                            ? (item.beschreibung.kurz || item.beschreibung.lang || '').substring(0, 60) + '...'
-                            : item.beschreibung.substring(0, 60) + '...'
-                          }
+            currentData.map((item, index) => {
+              return (
+                <Card 
+                  key={item._id || index}
+                  sx={{ 
+                    opacity: (currentTab?.key === 'fertigprodukte' && !item.aktiv) || 
+                            (currentTab?.key !== 'fertigprodukte' && !item.verfuegbar) ? 0.6 : 1,
+                    '&:active': { transform: 'scale(0.98)' }
+                  }}
+                >
+                  <CardContent sx={{ pb: 1, px: isMobile ? 1.5 : 2, py: isMobile ? 1.5 : 2 }}>
+                    {/* Header mit Name und Status */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Box sx={{ flex: 1, mr: 1 }}>
+                        <Typography variant="h6" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
+                          {item.name}
                         </Typography>
-                      )}
-                    </Box>
-                    <StatusChip 
-                      isActive={currentTab.key === 'fertigprodukte' ? item.aktiv : item.verfuegbar} 
-                      productType={currentTab.key === 'fertigprodukte' ? 'fertigprodukt' : 'rohstoff'} 
-                    />
+                        {item.beschreibung && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {typeof item.beschreibung === 'object' 
+                              ? (item.beschreibung.kurz || item.beschreibung.lang || '').substring(0, 60) + '...'
+                              : item.beschreibung.substring(0, 60) + '...'
+                            }
+                          </Typography>
+                        )}
+                      </Box>
+                      <StatusChip 
+                        isActive={currentTab?.key === 'fertigprodukte' ? item.aktiv : item.verfuegbar} 
+                        productType={currentTab?.key === 'fertigprodukte' ? 'fertigprodukt' : 'rohstoff'} 
+                      />
                   </Box>
 
                   {/* Bestand Info - Mobile optimiert */}
@@ -1877,28 +2084,28 @@ const AdminLager = () => {
 
                   {/* Zusätzliche Infos in kompakter Form */}
                   <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, fontSize: '0.875rem' }}>
-                    {item.preis_pro_kg && (
+                    {item.preis_pro_kg && item.preis_pro_kg > 0 && (
                       <Box>
                         <Typography variant="body2" color="text.secondary">
                           Preis/kg: <strong>{item.preis_pro_kg.toFixed(2)}€</strong>
                         </Typography>
                       </Box>
                     )}
-                    {item.preis_pro_ml && (
+                    {item.preis_pro_ml && item.preis_pro_ml > 0 && (
                       <Box>
                         <Typography variant="body2" color="text.secondary">
                           Preis/ml: <strong>{item.preis_pro_ml.toFixed(2)}€</strong>
                         </Typography>
                       </Box>
                     )}
-                    {item.preis_pro_stueck && (
+                    {item.preis_pro_stueck && item.preis_pro_stueck > 0 && (
                       <Box>
                         <Typography variant="body2" color="text.secondary">
                           Preis/Stk: <strong>{item.preis_pro_stueck.toFixed(2)}€</strong>
                         </Typography>
                       </Box>
                     )}
-                    {item.mindestbestand && (
+                    {item.mindestbestand && item.mindestbestand > 0 && (
                       <Box>
                         <Typography variant="body2" color="text.secondary">
                           Min-Bestand: <strong>{item.mindestbestand}</strong>
@@ -1908,7 +2115,8 @@ const AdminLager = () => {
                   </Box>
                 </CardContent>
               </Card>
-            ))
+              );
+            })
           )}
         </Stack>
       ) : (
@@ -2239,137 +2447,314 @@ const AdminLager = () => {
                   helperText={`Geben Sie den korrekten Bestand in ${inventurForm.einheit} ein`}
                 />
 
-                {/* Rohstoff-Informationen für Fertigprodukte */}
+                {/* Rohstoff-Informationen für Fertigprodukte / Gießwerkstoff-Informationen für Werkstücke */}
                 {inventurForm.typ === 'fertigprodukt' && (
                   <Card variant="outlined" sx={{ mb: 2, backgroundColor: 'action.hover' }}>
                     <CardContent>
-                      <Typography variant="h6" gutterBottom color="info.main">
-                        🧪 Automatische Rohstoff-Subtraktion
-                      </Typography>
-                      
-                      {rohstoffInfo ? (
-                        <Box>
-                          <Stack spacing={1.5}>
-                            {rohstoffInfo.rohstoffe.map((rohstoff, index) => {
-                              // Dynamische Berechnung basierend auf eingegebener Menge
-                              const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
-                              const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
-                              const benoetigt = buchungsAnzahl > 0 ? rohstoff.proStueck * buchungsAnzahl : 0;
-                              const verfuegbar = rohstoff.verfuegbar;
-                              const ausreichendFuerBuchung = benoetigt <= verfuegbar;
-                              const verbleibt = verfuegbar - benoetigt;
-                              
-                              return (
-                                <Box 
-                                  key={index}
-                                  sx={{ 
-                                    p: 1.5, 
-                                    border: '2px solid', 
-                                    borderColor: ausreichendFuerBuchung ? 'success.main' : 'error.main',
-                                    borderRadius: 1,
-                                    backgroundColor: ausreichendFuerBuchung ? 'rgba(46, 125, 50, 0.08)' : 'rgba(211, 47, 47, 0.12)'
-                                  }}
-                                >
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Typography variant="body1" fontWeight="bold">
-                                      {rohstoff.name}
-                                    </Typography>
-                                    <Chip 
-                                      label={ausreichendFuerBuchung ? 'OK' : 'NICHT GENUG'} 
-                                      color={ausreichendFuerBuchung ? 'success' : 'error'} 
-                                      size="small" 
-                                    />
-                                  </Box>
-                                  
-                                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 1, mt: 1 }}>
-                                    <Box>
-                                      <Typography variant="caption" color="text.secondary">
-                                        Pro Stück:
-                                      </Typography>
-                                      <Typography variant="body2">
-                                        {rohstoff.proStueck} {rohstoff.einheit}
-                                      </Typography>
-                                    </Box>
-                                    
-                                    <Box>
-                                      <Typography variant="caption" color="text.secondary">
-                                        Benötigt:
-                                      </Typography>
-                                      <Typography variant="body2" fontWeight="bold" color={benoetigt > 0 ? 'warning.main' : 'text.primary'}>
-                                        {benoetigt > 0 ? `${benoetigt} ${rohstoff.einheit}` : '0'}
-                                      </Typography>
-                                    </Box>
-                                    
-                                    <Box>
-                                      <Typography variant="caption" color="text.secondary">
-                                        Verfügbar:
-                                      </Typography>
-                                      <Typography variant="body2">
-                                        {verfuegbar} {rohstoff.einheit}
-                                      </Typography>
-                                    </Box>
-                                    
-                                    <Box>
-                                      <Typography variant="caption" color="text.secondary">
-                                        Verbleibt:
-                                      </Typography>
-                                      <Typography 
-                                        variant="body2" 
-                                        fontWeight="bold"
-                                        color={
-                                          verbleibt < 0 ? 'error.main' : 
-                                          verbleibt < rohstoff.proStueck * 2 ? 'warning.main' : 
-                                          'success.main'
-                                        }
-                                      >
-                                        {verbleibt} {rohstoff.einheit}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                  
-                                  {!ausreichendFuerBuchung && (
-                                    <Alert severity="error" sx={{ mt: 1 }}>
-                                      <Typography variant="body2">
-                                        <strong>Fehlen {benoetigt - verfuegbar} {rohstoff.einheit}</strong>
-                                      </Typography>
-                                    </Alert>
-                                  )}
-                                  
-                                  {ausreichendFuerBuchung && verbleibt >= 0 && verbleibt < rohstoff.proStueck * 2 && benoetigt > 0 && (
-                                    <Alert severity="warning" sx={{ mt: 1 }}>
-                                      <Typography variant="body2">
-                                        Kritischer Bestand nach Buchung!
-                                      </Typography>
-                                    </Alert>
-                                  )}
-                                </Box>
-                              );
-                            })}
-                          </Stack>
+                      {/* Seife: Rohstoff-Informationen */}
+                      {inventurForm.produktDetails?.kategorie !== 'werkstuck' && rohstoffInfo && (
+                        <>
+                          <Typography variant="h6" gutterBottom color="info.main">
+                            🧪 Automatische Rohstoff-Subtraktion
+                          </Typography>
                           
-                          {rohstoffInfo.verfuegbarkeit.warnungen.length > 0 && (
-                            <Alert severity="warning" sx={{ mt: 2 }}>
-                              <Typography variant="body2" fontWeight="bold" gutterBottom>
-                                ⚠️ Rohstoff-Warnungen:
-                              </Typography>
-                              {rohstoffInfo.verfuegbarkeit.warnungen.map((warnung, index) => (
-                                <Typography key={index} variant="body2" sx={{ ml: 1 }}>
-                                  • {warnung}
+                          <Box>
+                            <Stack spacing={1.5}>
+                              {rohstoffInfo.rohstoffe.map((rohstoff, index) => {
+                                // Dynamische Berechnung basierend auf eingegebener Menge
+                                const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
+                                const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
+                                const benoetigt = buchungsAnzahl > 0 ? rohstoff.proStueck * buchungsAnzahl : 0;
+                                const verfuegbar = rohstoff.verfuegbar;
+                                
+                                // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+                                const istUnbegrenzt = rohstoff.unbegrenzterVorrat === true || 
+                                                     rohstoff.name?.toLowerCase().includes('wasser') ||
+                                                     rohstoff.name?.toLowerCase().includes('leitungswasser');
+                                                     
+                                const ausreichendFuerBuchung = istUnbegrenzt ? true : benoetigt <= verfuegbar;
+                                const verbleibt = istUnbegrenzt ? '∞' : (verfuegbar - benoetigt);
+                                
+                                return (
+                                  <Box 
+                                    key={index}
+                                    sx={{ 
+                                      p: 1.5, 
+                                      border: '2px solid', 
+                                      borderColor: ausreichendFuerBuchung ? 'success.main' : 'error.main',
+                                      borderRadius: 1,
+                                      backgroundColor: ausreichendFuerBuchung ? 'rgba(46, 125, 50, 0.08)' : 'rgba(211, 47, 47, 0.12)'
+                                    }}
+                                  >
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Typography variant="body1" fontWeight="bold">
+                                        {rohstoff.name}
+                                      </Typography>
+                                      <Chip 
+                                        label={ausreichendFuerBuchung ? 'OK' : 'NICHT GENUG'} 
+                                        color={ausreichendFuerBuchung ? 'success' : 'error'} 
+                                        size="small" 
+                                      />
+                                    </Box>
+                                    
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 1, mt: 1 }}>
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Pro Stück:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                          {rohstoff.proStueck} {rohstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Benötigt:
+                                        </Typography>
+                                        <Typography variant="body2" fontWeight="bold" color={benoetigt > 0 ? 'warning.main' : 'text.primary'}>
+                                          {benoetigt > 0 ? `${benoetigt} ${rohstoff.einheit}` : '0'}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Verfügbar:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                          {istUnbegrenzt ? '∞' : verfuegbar} {istUnbegrenzt ? '' : rohstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Verbleibt:
+                                        </Typography>
+                                        <Typography 
+                                          variant="body2" 
+                                          fontWeight="bold"
+                                          color={
+                                            istUnbegrenzt ? 'success.main' :
+                                            verbleibt < 0 ? 'error.main' : 
+                                            verbleibt < rohstoff.proStueck * 2 ? 'warning.main' : 
+                                            'success.main'
+                                          }
+                                        >
+                                          {istUnbegrenzt ? '∞' : verbleibt} {istUnbegrenzt ? '' : rohstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+                                    
+                                    {!ausreichendFuerBuchung && !istUnbegrenzt && (
+                                      <Alert severity="error" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          <strong>Fehlen {benoetigt - verfuegbar} {rohstoff.einheit}</strong>
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                    
+                                    {istUnbegrenzt && benoetigt > 0 && (
+                                      <Alert severity="info" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          <strong>Unbegrenzte Ressource</strong> - Verbrauch wird nur dokumentiert
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                    
+                                    {ausreichendFuerBuchung && !istUnbegrenzt && verbleibt >= 0 && verbleibt < rohstoff.proStueck * 2 && benoetigt > 0 && (
+                                      <Alert severity="warning" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          Kritischer Bestand nach Buchung!
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                  </Box>
+                                );
+                              })}
+                            </Stack>
+                            
+                            {rohstoffInfo.verfuegbarkeit.warnungen.length > 0 && (
+                              <Alert severity="warning" sx={{ mt: 2 }}>
+                                <Typography variant="body2" fontWeight="bold" gutterBottom>
+                                  ⚠️ Rohstoff-Warnungen:
                                 </Typography>
-                              ))}
-                            </Alert>
-                          )}
-                          
-                          <Box sx={{ mt: 2, p: 1, backgroundColor: 'info.light', borderRadius: 1 }}>
-                            <Typography variant="body2" fontWeight="bold" color="info.main">
-                              🎯 Maximale Produktion gesamt: {rohstoffInfo.maxProduktionGesamt} Stück
-                            </Typography>
+                                {rohstoffInfo.verfuegbarkeit.warnungen.map((warnung, index) => (
+                                  <Typography key={index} variant="body2" sx={{ ml: 1 }}>
+                                    • {warnung}
+                                  </Typography>
+                                ))}
+                              </Alert>
+                            )}
+                            
+                            <Box sx={{ mt: 2, p: 1, backgroundColor: 'info.light', borderRadius: 1 }}>
+                              <Typography variant="body2" fontWeight="bold" color="info.main">
+                                🎯 Maximale Produktion gesamt: {rohstoffInfo.maxProduktionGesamt} Stück
+                              </Typography>
+                            </Box>
                           </Box>
-                        </Box>
-                      ) : (
+                        </>
+                      )}
+                      
+                      {/* Werkstück: Gießwerkstoff-Informationen */}
+                      {inventurForm.produktDetails?.kategorie === 'werkstuck' && giesswerkstoffInfo && (
+                        <>
+                          <Typography variant="h6" gutterBottom color="secondary.main">
+                            🎨 Automatische Gießwerkstoff-Subtraktion
+                          </Typography>
+                          
+                          <Box>
+                            <Stack spacing={1.5}>
+                              {giesswerkstoffInfo.giesswerkstoff.map((giesswerkstoff, index) => {
+                                // Dynamische Berechnung basierend auf eingegebener Menge
+                                const neueAnzahl = parseFloat(inventurForm.neuerBestand) || 0;
+                                const buchungsAnzahl = neueAnzahl - inventurForm.aktuellerBestand;
+                                const benoetigt = buchungsAnzahl > 0 ? giesswerkstoff.proStueck * buchungsAnzahl : 0;
+                                const verfuegbar = giesswerkstoff.verfuegbar;
+                                
+                                // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+                                const istUnbegrenzt = giesswerkstoff.unbegrenzterVorrat === true || 
+                                                     giesswerkstoff.name?.toLowerCase().includes('wasser') ||
+                                                     giesswerkstoff.name?.toLowerCase().includes('leitungswasser');
+                                                     
+                                const ausreichendFuerBuchung = istUnbegrenzt ? true : benoetigt <= verfuegbar;
+                                const verbleibt = istUnbegrenzt ? '∞' : (verfuegbar - benoetigt);
+                                
+                                return (
+                                  <Box 
+                                    key={index}
+                                    sx={{ 
+                                      p: 1.5, 
+                                      border: '2px solid', 
+                                      borderColor: ausreichendFuerBuchung ? 'success.main' : 'error.main',
+                                      borderRadius: 1,
+                                      backgroundColor: ausreichendFuerBuchung ? 'rgba(46, 125, 50, 0.08)' : 'rgba(211, 47, 47, 0.12)'
+                                    }}
+                                  >
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Typography variant="body1" fontWeight="bold">
+                                        {giesswerkstoff.name}
+                                        <Chip 
+                                          label={giesswerkstoff.typ === 'zusatzmaterial' ? 'Zusatz' : 'Haupt'} 
+                                          size="small" 
+                                          color={giesswerkstoff.typ === 'zusatzmaterial' ? 'info' : 'primary'}
+                                          sx={{ ml: 1 }}
+                                        />
+                                      </Typography>
+                                      <Chip 
+                                        label={ausreichendFuerBuchung ? 'OK' : 'NICHT GENUG'} 
+                                        color={ausreichendFuerBuchung ? 'success' : 'error'} 
+                                        size="small" 
+                                      />
+                                    </Box>
+                                    
+                                    <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 1, mt: 1 }}>
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Pro Stück:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                          {giesswerkstoff.proStueck.toFixed(1)} {giesswerkstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Benötigt:
+                                        </Typography>
+                                        <Typography variant="body2" fontWeight="bold" color={benoetigt > 0 ? 'warning.main' : 'text.primary'}>
+                                          {benoetigt > 0 ? `${benoetigt.toFixed(1)} ${giesswerkstoff.einheit}` : '0'}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Verfügbar:
+                                        </Typography>
+                                        <Typography variant="body2">
+                                          {istUnbegrenzt ? '∞' : verfuegbar.toFixed(1)} {istUnbegrenzt ? '' : giesswerkstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                      
+                                      <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                          Verbleibt:
+                                        </Typography>
+                                        <Typography 
+                                          variant="body2" 
+                                          fontWeight="bold"
+                                          color={
+                                            istUnbegrenzt ? 'success.main' :
+                                            verbleibt < 0 ? 'error.main' : 
+                                            verbleibt < giesswerkstoff.proStueck * 2 ? 'warning.main' : 
+                                            'success.main'
+                                          }
+                                        >
+                                          {istUnbegrenzt ? '∞' : verbleibt.toFixed(1)} {istUnbegrenzt ? '' : giesswerkstoff.einheit}
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+                                    
+                                    {/* Berechnungsdetails anzeigen */}
+                                    {giesswerkstoff.berechnungsDetails && (
+                                      <Box sx={{ mt: 1, p: 1, bgcolor: 'grey.100', borderRadius: 0.5 }}>
+                                        <Typography variant="caption" color="text.secondary">
+                                          📊 Berechnung: {giesswerkstoff.berechnungsDetails.fuellvolumenMl}ml × {giesswerkstoff.berechnungsDetails.berechnungsFaktor || giesswerkstoff.berechnungsDetails.faktor} × (1 + {giesswerkstoff.berechnungsDetails.schwundProzent}%)
+                                          {giesswerkstoff.berechnungsDetails.giessform && ` | Form: ${giesswerkstoff.berechnungsDetails.giessform}`}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                    
+                                    {!ausreichendFuerBuchung && !istUnbegrenzt && (
+                                      <Alert severity="error" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          <strong>Fehlen {(benoetigt - verfuegbar).toFixed(1)} {giesswerkstoff.einheit}</strong>
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                    
+                                    {istUnbegrenzt && benoetigt > 0 && (
+                                      <Alert severity="info" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          <strong>Unbegrenzte Ressource</strong> - Verbrauch wird nur dokumentiert
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                    
+                                    {ausreichendFuerBuchung && !istUnbegrenzt && verbleibt >= 0 && verbleibt < giesswerkstoff.proStueck * 2 && benoetigt > 0 && (
+                                      <Alert severity="warning" sx={{ mt: 1 }}>
+                                        <Typography variant="body2">
+                                          Kritischer Bestand nach Buchung!
+                                        </Typography>
+                                      </Alert>
+                                    )}
+                                  </Box>
+                                );
+                              })}
+                            </Stack>
+                            
+                            {giesswerkstoffInfo.verfuegbarkeit.warnungen.length > 0 && (
+                              <Alert severity="warning" sx={{ mt: 2 }}>
+                                <Typography variant="body2" fontWeight="bold" gutterBottom>
+                                  ⚠️ Gießwerkstoff-Warnungen:
+                                </Typography>
+                                {giesswerkstoffInfo.verfuegbarkeit.warnungen.map((warnung, index) => (
+                                  <Typography key={index} variant="body2" sx={{ ml: 1 }}>
+                                    • {warnung.material}: {warnung.error || `${warnung.fehlend} fehlen (benötigt: ${warnung.benoetigt}, verfügbar: ${warnung.verfuegbar})`}
+                                  </Typography>
+                                ))}
+                              </Alert>
+                            )}
+                          </Box>
+                        </>
+                      )}
+                      
+                      {/* Fallback: Keine Informationen verfügbar */}
+                      {inventurForm.typ === 'fertigprodukt' && !rohstoffInfo && !giesswerkstoffInfo && (
                         <Alert severity="warning">
                           <Typography variant="body2">
-                            Rohstoff-Informationen konnten nicht geladen werden.
+                            {inventurForm.produktDetails?.kategorie === 'werkstuck' 
+                              ? 'Gießwerkstoff-Informationen konnten nicht geladen werden.'
+                              : 'Rohstoff-Informationen konnten nicht geladen werden.'
+                            }
                           </Typography>
                         </Alert>
                       )}

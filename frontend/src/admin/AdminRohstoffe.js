@@ -80,6 +80,7 @@ const AdminRohstoffe = () => {
   const [zusatzinhaltsstoffe, setZusatzinhaltsstoffe] = useState([]);
   const [giessformen, setGiessformen] = useState([]);
   const [giesswerkstoff, setGiesswerkstoff] = useState([]);
+  const [giesszusatzstoffe, setGiesszusatzstoffe] = useState([]);
   
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
@@ -89,6 +90,17 @@ const AdminRohstoffe = () => {
   // Form states
   const [formData, setFormData] = useState({});
 
+  // Mixing Ratio Dialog states
+  const [openMixingDialog, setOpenMixingDialog] = useState(false);
+  const [mixingDialogData, setMixingDialogData] = useState({
+    berechnungsFaktor: 1.5,
+    schwundProzent: 5,
+    mischverhaeltnis: {
+      giesswerkstoffMenge: 100,
+      zusaetzlichesMaterial: []
+    }
+  });
+
   // Search Hook für die aktuelle Tab-Daten
   const getCurrentTabData = () => {
     if (currentTab === 0) return rohseife;
@@ -96,7 +108,9 @@ const AdminRohstoffe = () => {
     if (currentTab === 2) return verpackungen;
     if (currentTab === 3) return zusatzinhaltsstoffe;
     if (currentTab === 4) return giessformen;
-    return giesswerkstoff;
+    if (currentTab === 5) return giesswerkstoff;
+    if (currentTab === 6) return giesszusatzstoffe;
+    return [];
   };
 
   const {
@@ -126,6 +140,9 @@ const AdminRohstoffe = () => {
       } else if (currentTab === 5) {
         const response = await axios.get(`${API_BASE}/admin/rohstoffe/giesswerkstoff`, { headers: getAuthHeaders() });
         setGiesswerkstoff(response.data.data || []);
+      } else if (currentTab === 6) {
+        const response = await axios.get(`${API_BASE}/lager/admin/rohstoffe/giesszusatzstoffe`, { headers: getAuthHeaders() });
+        setGiesszusatzstoffe(response.data.data || []);
       }
     } catch (err) {
       setError('Fehler beim Laden der Daten: ' + err.message);
@@ -152,6 +169,8 @@ const AdminRohstoffe = () => {
       else if (tab === 'zusatzinhaltsstoffe') tabIndex = 3;
       else if (tab === 'giessformen') tabIndex = 4;
       else if (tab === 'giesswerkstoff') tabIndex = 5;
+      else if (tab === 'giesszusatzstoffe') tabIndex = 6;
+      else if (tab === 'mixingRatios') tabIndex = 7;
       else if (tab === 'rohseifen') tabIndex = 0;
       
       setCurrentTab(tabIndex);
@@ -619,7 +638,9 @@ const AdminRohstoffe = () => {
                       currentTab === 1 ? 'duftoele' : 
                       currentTab === 2 ? 'verpackungen' : 
                       currentTab === 3 ? 'zusatzinhaltsstoffe' :
-                      currentTab === 4 ? 'admin/rohstoffe/giessformen' : 'admin/rohstoffe/giesswerkstoff';
+                      currentTab === 4 ? 'admin/rohstoffe/giessformen' : 
+                      currentTab === 5 ? 'admin/rohstoffe/giesswerkstoff' :
+                      'lager/admin/rohstoffe/giesszusatzstoffe';
       
       if (dialogMode === 'create') {
         await axios.post(`${API_BASE}/${endpoint}`, cleanFormData, { headers: getAuthHeaders() });
@@ -656,7 +677,9 @@ const AdminRohstoffe = () => {
                       currentTab === 1 ? 'duftoele' : 
                       currentTab === 2 ? 'verpackungen' : 
                       currentTab === 3 ? 'zusatzinhaltsstoffe' :
-                      currentTab === 4 ? 'admin/rohstoffe/giessformen' : 'admin/rohstoffe/giesswerkstoff';
+                      currentTab === 4 ? 'admin/rohstoffe/giessformen' : 
+                      currentTab === 5 ? 'admin/rohstoffe/giesswerkstoff' :
+                      'lager/admin/rohstoffe/giesszusatzstoffe';
       
       await axios.delete(`${API_BASE}/${endpoint}/${id}`, { headers: getAuthHeaders() });
       setSuccess('Erfolgreich gelöscht!');
@@ -1483,6 +1506,7 @@ const AdminRohstoffe = () => {
                         size="small" 
                         color="primary"
                         onClick={() => handleOpenDialog('edit', item)}
+                        title="Gießform bearbeiten"
                       >
                         <EditIcon />
                       </IconButton>
@@ -1490,6 +1514,7 @@ const AdminRohstoffe = () => {
                         size="small" 
                         color="error"
                         onClick={() => handleDelete(item._id)}
+                        title="Gießform löschen"
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -1647,11 +1672,21 @@ const AdminRohstoffe = () => {
                     <Typography variant="h6" component="div">
                       {item.bezeichnung}
                     </Typography>
-                    <Chip 
-                      label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
-                      color={item.verfuegbar ? 'success' : 'error'}
-                      size="small"
-                    />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+                      <Chip 
+                        label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
+                        color={item.verfuegbar ? 'success' : 'error'}
+                        size="small"
+                      />
+                      {item.mischkonfiguration && (item.mischkonfiguration.berechnungsFaktor || item.mischkonfiguration.schwundProzent) && (
+                        <Chip 
+                          label="Mischverhältnis ✓" 
+                          color="info"
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
                   </Box>
                   
                   {item.kategorie && (
@@ -1707,8 +1742,17 @@ const AdminRohstoffe = () => {
                     <Box sx={{ display: 'flex', gap: 1, ml: 'auto' }}>
                       <IconButton 
                         size="small" 
+                        color="info"
+                        onClick={() => handleEditMixingRatio(item)}
+                        title="Mischverhältnis konfigurieren"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton 
+                        size="small" 
                         color="primary"
                         onClick={() => handleOpenDialog('edit', item)}
+                        title="Bearbeiten"
                       >
                         <EditIcon />
                       </IconButton>
@@ -1716,6 +1760,7 @@ const AdminRohstoffe = () => {
                         size="small" 
                         color="error"
                         onClick={() => handleDelete(item._id)}
+                        title="Löschen"
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -1857,20 +1902,32 @@ const AdminRohstoffe = () => {
                   )}
                 </TableCell>
                 <TableCell align="center">
-                  <IconButton 
-                    size="small" 
-                    color="primary"
-                    onClick={() => handleOpenDialog('edit', item)}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton 
-                    size="small" 
-                    color="error"
-                    onClick={() => handleDelete(item._id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+                  <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', alignItems: 'center' }}>
+                    <IconButton 
+                      size="small" 
+                      color="info"
+                      onClick={() => handleEditMixingRatio(item)}
+                      title="Mischverhältnis konfigurieren"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      color="primary"
+                      onClick={() => handleOpenDialog('edit', item)}
+                      title="Bearbeiten"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      color="error"
+                      onClick={() => handleDelete(item._id)}
+                      title="Löschen"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
                 </TableCell>
               </TableRow>
             ))}
@@ -1881,6 +1938,191 @@ const AdminRohstoffe = () => {
                     {searchTerm ? 
                       `Keine Gießwerkstoffe gefunden, die "${searchTerm}" entsprechen.` :
                       'Keine Gießwerkstoffe verfügbar.'
+                    }
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  };
+
+  const renderGiesszusatzstoffeTable = () => {
+    const filteredData = filterItems(giesszusatzstoffe, searchTerm);
+    
+    if (isMobile) {
+      return (
+        <Stack spacing={2}>
+          {filteredData.map((item) => (
+            <Card key={item._id} variant="outlined">
+              <CardContent>
+                <Stack spacing={1.5}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Typography variant="h6" component="div">
+                      {item.bezeichnung}
+                    </Typography>
+                    <Chip 
+                      label={item.typ || 'Unbekannt'} 
+                      color="primary"
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Box>
+                  
+                  <Divider />
+                  
+                  <Stack spacing={0.5}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body2" color="textSecondary">Bestand:</Typography>
+                      <Typography variant="body2" fontWeight="bold" color={item.typ === 'wasser' ? 'primary' : 'inherit'}>
+                        {item.typ === 'wasser' ? '∞ (unbegrenzt)' : `${item.aktuellerBestand} ${item.einheit}`}
+                      </Typography>
+                    </Box>
+                    {item.lieferant && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Lieferant:</Typography>
+                        <Typography variant="body2">{item.lieferant}</Typography>
+                      </Box>
+                    )}
+                    {item.preis_pro_einheit && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Preis/Einheit:</Typography>
+                        <Typography variant="body2">{item.preis_pro_einheit}€</Typography>
+                      </Box>
+                    )}
+                    {item.artikelnummer && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" color="textSecondary">Art.-Nr.:</Typography>
+                        <Typography variant="body2">{item.artikelnummer}</Typography>
+                      </Box>
+                    )}
+                  </Stack>
+                  
+                  <Box sx={{ display: 'flex', gap: 1, pt: 1 }}>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      fullWidth
+                      onClick={() => handleOpenDialog('edit', item)}
+                      startIcon={<EditIcon />}
+                    >
+                      Bearbeiten
+                    </Button>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      color="error"
+                      onClick={() => handleDelete(item._id)}
+                      startIcon={<DeleteIcon />}
+                    >
+                      Löschen
+                    </Button>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          ))}
+          {filteredData.length === 0 && (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="textSecondary">
+                {searchTerm ? 
+                  `Keine Gießzusatzstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                  'Keine Gießzusatzstoffe verfügbar.'
+                }
+              </Typography>
+            </Paper>
+          )}
+        </Stack>
+      );
+    }
+
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Bezeichnung</TableCell>
+              <TableCell>Typ</TableCell>
+              <TableCell>Bestand</TableCell>
+              <TableCell>Einheit</TableCell>
+              <TableCell>Lieferant</TableCell>
+              <TableCell>Artikelnummer</TableCell>
+              <TableCell>Preis/Einheit</TableCell>
+              <TableCell align="center">Aktionen</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filteredData.map((item) => (
+              <TableRow key={item._id}>
+                <TableCell>
+                  <Typography variant="body2" fontWeight="bold">
+                    {item.bezeichnung}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Chip 
+                    label={item.typ || 'Unbekannt'} 
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight="bold" color={item.typ === 'wasser' ? 'primary' : 'inherit'}>
+                    {item.typ === 'wasser' ? '∞' : item.aktuellerBestand}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {item.einheit}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {item.lieferant || '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {item.artikelnummer || '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2">
+                    {item.preis_pro_einheit ? `${item.preis_pro_einheit}€` : '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                    <IconButton 
+                      size="small" 
+                      color="primary"
+                      onClick={() => handleOpenDialog('edit', item)}
+                      title="Bearbeiten"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton 
+                      size="small" 
+                      color="error"
+                      onClick={() => handleDelete(item._id)}
+                      title="Löschen"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
+            {filteredData.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                  <Typography variant="body2" color="textSecondary">
+                    {searchTerm ? 
+                      `Keine Gießzusatzstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                      'Keine Gießzusatzstoffe verfügbar.'
                     }
                   </Typography>
                 </TableCell>
@@ -3516,7 +3758,7 @@ const AdminRohstoffe = () => {
               value={formData.dichte || ''}
               onChange={handleInputChange}
               inputProps={{ min: 0, step: '0.1' }}
-              helperText="g/cm³"
+              helperText="g/cm3"
             />
           </Grid>
           
@@ -3834,7 +4076,324 @@ const AdminRohstoffe = () => {
           </Grid>
         </Grid>
       );
+    } else if (currentTab === 6) {
+      // Gießzusatzstoffe Form
+      return (
+        <Grid container spacing={2}>
+          {/* Grundinformationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+              Grundinformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Bezeichnung *"
+              name="bezeichnung"
+              value={formData.bezeichnung || ''}
+              onChange={handleInputChange}
+              required
+              placeholder="z.B. Destilliertes Wasser, Härter XY"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"} required>
+              <InputLabel>Typ *</InputLabel>
+              <Select
+                name="typ"
+                value={formData.typ || ''}
+                onChange={(e) => {
+                  const newTyp = e.target.value;
+                  let updatedFormData = { ...formData, typ: newTyp };
+                  
+                  // Automatische Wasser-Konfiguration
+                  if (newTyp === 'wasser') {
+                    updatedFormData = {
+                      ...updatedFormData,
+                      einheit: 'm3',
+                      preis_pro_einheit: 3.0,
+                      aktuellerBestand: 999999,
+                      unbegrenzterVorrat: true,
+                      bezeichnung: updatedFormData.bezeichnung || 'Leitungswasser'
+                    };
+                  } else {
+                    // Reset für andere Typen
+                    updatedFormData = {
+                      ...updatedFormData,
+                      unbegrenzterVorrat: false
+                    };
+                  }
+                  
+                  setFormData(updatedFormData);
+                }}
+                label="Typ *"
+              >
+                <MenuItem value="wasser">💧 Wasser</MenuItem>
+                <MenuItem value="verduenner">🧪 Verdünner</MenuItem>
+                <MenuItem value="haertungsagent">⚗️ Härtungsagent</MenuItem>
+                <MenuItem value="pigment">🎨 Pigment</MenuItem>
+                <MenuItem value="additiv">➕ Additiv</MenuItem>
+                <MenuItem value="release_agent">🔓 Trennmittel</MenuItem>
+                <MenuItem value="stabilisator">🛡️ Stabilisator</MenuItem>
+                <MenuItem value="sonstiges">📦 Sonstiges</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          
+          {/* Bestandsinformationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Bestandsinformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label={formData.typ === 'wasser' ? "Verfügbarkeit" : "Aktueller Bestand *"}
+              name="aktuellerBestand"
+              type="number"
+              value={formData.typ === 'wasser' ? 999999 : (formData.aktuellerBestand || 0)}
+              onChange={handleInputChange}
+              required
+              inputProps={{ min: 0, step: '0.1' }}
+              disabled={formData.typ === 'wasser'}
+              helperText={formData.typ === 'wasser' ? "Wasser ist immer verfügbar" : ""}
+            />
+          </Grid>
+          <Grid item xs={4}>
+            <FormControl fullWidth size={isMobile ? "small" : "medium"} required>
+              <InputLabel>Einheit *</InputLabel>
+              <Select
+                name="einheit"
+                value={formData.einheit || 'ml'}
+                onChange={handleInputChange}
+                label="Einheit *"
+              >
+                <MenuItem value="ml">ml (Milliliter)</MenuItem>
+                <MenuItem value="l">l (Liter)</MenuItem>
+                <MenuItem value="m3">m3 (Kubikmeter)</MenuItem>
+                <MenuItem value="g">g (Gramm)</MenuItem>
+                <MenuItem value="kg">kg (Kilogramm)</MenuItem>
+                <MenuItem value="tropfen">Tropfen</MenuItem>
+                <MenuItem value="stueck">Stück</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={4}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Mindestbestand"
+              name="mindestbestand"
+              type="number"
+              value={formData.mindestbestand || 0}
+              onChange={handleInputChange}
+              inputProps={{ min: 0, step: '0.1' }}
+            />
+          </Grid>
+          
+          {/* Lieferanteninformationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Lieferanteninformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Lieferant"
+              name="lieferant"
+              value={formData.lieferant || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. Chemie AG, Baumarkt XY"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Artikelnummer"
+              name="artikelnummer"
+              value={formData.artikelnummer || ''}
+              onChange={handleInputChange}
+              placeholder="Interne oder Lieferanten-Art.-Nr."
+            />
+          </Grid>
+          
+          {/* Preisinformationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Preisinformationen
+            </Typography>
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label={formData.typ === 'wasser' ? "Preis pro m3 Wasser" : "Preis pro Einheit"}
+              name="preis_pro_einheit"
+              type="number"
+              value={formData.preis_pro_einheit || (formData.typ === 'wasser' ? 3.0 : 0)}
+              onChange={handleInputChange}
+              inputProps={{ min: 0, step: '0.01' }}
+              helperText={formData.typ === 'wasser' ? "€ pro Kubikmeter (Standard: 3€)" : "€ pro Einheit"}
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Gesamtwert Bestand"
+              name="gesamtwert"
+              type="number"
+              value={formData.typ === 'wasser' ? "∞" : ((formData.aktuellerBestand || 0) * (formData.preis_pro_einheit || 0)).toFixed(2)}
+              InputProps={{ readOnly: true }}
+              helperText={formData.typ === 'wasser' ? "Wasser ist unbegrenzt verfügbar" : "Automatisch berechnet"}
+            />
+          </Grid>
+          
+          {/* Zusätzliche Informationen */}
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" color="textSecondary" gutterBottom sx={{ mt: 2 }}>
+              Zusätzliche Informationen
+            </Typography>
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Beschreibung"
+              name="beschreibung"
+              value={formData.beschreibung || ''}
+              onChange={handleInputChange}
+              multiline
+              rows={2}
+              placeholder="Verwendungszweck, besondere Eigenschaften, etc."
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Haltbarkeit"
+              name="haltbarkeit"
+              value={formData.haltbarkeit || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. 24 Monate, unbegrenzt"
+            />
+          </Grid>
+          <Grid item xs={6}>
+            <TextField
+              fullWidth
+              size={isMobile ? "small" : "medium"}
+              label="Lagerhinweise"
+              name="lagerhinweise"
+              value={formData.lagerhinweise || ''}
+              onChange={handleInputChange}
+              placeholder="z.B. kühl und trocken lagern"
+            />
+          </Grid>
+        </Grid>
+      );
     }
+  };
+
+  const handleEditMixingRatio = (item) => {
+    setSelectedItem(item);
+    const config = item.mischkonfiguration || {};
+    setMixingDialogData({
+      berechnungsFaktor: config.berechnungsFaktor || 1.5,
+      schwundProzent: config.schwundProzent || 5,
+      mischverhaeltnis: {
+        giesswerkstoffMenge: 100, // Nur für Anzeige, wird nicht gespeichert
+        zusaetzlichesMaterial: config.zusaetzlichesMaterial || []
+      }
+    });
+    
+    // Gießzusatzstoffe laden, falls nicht bereits geladen
+    if (giesszusatzstoffe.length === 0) {
+      loadGiesszusatzstoffe();
+    }
+    
+    setOpenMixingDialog(true);
+  };
+
+  // Funktion zum Laden der Gießzusatzstoffe
+  const loadGiesszusatzstoffe = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/lager/admin/rohstoffe/giesszusatzstoffe`, { headers: getAuthHeaders() });
+      setGiesszusatzstoffe(response.data.data || []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Gießzusatzstoffe:', error);
+    }
+  };
+
+  const handleSaveMixingRatio = async () => {
+    if (!selectedItem) return;
+    
+    setLoading(true);
+    try {
+      await axios.put(
+        `${API_BASE}/admin/rohstoffe/giesswerkstoff/${selectedItem._id}/mischkonfiguration`,
+        {
+          berechnungsFaktor: mixingDialogData.berechnungsFaktor,
+          schwundProzent: mixingDialogData.schwundProzent,
+          zusaetzlichesMaterial: mixingDialogData.mischverhaeltnis.zusaetzlichesMaterial
+        },
+        { headers: getAuthHeaders() }
+      );
+      
+      setSuccess('Mischverhältnis-Konfiguration erfolgreich gespeichert!');
+      setOpenMixingDialog(false);
+      
+      // Aktualisiere die Gießwerkstoffe-Daten
+      loadData();
+      
+    } catch (error) {
+      console.error('Error saving mixing ratio config:', error);
+      setError('Fehler beim Speichern der Mischverhältnis-Konfiguration');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddAdditionalMaterial = () => {
+    setMixingDialogData(prev => ({
+      ...prev,
+      mischverhaeltnis: {
+        ...prev.mischverhaeltnis,
+        zusaetzlichesMaterial: [
+          ...prev.mischverhaeltnis.zusaetzlichesMaterial,
+          { bezeichnung: '', faktor: 0 }
+        ]
+      }
+    }));
+  };
+
+  const handleRemoveAdditionalMaterial = (index) => {
+    setMixingDialogData(prev => ({
+      ...prev,
+      mischverhaeltnis: {
+        ...prev.mischverhaeltnis,
+        zusaetzlichesMaterial: prev.mischverhaeltnis.zusaetzlichesMaterial.filter((_, i) => i !== index)
+      }
+    }));
+  };
+
+  const handleUpdateAdditionalMaterial = (index, field, value) => {
+    setMixingDialogData(prev => ({
+      ...prev,
+      mischverhaeltnis: {
+        ...prev.mischverhaeltnis,
+        zusaetzlichesMaterial: prev.mischverhaeltnis.zusaetzlichesMaterial.map((material, i) =>
+          i === index ? { ...material, [field]: value } : material
+        )
+      }
+    }));
   };
 
   return (
@@ -3875,18 +4434,43 @@ const AdminRohstoffe = () => {
       )}
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: isMobile ? 2 : 3 }}>
-        <Tabs 
-          value={currentTab} 
-          onChange={handleTabChange}
-          variant={isMobile ? "fullWidth" : "standard"}
-        >
-          <Tab label={isMobile ? "Seifen" : "Rohseifen"} />
-          <Tab label={isMobile ? "Düfte" : "Duftöle"} />
-          <Tab label={isMobile ? "Verp." : "Verpackungen"} />
-          <Tab label={isMobile ? "Zusatz" : "Zusatzinhaltsstoffe"} />
-          <Tab label={isMobile ? "Formen" : "Gießformen"} />
-          <Tab label={isMobile ? "Werkst." : "Gießwerkstoffe"} />
-        </Tabs>
+        {isMobile ? (
+          // Mobile: Dropdown-Auswahl
+          <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+            <InputLabel id="rohstoff-category-select-label">Rohstoff-Kategorie</InputLabel>
+            <Select
+              labelId="rohstoff-category-select-label"
+              id="rohstoff-category-select"
+              value={currentTab}
+              label="Rohstoff-Kategorie"
+              onChange={(e) => setCurrentTab(e.target.value)}
+              sx={{ bgcolor: 'background.paper' }}
+            >
+              <MenuItem value={0}>🧼 Rohseifen</MenuItem>
+              <MenuItem value={1}>🌸 Duftöle</MenuItem>
+              <MenuItem value={2}>📦 Verpackungen</MenuItem>
+              <MenuItem value={3}>🧪 Zusatzinhaltsstoffe</MenuItem>
+              <MenuItem value={4}>🏗️ Gießformen</MenuItem>
+              <MenuItem value={5}>⚗️ Gießwerkstoffe</MenuItem>
+              <MenuItem value={6}>💧 Gießzusatzstoffe</MenuItem>
+            </Select>
+          </FormControl>
+        ) : (
+          // Desktop: Normale Tabs
+          <Tabs 
+            value={currentTab} 
+            onChange={handleTabChange}
+            variant="standard"
+          >
+            <Tab label="Rohseifen" />
+            <Tab label="Duftöle" />
+            <Tab label="Verpackungen" />
+            <Tab label="Zusatzinhaltsstoffe" />
+            <Tab label="Gießformen" />
+            <Tab label="Gießwerkstoffe" />
+            <Tab label="Gießzusatzstoffe" />
+          </Tabs>
+        )}
       </Box>
 
       {/* Universelles Suchfeld */}
@@ -3910,7 +4494,8 @@ const AdminRohstoffe = () => {
             currentTab === 2 ? "Suche nach Verpackungen (Name, Material, Form, Größe...)" :
             currentTab === 3 ? "Suche nach Zusatzinhaltsstoffen (Name, Typ, Hersteller, Wirkung...)" :
             currentTab === 4 ? "Suche nach Gießformen (Inventarnummer, Name, Form, Material...)" :
-            "Suche nach Gießwerkstoffen (Bezeichnung, Typ, Hersteller...)"
+            currentTab === 5 ? "Suche nach Gießwerkstoffen (Bezeichnung, Typ, Hersteller...)" :
+            "Suche nach Gießzusatzstoffen (Bezeichnung, Typ, Lieferant...)"
           }
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -3939,7 +4524,8 @@ const AdminRohstoffe = () => {
               currentTab === 2 ? filterItems(verpackungen, searchTerm).length :
               currentTab === 3 ? filterItems(zusatzinhaltsstoffe, searchTerm).length :
               currentTab === 4 ? filterItems(giessformen, searchTerm).length :
-              filterItems(giesswerkstoff, searchTerm).length
+              currentTab === 5 ? filterItems(giesswerkstoff, searchTerm).length :
+              filterItems(giesszusatzstoffe, searchTerm).length
             }`}
             color="primary"
             variant="outlined"
@@ -3966,7 +4552,9 @@ const AdminRohstoffe = () => {
             currentTab === 1 ? "Neues Duftöl hinzufügen" :
             currentTab === 2 ? "Neue Verpackung hinzufügen" :
             currentTab === 3 ? "Neuen Zusatzinhaltsstoff hinzufügen" :
-            currentTab === 4 ? "Neue Gießform hinzufügen" : "Neuen Gießwerkstoff hinzufügen"
+            currentTab === 4 ? "Neue Gießform hinzufügen" : 
+            currentTab === 5 ? "Neuen Gießwerkstoff hinzufügen" :
+            "Neuen Gießzusatzstoff hinzufügen"
           )}
         </Button>
       </Box>
@@ -3981,6 +4569,7 @@ const AdminRohstoffe = () => {
           {currentTab === 3 && renderZusatzinhaltsstoffeTable()}
           {currentTab === 4 && renderGiessformenTable()}
           {currentTab === 5 && renderGiesswerkstoffTable()}
+          {currentTab === 6 && renderGiesszusatzstoffeTable()}
         </>
       )}
 
@@ -3996,6 +4585,7 @@ const AdminRohstoffe = () => {
           {dialogMode === 'create' ? (
             currentTab === 0 ? 'Neue Rohseife erstellen' :
             currentTab === 1 ? 'Neues Duftöl erstellen' :
+            currentTab === 6 ? 'Neuen Gießzusatzstoff erstellen' :
             currentTab === 2 ? 'Neue Verpackung erstellen' :
             currentTab === 3 ? 'Neuen Zusatzinhaltsstoff erstellen' :
             currentTab === 4 ? 'Neue Gießform erstellen' : 'Neuen Gießwerkstoff erstellen'
@@ -4004,7 +4594,9 @@ const AdminRohstoffe = () => {
             currentTab === 1 ? 'Duftöl bearbeiten' :
             currentTab === 2 ? 'Verpackung bearbeiten' :
             currentTab === 3 ? 'Zusatzinhaltsstoff bearbeiten' :
-            currentTab === 4 ? 'Gießform bearbeiten' : 'Gießwerkstoff bearbeiten'
+            currentTab === 4 ? 'Gießform bearbeiten' : 
+            currentTab === 5 ? 'Gießwerkstoff bearbeiten' :
+            'Gießzusatzstoff bearbeiten'
           )}
         </DialogTitle>
         <DialogContent>
@@ -4021,6 +4613,218 @@ const AdminRohstoffe = () => {
             fullWidth={isMobile}
           >
             {dialogMode === 'create' ? 'Erstellen' : 'Speichern'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog für Mischverhältnis-Konfiguration */}
+      <Dialog 
+        open={openMixingDialog} 
+        onClose={() => setOpenMixingDialog(false)}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle>
+          Mischverhältnis konfigurieren: {selectedItem?.bezeichnung}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <Grid container spacing={3}>
+              {/* Grundkonfiguration */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Berechnungsparameter
+                </Typography>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Berechnung: Werkstück-Gewicht × Berechnungsfaktor × (1 + Schwund%) × Anzahl
+                </Alert>
+              </Grid>
+              
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  label="Berechnungsfaktor"
+                  type="number"
+                  value={mixingDialogData.berechnungsFaktor}
+                  onChange={(e) => setMixingDialogData(prev => ({
+                    ...prev,
+                    berechnungsFaktor: parseFloat(e.target.value) || 1.5
+                  }))}
+                  inputProps={{ min: 1, step: 0.1 }}
+                  helperText="Standardfaktor für Gewichtsberechnung (empfohlen: 1.5)"
+                />
+              </Grid>
+              
+              <Grid item xs={6}>
+                <TextField
+                  fullWidth
+                  label="Schwund in %"
+                  type="number"
+                  value={mixingDialogData.schwundProzent}
+                  onChange={(e) => setMixingDialogData(prev => ({
+                    ...prev,
+                    schwundProzent: parseFloat(e.target.value) || 5
+                  }))}
+                  inputProps={{ min: 0, max: 50, step: 1 }}
+                  helperText="Materialverlust beim Gießen (Standard: 5%)"
+                />
+              </Grid>
+
+              {/* Zusatzmaterial */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Typography variant="h6" color="primary">
+                    Zusätzliches Material
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={handleAddAdditionalMaterial}
+                  >
+                    Hinzufügen
+                  </Button>
+                </Box>
+              </Grid>
+
+              {mixingDialogData.mischverhaeltnis.zusaetzlichesMaterial.map((material, index) => (
+                <React.Fragment key={index}>
+                  <Grid item xs={5}>
+                    <FormControl fullWidth>
+                      <InputLabel>{`Material ${index + 1} - Bezeichnung`}</InputLabel>
+                      <Select
+                        value={material.bezeichnung || ''}
+                        label={`Material ${index + 1} - Bezeichnung`}
+                        onChange={(e) => handleUpdateAdditionalMaterial(index, 'bezeichnung', e.target.value)}
+                        displayEmpty
+                      >
+                        <MenuItem value="">
+                          <em>Material auswählen...</em>
+                        </MenuItem>
+                        {giesszusatzstoffe.map((zusatzstoff) => (
+                          <MenuItem key={zusatzstoff._id} value={zusatzstoff.bezeichnung}>
+                            {zusatzstoff.bezeichnung} ({zusatzstoff.typ}) - {zusatzstoff.aktuellerBestand === 999999 ? '∞' : zusatzstoff.aktuellerBestand} {zusatzstoff.einheit}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={5}>
+                    <TextField
+                      fullWidth
+                      label={`Material ${index + 1} - Faktor`}
+                      type="number"
+                      value={material.faktor || 0}
+                      onChange={(e) => handleUpdateAdditionalMaterial(index, 'faktor', parseFloat(e.target.value) || 0)}
+                      inputProps={{ min: 0, step: 0.1, max: 10 }}
+                      helperText="Faktor für Füllvolumen (z.B. 0.2 = 20% des Füllvolumens)"
+                    />
+                  </Grid>
+                  <Grid item xs={2}>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleRemoveAdditionalMaterial(index)}
+                      sx={{ mt: 1 }}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Grid>
+                </React.Fragment>
+              ))}
+
+              {/* Vorschau der Berechnung */}
+              <Grid item xs={12}>
+                <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Berechnungsvorschau (für 100ml Gießform-Füllvolumen)
+                  </Typography>
+                  
+                  {/* Hauptmaterial Berechnung */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                    <Typography variant="subtitle2" gutterBottom color="primary">
+                      Hauptmaterial (Gießwerkstoff):
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      Berechnung: 100ml × {mixingDialogData.berechnungsFaktor} × (1 + {mixingDialogData.schwundProzent}%)
+                    </Typography>
+                    <Typography variant="body2" color="primary" fontWeight="bold">
+                      Benötigte Menge: {Math.round(100 * mixingDialogData.berechnungsFaktor * (1 + mixingDialogData.schwundProzent / 100))}g Gießwerkstoff
+                    </Typography>
+                  </Box>
+                  
+                  {/* Zusatzmaterialien Berechnung */}
+                  {mixingDialogData.mischverhaeltnis.zusaetzlichesMaterial.length > 0 && (
+                    <Box sx={{ mb: 2, p: 2, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                      <Typography variant="subtitle2" gutterBottom color="secondary">
+                        Zusätzliche Materialien:
+                      </Typography>
+                      {mixingDialogData.mischverhaeltnis.zusaetzlichesMaterial.map((material, index) => {
+                        const zusatzMenge = Math.round(100 * (material.faktor || 0) * (1 + mixingDialogData.schwundProzent / 100));
+                        return (
+                          <Box key={index} sx={{ mb: 1 }}>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              {material.bezeichnung || `Material ${index + 1}`}: 100ml × {material.faktor || 0} × (1 + {mixingDialogData.schwundProzent}%)
+                            </Typography>
+                            <Typography variant="body2" color="secondary" fontWeight="bold">
+                              Benötigte Menge: {zusatzMenge}{material.einheit || 'g'}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  )}
+                  
+                  {/* Gesamtmenge Berechnung */}
+                  <Box sx={{ mb: 2, p: 2, bgcolor: 'success.light', borderRadius: 1, border: '2px solid', borderColor: 'success.main' }}>
+                    <Typography variant="subtitle2" gutterBottom color="success.dark">
+                      Gesamtmenge für 100ml Gießform:
+                    </Typography>
+                    {(() => {
+                      const hauptMenge = Math.round(100 * mixingDialogData.berechnungsFaktor * (1 + mixingDialogData.schwundProzent / 100));
+                      const zusatzGesamt = mixingDialogData.mischverhaeltnis.zusaetzlichesMaterial.reduce((sum, material) => {
+                        return sum + Math.round(100 * (material.faktor || 0) * (1 + mixingDialogData.schwundProzent / 100));
+                      }, 0);
+                      const gesamtMenge = hauptMenge + zusatzGesamt;
+                      
+                      return (
+                        <>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            {hauptMenge}g Gießwerkstoff + {zusatzGesamt}g Zusatzmaterialien = <strong>{gesamtMenge}g Gesamtmaterial</strong>
+                          </Typography>
+                          <Typography variant="h6" color="success.dark" fontWeight="bold">
+                            Benötigte Gesamtmenge: {gesamtMenge}g
+                          </Typography>
+                        </>
+                      );
+                    })()}
+                  </Box>
+                  
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                    ℹ️ Die tatsächliche Menge wird basierend auf dem Füllvolumen der jeweiligen Gießform berechnet
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 3, gap: 1 }}>
+          <Button 
+            onClick={() => setOpenMixingDialog(false)} 
+            size="large"
+            fullWidth={isMobile}
+          >
+            Abbrechen
+          </Button>
+          <Button 
+            onClick={handleSaveMixingRatio} 
+            variant="contained" 
+            color="primary"
+            size="large"
+            fullWidth={isMobile}
+            disabled={loading}
+          >
+            {loading ? 'Speichert...' : 'Speichern'}
           </Button>
         </DialogActions>
       </Dialog>

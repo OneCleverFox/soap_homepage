@@ -210,7 +210,6 @@ giessformSchema.virtual('inventarnummerFormatiert').get(function() {
 });
 
 // Indices für bessere Performance
-giessformSchema.index({ inventarnummer: 1 }, { unique: true });
 giessformSchema.index({ verfuegbar: 1, ausgeliehen: 1 });
 giessformSchema.index({ form: 1, kategorie: 1 });
 giessformSchema.index({ volumenMl: 1 });

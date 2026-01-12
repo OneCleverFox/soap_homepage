@@ -187,19 +187,26 @@ const AdminPortfolio = () => {
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
 
+    // Spezielle Behandlung für Zahlenfelder um NaN zu vermeiden
+    let processedValue = type === 'checkbox' ? checked : value;
+    if (name === 'reihenfolge' && value !== '') {
+      const numValue = parseInt(value, 10);
+      processedValue = isNaN(numValue) ? '' : numValue;
+    }
+
     if (name.includes('.')) {
       const [parent, child] = name.split('.');
       setFormData(prev => ({
         ...prev,
         [parent]: {
           ...prev[parent],
-          [child]: type === 'checkbox' ? checked : value
+          [child]: processedValue
         }
       }));
     } else {
       setFormData(prev => ({
         ...prev,
-        [name]: type === 'checkbox' ? checked : value
+        [name]: processedValue
       }));
     }
   };
@@ -801,9 +808,18 @@ const AdminPortfolio = () => {
                     type="number"
                     value={formData.preis}
                     onChange={handleInputChange}
-                    required
-                    inputProps={{ min: 0, step: 0.01 }}
-                    helperText="Verkaufspreis"
+                    required={formData.kategorie !== 'werkstuck'}
+                    disabled={formData.kategorie === 'werkstuck'}
+                    inputProps={{ 
+                      min: 0, 
+                      step: 0.01,
+                      readOnly: formData.kategorie === 'werkstuck'
+                    }}
+                    helperText={
+                      formData.kategorie === 'werkstuck' 
+                        ? "Wird automatisch in der Warenberechnung ermittelt"
+                        : "Verkaufspreis"
+                    }
                   />
                 </Grid>
               </>

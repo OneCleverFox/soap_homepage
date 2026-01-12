@@ -133,17 +133,59 @@ const portfolioSchema = new mongoose.Schema({
     default: ''
   },
   
-  // Werkstück-spezifische Felder
+  // Werkstück-spezifische Felder (optional für Fallback-Berechnungen)
   giessform: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Giessform',
-    required: function() { return this.kategorie === 'werkstuck'; }
+    required: false  // Optional - ermöglicht Fallback-Berechnungen
   },
   giesswerkstoff: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Giesswerkstoff',
-    required: function() { return this.kategorie === 'werkstuck'; }
+    required: false  // Optional - ermöglicht Fallback-Berechnungen
   },
+  
+  // Gießwerkstoff-Konfiguration für Berechnungen
+  giesswerkstoffKonfiguration: {
+    berechnungsFaktor: {
+      type: Number,
+      default: 1.5,
+      min: 1.0,
+      max: 10.0
+    },
+    schwundProzent: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 50
+    }
+  },
+  
+  // Gießzusatzstoffe-Konfiguration für Werkstücke
+  giesszusatzstoffe: [{
+    zusatzstoffId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Giesszusatzstoff',
+      required: true
+    },
+    mischverhaeltnis: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100, // Prozent vom Gießwerkstoff
+      default: 1
+    },
+    einheit: {
+      type: String,
+      enum: ['prozent', 'gramm', 'ml', 'kubikmeter'],
+      default: 'prozent'
+    },
+    hinweise: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  }],
   
   // Abmessungen (für beide Kategorien nutzbar)
   abmessungen: {

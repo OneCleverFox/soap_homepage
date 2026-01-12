@@ -7,6 +7,8 @@ const Bestand = require('../models/Bestand');
 const Rohseife = require('../models/Rohseife');
 const Verpackung = require('../models/Verpackung');
 const Duftoil = require('../models/Duftoil');
+const Giesswerkstoff = require('../models/Giesswerkstoff');
+const Giessform = require('../models/Giessform');
 const { auth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
@@ -626,8 +628,25 @@ router.get('/with-prices', async (req, res) => {
         const automatischerPreis = Math.ceil(priceData.gesamtpreis * 1.5); // 50% Marge
         const verkaufspreis = gespeicherterPreis > 0 ? gespeicherterPreis : automatischerPreis;
         
+        // Namen für Frontend-Anzeige hinzufügen
+        let additionalNames = {};
+        
+        // Rohseifenname für Seifen
+        if (item.kategorie !== 'werkstuck' && item.seife) {
+          const rohseife = rohseifenMap.get(item.seife.toLowerCase());
+          additionalNames.rohseifename = rohseife?.bezeichnung || item.seife;
+        }
+        
+        // Gießwerkstoff- und Gießform-Namen für Werkstücke (synchron aus dem Item selbst)
+        if (item.kategorie === 'werkstuck') {
+          // Fallback-Namen verwenden bis wir die echten Namen laden können
+          additionalNames.giesswerkstoffName = 'Standard';
+          additionalNames.giessformName = 'Standard';
+        }
+        
         const result = {
           ...item,
+          ...additionalNames,
           berechneterPreis: priceData.gesamtpreis,
           preisDetails: priceData.details,
           verkaufspreis: verkaufspreis,
@@ -757,6 +776,32 @@ router.get('/:id', async (req, res) => {
 
     console.log('✅ Portfolio-Item gefunden:', portfolioItem.name);
 
+    // Für Werkstücke: Gießwerkstoff und Gießform-Namen laden
+    let giesswerkstoffName = null;
+    let giessformName = null;
+    
+    if (portfolioItem.kategorie === 'werkstuck') {
+      if (portfolioItem.giesswerkstoff) {
+        try {
+          const giesswerkstoff = await Giesswerkstoff.findById(portfolioItem.giesswerkstoff);
+          giesswerkstoffName = giesswerkstoff ? giesswerkstoff.bezeichnung : null;
+          console.log('🧱 Gießwerkstoff Name:', giesswerkstoffName);
+        } catch (gError) {
+          console.warn('⚠️ Gießwerkstoff nicht gefunden:', portfolioItem.giesswerkstoff);
+        }
+      }
+      
+      if (portfolioItem.giessform) {
+        try {
+          const giessform = await Giessform.findById(portfolioItem.giessform);
+          giessformName = giessform ? giessform.name : null;
+          console.log('🍱 Gießform Name:', giessformName);
+        } catch (gError) {
+          console.warn('⚠️ Gießform nicht gefunden:', portfolioItem.giessform);
+        }
+      }
+    }
+
     // Bestandsinformationen für dieses Portfolio-Item laden
     let bestand = null;
     try {
@@ -798,10 +843,13 @@ router.get('/:id', async (req, res) => {
 
     console.log('📦 Finaler Bestand:', bestand);
 
-    // Portfolio-Item mit Bestandsinformationen zurückgeben
+    // Portfolio-Item mit Bestandsinformationen und Werkstück-Namen zurückgeben
     const responseData = {
       ...portfolioItem.toObject(),
-      bestand
+      bestand,
+      // Werkstück-spezifische Namen hinzufügen
+      giesswerkstoffName,
+      giessformName
     };
 
     res.status(200).json({
