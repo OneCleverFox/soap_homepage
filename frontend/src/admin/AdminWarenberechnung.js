@@ -118,7 +118,15 @@ const AdminWarenberechnung = () => {
 
     // Wenn das aktuelle Produkt herausgefiltert wurde, wähle das erste verfügbare
     if (selectedProduct && !filtered.find(p => p._id === selectedProduct._id)) {
-      setSelectedProduct(filtered.length > 0 ? filtered[0] : null);
+      const newSelection = filtered.length > 0 ? filtered[0] : null;
+      setSelectedProduct(newSelection);
+      if (newSelection) {
+        // Nur laden wenn ein neues Produkt verfügbar ist
+        calculateProductCosts(newSelection);
+      } else {
+        // Berechnung zurücksetzen wenn kein Produkt verfügbar
+        setCalculation(null);
+      }
     }
   }, [portfolioProducts, categoryFilter, statusFilter, selectedProduct]);
 
@@ -152,6 +160,11 @@ const AdminWarenberechnung = () => {
   const handleProductChange = (event) => {
     const product = filteredProducts.find(p => p._id === event.target.value);
     setSelectedProduct(product);
+    if (product) {
+      calculateProductCosts(product);
+    } else {
+      setCalculation(null);
+    }
   };
 
   const handleEditClick = () => {
@@ -359,6 +372,44 @@ const AdminWarenberechnung = () => {
     );
   }
 
+  // Verhindert Rendering wenn kein Produkt oder Berechnung geladen ist, 
+  // oder wenn gefilterte Produkte verfügbar sind aber kein Produkt ausgewählt
+  if ((!selectedProduct || !calculation) && filteredProducts.length > 0) {
+    return (
+      <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
+          📊 Warenberechnung
+        </Typography>
+        <Paper sx={{ p: isMobile ? 2 : 3 }}>
+          <Typography>Bitte ein Produkt auswählen...</Typography>
+          <FormControl fullWidth size={isMobile ? "small" : "medium"} sx={{ mt: 2 }}>
+            <InputLabel>Produkt auswählen</InputLabel>
+            <Select
+              value={selectedProduct?._id || ''}
+              onChange={handleProductChange}
+              label="Produkt auswählen"
+            >
+              {filteredProducts.map((product) => (
+                <MenuItem 
+                  key={product._id} 
+                  value={product._id}
+                  sx={{
+                    opacity: product.aktiv ? 1 : 0.6,
+                    fontStyle: product.aktiv ? 'normal' : 'italic'
+                  }}
+                >
+                  {!product.aktiv && '🚫 '}
+                  {product.name} 
+                  {!product.aktiv && ' (INAKTIV)'}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Paper>
+      </Container>
+    );
+  }
+
   return (
     <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 4, mb: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
       <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
@@ -459,8 +510,8 @@ const AdminWarenberechnung = () => {
                 gap: isMobile ? 1.5 : 2
               }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant={isMobile ? "h6" : "h5"}>{selectedProduct.name}</Typography>
-                  {!selectedProduct.aktiv && (
+                  <Typography variant={isMobile ? "h6" : "h5"}>{selectedProduct?.name || 'Kein Produkt gewählt'}</Typography>
+                  {selectedProduct && !selectedProduct.aktiv && (
                     <Chip 
                       label="🚫 INAKTIV" 
                       color="warning" 
@@ -475,7 +526,7 @@ const AdminWarenberechnung = () => {
                   alignItems={isMobile ? 'stretch' : 'center'}
                 >
                   <Chip 
-                    label={`VK: ${calculation.vkPreis.toFixed(2)} €`} 
+                    label={`VK: ${calculation?.vkPreis?.toFixed(2) || '0.00'} €`} 
                     color="primary" 
                     sx={{ 
                       fontSize: isMobile ? '1rem' : '1.2rem', 
@@ -630,14 +681,14 @@ const AdminWarenberechnung = () => {
                               </Typography>
                             </Box>
                             <Typography variant="caption" color="text.secondary">
-                              Volumen: {selectedProduct.volumenInMl || 0} ml
+                              Volumen: {calculation.volumenInMl || selectedProduct.volumenInMl || selectedProduct.volumen || 0} ml
                             </Typography>
                           </Stack>
                         </CardContent>
                       </Card>
 
                       {/* Gießzusatzstoffe */}
-                      {calculation.giesszusatzstoffeKostenGesamt > 0 && (
+                      {(calculation.giesszusatzstoffeKostenGesamt > 0 || (calculation.giesszusatzstoffeKonfiguration && calculation.giesszusatzstoffeKonfiguration.length > 0)) && (
                         <Card variant="outlined">
                           <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                             <Typography variant="subtitle2" color="secondary" gutterBottom>
@@ -695,13 +746,22 @@ const AdminWarenberechnung = () => {
                           <Typography variant="caption">
                             {selectedProduct.kategorie === 'seife' 
                               ? `${selectedProduct.seifenform || 'Standard'} (0,10 €)`
-                              : `${selectedProduct.giessform || calculation.giessformName || 'Standard'} (${calculation.giessformKosten?.toFixed(2) || '0.10'} €)`
+                              : `${calculation.giessformName || selectedProduct.giessformName || 'Standard'} (${calculation.giessformKosten?.toFixed(2) || '0.10'} €)`
                             }
                           </Typography>
                         </Box>
                         <Box display="flex" justifyContent="space-between">
                           <Typography variant="caption">Zusatz:</Typography>
-                          <Typography variant="caption">{selectedProduct.zusatz || 0}</Typography>
+                          <Typography variant="caption">
+                            {calculation.giesszusatzstoffe && Array.isArray(calculation.giesszusatzstoffe) && calculation.giesszusatzstoffe.length > 0
+                              ? calculation.giesszusatzstoffe
+                                  .filter(gz => gz && (gz.name || gz.bezeichnung)) // Null-Check hinzufügen
+                                  .map(gz => 
+                                    `${gz.name || gz.bezeichnung}: ${gz.menge}g (${(gz.preis || 0).toFixed(2)}€)`
+                                  ).join(', ')
+                              : selectedProduct.zusatz || '0'
+                            }
+                          </Typography>
                         </Box>
                         <Box display="flex" justifyContent="space-between">
                           <Typography variant="caption">Optional:</Typography>
@@ -959,12 +1019,12 @@ const AdminWarenberechnung = () => {
                         </TableRow>
                         <TableRow>
                           <TableCell>Volumen</TableCell>
-                          <TableCell>{selectedProduct.volumenInMl || 0} ml</TableCell>
+                          <TableCell>{calculation.volumenInMl || selectedProduct.volumenInMl || selectedProduct.volumen || 0} ml</TableCell>
                           <TableCell align="right"></TableCell>
                         </TableRow>
 
                         {/* Gießzusatzstoffe */}
-                        {calculation.giesszusatzstoffeKostenGesamt > 0 && (
+                        {(calculation.giesszusatzstoffeKostenGesamt > 0 || (calculation.giesszusatzstoffeKonfiguration && calculation.giesszusatzstoffeKonfiguration.length > 0)) && (
                           <>
                             <TableRow>
                               <TableCell rowSpan={calculation.giesszusatzstoffeKonfiguration?.length + 1 || 2}>
@@ -997,7 +1057,7 @@ const AdminWarenberechnung = () => {
                         {/* Gießform */}
                         <TableRow>
                           <TableCell>🍱 Gießform</TableCell>
-                          <TableCell>{selectedProduct.giessform || calculation.giessformName || 'Standard'}</TableCell>
+                          <TableCell>{calculation.giessformName || selectedProduct.giessformName || 'Standard'}</TableCell>
                           <TableCell align="right">{calculation.giessformKosten?.toFixed(2) || '0.10'} €</TableCell>
                         </TableRow>
                         <TableRow>
@@ -1014,13 +1074,8 @@ const AdminWarenberechnung = () => {
                     </TableRow>
                     <TableRow>
                       <TableCell>Verpackung</TableCell>
-                      <TableCell>{calculation.verpackungName}</TableCell>
-                      <TableCell align="right"></TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Verpackung</TableCell>
-                      <TableCell></TableCell>
-                      <TableCell align="right">{calculation.verpackungKosten?.toFixed(2)} €</TableCell>
+                      <TableCell>{calculation.verpackungName || '-'}</TableCell>
+                      <TableCell align="right">{calculation.verpackungKosten?.toFixed(2) || '0.00'} €</TableCell>
                     </TableRow>
                     <TableRow>
                       <TableCell>Energie</TableCell>

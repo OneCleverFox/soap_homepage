@@ -54,6 +54,47 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 
+// Hilfsfunktion für Zahlenformatierung in Eingabefeldern
+const formatNumberForInput = (value) => {
+  const numValue = parseFloat(value) || 0;
+  
+  // Prüfe auf sehr große oder ungewöhnliche Zahlen
+  if (numValue >= 1e10 || !isFinite(numValue) || isNaN(numValue)) {
+    return '0'; // Setze auf 0 bei extremen Werten
+  }
+  
+  // Für normale Zahlen, entferne führende Nullen und formatiere vernünftig
+  return numValue.toString();
+};
+
+// Prüft ob ein Artikel unendlich verfügbar ist (wie Leitungswasser)
+const isInfinitelyAvailable = (item) => {
+  if (!item) return false;
+  
+  const name = (item.name || item.bezeichnung || '').toLowerCase();
+  const infiniteItems = [
+    'leitungswasser',
+    'wasser',
+    'tap water',
+    'destilliertes wasser'
+  ];
+  
+  return infiniteItems.some(infiniteItem => name.includes(infiniteItem));
+};
+
+// Formatiert Bestand für Anzeige (zeigt ∞ für unendliche Artikel)
+const formatBestandDisplay = (item, bestand) => {
+  if (isInfinitelyAvailable(item)) {
+    return '∞';
+  }
+  
+  if (typeof bestand === 'object') {
+    return bestand?.menge || 0;
+  }
+  
+  return bestand || 0;
+};
+
 const AdminLager = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -552,7 +593,7 @@ const AdminLager = () => {
     setInventurForm({
       typ: backendTyp,
       artikelId: item._id,
-      neuerBestand: aktuellerBestand.toString(),
+      neuerBestand: formatNumberForInput(aktuellerBestand),
       notizen: '',
       aktuellerBestand: aktuellerBestand,
       einheit: einheit,
@@ -1321,7 +1362,7 @@ const AdminLager = () => {
             sx={{ width: 50, height: 50 }}
             variant="rounded"
           >
-            {item.name?.[0] || '?'}
+            {(item.name || item.bezeichnung || '?')[0]}
           </Avatar>
         );
       
@@ -1657,6 +1698,46 @@ const AdminLager = () => {
               )}
             </Box>
           );
+        } else if (currentTab.key === 'giesszusatzstoffe') {
+          const bestand = item.aktuellerBestand || 0;
+          const einheit = item.einheit || 'ml';
+          
+          // Prüfe auf unendlich verfügbare Artikel (wie Leitungswasser)
+          if (isInfinitelyAvailable(item)) {
+            return (
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                color: 'success.main',
+                fontWeight: 'bold'
+              }}>
+                ∞ (unbegrenzt)
+              </Box>
+            );
+          }
+          
+          return (
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              color: bestand <= (item.mindestbestand || 0) ? 'error.main' : 'text.primary',
+              fontWeight: bestand <= (item.mindestbestand || 0) ? 'bold' : 'normal'
+            }}>
+              {bestand}{einheit}
+              {bestand <= (item.mindestbestand || 0) && (
+                <Box 
+                  component="span" 
+                  sx={{ 
+                    ml: 0.5, 
+                    fontSize: '12px',
+                    color: 'error.main'
+                  }}
+                >
+                  ⚠️
+                </Box>
+              )}
+            </Box>
+          );
         }
         return '-';
       
@@ -1667,6 +1748,17 @@ const AdminLager = () => {
         return item.reihenfolge || '-';
       
       case 'actions':
+        // Verstecke Inventur-Actions für unendlich verfügbare Artikel
+        if (isInfinitelyAvailable(item)) {
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <Typography variant="caption" color="success.main" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>
+                Unbegrenzt verfügbar
+              </Typography>
+            </Box>
+          );
+        }
+        
         return (
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Tooltip title="Inventur">
@@ -2006,7 +2098,7 @@ const AdminLager = () => {
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                       <Box sx={{ flex: 1, mr: 1 }}>
                         <Typography variant="h6" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
-                          {item.name}
+                          {item.name || item.bezeichnung || 'Unbekannt'}
                         </Typography>
                         {item.beschreibung && (
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -2046,39 +2138,50 @@ const AdminLager = () => {
                         </Typography>
                       )}
                       <Typography variant="h6" color="primary" sx={{ fontSize: '1.1rem' }}>
-                        {typeof item.bestand === 'object' ? (item.bestand?.menge || 0) : (item.bestand || 0)}
+                        {formatBestandDisplay(item, typeof item.bestand === 'object' ? item.bestand?.menge : item.bestand)}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {typeof item.bestand === 'object' ? (item.bestand?.einheit || item.einheit) : item.einheit}
+                        {isInfinitelyAvailable(item) ? '' : (typeof item.bestand === 'object' ? (item.bestand?.einheit || item.einheit) : item.einheit)}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton
-                        size="small"
-                        onClick={() => openInventurDialog(item, currentTab.key)}
-                        sx={{ 
-                          bgcolor: 'primary.main', 
-                          color: 'white',
-                          '&:hover': { bgcolor: 'primary.dark' },
-                          minWidth: isMobile ? 36 : 40,
-                          height: isMobile ? 36 : 40
-                        }}
-                      >
-                        <EditIcon fontSize={isMobile ? "small" : "small"} />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => openHistoryDialog(item, currentTab.key)}
-                        sx={{ 
-                          bgcolor: 'secondary.main', 
-                          color: 'white',
-                          '&:hover': { bgcolor: 'secondary.dark' },
-                          minWidth: isMobile ? 36 : 40,
-                          height: isMobile ? 36 : 40
-                        }}
-                      >
-                        <HistoryIcon fontSize={isMobile ? "small" : "small"} />
-                      </IconButton>
+                      {!isInfinitelyAvailable(item) && (
+                        <>
+                          <IconButton
+                            size="small"
+                            onClick={() => openInventurDialog(item, currentTab.key)}
+                            sx={{ 
+                              bgcolor: 'primary.main', 
+                              color: 'white',
+                              '&:hover': { bgcolor: 'primary.dark' },
+                              minWidth: isMobile ? 36 : 40,
+                              height: isMobile ? 36 : 40
+                            }}
+                          >
+                            <EditIcon fontSize={isMobile ? "small" : "small"} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => openHistoryDialog(item, currentTab.key)}
+                            sx={{ 
+                              bgcolor: 'secondary.main', 
+                              color: 'white',
+                              '&:hover': { bgcolor: 'secondary.dark' },
+                              minWidth: isMobile ? 36 : 40,
+                              height: isMobile ? 36 : 40
+                            }}
+                          >
+                            <HistoryIcon fontSize={isMobile ? "small" : "small"} />
+                          </IconButton>
+                        </>
+                      )}
+                      {isInfinitelyAvailable(item) && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: 'success.light', borderRadius: 1 }}>
+                          <Typography variant="caption" color="success.dark" sx={{ fontWeight: 'bold' }}>
+                            Unbegrenzt verfügbar
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
                   </Box>
 
@@ -2256,7 +2359,7 @@ const AdminLager = () => {
               {(() => {
                 const validation = validateRohstoffVerfuegbarkeit();
                 const isFormValid = inventurForm.neuerBestand && 
-                                   inventurForm.neuerBestand !== inventurForm.aktuellerBestand.toString();
+                                   inventurForm.neuerBestand !== formatNumberForInput(inventurForm.aktuellerBestand);
                 const canSave = isFormValid && validation.isValid && !saving;
                 
                 return (
@@ -2425,7 +2528,7 @@ const AdminLager = () => {
                   })}
                   onFocus={(e) => {
                     // Feld beim ersten Klick leeren für einfache Eingabe
-                    if (inventurForm.neuerBestand === inventurForm.aktuellerBestand.toString()) {
+                    if (inventurForm.neuerBestand === formatNumberForInput(inventurForm.aktuellerBestand)) {
                       setInventurForm({
                         ...inventurForm,
                         neuerBestand: ''
@@ -2816,7 +2919,7 @@ const AdminLager = () => {
             {(() => {
               const validation = validateRohstoffVerfuegbarkeit();
               const isFormValid = inventurForm.neuerBestand && 
-                                 inventurForm.neuerBestand !== inventurForm.aktuellerBestand.toString();
+                                 inventurForm.neuerBestand !== formatNumberForInput(inventurForm.aktuellerBestand);
               const canSave = isFormValid && validation.isValid && !saving;
               
               return (

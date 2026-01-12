@@ -302,14 +302,60 @@ const AdminRohstoffe = () => {
   // Hilfsfunktion um Objektwerte zu Strings zu konvertieren
   const sanitizeFormData = (data) => {
     const sanitized = { ...data };
+    
+    // Liste der numerischen Felder für verschiedene Tabs
+    const numericFields = {
+      // Gemeinsame numerische Felder
+      gesamtInGramm: 1000,
+      ekPreis: 0,
+      preisProGramm: 0,
+      preisPro10Gramm: 0,
+      aktuellerBestand: 0,
+      aktuellVorrat: 0,
+      mindestbestand: 100,
+      
+      // Duftöle
+      gesamtInMl: 15,
+      tropfenProMl: 20,
+      anzahlTropfen: 300,
+      kostenProTropfen: 0,
+      
+      // Verpackungen
+      menge: 1,
+      kostenInEuro: 0,
+      kostenProStueck: 0,
+      
+      // Gießwerkstoffe - hier sind die problematischen Felder
+      dichte: 0,
+      haertungszeit: 0,
+      vollhaertung: 0,
+      gießtemperatur: 0,
+    };
+    
     Object.keys(sanitized).forEach(key => {
       if (sanitized[key] && typeof sanitized[key] === 'object' && sanitized[key].constructor === Object) {
         // Konvertiere Objekte zu leerem String oder zu JSON falls gewünscht
         sanitized[key] = '';
       } else if (sanitized[key] === null || sanitized[key] === undefined) {
         sanitized[key] = '';
+      } else if (numericFields.hasOwnProperty(key)) {
+        // Sanitize numerische Felder
+        const value = sanitized[key];
+        if (typeof value === 'string' && value.trim() === '') {
+          sanitized[key] = numericFields[key]; // Standardwert
+        } else {
+          const numericValue = parseFloat(value);
+          if (isNaN(numericValue) || !isFinite(numericValue)) {
+            // Ungültige Zeichen oder nicht-numerische Werte
+            console.warn(`Ungültiger numerischer Wert für ${key}: "${value}", setze Standardwert ${numericFields[key]}`);
+            sanitized[key] = numericFields[key];
+          } else {
+            sanitized[key] = numericValue;
+          }
+        }
       }
     });
+    
     return sanitized;
   };
 
@@ -564,8 +610,38 @@ const AdminRohstoffe = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    
+    // Liste der numerischen Felder
+    const numericFields = new Set([
+      'gesamtInGramm', 'ekPreis', 'preisProGramm', 'preisPro10Gramm',
+      'aktuellerBestand', 'aktuellVorrat', 'mindestbestand',
+      'gesamtInMl', 'tropfenProMl', 'anzahlTropfen', 'kostenProTropfen',
+      'menge', 'kostenInEuro', 'kostenProStueck',
+      'dichte', 'haertungszeit', 'vollhaertung', 'gießtemperatur'
+    ]);
+    
     // Sicherstellen dass value niemals undefined/null ist für textareas
-    const cleanValue = value === null || value === undefined ? '' : String(value);
+    let cleanValue = value === null || value === undefined ? '' : String(value);
+    
+    // Spezielle Behandlung für numerische Felder
+    if (numericFields.has(name) && type === 'number') {
+      if (cleanValue === '') {
+        cleanValue = '';  // Leere Eingabe erlauben
+      } else {
+        // Entferne ungültige Zeichen für numerische Eingaben
+        const sanitizedValue = cleanValue.replace(/[^\d.-]/g, '');
+        const numValue = parseFloat(sanitizedValue);
+        
+        if (isNaN(numValue) || !isFinite(numValue)) {
+          // Bei ungültigen Werten setze leeren String
+          cleanValue = '';
+          console.warn(`Ungültiger numerischer Wert für ${name}: "${value}", setze leeren String`);
+        } else {
+          cleanValue = sanitizedValue;
+        }
+      }
+    }
+    
     const newValue = type === 'checkbox' ? checked : cleanValue;
     
     setFormData(prev => {
