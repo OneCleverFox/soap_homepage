@@ -195,13 +195,37 @@ const giesswerkstoffSchema = new mongoose.Schema({
   
   // Mischverhältnis-Konfiguration für automatische Ausbuchung
   mischkonfiguration: {
-    type: mongoose.Schema.Types.Mixed,
-    default: function() {
-      return {
-        berechnungsFaktor: 1.5,
-        schwundProzent: 5,
-        zusaetzlichesMaterial: []
-      };
+    berechnungsFaktor: {
+      type: Number,
+      default: 1.5,
+      min: 1.0,
+      max: 10.0
+    },
+    schwundProzent: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 50
+    },
+    zusaetzlichesMaterial: {
+      type: [{
+        bezeichnung: {
+          type: String,
+          required: true
+        },
+        faktor: {
+          type: Number,
+          required: true,
+          min: 0,
+          max: 10,
+          default: 0
+        },
+        einheit: {
+          type: String,
+          default: 'g'
+        }
+      }],
+      default: []
     }
   },
   
@@ -269,23 +293,6 @@ const giesswerkstoffSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Post-find Middleware um korrupte Daten zu reparieren
-giesswerkstoffSchema.post(['find', 'findOne'], function(docs) {
-  if (!docs) return;
-  
-  const docArray = Array.isArray(docs) ? docs : [docs];
-  
-  docArray.forEach(doc => {
-    if (doc && (typeof doc.mischkonfiguration === 'string' || !doc.mischkonfiguration)) {
-      doc.mischkonfiguration = {
-        berechnungsFaktor: 1.5,
-        schwundProzent: 5,
-        zusaetzlichesMaterial: []
-      };
-    }
-  });
-});
-
 // Virtuelle Felder für berechnete Werte
 giesswerkstoffSchema.virtual('bestandsStatus').get(function() {
   if (this.aktuellerBestand <= 0) return 'leer';
@@ -323,15 +330,6 @@ giesswerkstoffSchema.index({ ablaufdatum: 1 });
 
 // Pre-save Middleware
 giesswerkstoffSchema.pre('save', function(next) {
-  // Mischkonfiguration bereinigen
-  if (typeof this.mischkonfiguration === 'string' || !this.mischkonfiguration) {
-    this.mischkonfiguration = {
-      berechnungsFaktor: 1.5,
-      schwundProzent: 5,
-      zusaetzlichesMaterial: []
-    };
-  }
-  
   // Tags bereinigen
   if (this.tags) {
     this.tags = this.tags.map(tag => tag.toLowerCase().trim()).filter(tag => tag.length > 0);
