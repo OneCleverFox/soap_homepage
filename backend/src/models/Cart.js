@@ -31,7 +31,30 @@ const cartItemSchema = new mongoose.Schema({
   },
   seife: {
     type: String,
-    required: true
+    required: false,  // Optional für Werkstücke
+    default: ''
+  },
+  // Werkstück-spezifische Felder
+  kategorie: {
+    type: String,
+    enum: ['seife', 'werkstuck'],
+    default: 'seife'
+  },
+  giesswerkstoff: {
+    type: String,
+    required: false
+  },
+  giesswerkstoffName: {
+    type: String,
+    required: false
+  },
+  giessform: {
+    type: String, 
+    required: false
+  },
+  giessformName: {
+    type: String,
+    required: false
   }
 }, { _id: false });
 

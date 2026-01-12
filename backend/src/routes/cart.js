@@ -256,16 +256,28 @@ router.post('/add', authenticateToken, async (req, res) => {
       // Menge erhöhen
       cart.artikel[existingItemIndex].menge += menge;
     } else {
-      // Neuen Artikel hinzufügen
-      cart.artikel.push({
+      // Neuen Artikel hinzufügen - kategorie-spezifische Daten
+      const cartItem = {
         produktId,
         name,
         preis,
         menge,
         bild: bild || '',
         gramm,
-        seife
-      });
+        kategorie: product.kategorie || 'seife'
+      };
+
+      // Kategorie-spezifische Felder hinzufügen
+      if (product.kategorie === 'werkstuck') {
+        cartItem.giesswerkstoff = product.giesswerkstoff || '';
+        cartItem.giesswerkstoffName = product.giesswerkstoffName || 'Standard';
+        cartItem.giessform = product.giessform || '';
+        cartItem.giessformName = product.giessformName || 'Standard';
+      } else {
+        cartItem.seife = seife || product.seife || '';
+      }
+
+      cart.artikel.push(cartItem);
     }
 
     await cart.save();

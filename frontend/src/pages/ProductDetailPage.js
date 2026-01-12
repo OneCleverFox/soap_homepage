@@ -27,7 +27,8 @@ import {
   Add as AddIcon,
   Remove as RemoveIcon,
   Inventory2 as InventoryIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Build
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
 import { useCart } from '../contexts/CartContext';
@@ -371,21 +372,44 @@ const ProductDetailPage = () => {
               </Box>
             </Box>
 
-            <Box display="flex" alignItems="center">
-              <LocalFlorist sx={{ mr: 2, color: 'primary.main' }} />
-              <Box>
-                <Typography variant="body2" color="text.secondary">Duft</Typography>
-                <Typography fontWeight="bold">{product.aroma}</Typography>
-              </Box>
-            </Box>
+            {/* Kategorie-spezifische Informationen */}
+            {product.kategorie === 'werkstuck' ? (
+              <>
+                <Box display="flex" alignItems="center">
+                  <Build sx={{ mr: 2, color: 'primary.main' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Gießwerkstoff</Typography>
+                    <Typography fontWeight="bold">{product.giesswerkstoffName || 'Standard'}</Typography>
+                  </Box>
+                </Box>
 
-            <Box display="flex" alignItems="center">
-              <Category sx={{ mr: 2, color: 'primary.main' }} />
-              <Box>
-                <Typography variant="body2" color="text.secondary">Form</Typography>
-                <Typography fontWeight="bold">{product.seifenform}</Typography>
-              </Box>
-            </Box>
+                <Box display="flex" alignItems="center">
+                  <Category sx={{ mr: 2, color: 'primary.main' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Gießform</Typography>
+                    <Typography fontWeight="bold">{product.giessformName || 'Standard'}</Typography>
+                  </Box>
+                </Box>
+              </>
+            ) : (
+              <>
+                <Box display="flex" alignItems="center">
+                  <LocalFlorist sx={{ mr: 2, color: 'primary.main' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Duft</Typography>
+                    <Typography fontWeight="bold">{product.aroma}</Typography>
+                  </Box>
+                </Box>
+
+                <Box display="flex" alignItems="center">
+                  <Category sx={{ mr: 2, color: 'primary.main' }} />
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">Form</Typography>
+                    <Typography fontWeight="bold">{product.seifenform}</Typography>
+                  </Box>
+                </Box>
+              </>
+            )}
 
             {product.verpackung && (
               <Box display="flex" alignItems="center">

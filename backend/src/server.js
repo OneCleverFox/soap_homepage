@@ -16,12 +16,12 @@ const { IPAnonymizer } = require('./utils/ipAnonymizer');
 
 // VERSION MARKER - Railway Deployment Check
 const APP_VERSION = '2.0.0-optimized';
-logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-logger.info(`🚀 BACKEND VERSION: ${APP_VERSION}`);
-logger.info('📅 BUILD DATE:', new Date().toISOString());
-logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+logger.info('');
+logger.info(` BACKEND VERSION: ${APP_VERSION}`);
+logger.info(' BUILD DATE:', new Date().toISOString());
+logger.info('');
 
-// Dotenv Configuration - nur für lokale Entwicklung
+// Dotenv Configuration - nur fr lokale Entwicklung
 if (process.env.NODE_ENV !== 'production') {
   // Lokal: Lade .env (Fallback zu .env.development)
   const fs = require('fs');
@@ -36,19 +36,19 @@ if (process.env.NODE_ENV !== 'production') {
     path: path.resolve(envPath, envFile)
   });
   
-  logger.info(`🔧 Loaded environment from: ${envFile}`);
-  logger.info(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
-  logger.info(`🔌 PORT: ${process.env.PORT}`);
-  logger.info(`🗄️  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
+  logger.info(` Loaded environment from: ${envFile}`);
+  logger.info(` NODE_ENV: ${process.env.NODE_ENV}`);
+  logger.info(` PORT: ${process.env.PORT}`);
+  logger.info(`  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
   
   // PayPal Debug Info
-  logger.info(`💳 PAYPAL_SANDBOX_CLIENT_ID: ${process.env.PAYPAL_SANDBOX_CLIENT_ID ? 'SET' : 'NOT SET'}`);
-  logger.info(`💳 PAYPAL_LIVE_CLIENT_ID: ${process.env.PAYPAL_LIVE_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+  logger.info(` PAYPAL_SANDBOX_CLIENT_ID: ${process.env.PAYPAL_SANDBOX_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+  logger.info(` PAYPAL_LIVE_CLIENT_ID: ${process.env.PAYPAL_LIVE_CLIENT_ID ? 'SET' : 'NOT SET'}`);
 } else {
   // Production (Railway): Nutzt Environment Variables direkt
-  logger.info('🔧 Production Mode: Using Railway Environment Variables');
-  logger.info(`🌍 NODE_ENV: ${process.env.NODE_ENV}`);
-  logger.info(`🔌 PORT: ${process.env.PORT}`);
+  logger.info(' Production Mode: Using Railway Environment Variables');
+  logger.info(` NODE_ENV: ${process.env.NODE_ENV}`);
+  logger.info(` PORT: ${process.env.PORT}`);
 }
 
 // Route Imports
@@ -78,7 +78,7 @@ const debugRoutes = require('./routes/debug');
 
 const app = express();
 
-// Trust proxy für Railway/Production - aber nur wenn explizit gesetzt
+// Trust proxy fr Railway/Production - aber nur wenn explizit gesetzt
 if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true') {
   app.set('trust proxy', 1);
 } else {
@@ -152,7 +152,7 @@ app.use((req, res, next) => {
   });
 
   if (!isAllowedOrigin) {
-    console.warn(`🚫 Blockierter CORS-Origin: ${requestOrigin} (${requestPath})`);
+    console.warn(` Blockierter CORS-Origin: ${requestOrigin} (${requestPath})`);
   }
 
   // CORS-Header IMMER setzen, auch wenn Origin nicht erlaubt ist
@@ -196,16 +196,16 @@ app.use(helmet({
   }
 }));
 
-// Rate Limiting - vereinfacht für Development
+// Rate Limiting - vereinfacht fr Development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: process.env.NODE_ENV === 'production' ? 500 : 1000, // Production: Erhöht von 50 auf 500
-  message: 'Zu viele Anfragen von dieser IP, bitte versuchen Sie es später erneut.',
+  max: process.env.NODE_ENV === 'production' ? 500 : 1000, // Production: Erhht von 50 auf 500
+  message: 'Zu viele Anfragen von dieser IP, bitte versuchen Sie es spter erneut.',
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: false, // Explizit auf false setzen für localhost
+  trustProxy: false, // Explizit auf false setzen fr localhost
   skip: (req) => {
-    // Skip rate limiting für localhost in development
+    // Skip rate limiting fr localhost in development
     if (process.env.NODE_ENV !== 'production') {
       const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
       return isLocalhost;
@@ -214,16 +214,16 @@ const limiter = rateLimit({
   }
 });
 
-// Verschärftes Rate Limiting für Auth-Endpunkte  
+// Verschrftes Rate Limiting fr Auth-Endpunkte  
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: process.env.NODE_ENV === 'production' ? 50 : 100, // Auth bleibt bei 50 für Sicherheit
+  max: process.env.NODE_ENV === 'production' ? 50 : 100, // Auth bleibt bei 50 fr Sicherheit
   message: 'Zu viele Login-Versuche. Bitte warten Sie 15 Minuten.',
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: false, // Explizit auf false setzen für localhost
+  trustProxy: false, // Explizit auf false setzen fr localhost
   skip: (req) => {
-    // Skip auth rate limiting für localhost in development
+    // Skip auth rate limiting fr localhost in development
     if (process.env.NODE_ENV !== 'production') {
       const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
       return isLocalhost;
@@ -248,25 +248,25 @@ const ensureUploadDirectories = () => {
   try {
     if (!fs.existsSync(uploadsPath)) {
       fs.mkdirSync(uploadsPath, { recursive: true });
-      console.log('✅ Created uploads directory:', uploadsPath);
+      console.log(' Created uploads directory:', uploadsPath);
     }
     if (!fs.existsSync(productsPath)) {
       fs.mkdirSync(productsPath, { recursive: true });
-      console.log('✅ Created products directory:', productsPath);
+      console.log(' Created products directory:', productsPath);
     }
-    console.log('✅ Upload directories ready');
+    console.log(' Upload directories ready');
   } catch (error) {
-    console.warn('⚠️ Could not create upload directories:', error.message);
+    console.warn(' Could not create upload directories:', error.message);
   }
 };
 
 // Create upload directories
 ensureUploadDirectories();
 
-// Static Files (für Produktbilder etc.)
+// Static Files (fr Produktbilder etc.)
 app.use('/uploads', express.static('uploads'));
 
-// Kritische Environment Variables prüfen
+// Kritische Environment Variables prfen
 function validateCriticalEnvVars() {
   const critical = [
     'JWT_SECRET',
@@ -276,23 +276,23 @@ function validateCriticalEnvVars() {
   const missing = critical.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
-    console.error('🚨 KRITISCHE SICHERHEITSLÜCKE:');
-    console.error('❌ Fehlende Environment Variables:', missing);
-    console.error('🛑 SERVER WIRD NICHT GESTARTET');
+    console.error(' KRITISCHE SICHERHEITSLCKE:');
+    console.error(' Fehlende Environment Variables:', missing);
+    console.error(' SERVER WIRD NICHT GESTARTET');
     process.exit(1);
   }
   
   // Warnung bei fehlender E-Mail-Konfiguration
   if (!process.env.RESEND_API_KEY) {
-    console.warn('⚠️ RESEND_API_KEY nicht konfiguriert - E-Mail-Service deaktiviert');
+    console.warn(' RESEND_API_KEY nicht konfiguriert - E-Mail-Service deaktiviert');
   }
   
   // Warnung bei schwachen JWT Secrets
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
-    console.warn('⚠️ JWT_SECRET ist zu kurz (< 32 Zeichen)');
+    console.warn(' JWT_SECRET ist zu kurz (< 32 Zeichen)');
   }
   
-  console.log('✅ Kritische Environment Variables validiert');
+  console.log(' Kritische Environment Variables validiert');
 }
 
 validateCriticalEnvVars();
@@ -302,38 +302,38 @@ const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URI_PROD;
 
 if (!MONGODB_URI) {
-  console.error('🚨 KRITISCHER FEHLER: MONGODB_URI nicht in Environment Variables gefunden!');
-  console.error('💡 Prüfen Sie Ihre .env Datei');
+  console.error(' KRITISCHER FEHLER: MONGODB_URI nicht in Environment Variables gefunden!');
+  console.error(' Prfen Sie Ihre .env Datei');
   process.exit(1);
 }
 
-console.log('🔧 DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
-console.log('📊 Database Mode:', DATABASE_MODE.toUpperCase());
-console.log('🌍 Umgebung: IMMER PRODUKTIVE MONGODB ATLAS DATENBANK');
-console.log('🔗 MongoDB URI verwendet:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+console.log(' DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
+console.log(' Database Mode:', DATABASE_MODE.toUpperCase());
+console.log(' Umgebung: IMMER PRODUKTIVE MONGODB ATLAS DATENBANK');
+console.log(' MongoDB URI verwendet:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
 
-// MongoDB Connection mit Retry-Logik für Railway
+// MongoDB Connection mit Retry-Logik fr Railway
 async function connectToMongoDB(retries = 5, delay = 5000) {
   if (!MONGODB_URI) {
-    console.error('❌ MONGODB_URI ist nicht definiert!');
-    console.error('💡 Prüfen Sie Ihre Environment Variables:');
+    console.error(' MONGODB_URI ist nicht definiert!');
+    console.error(' Prfen Sie Ihre Environment Variables:');
     console.error('   - DOTENV_KEY:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
     console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
     console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
     return;
   }
 
-  console.log('🔄 Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+  console.log(' Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
   
-  // Debug: Zeige aktuelle IP-Adresse für Whitelist-Check
+  // Debug: Zeige aktuelle IP-Adresse fr Whitelist-Check
   try {
     const fetch = require('node-fetch');
     const response = await fetch('https://api.ipify.org?format=json');
     const { ip } = await response.json();
-    console.log('🌐 Aktuelle öffentliche IP-Adresse:', ip);
-    console.log('💡 Diese IP muss in MongoDB Atlas Whitelist stehen!');
+    console.log(' Aktuelle ffentliche IP-Adresse:', ip);
+    console.log(' Diese IP muss in MongoDB Atlas Whitelist stehen!');
   } catch (ipError) {
-    console.warn('⚠️ Konnte aktuelle IP nicht ermitteln:', ipError.message);
+    console.warn(' Konnte aktuelle IP nicht ermitteln:', ipError.message);
   }
   
   // Optimierte Mongoose Verbindungsoptionen
@@ -343,14 +343,14 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
     try {
       await mongoose.connect(MONGODB_URI, mongooseOptions);
       logger.success('MongoDB erfolgreich verbunden');
-      logger.info('📊 Database:', mongoose.connection.db ? mongoose.connection.db.databaseName : 'connecting...');
-      logger.info('🏢 Host:', mongoose.connection.host || 'connecting...');
-      logger.info(`🎯 Verbindung hergestellt nach ${attempt} Versuch(en)`);
+      logger.info(' Database:', mongoose.connection.db ? mongoose.connection.db.databaseName : 'connecting...');
+      logger.info(' Host:', mongoose.connection.host || 'connecting...');
+      logger.info(` Verbindung hergestellt nach ${attempt} Versuch(en)`);
       
       // Database Optimization Setup - nur in Development
       if (process.env.NODE_ENV !== 'production' && !process.env.RAILWAY_ENVIRONMENT) {
         try {
-          // Warte auf vollständige DB-Bereitschaft
+          // Warte auf vollstndige DB-Bereitschaft
           const isReady = await DatabaseDebugger.waitForConnection(5000);
           
           if (isReady) {
@@ -359,16 +359,16 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
             DatabaseOptimizer.enableSlowQueryLogging();
             await cacheManager.warmupCache();
           } else {
-            logger.warning('⚠️ Optimization skipped - database not fully ready');
+            logger.warning(' Optimization skipped - database not fully ready');
           }
         } catch (optimizationError) {
-          logger.warning('⚠️ Optimization setup failed (non-critical):', optimizationError.message);
+          logger.warning(' Optimization setup failed (non-critical):', optimizationError.message);
         }
       }
       
       return; // Erfolg - beende Funktion
     } catch (err) {
-      logger.error(`❌ MongoDB Verbindungsfehler (Versuch ${attempt}/${retries}):`, {
+      logger.error(` MongoDB Verbindungsfehler (Versuch ${attempt}/${retries}):`, {
         message: err.message,
         name: err.name,
         code: err.code
@@ -376,12 +376,12 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
       
       if (attempt < retries) {
         const waitTime = delay * attempt; // Exponential backoff
-        logger.warning(`⏳ Warte ${waitTime/1000} Sekunden vor nächstem Versuch...`);
+        logger.warning(` Warte ${waitTime/1000} Sekunden vor nchstem Versuch...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       } else {
-        logger.critical('💡 Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-        logger.critical('⚠️ Alle Verbindungsversuche fehlgeschlagen!');
-        logger.warning('⚠️ Backend läuft ohne Datenbankverbindung weiter...');
+        logger.critical(' Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
+        logger.critical(' Alle Verbindungsversuche fehlgeschlagen!');
+        logger.warning(' Backend luft ohne Datenbankverbindung weiter...');
       }
     }
   }
@@ -390,26 +390,26 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
 // Starte MongoDB Verbindung
 connectToMongoDB();
 
-// MongoDB Verbindungsevents überwachen
+// MongoDB Verbindungsevents berwachen
 mongoose.connection.on('connected', () => {
-  logger.success('🔗 Mongoose Verbindung hergestellt');
+  logger.success(' Mongoose Verbindung hergestellt');
 });
 
 mongoose.connection.on('error', (err) => {
-  logger.error('❌ Mongoose Verbindungsfehler:', err);
+  logger.error(' Mongoose Verbindungsfehler:', err);
 });
 
 mongoose.connection.on('disconnected', () => {
-  logger.warning('🔌 Mongoose Verbindung getrennt');
+  logger.warning(' Mongoose Verbindung getrennt');
   // In Development: Weniger aggressive Wiederverbindung
   if (mongoose.connection.readyState === 0 && process.env.NODE_ENV === 'development') {
-    console.log('🔄 Versuche Wiederverbindung in 10 Sekunden...');
+    console.log(' Versuche Wiederverbindung in 10 Sekunden...');
     setTimeout(async () => {
       try {
         await connectToMongoDB();
-        console.log('✅ Wiederverbindung erfolgreich');
+        console.log(' Wiederverbindung erfolgreich');
       } catch (err) {
-        console.error('❌ Wiederverbindung fehlgeschlagen:', err.message);
+        console.error(' Wiederverbindung fehlgeschlagen:', err.message);
       }
     }, 10000); // 10 Sekunden warten
   }
@@ -417,7 +417,7 @@ mongoose.connection.on('disconnected', () => {
 
 // Graceful Shutdown
 process.on('SIGINT', async () => {
-  console.log('SIGINT erhalten, schließe Server...');
+  console.log('SIGINT erhalten, schliee Server...');
   await mongoose.connection.close();
   console.log('MongoDB Verbindung geschlossen.');
   process.exit(0);
@@ -468,8 +468,8 @@ app.get('/api/health', (req, res) => {
   res.status(httpStatus).json({
     status: dbStatus === 1 ? 'OK' : 'DEGRADED',
     message: dbStatus === 1 
-      ? 'Gluecksmomente Backend läuft' 
-      : 'Backend läuft, aber Datenbank ist nicht verfügbar',
+      ? 'Gluecksmomente Backend luft' 
+      : 'Backend luft, aber Datenbank ist nicht verfgbar',
     version: APP_VERSION,
     database: {
       status: dbStatusMap[dbStatus] || 'unknown',
@@ -524,11 +524,11 @@ app.use(globalErrorHandler);
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
-  logger.success(`🚀 Server läuft auf Port ${PORT}`);
-  logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`🔗 API verfügbar unter: http://localhost:${PORT}/api`);
-  logger.info(`🔗 Health Check: http://localhost:${PORT}/api/health`);
-  logger.info(`📊 Extended Health: http://localhost:${PORT}/api/health-extended`);
+  logger.success(` Server luft auf Port ${PORT}`);
+  logger.info(` Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(` API verfgbar unter: http://localhost:${PORT}/api`);
+  logger.info(` Health Check: http://localhost:${PORT}/api/health`);
+  logger.info(` Extended Health: http://localhost:${PORT}/api/health-extended`);
   
   // Upload-Cleanup starten
   require('./utils/uploadCleanup');
@@ -536,7 +536,7 @@ const server = app.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM erhalten, schließe Server...');
+  logger.info('SIGTERM erhalten, schliee Server...');
   server.close(() => {
     logger.info('Server geschlossen.');
     // Cache nur in Development flushen
@@ -550,7 +550,7 @@ process.on('SIGTERM', () => {
 });
 
 process.on('SIGINT', () => {
-  logger.info('SIGINT erhalten, schließe Server...');
+  logger.info('SIGINT erhalten, schliee Server...');
   server.close(() => {
     logger.info('Server geschlossen.');
     // Cache nur in Development flushen
@@ -562,3 +562,5 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+

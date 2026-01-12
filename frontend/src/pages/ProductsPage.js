@@ -827,8 +827,27 @@ const ProductsPage = React.memo(() => {
                     />
                   )}
                   
-                  {/* Rohseifen Badge(s) */}
+                  {/* Kategorie-spezifische Badge(s) */}
                   {(() => {
+                    // Werkstück-spezifische Anzeige
+                    if (product.kategorie === 'werkstuck') {
+                      return (
+                        <Chip 
+                          label={product.giesswerkstoffName || 'Standard'}
+                          size="small"
+                          sx={{ 
+                            position: 'absolute',
+                            top: 16,
+                            right: 16,
+                            bgcolor: 'rgba(255,255,255,0.95)',
+                            fontWeight: 'bold',
+                            backdropFilter: 'blur(10px)'
+                          }}
+                        />
+                      );
+                    }
+
+                    // Seife-spezifische Anzeige (bestehender Code)
                     const isDualSoap = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
                     const seife2 = product.rohseifenKonfiguration?.seife2;
                     
@@ -937,20 +956,31 @@ const ProductsPage = React.memo(() => {
                       </Typography>
                     </Box>
 
-                    <Box display="flex" alignItems="center">
-                      <AromaIcon sx={{ mr: 0.5, fontSize: 18, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {product.aroma}
-                      </Typography>
-                    </Box>
+                    {/* Aroma nur für Seifen anzeigen */}
+                    {product.kategorie === 'seife' && product.aroma && (
+                      <Box display="flex" alignItems="center">
+                        <AromaIcon sx={{ mr: 0.5, fontSize: 18, color: 'text.secondary' }} />
+                        <Typography variant="body2" color="text.secondary">
+                          {product.aroma}
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
 
                   {/* Rohseifen-Information */}
                   <Box sx={{ mb: 2 }}>
                     {(() => {
-                      const isDualSoapInfo = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
+                      // Kategorie-spezifische Anzeige
+                      if (product.kategorie === 'werkstuck') {
+                        return (
+                          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                            <strong>Gießwerkstoff:</strong> {product.giesswerkstoffName || 'Standard'}
+                          </Typography>
+                        );
+                      }
                       
-                      // Gewichtverteilung Info validiert ✅
+                      // Seife-spezifische Anzeige (bestehender Code)
+                      const isDualSoapInfo = product.rohseifenKonfiguration?.verwendeZweiRohseifen;
                       
                       return isDualSoapInfo ? (
                       <Box>

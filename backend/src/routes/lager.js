@@ -9,6 +9,7 @@ const Verpackung = require('../models/Verpackung');
 const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
 const Giessform = require('../models/Giessform');
 const Giesswerkstoff = require('../models/Giesswerkstoff');
+const Giesszusatzstoff = require('../models/Giesszusatzstoff');
 const { authenticateToken } = require('../middleware/auth');
 
 // Middleware: Nur Admin darf Lager verwalten
@@ -547,9 +548,19 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                     });
                     
                     if (zusatzstoffBestand) {
-                      if (zusatzstoffBestand.menge >= benoetigt) {
+                      // Prüfung auf unbegrenzte Materialien (Wasser, etc.)
+                      const istUnbegrenzt = zusatzstoffRecord.unbegrenzterVorrat === true ||
+                                           zusatzstoffRecord.bezeichnung?.toLowerCase().includes('wasser') ||
+                                           zusatzstoffRecord.bezeichnung?.toLowerCase().includes('leitungswasser');
+                      
+                      if (istUnbegrenzt || zusatzstoffBestand.menge >= benoetigt) {
                         const zusatzstoffVorher = zusatzstoffBestand.menge;
-                        zusatzstoffBestand.menge -= benoetigt;
+                        
+                        // Nur bei begrenzten Materialien den Bestand reduzieren
+                        if (!istUnbegrenzt) {
+                          zusatzstoffBestand.menge -= benoetigt;
+                        }
+                        
                         zusatzstoffBestand.letzteAktualisierung = new Date();
                         await zusatzstoffBestand.save();
                         
@@ -560,12 +571,14 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                             artikelId: zusatzstoffRecord._id,
                             name: zusatzstoffRecord.bezeichnung
                           },
-                          menge: -benoetigt,
+                          menge: istUnbegrenzt ? 0 : -benoetigt,  // Null für unbegrenzte Materialien
                           einheit: 'g',
                           bestandVorher: zusatzstoffVorher,
-                          bestandNachher: zusatzstoffBestand.menge,
-                          grund: `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
-                          notizen: `Zusatzinhaltsstoff ${mengeProStuck}g pro Stück - Fertigprodukt-Inventur (ID: ${artikelId})`,
+                          bestandNachher: istUnbegrenzt ? zusatzstoffVorher : zusatzstoffBestand.menge,
+                          grund: istUnbegrenzt ? 
+                            `Unbegrenztes Material verwendet: ${buchungsAnzahl}x ${artikel.name} (${benoetigt}g verbraucht)` :
+                            `Automatische Rohstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name}`,
+                          notizen: `Zusatzinhaltsstoff ${mengeProStuck}g pro Stück - Fertigprodukt-Inventur (ID: ${artikelId})${istUnbegrenzt ? ' (UNBEGRENZTE RESSOURCE)' : ''}`,
                           referenz: {
                             typ: 'fertigprodukt-inventur',
                             produktId: artikel._id,
@@ -578,7 +591,11 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                           }
                         });
                         
-                        console.log(`    ✅ Zusatzinhaltsstoff ${zusatzstoffRecord.bezeichnung}: -${benoetigt}g (${zusatzstoffBestand.menge}g verbleibt)`);
+                        if (istUnbegrenzt) {
+                          console.log(`    💧 Unbegrenzter Zusatzinhaltsstoff ${zusatzstoffRecord.bezeichnung}: -${benoetigt}g verbraucht (unbegrenzt verfügbar)`);
+                        } else {
+                          console.log(`    ✅ Zusatzinhaltsstoff ${zusatzstoffRecord.bezeichnung}: -${benoetigt}g (${zusatzstoffBestand.menge}g verbleibt)`);
+                        }
                       } else {
                         rohstoffFehler.push(`Nicht genug ${zusatzstoff.inhaltsstoffName}: benötigt ${benoetigt}g, verfügbar ${zusatzstoffBestand.menge}g`);
                       }
@@ -611,6 +628,149 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
               
             } catch (rohstoffError) {
               console.error('❌ Fehler bei automatischer Rohstoff-Subtraktion:', rohstoffError);
+            }
+          }
+          
+          // 🎨 AUTOMATISCHE GIESSWERKSTOFF-SUBTRAKTION bei Werkstück-Inventur
+          if (buchungsAnzahl > 0 && artikel.kategorie === 'werkstuck') {
+            console.log(`🎨 Automatische Gießwerkstoff-Subtraktion für ${buchungsAnzahl}x ${artikel.name}`);
+            
+            const giesswerkstoffBewegungen = [];
+            const giesswerkstoffFehler = [];
+            
+            try {
+              // Gießwerkstoff finden und Konfiguration holen
+              if (!artikel.giesswerkstoff) {
+                console.log(`  ⚠️ Kein Gießwerkstoff für Werkstück ${artikel.name} zugewiesen`);
+                break;
+              }
+              
+              const giesswerkstoff = await Giesswerkstoff.findById(artikel.giesswerkstoff);
+              if (!giesswerkstoff) {
+                console.log(`  ❌ Gießwerkstoff nicht gefunden für Werkstück ${artikel.name}`);
+                break;
+              }
+              
+              // Gießform laden für Füllvolumen
+              if (!artikel.giessform) {
+                console.log(`  ⚠️ Keine Gießform für Werkstück ${artikel.name} zugewiesen`);
+                break;
+              }
+              
+              const giessform = await Giessform.findById(artikel.giessform);
+              if (!giessform) {
+                console.log(`  ❌ Gießform nicht gefunden für Werkstück ${artikel.name}`);
+                break;
+              }
+              
+              // Mischkonfiguration vom Gießwerkstoff holen
+              const config = giesswerkstoff.mischkonfiguration || {};
+              const berechnungsFaktor = config.berechnungsFaktor || 1.5;
+              const schwundProzent = config.schwundProzent || 5;
+              
+              // Basis-Menge: Füllvolumen der Gießform
+              const fuellvolumenMl = giessform.volumenMl;
+              
+              // Benötigte Gießwerkstoff-Menge berechnen
+              // Beispiel: 100ml Füllvolumen * 1.5 Faktor = 150g Gießwerkstoff
+              const grundMenge = fuellvolumenMl * berechnungsFaktor;
+              
+              // Schwund hinzufügen
+              const mitSchwund = grundMenge * (1 + schwundProzent / 100);
+              
+              // Gesamtmenge für alle hergestellten Werkstücke
+              const gesamtMenge = mitSchwund * buchungsAnzahl;
+              
+              console.log(`  📊 Berechnung: ${fuellvolumenMl}ml Füllvolumen * ${berechnungsFaktor} * (1 + ${schwundProzent}%) * ${buchungsAnzahl} = ${gesamtMenge}g`);
+              
+              // Gießwerkstoff-Bestand prüfen und subtrahieren
+              // Prüfung auf unbegrenzte Gießwerkstoffe
+              const istUnbegrenzterGiesswerkstoff = giesswerkstoff.unbegrenzterVorrat === true ||
+                                                   giesswerkstoff.bezeichnung?.toLowerCase().includes('wasser') ||
+                                                   giesswerkstoff.bezeichnung?.toLowerCase().includes('leitungswasser');
+              
+              if (istUnbegrenzterGiesswerkstoff || giesswerkstoff.aktuellerBestand >= gesamtMenge) {
+                const vorherBestand = giesswerkstoff.aktuellerBestand;
+                
+                // Nur bei begrenzten Gießwerkstoffen den Bestand reduzieren
+                if (!istUnbegrenzterGiesswerkstoff) {
+                  giesswerkstoff.aktuellerBestand -= gesamtMenge;
+                }
+                
+                await giesswerkstoff.save();
+                
+                giesswerkstoffBewegungen.push({
+                  typ: 'werkstuck_produktion',
+                  artikel: {
+                    typ: 'giesswerkstoff',
+                    artikelId: giesswerkstoff._id,
+                    name: giesswerkstoff.bezeichnung
+                  },
+                  menge: -gesamtMenge,
+                  einheit: giesswerkstoff.einheit || 'g',
+                  bestandVorher: vorherBestand,
+                  bestandNachher: giesswerkstoff.aktuellerBestand,
+                  grund: `Automatische Gießwerkstoff-Subtraktion: ${buchungsAnzahl}x ${artikel.name} (Faktor: ${berechnungsFaktor}, Schwund: ${schwundProzent}%)`,
+                  notizen: `Werkstück-Produktion - ${fuellvolumenMl}ml Füllvolumen pro Form (${giessform.name})`,
+                  giesswerkstoffDetails: {
+                    giesswerkstoffId: giesswerkstoff._id,
+                    giesswerkstoffName: giesswerkstoff.bezeichnung,
+                    giessformId: giessform._id,
+                    giessformName: giessform.name,
+                    fuellvolumenMl: fuellvolumenMl,
+                    berechnungsFaktor: berechnungsFaktor,
+                    schwundProzent: schwundProzent
+                  },
+                  referenz: {
+                    typ: 'werkstuck-inventur',
+                    produktId: artikel._id,
+                    produktName: artikel.name,
+                    anzahl: buchungsAnzahl
+                  }
+                });
+                
+                if (istUnbegrenzterGiesswerkstoff) {
+                  console.log(`  💧 Unbegrenzter Gießwerkstoff ${giesswerkstoff.bezeichnung}: -${gesamtMenge}${giesswerkstoff.einheit || 'g'} verbraucht (unbegrenzt verfügbar)`);
+                } else {
+                  console.log(`  ✅ Gießwerkstoff ${giesswerkstoff.bezeichnung}: -${gesamtMenge}${giesswerkstoff.einheit || 'g'}`);
+                }
+              } else {
+                giesswerkstoffFehler.push(`Nicht genügend ${giesswerkstoff.bezeichnung}: benötigt ${gesamtMenge}g, verfügbar ${giesswerkstoff.aktuellerBestand}g`);
+              }
+              
+              // Zusatzmaterial (z.B. Wasser, Härter) berechnen und subtrahieren falls konfiguriert
+              const zusaetzlichesMaterial = config.zusaetzlichesMaterial || [];
+              for (const material of zusaetzlichesMaterial) {
+                if (material.faktor > 0) {
+                  // Zusatzmaterial-Menge: Füllvolumen × Faktor × (1 + Schwund%)
+                  const zusatzGrundMenge = fuellvolumenMl * material.faktor;
+                  const zusatzMitSchwund = zusatzGrundMenge * (1 + schwundProzent / 100);
+                  const zusatzGesamtMenge = zusatzMitSchwund * buchungsAnzahl;
+                  
+                  console.log(`  💧 Zusatzmaterial ${material.bezeichnung}: ${fuellvolumenMl}ml × ${material.faktor} × (1 + ${schwundProzent}%) × ${buchungsAnzahl} = ${zusatzGesamtMenge}${material.einheit || 'g'} (wird derzeit nur protokolliert)`);
+                }
+              }
+              
+              // Alle Gießwerkstoff-Bewegungen protokollieren
+              for (const bewegungData of giesswerkstoffBewegungen) {
+                try {
+                  await Bewegung.erstelle({
+                    ...bewegungData,
+                    userId: req.user.id || req.user.userId || req.user._id
+                  });
+                } catch (err) {
+                  console.error('Fehler beim Protokollieren der Gießwerkstoff-Bewegung:', err);
+                }
+              }
+              
+              console.log(`🎯 Gießwerkstoff-Subtraktion abgeschlossen: ${giesswerkstoffBewegungen.length} Bewegungen protokolliert`);
+              
+              if (giesswerkstoffFehler.length > 0) {
+                console.warn('⚠️ Gießwerkstoff-Warnungen:', giesswerkstoffFehler);
+              }
+              
+            } catch (giesswerkstoffError) {
+              console.error('❌ Fehler bei automatischer Gießwerkstoff-Subtraktion:', giesswerkstoffError);
             }
           }
         }
@@ -708,6 +868,20 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
           vorherBestand = artikel.aktuellerBestand || 0;
           artikel.aktuellerBestand = parseFloat(neuerBestand);
           artikel.letzteInventur = new Date();
+          if (notizen) {
+            artikel.notizen = notizen;
+          }
+          await artikel.save();
+        }
+        break;
+        
+      case 'giesszusatzstoff':
+        artikel = await Giesszusatzstoff.findById(artikelId);
+        modelName = 'Giesszusatzstoff';
+        if (artikel) {
+          vorherBestand = artikel.aktuellerBestand || 0;
+          artikel.aktuellerBestand = parseFloat(neuerBestand);
+          artikel.updatedAt = new Date();
           if (notizen) {
             artikel.notizen = notizen;
           }
@@ -968,6 +1142,198 @@ router.get('/fertigprodukt-rohstoffe/:produktId', authenticateToken, async (req,
       success: false,
       message: 'Fehler beim Abrufen der Fertigprodukt-Rohstoffe',
       error: error.message
+    });
+  }
+});
+
+// GET /api/lager/werkstuck-giesswerkstoff/:produktId - Zeige benötigte Gießwerkstoffe für Werkstück
+router.get('/werkstuck-giesswerkstoff/:produktId', authenticateToken, async (req, res) => {
+  try {
+    const produkt = await Portfolio.findById(req.params.produktId);
+    
+    if (!produkt) {
+      return res.status(404).json({
+        success: false,
+        message: 'Werkstück nicht gefunden'
+      });
+    }
+    
+    if (produkt.kategorie !== 'werkstuck') {
+      return res.status(400).json({
+        success: false,
+        message: 'Produkt ist kein Werkstück'
+      });
+    }
+    
+    const giesswerkstoff = [];
+    const verfuegbarkeit = { alleVerfuegbar: true, warnungen: [] };
+    
+    // Variablen für Berechnungen
+    let fuellvolumenMl = 0;
+    let berechnungsFaktor = 1.5;
+    let schwundProzent = 5;
+    
+    // Gießwerkstoff laden
+    if (produkt.giesswerkstoff && produkt.giessform) {
+      const giesswerkstoffDoc = await Giesswerkstoff.findById(produkt.giesswerkstoff);
+      const giessformDoc = await Giessform.findById(produkt.giessform);
+      
+      if (giesswerkstoffDoc && giessformDoc) {
+        // Berechnung wie in der automatischen Subtraktion
+        const config = giesswerkstoffDoc.mischkonfiguration || {};
+        berechnungsFaktor = config.berechnungsFaktor || 1.5;
+        schwundProzent = config.schwundProzent || 5;
+        fuellvolumenMl = giessformDoc.volumenMl;
+        
+        // Benötigte Menge pro Stück berechnen
+        const grundMenge = fuellvolumenMl * berechnungsFaktor;
+        const mitSchwund = grundMenge * (1 + schwundProzent / 100);
+        
+        const verfuegbar = giesswerkstoffDoc.aktuellerBestand;
+        const ausreichend = verfuegbar >= mitSchwund;
+        
+        if (!ausreichend) {
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push({
+            material: giesswerkstoffDoc.bezeichnung,
+            benoetigt: mitSchwund,
+            verfuegbar: verfuegbar,
+            fehlend: mitSchwund - verfuegbar
+          });
+        }
+        
+        giesswerkstoff.push({
+          name: giesswerkstoffDoc.bezeichnung,
+          typ: 'giesswerkstoff',
+          proStueck: mitSchwund,
+          verfuegbar: verfuegbar,
+          einheit: giesswerkstoffDoc.einheit || 'g',
+          berechnungsDetails: {
+            fuellvolumenMl: fuellvolumenMl,
+            berechnungsFaktor: berechnungsFaktor,
+            schwundProzent: schwundProzent,
+            giessform: giessformDoc.name
+          }
+        });
+        
+        // Zusatzmaterialien hinzufügen falls konfiguriert
+        const zusaetzlichesMaterial = config.zusaetzlichesMaterial || [];
+        for (const material of zusaetzlichesMaterial) {
+          if (material.faktor > 0) {
+            const zusatzGrundMenge = fuellvolumenMl * material.faktor;
+            const zusatzMitSchwund = zusatzGrundMenge * (1 + schwundProzent / 100);
+            
+            giesswerkstoff.push({
+              name: material.bezeichnung,
+              typ: 'zusatzmaterial',
+              proStueck: zusatzMitSchwund,
+              verfuegbar: 0, // Zusatzmaterialien werden derzeit nur protokolliert
+              einheit: material.einheit || 'g',
+              berechnungsDetails: {
+                fuellvolumenMl: fuellvolumenMl,
+                faktor: material.faktor,
+                schwundProzent: schwundProzent
+              }
+            });
+          }
+        }
+      } else {
+        verfuegbarkeit.alleVerfuegbar = false;
+        verfuegbarkeit.warnungen.push({
+          material: 'Gießwerkstoff oder Gießform',
+          error: 'Gießwerkstoff oder Gießform nicht gefunden'
+        });
+      }
+    } else {
+      verfuegbarkeit.alleVerfuegbar = false;
+      verfuegbarkeit.warnungen.push({
+        material: 'Konfiguration',
+        error: 'Gießwerkstoff oder Gießform nicht zugewiesen'
+      });
+    }
+    
+    // 💧 Gießzusatzstoffe prüfen
+    if (produkt.giesszusatzstoffe && produkt.giesszusatzstoffe.length > 0) {
+      console.log(`💧 Prüfe Gießzusatzstoffe für Werkstück ${produkt.name}: ${produkt.giesszusatzstoffe.length} Zusatzstoffe`);
+      
+      for (const zusatzKonfig of produkt.giesszusatzstoffe) {
+        const zusatzstoff = await Giesszusatzstoff.findById(zusatzKonfig.zusatzstoffId);
+        
+        if (zusatzstoff) {
+          // Berechne benötigte Menge basierend auf Mischverhältnis
+          let benoetigtesMengeProStueck = 0;
+          
+          if (zusatzKonfig.einheit === 'prozent') {
+            // Prozent vom Gießwerkstoff-Volumen
+            const giesswerkstoffMenge = fuellvolumenMl * berechnungsFaktor * (1 + schwundProzent / 100);
+            benoetigtesMengeProStueck = (giesswerkstoffMenge * zusatzKonfig.mischverhaeltnis) / 100;
+          } else {
+            // Absolute Menge
+            benoetigtesMengeProStueck = zusatzKonfig.mischverhaeltnis;
+          }
+          
+          const verfuegbar = zusatzstoff.aktuellVorrat || 0;
+          const istUnbegrenzt = zusatzstoff.unbegrenzterVorrat === true;
+          const ausreichend = istUnbegrenzt || verfuegbar >= benoetigtesMengeProStueck;
+          
+          if (!istUnbegrenzt && !ausreichend) {
+            verfuegbarkeit.alleVerfuegbar = false;
+            verfuegbarkeit.warnungen.push({
+              material: zusatzstoff.bezeichnung,
+              benoetigt: benoetigtesMengeProStueck,
+              verfuegbar: verfuegbar,
+              fehlend: benoetigtesMengeProStueck - verfuegbar
+            });
+          }
+          
+          giesswerkstoff.push({
+            name: zusatzstoff.bezeichnung,
+            typ: 'giesszusatzstoff',
+            proStueck: benoetigtesMengeProStueck,
+            verfuegbar: verfuegbar,
+            einheit: zusatzstoff.einheit || 'g',
+            unbegrenzterVorrat: istUnbegrenzt,
+            berechnungsDetails: {
+              mischverhaeltnis: zusatzKonfig.mischverhaeltnis,
+              einheit: zusatzKonfig.einheit,
+              hinweise: zusatzKonfig.hinweise || ''
+            }
+          });
+          
+          console.log(`   💧 ${zusatzstoff.bezeichnung}: ${benoetigtesMengeProStueck}${zusatzstoff.einheit} pro Stück, unbegrenzt: ${istUnbegrenzt}`);
+        } else {
+          console.warn(`   ⚠️ Gießzusatzstoff nicht gefunden: ${zusatzKonfig.zusatzstoffId}`);
+          verfuegbarkeit.alleVerfuegbar = false;
+          verfuegbarkeit.warnungen.push({
+            material: 'Unbekannter Gießzusatzstoff',
+            error: 'Gießzusatzstoff nicht in Datenbank gefunden'
+          });
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        produkt: {
+          id: produkt._id,
+          name: produkt.name,
+          kategorie: produkt.kategorie,
+          giesswerkstoff: produkt.giesswerkstoff,
+          giessform: produkt.giessform
+        },
+        giesswerkstoff: giesswerkstoff,
+        verfuegbarkeit: verfuegbarkeit,
+        automatischeSubtraktion: true,
+        hinweis: "Bei Werkstück-Inventur werden die benötigten Gießwerkstoffe automatisch subtrahiert"
+      }
+    });
+    
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Gießwerkstoff-Info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Gießwerkstoff-Informationen'
     });
   }
 });
@@ -1555,6 +1921,142 @@ router.get('/artikel', authenticateToken, requireAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Artikel',
+      error: error.message
+    });
+  }
+});
+
+// 🧋 GIESSWERKSTOFF CRUD ROUTES
+
+// GET /api/admin/rohstoffe/giesswerkstoff - Alle Gießwerkstoffe abrufen
+router.get('/admin/rohstoffe/giesswerkstoff', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('🧋 Lade alle Gießwerkstoffe...');
+    
+    const giesswerkstoff = await Giesswerkstoff.find()
+      .sort({ bezeichnung: 1 })
+      .lean();
+    
+    console.log(`✅ ${giesswerkstoff.length} Gießwerkstoffe gefunden`);
+    
+    res.json({
+      success: true,
+      data: giesswerkstoff
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Gießwerkstoffe:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Gießwerkstoffe',
+      error: error.message
+    });
+  }
+});
+
+// 💧 GIESSZUSATZSTOFFE CRUD ROUTES
+
+// GET /api/lager/admin/rohstoffe/giesszusatzstoffe - Alle Gießzusatzstoffe abrufen
+router.get('/admin/rohstoffe/giesszusatzstoffe', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    console.log('💧 Lade alle Gießzusatzstoffe...');
+    
+    const giesszusatzstoffe = await Giesszusatzstoff.find()
+      .sort({ bezeichnung: 1 })
+      .lean();
+    
+    console.log(`✅ ${giesszusatzstoffe.length} Gießzusatzstoffe gefunden`);
+    
+    res.json({
+      success: true,
+      data: giesszusatzstoffe
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Gießzusatzstoffe:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Gießzusatzstoffe',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/admin/rohstoffe/giesszusatzstoffe - Neuen Gießzusatzstoff erstellen
+router.post('/admin/rohstoffe/giesszusatzstoffe', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const giesszusatzstoff = new Giesszusatzstoff(req.body);
+    await giesszusatzstoff.save();
+    
+    console.log('✅ Neuer Gießzusatzstoff erstellt:', giesszusatzstoff.bezeichnung);
+    
+    res.status(201).json({
+      success: true,
+      data: giesszusatzstoff,
+      message: 'Gießzusatzstoff erfolgreich erstellt'
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Erstellen des Gießzusatzstoffs:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Gießzusatzstoffs',
+      error: error.message
+    });
+  }
+});
+
+// PUT /api/admin/rohstoffe/giesszusatzstoffe/:id - Gießzusatzstoff aktualisieren
+router.put('/admin/rohstoffe/giesszusatzstoffe/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const giesszusatzstoff = await Giesszusatzstoff.findByIdAndUpdate(id, req.body, { new: true });
+    
+    if (!giesszusatzstoff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gießzusatzstoff nicht gefunden'
+      });
+    }
+    
+    console.log('✅ Gießzusatzstoff aktualisiert:', giesszusatzstoff.bezeichnung);
+    
+    res.json({
+      success: true,
+      data: giesszusatzstoff,
+      message: 'Gießzusatzstoff erfolgreich aktualisiert'
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Aktualisieren des Gießzusatzstoffs:', error);
+    res.status(400).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren des Gießzusatzstoffs',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/admin/rohstoffe/giesszusatzstoffe/:id - Gießzusatzstoff löschen
+router.delete('/admin/rohstoffe/giesszusatzstoffe/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const giesszusatzstoff = await Giesszusatzstoff.findByIdAndDelete(id);
+    
+    if (!giesszusatzstoff) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gießzusatzstoff nicht gefunden'
+      });
+    }
+    
+    console.log('✅ Gießzusatzstoff gelöscht:', giesszusatzstoff.bezeichnung);
+    
+    res.json({
+      success: true,
+      message: 'Gießzusatzstoff erfolgreich gelöscht'
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Löschen des Gießzusatzstoffs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Gießzusatzstoffs',
       error: error.message
     });
   }

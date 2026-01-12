@@ -329,4 +329,54 @@ router.delete('/giesswerkstoff/:id', async (req, res) => {
   }
 });
 
+// PUT /api/admin/rohstoffe/giesswerkstoff/:id/mischkonfiguration - Mischverhältnis konfigurieren
+router.put('/giesswerkstoff/:id/mischkonfiguration', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { berechnungsFaktor, schwundProzent, zusaetzlichesMaterial } = req.body;
+
+    // Validierung
+    if (berechnungsFaktor && (berechnungsFaktor < 1 || berechnungsFaktor > 10)) {
+      return res.status(400).json({ 
+        message: 'Berechnungsfaktor muss zwischen 1 und 10 liegen' 
+      });
+    }
+
+    if (schwundProzent && (schwundProzent < 0 || schwundProzent > 50)) {
+      return res.status(400).json({ 
+        message: 'Schwundprozent muss zwischen 0 und 50 liegen' 
+      });
+    }
+
+    const giesswerkstoff = await Giesswerkstoff.findByIdAndUpdate(
+      id,
+      {
+        'mischkonfiguration.berechnungsFaktor': berechnungsFaktor || 1.5,
+        'mischkonfiguration.schwundProzent': schwundProzent || 5,
+        'mischkonfiguration.zusaetzlichesMaterial': zusaetzlichesMaterial || []
+      },
+      { 
+        new: true, 
+        runValidators: true 
+      }
+    );
+
+    if (!giesswerkstoff) {
+      return res.status(404).json({ message: 'Gießwerkstoff nicht gefunden' });
+    }
+
+    res.json({
+      message: 'Mischkonfiguration erfolgreich aktualisiert',
+      data: giesswerkstoff
+    });
+
+  } catch (error) {
+    console.error('Fehler beim Aktualisieren der Mischkonfiguration:', error);
+    res.status(500).json({ 
+      message: 'Fehler beim Aktualisieren der Mischkonfiguration',
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router;

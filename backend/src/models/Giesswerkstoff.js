@@ -193,6 +193,39 @@ const giesswerkstoffSchema = new mongoose.Schema({
     }
   },
   
+  // Mischverhältnis-Konfiguration für automatische Ausbuchung
+  mischkonfiguration: {
+    berechnungsFaktor: {
+      type: Number,
+      default: 1.5,
+      min: 1.0,
+      max: 10.0
+    },
+    schwundProzent: {
+      type: Number,
+      default: 5,
+      min: 0,
+      max: 50
+    },
+    zusaetzlichesMaterial: [{
+      bezeichnung: {
+        type: String,
+        required: true
+      },
+      faktor: {
+        type: Number,
+        required: true,
+        min: 0,
+        max: 10,
+        default: 0
+      },
+      einheit: {
+        type: String,
+        default: 'g'
+      }
+    }]
+  },
+  
   // Verfügbarkeit und Status
   verfuegbar: {
     type: Boolean,
@@ -286,7 +319,6 @@ giesswerkstoffSchema.virtual('bestellmenge').get(function() {
 });
 
 // Indices für Performance
-giesswerkstoffSchema.index({ bezeichnung: 1 }, { unique: true });
 giesswerkstoffSchema.index({ typ: 1, kategorie: 1 });
 giesswerkstoffSchema.index({ verfuegbar: 1, aktuellerBestand: 1 });
 giesswerkstoffSchema.index({ lieferant: 1, artikelnummer: 1 });
