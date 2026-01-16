@@ -46,7 +46,8 @@ const AGBPage = () => {
             § 2 Zustandekommen des Vertrages
           </Typography>
           <Typography variant="body1" paragraph>
-            (1) Gegenstand des Vertrages ist der Verkauf von handgefertigten Seifen und verwandten Produkten.
+            (1) Gegenstand des Vertrages ist der Verkauf von handgefertigten Produkten, insbesondere Seifen, 
+            Kosmetik- und Pflegeprodukte, Dekorationsartikel, Gipsabdrücke und Bilder.
           </Typography>
           <Typography variant="body1" paragraph>
             (2) Bereits mit dem Einstellen des jeweiligen Produkts auf unserer Internetseite unterbreiten 
@@ -229,8 +230,8 @@ const AGBPage = () => {
             2. Wesentliche Merkmale der Ware
           </Typography>
           <Typography variant="body1" paragraph>
-            Die wesentlichen Merkmale unserer handgefertigten Seifen und Produkte finden sich 
-            in der jeweiligen Produktbeschreibung auf unserer Website.
+            Die wesentlichen Merkmale unserer handgefertigten Produkte (Seifen, Kosmetik- und Pflegeprodukte, 
+            Dekorationsartikel, Gipsabdrücke, Bilder) finden sich in der jeweiligen Produktbeschreibung auf unserer Website.
           </Typography>
         </Box>
 
