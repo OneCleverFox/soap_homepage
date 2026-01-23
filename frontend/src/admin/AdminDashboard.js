@@ -223,8 +223,10 @@ const AdminDashboard = () => {
         if (value > 0) return 'warning';  // Orange: Kritisch (1-5 Rohstoffe) 
         return 'success';                 // Grün: Alles ok
       
-      case 'Rechnungen (30 Tage)':
-        return 'info'; // Informativ, keine Handlung nötig
+      case 'Zu verpacken':
+        if (value > 5) return 'error';    // Rot: Viele zu verpacken (>5)
+        if (value > 0) return 'warning';  // Orange: Handlung erforderlich
+        return 'success';                 // Grün: Alle verpackt
       
       case 'Anfragen zur Genehmigung':
         if (value > 10) return 'error';   // Rot: Viele Anfragen (>10)
@@ -273,12 +275,12 @@ const AdminDashboard = () => {
       action: () => navigate('/admin/lager')
     },
     {
-      title: 'Rechnungen (30 Tage)',
-      value: verkauf.rechnungen?.rechnungenLetzter30Tage || 0,
-      icon: <ShoppingCartIcon />,
-      color: getCardColor('Rechnungen (30 Tage)', verkauf.rechnungen?.rechnungenLetzter30Tage || 0),
-      subtitle: formatCurrency(verkauf.rechnungen?.umsatzLetzter30Tage || 0),
-      action: () => navigate('/admin/invoice-list')
+      title: 'Überfällige Rechnungen',
+      value: verkauf.rechnungen?.overdue || 0,
+      icon: <WarningIcon />,
+      color: getCardColor('Überfällige Rechnungen', verkauf.rechnungen?.overdue || 0),
+      subtitle: (verkauf.rechnungen?.overdue || 0) > 0 ? 'Mahnung erforderlich' : undefined,
+      action: () => navigate('/admin/invoice-list?status=overdue')
     },
     {
       title: 'Anfragen zur Genehmigung',
@@ -296,19 +298,19 @@ const AdminDashboard = () => {
       action: () => navigate('/admin/bestellungen?status=neu')
     },
     {
-      title: 'Überfällige Rechnungen',
-      value: verkauf.rechnungen?.overdue || 0,
-      icon: <WarningIcon />,
-      color: getCardColor('Überfällige Rechnungen', verkauf.rechnungen?.overdue || 0),
-      subtitle: (verkauf.rechnungen?.overdue || 0) > 0 ? 'Mahnung erforderlich' : undefined,
-      action: () => navigate('/admin/invoice-list?status=overdue')
-    },
-    {
       title: 'Zu bestätigen',
       value: verkauf.bestellungen?.zuBestaetigen?.length || 0,
       icon: <ShoppingCartIcon />,
       color: getCardColor('Zu bestätigen', verkauf.bestellungen?.zuBestaetigen?.length || 0),
-      subtitle: (verkauf.bestellungen?.zuBestaetigen?.length || 0) > 0 ? 'Bezahlt - bereit zur Bestätigung' : undefined,
+      subtitle: (verkauf.bestellungen?.zuBestaetigen?.length || 0) > 0 ? 'Aus Anfragen - zur Bestätigung' : undefined,
+      action: () => navigate('/admin/bestellungen?status=neu')
+    },
+    {
+      title: 'Zu verpacken',
+      value: verkauf.bestellungen?.zuVerpacken?.length || 0,
+      icon: <InventoryIcon />,
+      color: getCardColor('Zu verpacken', verkauf.bestellungen?.zuVerpacken?.length || 0),
+      subtitle: (verkauf.bestellungen?.zuVerpacken?.length || 0) > 0 ? 'Bezahlt - bereit zum Verpacken' : undefined,
       action: () => navigate('/admin/bestellungen?status=bezahlt')
     },
     {
@@ -417,13 +419,13 @@ const AdminDashboard = () => {
                     alignItems: isMobile ? 'flex-end' : 'flex-start'
                   }}>
                     <Typography 
-                      variant={isMobile ? "h5" : "h3"} 
+                      variant={isMobile ? "h4" : "h2"} 
                       component="div" 
                       sx={{ 
                         fontWeight: 'bold', 
                         color: `${kpi.color}.main`,
-                        fontSize: isMobile ? '1.5rem' : undefined,
-                        lineHeight: isMobile ? 1.1 : undefined
+                        fontSize: isMobile ? '2rem' : '3rem',
+                        lineHeight: 1.1
                       }}
                     >
                       {kpi.value}

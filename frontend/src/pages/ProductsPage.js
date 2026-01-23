@@ -88,9 +88,9 @@ const ProductsPage = React.memo(() => {
     },
     { 
       key: 'seife', 
-      label: 'Handgemachte Seifen', 
+      label: 'Kosmetikprodukte', 
       icon: SoapIcon,
-      beschreibung: 'Natürliche Seifen aus hochwertigen Rohstoffen' 
+      beschreibung: 'Hochwertige Seifen aus ausgesuchten Rohstoffen' 
     },
     { 
       key: 'werkstuck', 
@@ -614,10 +614,10 @@ const ProductsPage = React.memo(() => {
               textFillColor: 'transparent'
             }}
           >
-            Unsere handgemachten Seifen
+            Unsere Seifenprodukte
           </Typography>
           <Typography variant={isMobile ? "body1" : "h6"} color="text.secondary" sx={{ mb: 2 }}>
-            Premium Qualität aus natürlichen Zutaten
+            Premium Qualität aus ausgewählten Zutaten
           </Typography>
           {/* 🚀 PROGRESSIVE LOADING STATE */}
           <Typography variant="body2" color="primary" sx={{ fontWeight: 500 }}>
@@ -676,7 +676,8 @@ const ProductsPage = React.memo(() => {
             left: 0,
             top: 64, // Unter der Navbar
             width: 240, // Schmaler: 240px statt 300px
-            height: 'calc(100vh - 64px)',
+            height: 'auto', // Automatische Höhe
+            maxHeight: 'calc(100vh - 64px)', // Maximal bis Footer
             bgcolor: 'grey.50', // Sanfterer Hintergrund
             borderRight: '1px solid',
             borderColor: 'grey.200', // Sanftere Borderfarbe
@@ -753,7 +754,7 @@ const ProductsPage = React.memo(() => {
                 textFillColor: 'transparent'
               }}
             >
-              {selectedKategorie === 'seife' ? 'Handgemachte Naturseifen' :
+              {selectedKategorie === 'seife' ? 'Kosmetikprodukte' :
                selectedKategorie === 'werkstuck' ? 'Gips-Werkstücke' :
                'Unsere Produktpalette'}
             </Typography>

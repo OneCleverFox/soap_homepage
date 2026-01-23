@@ -196,14 +196,31 @@ const AdminPortfolio = () => {
     }
 
     if (name.includes('.')) {
-      const [parent, child] = name.split('.');
-      setFormData(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: processedValue
-        }
-      }));
+      const parts = name.split('.');
+      
+      // Behandle verschachtelte Strukturen (z.B. rohseifenKonfiguration.gewichtVerteilung.seife1Prozent)
+      if (parts.length === 2) {
+        const [parent, child] = parts;
+        setFormData(prev => ({
+          ...prev,
+          [parent]: {
+            ...prev[parent],
+            [child]: processedValue
+          }
+        }));
+      } else if (parts.length === 3) {
+        const [parent, middle, child] = parts;
+        setFormData(prev => ({
+          ...prev,
+          [parent]: {
+            ...prev[parent],
+            [middle]: {
+              ...prev[parent]?.[middle],
+              [child]: processedValue
+            }
+          }
+        }));
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -237,7 +254,7 @@ const AdminPortfolio = () => {
       optional: item.optional || '',
       reihenfolge: item.reihenfolge || '',
       aktiv: item.aktiv !== undefined ? item.aktiv : false,
-      istMischung: item.istMischung || false,
+      istMischung: item.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
       rohseifenKonfiguration: item.rohseifenKonfiguration || null,
       abmessungen: {
         laenge: (item.abmessungen && item.abmessungen.laenge) || '',
@@ -260,6 +277,11 @@ const AdminPortfolio = () => {
     try {
       // Bereite die Daten basierend auf der Kategorie vor
       const submitData = { ...formData };
+      
+      // Stelle sicher, dass verwendeZweiRohseifen korrekt gesetzt ist
+      if (submitData.istMischung && submitData.rohseifenKonfiguration) {
+        submitData.rohseifenKonfiguration.verwendeZweiRohseifen = true;
+      }
       
       if (formData.kategorie === 'werkstuck') {
         // Für Werkstücke: Setze Seifenfelder auf leere Strings
@@ -899,7 +921,7 @@ const AdminPortfolio = () => {
                       {seifenOptions.map(option => (
                         <MenuItem key={option} value={option}>{option}</MenuItem>
                       ))}
-                      <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
+                      <MenuItem key="__CREATE_NEW__" value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
                         + Neue Rohseife erstellen...
                       </MenuItem>
                     </Select>
@@ -925,7 +947,7 @@ const AdminPortfolio = () => {
                       {aromaOptions.map(option => (
                         <MenuItem key={option} value={option}>{option}</MenuItem>
                       ))}
-                      <MenuItem value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
+                      <MenuItem key="__CREATE_NEW__" value="__CREATE_NEW__" sx={{ fontStyle: 'italic', color: 'primary.main' }}>
                         + Neues Duftöl erstellen...
                       </MenuItem>
                     </Select>
@@ -977,7 +999,7 @@ const AdminPortfolio = () => {
                             ...prev,
                             istMischung: e.target.checked,
                             rohseifenKonfiguration: e.target.checked ? {
-                              seife1: prev.seife || '',
+                              verwendeZweiRohseifen: true,
                               seife2: '',
                               gewichtVerteilung: {
                                 seife1Prozent: 50,
@@ -999,8 +1021,8 @@ const AdminPortfolio = () => {
                       <FormControl fullWidth>
                         <InputLabel>Erste Rohseife</InputLabel>
                         <Select
-                          name="rohseifenKonfiguration.seife1"
-                          value={formData.rohseifenKonfiguration?.seife1 || formData.seife || ''}
+                          name="seife"
+                          value={formData.seife || ''}
                           onChange={handleInputChange}
                           label="Erste Rohseife"
                           required
@@ -1023,7 +1045,7 @@ const AdminPortfolio = () => {
                           required
                         >
                           {seifenOptions
-                            .filter(option => option !== formData.rohseifenKonfiguration?.seife1)
+                            .filter(option => option !== formData.seife)
                             .map(option => (
                               <MenuItem key={option} value={option}>{option}</MenuItem>
                             ))}
@@ -1034,7 +1056,7 @@ const AdminPortfolio = () => {
                     <Grid item xs={12} sm={6}>
                       <TextField
                         fullWidth
-                        label={`${formData.rohseifenKonfiguration?.seife1 || 'Seife 1'} (%)`}
+                        label={`${formData.seife || 'Seife 1'} (%)`}
                         name="rohseifenKonfiguration.gewichtVerteilung.seife1Prozent"
                         type="number"
                         value={formData.rohseifenKonfiguration?.gewichtVerteilung?.seife1Prozent || 50}
@@ -1107,8 +1129,17 @@ const AdminPortfolio = () => {
                       required
                     >
                       {giessformOptions.map(option => (
-                        <MenuItem key={option._id} value={option._id}>
+                        <MenuItem 
+                          key={option._id} 
+                          value={option._id}
+                          disabled={!option.verfuegbar}
+                          sx={{
+                            fontStyle: !option.verfuegbar ? 'italic' : 'normal',
+                            color: !option.verfuegbar ? 'text.disabled' : 'text.primary'
+                          }}
+                        >
                           {option.inventarnummer} - {option.name} - {option.form}, {option.material}
+                          {!option.verfuegbar && ' (nicht verfügbar)'}
                         </MenuItem>
                       ))}
                     </Select>
@@ -1126,8 +1157,17 @@ const AdminPortfolio = () => {
                       required
                     >
                       {giesswerkstoffOptions.map(option => (
-                        <MenuItem key={option._id} value={option._id}>
+                        <MenuItem 
+                          key={option._id} 
+                          value={option._id}
+                          disabled={!option.verfuegbar}
+                          sx={{
+                            fontStyle: !option.verfuegbar ? 'italic' : 'normal',
+                            color: !option.verfuegbar ? 'text.disabled' : 'text.primary'
+                          }}
+                        >
                           {option.bezeichnung} - {option.typ} ({option.konsistenz})
+                          {!option.verfuegbar && ' (nicht verfügbar)'}
                         </MenuItem>
                       ))}
                     </Select>

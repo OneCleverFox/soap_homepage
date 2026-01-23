@@ -313,9 +313,6 @@ export const CartProvider = ({ children }) => {
       // Backend-Update
       await cartAPI.addToCart(cartItem);
       
-      // Stock-Update für UI-Reaktivität
-      stockEventService.notifyStockChange(product.id, null);
-      
       toast.success('Artikel hinzugefügt');
     } catch (error) {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', error);
@@ -350,9 +347,6 @@ export const CartProvider = ({ children }) => {
       
       // Backend-Update mit korrekter produktId
       await cartAPI.removeItem(backendProduktId);
-      
-      // Stock-Update für UI-Reaktivität
-      stockEventService.notifyStockChange(backendProduktId, null);
       
       toast.success('Artikel entfernt');
     } catch (error) {
@@ -425,9 +419,6 @@ export const CartProvider = ({ children }) => {
       
       // Backend-Update mit korrekter produktId
       await cartAPI.updateQuantity(backendProduktId, quantity);
-      
-      // Stock-Update für UI-Reaktivität
-      stockEventService.notifyStockChange(backendProduktId, null);
       
     } catch (error) {
       console.error('Fehler beim Aktualisieren des Warenkorbs:', error);

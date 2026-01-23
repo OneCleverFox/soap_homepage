@@ -83,11 +83,32 @@ const isInfinitelyAvailable = (item) => {
 };
 
 // Formatiert Bestand für Anzeige (zeigt ∞ für unendliche Artikel)
-const formatBestandDisplay = (item, bestand) => {
+const formatBestandDisplay = (item, bestand, currentTabKey) => {
   if (isInfinitelyAvailable(item)) {
     return '∞';
   }
   
+  // Rohseifen, Duftöle, Verpackungen, Zusatzinhaltsstoffe nutzen aktuellVorrat
+  if (currentTabKey === 'rohseifen' || currentTabKey === 'duftoele' || 
+      currentTabKey === 'verpackungen' || currentTabKey === 'zusatzinhaltsstoffe') {
+    // Zusatzinhaltsstoffe können bestand.menge haben
+    if (currentTabKey === 'zusatzinhaltsstoffe' && typeof item.bestand === 'object') {
+      return item.bestand.menge || 0;
+    }
+    return item.aktuellVorrat || 0;
+  }
+  
+  // Gießwerkstoffe haben spezielle Felder
+  if (currentTabKey === 'giesswerkstoff') {
+    return item.aktuellerBestand || 0;
+  }
+  
+  // Gießzusatzstoffe ebenfalls
+  if (currentTabKey === 'giesszusatzstoffe') {
+    return item.aktuellerBestand || 0;
+  }
+  
+  // Fertigprodukte
   if (typeof bestand === 'object') {
     return bestand?.menge || 0;
   }
@@ -141,7 +162,6 @@ const AdminLager = () => {
   // Gießwerkstoff-Info für Werkstücke
   const [giesswerkstoffInfo, setGiesswerkstoffInfo] = useState(null);
   
-  // Data states für alle Produkttypen
   const [data, setData] = useState({
     fertigprodukte: [],
     rohseifen: [],
@@ -152,9 +172,13 @@ const AdminLager = () => {
     giesswerkstoff: [],
     giesszusatzstoffe: []
   });
+  
+  // 🚀 PERFORMANCE: Cache für bereits geladene Tabs
+  const [loadedTabs, setLoadedTabs] = useState(new Set());
+  const loadingRef = React.useRef(new Set()); // Verhindere parallele Requests
 
-  // Search Hook für die aktuelle Tab-Daten mit Filter für aktive/inaktive Items
-  const getCurrentTabData = () => {
+  // ⚡ WICHTIG: useMemo verhindert Render-Schleife!
+  const currentTabData = React.useMemo(() => {
     const tabNames = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe', 'giessformen', 'giesswerkstoff', 'giesszusatzstoffe'];
     const rawData = data[tabNames[activeTab]] || [];
     
@@ -181,21 +205,22 @@ const AdminLager = () => {
       });
     }
     
-    // Debug-Log
-    if (activeTab === 0) { // Nur für Fertigprodukte
-      console.log(`🔍 Filter Debug - Tab: ${tabNames[activeTab]}, Show Inactive: ${showInactiveItems}, Seifen: ${categoryFilter.seifen}, Werkstücke: ${categoryFilter.werkstucke}`);
-      console.log(`📊 Raw Data: ${rawData.length}, Filtered: ${filteredData.length}`);
-      console.log(`✅ Active items: ${rawData.filter(item => item.aktiv).length}`);
-      console.log(`❌ Inactive items: ${rawData.filter(item => !item.aktiv).length}`);
+    // Sortierung für Gießformen: nach Inventarnummer absteigend
+    if (activeTab === 5) { // Tab 5 = giessformen
+      filteredData = [...filteredData].sort((a, b) => {
+        const invA = a.inventarnummer || '';
+        const invB = b.inventarnummer || '';
+        return invB.localeCompare(invA, undefined, { numeric: true, sensitivity: 'base' });
+      });
     }
     
     return filteredData;
-  };
+  }, [data, activeTab, showInactiveItems, categoryFilter]);
 
   const {
     searchTerm,
     setSearchTerm
-  } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung']);
+  } = useAdminSearch(currentTabData, ['name', 'bezeichnung', 'beschreibung']);
 
   const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -288,41 +313,145 @@ const AdminLager = () => {
     }
   }, [makeAPICall, setLoading]);
 
-  // UseEffect mit Cleanup und Rate Limiting
+  // 🚀 PERFORMANCE: Lazy Loading - Lade nur den aktiven Tab
+  const loadTabData = useCallback(async (tabIndex) => {
+    const tabKeys = ['fertigprodukte', 'rohseifen', 'duftoele', 'verpackungen', 'zusatzinhaltsstoffe', 'giessformen', 'giesswerkstoff', 'giesszusatzstoffe'];
+    const tabKey = tabKeys[tabIndex];
+    
+    // Skip wenn bereits geladen
+    if (loadedTabs.has(tabIndex)) {
+      console.log(`📦 Tab ${tabIndex} (${tabKey}) bereits im Cache`);
+      return;
+    }
+    
+    // Skip wenn gerade lädt (verhindere Doppel-Requests)
+    if (loadingRef.current.has(tabIndex)) {
+      console.log(`⏳ Tab ${tabIndex} (${tabKey}) lädt bereits...`);
+      return;
+    }
+    
+    const endpoints = {
+      fertigprodukte: '/portfolio?includeUnavailable=true',
+      rohseifen: '/rohseife?includeUnavailable=true',
+      duftoele: '/duftoele?includeUnavailable=true',
+      verpackungen: '/verpackungen?includeUnavailable=true',
+      zusatzinhaltsstoffe: '/zusatzinhaltsstoffe?includeUnavailable=true',
+      giessformen: '/admin/rohstoffe/giessformen',
+      giesswerkstoff: '/admin/rohstoffe/giesswerkstoff',
+      giesszusatzstoffe: '/lager/admin/rohstoffe/giesszusatzstoffe'
+    };
+    
+    // ⏱️ PERFORMANCE TIMING START
+    const startTime = performance.now();
+    console.log(`⏱️ [${tabKey}] Start loading...`);
+    
+    // Markiere als ladend
+    loadingRef.current.add(tabIndex);
+    
+    try {
+      const result = await makeAPICall(endpoints[tabKey]);
+      
+      const apiTime = performance.now() - startTime;
+      console.log(`⏱️ [${tabKey}] API call completed in ${apiTime.toFixed(2)}ms`);
+      
+      // ⚡ IMMER Daten setzen, auch wenn leer
+      const newData = (result && result.success) ? (result.data || []) : [];
+      
+      setData(prev => ({
+        ...prev,
+        [tabKey]: newData
+      }));
+      
+      // Markiere Tab als geladen
+      setLoadedTabs(prev => new Set([...prev, tabIndex]));
+      
+      // ⚡ WICHTIG: Setze loading auf false beim ersten erfolgreichen Load
+      if (loading) {
+        setLoading(false);
+      }
+      
+      const totalTime = performance.now() - startTime;
+      const itemCount = newData.length;
+      
+      if (tabKey === 'fertigprodukte') {
+        const active = newData.filter(item => item.aktiv).length;
+        console.log(`✅ [${tabKey}] DONE in ${totalTime.toFixed(2)}ms - ${itemCount} total (${active} aktiv)`);
+      } else {
+        console.log(`✅ [${tabKey}] DONE in ${totalTime.toFixed(2)}ms - ${itemCount} items`);
+      }
+    } catch (error) {
+      const errorTime = performance.now() - startTime;
+      console.error(`❌ [${tabKey}] ERROR after ${errorTime.toFixed(2)}ms:`, error);
+      toast.error(`Fehler beim Laden: ${error.message}`);
+    } finally {
+      // Entferne Loading-Flag
+      loadingRef.current.delete(tabIndex);
+      
+      const finalTime = performance.now() - startTime;
+      console.log(`⏱️ [${tabKey}] Total time (with state update): ${finalTime.toFixed(2)}ms`);
+    }
+  }, [makeAPICall, loadedTabs]);
+  
+  // Initial: Lade nur den ersten Tab
   useEffect(() => {
     let isMounted = true;
+    let hasLoaded = false; // Verhindere Strict Mode Doppel-Render
     
-    const loadData = async () => {
-      if (isMounted) {
-        await loadAllData();
+    const initLoad = async () => {
+      if (isMounted && !hasLoaded) {
+        hasLoaded = true;
+        const pageStartTime = performance.now();
+        console.log('🚀 ========== PAGE LOAD START ==========');
+        
+        await loadTabData(0);
+        
+        const pageEndTime = performance.now();
+        console.log(`🏁 ========== PAGE READY in ${(pageEndTime - pageStartTime).toFixed(2)}ms ==========`);
       }
     };
     
-    // Slight delay to prevent React Strict Mode double calls
-    const timer = setTimeout(loadData, 100);
+    initLoad();
     
     return () => {
       isMounted = false;
-      clearTimeout(timer);
     };
-  }, [loadAllData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Leere Dependencies - nur beim Mount
+  
+  // Lade Tab-Daten wenn Tab gewechselt wird
+  useEffect(() => {
+    const tabSwitchStart = performance.now();
+    
+    const loadTab = async () => {
+      console.log(`🔄 Tab switch to index ${activeTab}`);
+      await loadTabData(activeTab);
+      const tabSwitchEnd = performance.now();
+      console.log(`⚡ Tab switch completed in ${(tabSwitchEnd - tabSwitchStart).toFixed(2)}ms`);
+    };
+    
+    loadTab();
+  }, [activeTab, loadTabData]);
 
   // 🎯 Moderne React-Reaktivität: Nur bei Tab-Fokus und Visibility-Änderungen
-  // 🎯 Moderne React-Reaktivität: Nur bei Tab-Fokus und Visibility-Änderungen
-  // 🎯 Moderne React-Reaktivität: Nur bei wirklich längerer Inaktivität
   const subscribeToUpdates = useCallback(() => {
     // Browser-Tab-Fokus: Aktualisiere Daten nur bei sehr langer Inaktivität (30 Minuten)
     let lastFocusTime = Date.now();
     
     const handleFocus = () => {
-      const timeSinceLastFocus = Date.now() - lastFocusTime;
-      const THIRTY_MINUTES = 30 * 60 * 1000; // 30 Minuten statt 5
+      const now = Date.now();
+      const thirtyMinutes = 30 * 60 * 1000;
       
-      if (timeSinceLastFocus > THIRTY_MINUTES) {
-        console.log('🎯 Tab sehr lange inaktiv (30+ min): Lade aktuelle Daten...');
-        loadAllData();
+      if (now - lastFocusTime > thirtyMinutes) {
+        console.log('⏰ Längere Inaktivität erkannt, aktualisiere aktuellen Tab...');
+        // Cache für aktuellen Tab invalidieren
+        setLoadedTabs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(activeTab);
+          return newSet;
+        });
+        loadTabData(activeTab);
       }
-      lastFocusTime = Date.now();
+      lastFocusTime = now;
     };
 
     const handleBlur = () => {
@@ -333,11 +462,16 @@ const AdminLager = () => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         const timeSinceLastFocus = Date.now() - lastFocusTime;
-        const THIRTY_MINUTES = 30 * 60 * 1000; // 30 Minuten statt 5
+        const THIRTY_MINUTES = 30 * 60 * 1000;
         
         if (timeSinceLastFocus > THIRTY_MINUTES) {
-          console.log('🎯 Seite sehr lange nicht sichtbar (30+ min): Lade aktuelle Daten...');
-          loadAllData();
+          console.log('🎯 Seite sehr lange nicht sichtbar (30+ min): Aktualisiere aktuellen Tab...');
+          setLoadedTabs(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(activeTab);
+            return newSet;
+          });
+          loadTabData(activeTab);
         }
         lastFocusTime = Date.now();
       }
@@ -352,7 +486,7 @@ const AdminLager = () => {
       window.removeEventListener('blur', handleBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [loadAllData]);
+  }, [loadTabData, activeTab]);
 
   useEffect(() => {
     const cleanup = subscribeToUpdates();
@@ -1350,7 +1484,7 @@ const AdminLager = () => {
   ];
 
   const currentTab = tabs[activeTab];
-  const currentData = filterItems(getCurrentTabData(), searchTerm);
+  const currentData = filterItems(currentTabData, searchTerm);
 
   // Render-Funktionen für verschiedene Zellentypen
   const renderCell = (item, column) => {
@@ -2094,13 +2228,17 @@ const AdminLager = () => {
                   }}
                 >
                   <CardContent sx={{ pb: 1, px: isMobile ? 1.5 : 2, py: isMobile ? 1.5 : 2 }}>
-                    {/* Header mit Name und Status */}
+                    {/* Header mit Name und Status (für Gießformen: Inventarnummer oben, Name unten) */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                       <Box sx={{ flex: 1, mr: 1 }}>
                         <Typography variant="h6" sx={{ fontSize: '1.1rem', lineHeight: 1.2 }}>
-                          {item.name || item.bezeichnung || 'Unbekannt'}
+                          {currentTab?.key === 'giessformen' && item.inventarnummer ? item.inventarnummer : (item.name || item.bezeichnung || 'Unbekannt')}
                         </Typography>
-                        {item.beschreibung && (
+                        {currentTab?.key === 'giessformen' && item.name ? (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                            {item.name}
+                          </Typography>
+                        ) : item.beschreibung && (
                           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                             {typeof item.beschreibung === 'object' 
                               ? (item.beschreibung.kurz || item.beschreibung.lang || '').substring(0, 60) + '...'
@@ -2115,7 +2253,7 @@ const AdminLager = () => {
                       />
                   </Box>
 
-                  {/* Bestand Info - Mobile optimiert */}
+                  {/* Info-Box - Mobile optimiert */}
                   <Box sx={{ 
                     display: 'grid', 
                     gridTemplateColumns: isMobile ? '1fr auto' : 'auto 1fr auto', 
@@ -2126,27 +2264,18 @@ const AdminLager = () => {
                     borderRadius: 1,
                     mb: 2
                   }}>
-                    {!isMobile && (
-                      <Typography variant="body2" color="text.secondary">
-                        Bestand:
-                      </Typography>
-                    )}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {isMobile && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
-                          Bestand:
-                        </Typography>
-                      )}
-                      <Typography variant="h6" color="primary" sx={{ fontSize: '1.1rem' }}>
-                        {formatBestandDisplay(item, typeof item.bestand === 'object' ? item.bestand?.menge : item.bestand)}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {isInfinitelyAvailable(item) ? '' : (typeof item.bestand === 'object' ? (item.bestand?.einheit || item.einheit) : item.einheit)}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      {!isInfinitelyAvailable(item) && (
-                        <>
+                    {/* Gießformen: Füllmenge anzeigen */}
+                    {currentTab?.key === 'giessformen' ? (
+                      <>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            Füllmenge:
+                          </Typography>
+                          <Typography variant="h6" color="primary" sx={{ fontSize: '1.1rem' }}>
+                            {item.volumenMl || 0} ml
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
                           <IconButton
                             size="small"
                             onClick={() => openInventurDialog(item, currentTab.key)}
@@ -2173,16 +2302,70 @@ const AdminLager = () => {
                           >
                             <HistoryIcon fontSize={isMobile ? "small" : "small"} />
                           </IconButton>
-                        </>
-                      )}
-                      {isInfinitelyAvailable(item) && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: 'success.light', borderRadius: 1 }}>
-                          <Typography variant="caption" color="success.dark" sx={{ fontWeight: 'bold' }}>
-                            Unbegrenzt verfügbar
+                        </Box>
+                      </>
+                    ) : (
+                      /* Andere Tabs: Bestand anzeigen */
+                      <>
+                        {!isMobile && (
+                          <Typography variant="body2" color="text.secondary">
+                            Bestand:
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {isMobile && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mr: 1 }}>
+                              Bestand:
+                            </Typography>
+                          )}
+                          <Typography variant="h6" color="primary" sx={{ fontSize: '1.1rem' }}>
+                            {formatBestandDisplay(item, typeof item.bestand === 'object' ? item.bestand?.menge : item.bestand, currentTab?.key)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {isInfinitelyAvailable(item) ? '' : (typeof item.bestand === 'object' ? (item.bestand?.einheit || item.einheit) : item.einheit)}
                           </Typography>
                         </Box>
-                      )}
-                    </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          {!isInfinitelyAvailable(item) && (
+                            <>
+                              <IconButton
+                                size="small"
+                                onClick={() => openInventurDialog(item, currentTab.key)}
+                                sx={{ 
+                                  bgcolor: 'primary.main', 
+                                  color: 'white',
+                                  '&:hover': { bgcolor: 'primary.dark' },
+                                  minWidth: isMobile ? 36 : 40,
+                                  height: isMobile ? 36 : 40
+                                }}
+                              >
+                                <EditIcon fontSize={isMobile ? "small" : "small"} />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={() => openHistoryDialog(item, currentTab.key)}
+                                sx={{ 
+                                  bgcolor: 'secondary.main', 
+                                  color: 'white',
+                                  '&:hover': { bgcolor: 'secondary.dark' },
+                                  minWidth: isMobile ? 36 : 40,
+                                  height: isMobile ? 36 : 40
+                                }}
+                              >
+                                <HistoryIcon fontSize={isMobile ? "small" : "small"} />
+                              </IconButton>
+                            </>
+                          )}
+                          {isInfinitelyAvailable(item) && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: 'success.light', borderRadius: 1 }}>
+                              <Typography variant="caption" color="success.dark" sx={{ fontWeight: 'bold' }}>
+                                Unbegrenzt verfügbar
+                              </Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      </>
+                    )}
                   </Box>
 
                   {/* Zusätzliche Infos in kompakter Form */}
@@ -2244,11 +2427,14 @@ const AdminLager = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {loading ? (
+                {(loading || loadingRef.current.has(activeTab)) ? (
                   <TableRow>
                     <TableCell colSpan={currentTab.columns.length} align="center">
-                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', p: 3 }}>
                         <CircularProgress />
+                        <Typography variant="caption" sx={{ mt: 1 }}>
+                          Lade {currentTab.label}...
+                        </Typography>
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -2300,7 +2486,7 @@ const AdminLager = () => {
         }}>
           <Typography variant="body2" color="text.secondary">
             {searchTerm ? 
-              `${currentData.length} von ${getCurrentTabData().length} ${currentTab.label} angezeigt` :
+              `${currentData.length} von ${currentTabData.length} ${currentTab.label} angezeigt` :
               `${currentData.length} ${showInactiveItems ? 'inaktive' : 'aktive'} ${currentTab.label} angezeigt`
             }
           </Typography>
@@ -2733,15 +2919,16 @@ const AdminLager = () => {
                                     }}
                                   >
                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                      <Typography variant="body1" fontWeight="bold">
-                                        {giesswerkstoff.name}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="body1" fontWeight="bold">
+                                          {giesswerkstoff.name}
+                                        </Typography>
                                         <Chip 
                                           label={giesswerkstoff.typ === 'zusatzmaterial' ? 'Zusatz' : 'Haupt'} 
                                           size="small" 
                                           color={giesswerkstoff.typ === 'zusatzmaterial' ? 'info' : 'primary'}
-                                          sx={{ ml: 1 }}
                                         />
-                                      </Typography>
+                                      </Box>
                                       <Chip 
                                         label={ausreichendFuerBuchung ? 'OK' : 'NICHT GENUG'} 
                                         color={ausreichendFuerBuchung ? 'success' : 'error'} 
