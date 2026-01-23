@@ -747,20 +747,17 @@ router.get('/admin', async (req, res) => {
     console.log('🔍 Admin orders request:', { status, sort, limit });
     
     // Filter für Status
-    let statusArray = ['neu', 'bezahlt', 'bestaetigt', 'verpackt', 'verschickt']; // Default - alle gültigen Status
+    const filter = {};
     
     if (status) {
       // Status kann ein comma-separated string oder einzelner wert sein
-      statusArray = status.includes(',') ? status.split(',') : [status];
+      const statusArray = status.includes(',') ? status.split(',') : [status];
+      console.log('📊 Status Filter Array:', statusArray);
+      filter.status = { $in: statusArray };
+    } else {
+      // Kein Status-Filter = ALLE Bestellungen
+      console.log('📊 Alle Bestellungen (kein Status-Filter)');
     }
-    
-    console.log('📊 Status Filter Array:', statusArray);
-    
-    const filter = {
-      status: { 
-        $in: statusArray 
-      }
-    };
     
     // Sortierung
     let sortOrder = {};
@@ -1179,10 +1176,12 @@ router.put('/:orderId/status', async (req, res) => {
       });
     }
 
-    // 🚨 NEUE VALIDIERUNG: Verpackt nur bei bezahlter Bestellung
+    // 🚨 VALIDIERUNG: Verpackt nur bei bezahlter Bestellung
     if (status === 'verpackt') {
-      // Prüfen ob Zahlung abgeschlossen ist
-      if (order.zahlung?.status !== 'bezahlt') {
+      // Prüfen ob Zahlung abgeschlossen ist ODER ob Bestellstatus bereits "bezahlt" ist
+      const istBezahlt = order.zahlung?.status === 'bezahlt' || order.status === 'bezahlt';
+      
+      if (!istBezahlt) {
         return res.status(400).json({
           success: false,
           message: 'Eine Bestellung kann nur als "verpackt" markiert werden, wenn die Zahlung abgeschlossen ist. Aktueller Zahlungsstatus: ' + (order.zahlung?.status || 'unbekannt') + '. Bitte warten Sie auf die Zahlung des Kunden.'
@@ -1237,6 +1236,83 @@ router.put('/:orderId/status', async (req, res) => {
       notiz: statusNotiz,
       bearbeiter: bearbeiter
     });
+    
+    // 🧾 Bei Status "bezahlt": Rechnung als bezahlt markieren oder erstellen falls nicht vorhanden
+    if (status === 'bezahlt') {
+      // Zahlungsstatus aktualisieren
+      if (!order.zahlung) {
+        order.zahlung = {};
+      }
+      order.zahlung.status = 'bezahlt';
+      order.zahlung.bezahltAm = new Date();
+      
+      // Rechnung auf "paid" setzen falls vorhanden
+      try {
+        const Invoice = require('../models/Invoice');
+        const invoice = await Invoice.findOne({ 
+          $or: [
+            { 'order.orderId': order._id },
+            { invoiceNumber: order.invoiceNumber }
+          ]
+        });
+        
+        if (invoice) {
+          console.log('💰 Rechnung als bezahlt markieren:', invoice.invoiceNumber);
+          invoice.status = 'paid';
+          invoice.payment.paidDate = new Date();
+          invoice.payment.paidAmount = invoice.amounts.total;
+          await invoice.save();
+          console.log('✅ Rechnung erfolgreich als bezahlt markiert');
+        } else {
+          // Falls noch keine Rechnung existiert, erstelle sie jetzt
+          console.log('🧾 Keine Rechnung vorhanden - erstelle neue Rechnung...');
+          const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
+          
+          if (invoiceResult.success) {
+            console.log('✅ Rechnung automatisch erstellt:', invoiceResult.invoiceNumber);
+            // Sofort als bezahlt markieren
+            const newInvoice = await Invoice.findOne({ invoiceNumber: invoiceResult.invoiceNumber });
+            if (newInvoice) {
+              newInvoice.status = 'paid';
+              newInvoice.payment.paidDate = new Date();
+              newInvoice.payment.paidAmount = newInvoice.amounts.total;
+              await newInvoice.save();
+            }
+          } else {
+            console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceResult.error);
+          }
+        }
+      } catch (invoiceError) {
+        console.error('❌ Fehler beim Aktualisieren der Rechnung:', invoiceError);
+      }
+    }
+    
+    // 📋 Anfrage-Status aktualisieren wenn Bestellung aus Anfrage entstanden ist
+    if (status === 'bezahlt' && (order.sourceInquiryId || order.anfrageId)) {
+      try {
+        const Inquiry = require('../models/Inquiry');
+        const inquiryId = order.sourceInquiryId || order.anfrageId;
+        console.log('🔍 Suche Anfrage mit ID:', inquiryId);
+        const inquiry = await Inquiry.findById(inquiryId);
+        if (inquiry) {
+          console.log('📋 Gefundene Anfrage:', inquiry.inquiryId, 'Status:', inquiry.status);
+          // Aktualisiere Status wenn noch nicht konvertiert oder payment_pending
+          if (inquiry.status !== 'converted_to_order') {
+            const oldStatus = inquiry.status;
+            inquiry.status = 'converted_to_order';
+            inquiry.convertedOrderId = order._id;
+            await inquiry.save();
+            console.log(`✅ Anfrage-Status aktualisiert: "${oldStatus}" → "converted_to_order" (${inquiry.inquiryId})`);
+          } else {
+            console.log('ℹ️ Anfrage bereits als "converted_to_order" markiert');
+          }
+        } else {
+          console.log('⚠️ Anfrage mit ID nicht gefunden:', inquiryId);
+        }
+      } catch (inquiryError) {
+        console.error('❌ Fehler beim Aktualisieren des Anfrage-Status:', inquiryError);
+      }
+    }
     
     // Versanddaten aktualisieren wenn vorhanden
     if (versand) {

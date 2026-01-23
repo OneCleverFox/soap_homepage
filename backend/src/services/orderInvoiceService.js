@@ -269,12 +269,16 @@ class OrderInvoiceService {
               tax: {
                 isSmallBusiness: template.companyInfo?.isSmallBusiness || false
               },
-              status: 'pending', // Bei automatischer Erstellung erst 'pending' - Admin muss manuell auf 'sent' setzen
+              status: 'sent', // ✅ Rechnung ist versendet/offen - wartet auf Zahlung
               notes: {
-                internal: `Automatisch generiert für Bestellung ${order.bestellnummer} - Status manuell auf 'versendet' setzen`,
+                internal: `Automatisch generiert für Bestellung ${order.bestellnummer}`,
                 customer: ''
               },
               // Verknüpfung zur ursprünglichen Bestellung
+              order: {
+                orderId: order._id,
+                bestellnummer: order.bestellnummer
+              },
               originalOrder: order._id,
               source: 'auto-payment'
             });

@@ -553,7 +553,8 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
           vorname: inquiry.customer.name ? inquiry.customer.name.split(' ')[0] : 'Unbekannt',
           nachname: inquiry.customer.name ? inquiry.customer.name.split(' ').slice(1).join(' ') : '',
           email: inquiry.customer.email,
-          telefon: ''
+          telefon: '',
+          kundennummer: inquiry.customer.id // ✅ Verwende customer.id als kundennummer
         },
         rechnungsadresse: (inquiry.rechnungsadresse && inquiry.rechnungsadresse !== null) ? inquiry.rechnungsadresse : {
           strasse: 'Unbekannt',
@@ -641,14 +642,47 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
       // Anfrage annehmen und automatisch Bestellung + Rechnung erstellen
       console.log('🔄 Erstelle automatisch Bestellung für angenommene Anfrage...');
       
+      // Artikel konvertieren von Inquiry-Format zu Order-Format
+      const konvertierteArtikel = inquiry.items.map(item => ({
+        produktId: item.productId || item.produktId,
+        produktSnapshot: {
+          name: item.name,
+          beschreibung: item.description || '',
+          bild: item.image || '',
+          kategorie: item.produktType || 'portfolio'
+        },
+        produktType: item.produktType || 'portfolio',
+        menge: item.quantity || item.menge || 1,
+        einzelpreis: item.price || item.einzelpreis || 0,
+        gesamtpreis: (item.quantity || item.menge || 1) * (item.price || item.einzelpreis || 0)
+      }));
+      
+      console.log('📦 Konvertierte Artikel:', konvertierteArtikel.length);
+      
       // Konvertiere Anfrage zu Bestellung
       const neueBestellung = new Order({
         // bestellnummer wird automatisch generiert durch pre-save hook
-        kundenId: inquiry.kundenId || null,
-        artikel: inquiry.items,
+        kundenId: inquiry.customer?.id || inquiry.kundenId || null,
+        besteller: {
+          vorname: inquiry.customer?.name ? inquiry.customer.name.split(' ')[0] : (inquiry.vorname || ''),
+          nachname: inquiry.customer?.name ? inquiry.customer.name.split(' ').slice(1).join(' ') : (inquiry.nachname || ''),
+          email: inquiry.customer?.email || inquiry.email,
+          telefon: inquiry.telefon || '',
+          kundennummer: inquiry.customer?.id || inquiry.kundennummer || null
+        },
+        artikel: konvertierteArtikel,
         bestellsumme: inquiry.total,
         versandkosten: inquiry.versandkosten || 5.99,
         gesamtsumme: inquiry.total + (inquiry.versandkosten || 5.99),
+        preise: {
+          zwischensumme: inquiry.total,
+          versandkosten: inquiry.versandkosten || 5.99,
+          gesamtsumme: inquiry.total + (inquiry.versandkosten || 5.99),
+          mwst: {
+            satz: 0,
+            betrag: 0
+          }
+        },
         rechnungsadresse: {
           vorname: inquiry.vorname || '',
           nachname: inquiry.nachname || '',

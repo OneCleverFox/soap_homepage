@@ -240,7 +240,7 @@ giessformSchema.pre('save', function(next) {
 
 // Statische Methoden
 giessformSchema.statics.findVerfuegbare = function() {
-  return this.find({ verfuegbar: true, ausgeliehen: false });
+  return this.find({ verfuegbar: true, ausgeliehen: false }).lean();
 };
 
 giessformSchema.statics.findByVolumen = function(minVol, maxVol) {
@@ -248,11 +248,11 @@ giessformSchema.statics.findByVolumen = function(minVol, maxVol) {
     volumenMl: { $gte: minVol, $lte: maxVol },
     verfuegbar: true,
     ausgeliehen: false
-  });
+  }).lean();
 };
 
 giessformSchema.statics.findByForm = function(formType) {
-  return this.find({ form: formType, verfuegbar: true, ausgeliehen: false });
+  return this.find({ form: formType, verfuegbar: true, ausgeliehen: false }).lean();
 };
 
 // Instance-Methoden

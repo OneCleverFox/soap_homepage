@@ -588,6 +588,41 @@ class InvoiceService {
         });
       }
 
+      // 🔄 Synchronisation: Wenn Rechnung als bezahlt markiert wird, auch Bestellung aktualisieren
+      if (status === 'paid' && invoice.order?.orderId) {
+        try {
+          const Order = require('../models/Order');
+          const order = await Order.findById(invoice.order.orderId);
+          
+          if (order) {
+            console.log('💰 Rechnung als bezahlt markiert - aktualisiere Bestellung:', order.bestellnummer);
+            
+            // Bestellung nur aktualisieren wenn noch nicht bezahlt
+            if (order.status !== 'bezahlt') {
+              order.status = 'bezahlt';
+              if (!order.zahlung) order.zahlung = {};
+              order.zahlung.status = 'bezahlt';
+              order.zahlung.bezahltAm = new Date();
+              
+              // Status-Verlauf hinzufügen
+              if (!order.statusVerlauf) order.statusVerlauf = [];
+              order.statusVerlauf.push({
+                status: 'bezahlt',
+                zeitpunkt: new Date(),
+                notiz: 'Automatisch aktualisiert durch Rechnung als bezahlt markieren',
+                bearbeiter: 'System'
+              });
+              
+              await order.save();
+              console.log('✅ Bestellung erfolgreich auf "bezahlt" gesetzt');
+            }
+          }
+        } catch (orderError) {
+          console.error('⚠️ Fehler beim Aktualisieren der Bestellung:', orderError);
+          // Nicht abbrechen - Rechnung wurde bereits aktualisiert
+        }
+      }
+
       res.json({
         success: true,
         message: `Rechnung status auf "${status}" geändert`,

@@ -162,10 +162,11 @@ router.post('/add', authenticateToken, async (req, res) => {
       _id: req.user?._id
     });
 
-    if (!produktId || !name || preis === undefined || !menge) {
+    if (!produktId || !name || preis === undefined || preis === null || !menge) {
       return res.status(400).json({
         success: false,
-        message: 'Produktdaten unvollständig'
+        message: 'Produktdaten unvollständig',
+        debug: { produktId, name, preis, menge }
       });
     }
 

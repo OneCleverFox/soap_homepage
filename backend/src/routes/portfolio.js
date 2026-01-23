@@ -296,6 +296,9 @@ async function calculatePortfolioPrice(portfolioItem) {
 // @access  Public (aktive), Admin (alle mit includeInactive=true)
 router.get('/', async (req, res) => {
   try {
+    // 🚀 PERFORMANCE: Stelle sicher dass aktiv-Index existiert
+    await Portfolio.collection.createIndex({ aktiv: 1, reihenfolge: 1 }, { background: true }).catch(() => {});
+    
     const { includeInactive, includeUnavailable } = req.query;
     
     // Unterstütze beide Parameter für Konsistenz
@@ -308,61 +311,59 @@ router.get('/', async (req, res) => {
     }
     // Wenn includeInactive=true oder includeUnavailable=true, werden alle Produkte (aktiv + inaktiv) geladen
     
-    // Migration: Aktualisiere alle Portfolio-Items ohne aktiv-Feld (einmalig)
-    const itemsWithoutActivField = await Portfolio.countDocuments({ 
-      aktiv: { $exists: false } 
-    });
-    
-    if (itemsWithoutActivField > 0) {
-      logger.info(`🔧 Migration: Setze aktiv=false für ${itemsWithoutActivField} Portfolio-Items`);
-      await Portfolio.updateMany(
-        { aktiv: { $exists: false } },
-        { $set: { aktiv: false } }
-      );
-      logger.info('✅ Migration abgeschlossen');
-    }
+    // 🚀 PERFORMANCE: Migration entfernt - läuft nur einmalig beim Server-Start
     
     const portfolioItems = await Portfolio.find(filter)
-      .sort({ aktiv: -1, reihenfolge: 1, name: 1 }); // Aktive zuerst, dann Sortierung
+      .sort({ aktiv: -1, reihenfolge: 1, name: 1 })
+      .lean(); // 🚀 PERFORMANCE: lean() für 2-5x schnellere Queries
 
-    // Lade Bestand-Daten für jedes Portfolio-Item
-    const portfolioWithBestand = await Promise.all(
-      portfolioItems.map(async (item) => {
-        const bestand = await Bestand.findOne({ 
-          artikelId: item._id,
-          typ: 'produkt'
-        });
-        
-        const itemObj = item.toObject();
-        
-        // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
-        if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
-          itemObj.aktiv = false; // Default für undefined/null Werte
-        }
-        
-        // Füge Bestand-Informationen im erwarteten Format hinzu
-        if (bestand) {
-          itemObj.bestand = {
-            menge: bestand.menge || 0,
-            einheit: bestand.einheit || 'Stück',
-            verfuegbar: (bestand.menge || 0) > 0
-          };
-        } else {
-          itemObj.bestand = {
-            menge: 0,
-            einheit: 'Stück',
-            verfuegbar: false
-          };
-        }
-        
-        // Legacy-Felder für Kompatibilität
-        itemObj.verfuegbareMenge = itemObj.bestand.menge;
-        itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
-        itemObj.bestandId = bestand ? bestand._id : null;
-        
-        return itemObj;
-      })
-    );
+    // 🚀 PERFORMANCE: Lade ALLE Bestände in einer einzigen Query
+    const portfolioIds = portfolioItems.map(item => item._id);
+    const allBestaende = await Bestand.find({ 
+      artikelId: { $in: portfolioIds },
+      typ: 'produkt'
+    }).lean();
+    
+    // Erstelle Map für O(1) Lookup
+    const bestandMap = new Map();
+    allBestaende.forEach(bestand => {
+      bestandMap.set(bestand.artikelId.toString(), bestand);
+    });
+
+    // Verarbeite Portfolio-Items ohne zusätzliche DB-Queries
+    const portfolioWithBestand = portfolioItems.map(item => {
+      const itemObj = item; // lean() liefert bereits Plain Objects
+      
+      // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
+      if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
+        itemObj.aktiv = false; // Default für undefined/null Werte
+      }
+      
+      // Hole Bestand aus Map (O(1) statt DB-Query)
+      const bestand = bestandMap.get(item._id.toString());
+      
+      // Füge Bestand-Informationen im erwarteten Format hinzu
+      if (bestand) {
+        itemObj.bestand = {
+          menge: bestand.menge || 0,
+          einheit: bestand.einheit || 'Stück',
+          verfuegbar: (bestand.menge || 0) > 0
+        };
+      } else {
+        itemObj.bestand = {
+          menge: 0,
+          einheit: 'Stück',
+          verfuegbar: false
+        };
+      }
+      
+      // Legacy-Felder für Kompatibilität
+      itemObj.verfuegbareMenge = itemObj.bestand.menge;
+      itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
+      itemObj.bestandId = bestand ? bestand._id : null;
+      
+      return itemObj;
+    });
 
     // Debug-Log für die Antwort
     const activeCount = portfolioWithBestand.filter(item => item.aktiv === true).length;
