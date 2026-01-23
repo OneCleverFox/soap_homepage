@@ -146,12 +146,13 @@ const CheckoutPage = () => {
         console.log('📄 Desktop Checkout: isSmallBusiness:', data.companyInfo?.isSmallBusiness);
         setInvoiceSettings(data);
       } else {
-        console.error('❌ Failed to load invoice settings');
+        // 401/403 Fehler sind normal für Kunden - verwende Standardwerte
+        console.log('ℹ️ Invoice settings not accessible (normal for customers), using defaults');
         // Fallback: MwSt anzeigen wenn Einstellungen nicht geladen werden können
         setInvoiceSettings({ companyInfo: { isSmallBusiness: false } });
       }
     } catch (error) {
-      console.error('❌ Error loading invoice settings:', error);
+      console.log('ℹ️ Invoice settings not accessible, using defaults:', error.message);
       // Fallback: MwSt anzeigen wenn Einstellungen nicht geladen werden können
       setInvoiceSettings({ companyInfo: { isSmallBusiness: false } });
     }

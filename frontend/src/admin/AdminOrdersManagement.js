@@ -105,6 +105,13 @@ const statusConfig = {
     priority: 8,
     description: 'Bestellung storniert',
     actions: ['note']
+  },
+  abgelehnt: {
+    label: '🚫 Abgelehnt',
+    color: 'error',
+    priority: 9,
+    description: 'Bestellung abgelehnt',
+    actions: ['note']
   }
 };
 
@@ -208,7 +215,7 @@ const AdminOrdersManagement = () => {
       
       if (filters.status !== 'all') {
         if (filters.status === 'pending') {
-          queryParams.append('status', 'neu,bezahlt,bestaetigt,verpackt');
+          queryParams.append('status', 'neu,bezahlt,bestaetigt,verpackt,storniert');
         } else {
           queryParams.append('status', filters.status);
         }
@@ -1493,6 +1500,16 @@ const AdminOrdersManagement = () => {
               )}
               
               {selectedOrder.status === 'bestaetigt' && (
+                <Button 
+                  color="success" 
+                  variant="contained"
+                  onClick={() => handleStatusUpdate(selectedOrder._id, 'bezahlt')}
+                >
+                  💰 Als bezahlt markieren
+                </Button>
+              )}
+              
+              {selectedOrder.status === 'bezahlt' && (
                 <Button 
                   color="primary" 
                   variant="contained"

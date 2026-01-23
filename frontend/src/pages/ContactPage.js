@@ -102,7 +102,7 @@ const ContactPage = () => {
             color="text.secondary"
             sx={{ maxWidth: 600, mx: 'auto' }}
           >
-            Haben Sie Fragen zu unseren handgemachten Naturprodukten? 
+            Haben Sie Fragen zu unseren handgemachten Produkten? 
             Wir freuen uns auf Ihre Nachricht!
           </Typography>
         </Box>

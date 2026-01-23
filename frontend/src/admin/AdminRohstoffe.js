@@ -82,6 +82,9 @@ const AdminRohstoffe = () => {
   const [giesswerkstoff, setGiesswerkstoff] = useState([]);
   const [giesszusatzstoffe, setGiesszusatzstoffe] = useState([]);
   
+  // 🚀 PERFORMANCE: Cache welche Tabs bereits geladen wurden
+  const [loadedTabs, setLoadedTabs] = useState(new Set());
+  
   // Dialog states
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState('create'); // 'create' or 'edit'
@@ -119,9 +122,17 @@ const AdminRohstoffe = () => {
   } = useAdminSearch(getCurrentTabData(), ['name', 'bezeichnung', 'beschreibung', 'inventarnummer', 'form', 'material', 'typ', 'haerte', 'farbe']);
 
   const loadData = React.useCallback(async () => {
+    // 🚀 PERFORMANCE: Überspringe laden wenn Tab bereits geladen wurde
+    if (loadedTabs.has(currentTab)) {
+      console.log(`📦 Tab ${currentTab} bereits im Cache - überspringe API-Call`);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
+      console.log(`🔄 Lade Daten für Tab ${currentTab}...`);
+      
       if (currentTab === 0) {
         const response = await axios.get(`${API_BASE}/rohseife?includeUnavailable=true`, { headers: getAuthHeaders() });
         setRohseife(response.data.data || []);
@@ -144,12 +155,16 @@ const AdminRohstoffe = () => {
         const response = await axios.get(`${API_BASE}/lager/admin/rohstoffe/giesszusatzstoffe`, { headers: getAuthHeaders() });
         setGiesszusatzstoffe(response.data.data || []);
       }
+      
+      // 🚀 PERFORMANCE: Markiere Tab als geladen
+      setLoadedTabs(prev => new Set([...prev, currentTab]));
+      console.log(`✅ Tab ${currentTab} erfolgreich geladen und gecacht`);
     } catch (err) {
       setError('Fehler beim Laden der Daten: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [currentTab, setError, setLoading]);
+  }, [currentTab, setError, setLoading, loadedTabs]);
 
   useEffect(() => {
     loadData();
@@ -190,24 +205,6 @@ const AdminRohstoffe = () => {
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
     setSearchTerm(''); // Suche beim Tab-Wechsel zurücksetzen
-  };
-
-  // Spezielle Filterfunktion für Gießformen (Inventarnummer + Name)
-  const filterGiessformen = (items, searchTerm) => {
-    if (!items || !Array.isArray(items)) {
-      return [];
-    }
-    
-    if (!searchTerm) return items;
-    
-    const search = searchTerm.toLowerCase();
-    
-    return items.filter(item => {
-      const name = (item.name || '').toLowerCase();
-      const inventarnummer = (item.inventarnummer || '').toLowerCase();
-      
-      return name.includes(search) || inventarnummer.includes(search);
-    });
   };
 
   // Universelle Filterfunktion für alle Rohstoff-Typen
@@ -726,6 +723,13 @@ const AdminRohstoffe = () => {
         setSuccess('Erfolgreich aktualisiert!');
       }
       
+      // 🚀 PERFORMANCE: Cache invalidieren um neue/aktualisierte Daten zu laden
+      setLoadedTabs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentTab);
+        return newSet;
+      });
+      
       handleCloseDialog();
       loadData();
     } catch (err) {
@@ -759,6 +763,14 @@ const AdminRohstoffe = () => {
       
       await axios.delete(`${API_BASE}/${endpoint}/${id}`, { headers: getAuthHeaders() });
       setSuccess('Erfolgreich gelöscht!');
+      
+      // 🚀 PERFORMANCE: Cache invalidieren um Daten neu zu laden
+      setLoadedTabs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(currentTab);
+        return newSet;
+      });
+      
       loadData();
     } catch (err) {
       setError('Fehler beim Löschen: ' + (err.response?.data?.message || err.message));
@@ -1512,7 +1524,13 @@ const AdminRohstoffe = () => {
   };
 
   const renderGiessformenTable = () => {
-    const filteredData = filterGiessformen(giessformen, searchTerm);
+    const filteredData = filterItems(giessformen, searchTerm)
+      .sort((a, b) => {
+        // Sortiere nach Inventarnummer absteigend
+        const numA = parseInt((a.inventarnummer || '').replace(/\D/g, '')) || 0;
+        const numB = parseInt((b.inventarnummer || '').replace(/\D/g, '')) || 0;
+        return numB - numA; // Absteigend
+      });
     
     if (isMobile) {
       return (
@@ -1522,9 +1540,14 @@ const AdminRohstoffe = () => {
               <CardContent>
                 <Stack spacing={1.5}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <Typography variant="h6" component="div">
-                      {item.name} ({item.inventarnummer})
-                    </Typography>
+                    <Box>
+                      <Typography variant="h6" component="div">
+                        {item.name}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Inv.-Nr.: {item.inventarnummer}
+                      </Typography>
+                    </Box>
                     <Chip 
                       label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
                       color={item.verfuegbar ? 'success' : 'error'}
@@ -1536,34 +1559,9 @@ const AdminRohstoffe = () => {
                   
                   <Stack spacing={0.5}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Form:</Typography>
-                      <Typography variant="body2">{item.form}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Material:</Typography>
-                      <Typography variant="body2">{item.material}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="textSecondary">Volumen:</Typography>
                       <Typography variant="body2">{item.volumenMl} ml</Typography>
                     </Box>
-                    {item.durchmesserMm && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="textSecondary">Durchmesser:</Typography>
-                        <Typography variant="body2">⌀ {item.durchmesserMm}mm</Typography>
-                      </Box>
-                    )}
-                    {(item.laengeMm && item.breiteMm) || item.tiefeMm ? (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="textSecondary">L x B x H:</Typography>
-                        <Typography variant="body2">
-                          {item.laengeMm && item.breiteMm ? 
-                            `${item.laengeMm} x ${item.breiteMm} x ${item.tiefeMm} mm` :
-                            `${item.tiefeMm}mm Höhe`
-                          }
-                        </Typography>
-                      </Box>
-                    ) : null}
                   </Stack>
                   
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mt: 2 }}>
@@ -1601,30 +1599,30 @@ const AdminRohstoffe = () => {
             </Card>
           ))}
           {filteredData.length === 0 && (
-            <Typography variant="body2" color="textSecondary" align="center" sx={{ py: 3 }}>
-              {searchTerm ? 
-                `Keine Gießformen gefunden, die "${searchTerm}" entsprechen.` :
-                'Keine Gießformen verfügbar.'
-              }
-            </Typography>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="textSecondary" align="center">
+                  {searchTerm ? 
+                    `Keine Gießformen gefunden, die "${searchTerm}" entsprechen.` :
+                    'Keine Gießformen verfügbar.'
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
           )}
         </Stack>
       );
     }
 
     return (
-      <TableContainer component={Paper} variant="outlined">
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Bild</TableCell>
               <TableCell>Inventarnummer</TableCell>
               <TableCell>Name</TableCell>
-              <TableCell>Form</TableCell>
-              <TableCell>Material</TableCell>
               <TableCell>Volumen (ml)</TableCell>
-              <TableCell>Durchmesser (mm)</TableCell>
-              <TableCell>L x B x H (mm)</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="center">Link</TableCell>
               <TableCell align="center">Aktionen</TableCell>
@@ -1665,20 +1663,13 @@ const AdminRohstoffe = () => {
                     </Box>
                   )}
                 </TableCell>
-                <TableCell>{item.inventarnummer}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight="medium">
+                    {item.inventarnummer}
+                  </Typography>
+                </TableCell>
                 <TableCell>{item.name}</TableCell>
-                <TableCell>{item.form}</TableCell>
-                <TableCell>{item.material}</TableCell>
                 <TableCell>{item.volumenMl}</TableCell>
-                <TableCell>
-                  {item.durchmesserMm ? `⌀ ${item.durchmesserMm}` : '-'}
-                </TableCell>
-                <TableCell>
-                  {item.laengeMm && item.breiteMm ? 
-                    `${item.laengeMm} x ${item.breiteMm} x ${item.tiefeMm}` :
-                    item.tiefeMm ? `${item.tiefeMm} H` : '-'
-                  }
-                </TableCell>
                 <TableCell>
                   <Chip 
                     label={item.verfuegbar ? 'Verfügbar' : 'Nicht verfügbar'} 
@@ -1718,7 +1709,7 @@ const AdminRohstoffe = () => {
             ))}
             {filteredData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
                   <Typography variant="body2" color="textSecondary">
                     {searchTerm ? 
                       `Keine Gießformen gefunden, die "${searchTerm}" entsprechen.` :
@@ -1779,18 +1770,6 @@ const AdminRohstoffe = () => {
                       <Chip label={item.typ || 'Unbekannt'} size="small" variant="outlined" />
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Konsistenz:</Typography>
-                      <Typography variant="body2">{item.konsistenz || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Farbe:</Typography>
-                      <Typography variant="body2">{item.farbe || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="textSecondary">Härte:</Typography>
-                      <Typography variant="body2">{item.haerte || '-'}</Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body2" color="textSecondary">Bestand:</Typography>
                       <Typography variant="body2" color={item.aktuellerBestand < item.mindestbestand ? 'error' : 'inherit'}>
                         {item.aktuellerBestand || 0} {item.einheit || 'g'}
@@ -1847,30 +1826,30 @@ const AdminRohstoffe = () => {
             </Card>
           ))}
           {filteredData.length === 0 && (
-            <Typography variant="body2" color="textSecondary" align="center" sx={{ py: 3 }}>
-              {searchTerm ? 
-                `Keine Gießwerkstoffe gefunden, die "${searchTerm}" entsprechen.` :
-                'Keine Gießwerkstoffe verfügbar.'
-              }
-            </Typography>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="textSecondary" align="center">
+                  {searchTerm ? 
+                    `Keine Gießwerkstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                    'Keine Gießwerkstoffe verfügbar.'
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
           )}
         </Stack>
       );
     }
 
     return (
-      <TableContainer component={Paper} variant="outlined">
+      <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Bild</TableCell>
               <TableCell>Bezeichnung</TableCell>
               <TableCell>Typ</TableCell>
-              <TableCell>Konsistenz</TableCell>
-              <TableCell>Farbe</TableCell>
               <TableCell>Bestand</TableCell>
-              <TableCell>Einheit</TableCell>
-              <TableCell>Härte</TableCell>
               <TableCell>Lieferant</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="center">Link</TableCell>
@@ -1932,22 +1911,18 @@ const AdminRohstoffe = () => {
                     variant="outlined"
                   />
                 </TableCell>
-                <TableCell>{item.konsistenz || '-'}</TableCell>
-                <TableCell>{item.farbe || '-'}</TableCell>
                 <TableCell>
                   <Box>
                     <Typography variant="body2">
-                      {item.aktuellerBestand || 0}
+                      {item.aktuellerBestand || 0} {item.einheit || 'g'}
                     </Typography>
                     {item.mindestbestand && item.aktuellerBestand < item.mindestbestand && (
                       <Typography variant="caption" color="error">
-                        Min: {item.mindestbestand}g
+                        Min: {item.mindestbestand}{item.einheit || 'g'}
                       </Typography>
                     )}
                   </Box>
                 </TableCell>
-                <TableCell>{item.einheit || 'g'}</TableCell>
-                <TableCell>{item.haerte || '-'}</TableCell>
                 <TableCell>
                   <Typography variant="body2">
                     {item.lieferant || '-'}
@@ -2009,7 +1984,7 @@ const AdminRohstoffe = () => {
             ))}
             {filteredData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={12} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
                   <Typography variant="body2" color="textSecondary">
                     {searchTerm ? 
                       `Keine Gießwerkstoffe gefunden, die "${searchTerm}" entsprechen.` :
@@ -2068,12 +2043,6 @@ const AdminRohstoffe = () => {
                         <Typography variant="body2">{item.preis_pro_einheit}€</Typography>
                       </Box>
                     )}
-                    {item.artikelnummer && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" color="textSecondary">Art.-Nr.:</Typography>
-                        <Typography variant="body2">{item.artikelnummer}</Typography>
-                      </Box>
-                    )}
                   </Stack>
                   
                   <Box sx={{ display: 'flex', gap: 1, pt: 1 }}>
@@ -2101,14 +2070,16 @@ const AdminRohstoffe = () => {
             </Card>
           ))}
           {filteredData.length === 0 && (
-            <Paper sx={{ p: 3, textAlign: 'center' }}>
-              <Typography variant="body2" color="textSecondary">
-                {searchTerm ? 
-                  `Keine Gießzusatzstoffe gefunden, die "${searchTerm}" entsprechen.` :
-                  'Keine Gießzusatzstoffe verfügbar.'
-                }
-              </Typography>
-            </Paper>
+            <Card variant="outlined">
+              <CardContent>
+                <Typography variant="body2" color="textSecondary" align="center">
+                  {searchTerm ? 
+                    `Keine Gießzusatzstoffe gefunden, die "${searchTerm}" entsprechen.` :
+                    'Keine Gießzusatzstoffe verfügbar.'
+                  }
+                </Typography>
+              </CardContent>
+            </Card>
           )}
         </Stack>
       );
@@ -2124,7 +2095,6 @@ const AdminRohstoffe = () => {
               <TableCell>Bestand</TableCell>
               <TableCell>Einheit</TableCell>
               <TableCell>Lieferant</TableCell>
-              <TableCell>Artikelnummer</TableCell>
               <TableCell>Preis/Einheit</TableCell>
               <TableCell align="center">Aktionen</TableCell>
             </TableRow>
@@ -2158,11 +2128,6 @@ const AdminRohstoffe = () => {
                 <TableCell>
                   <Typography variant="body2">
                     {item.lieferant || '-'}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">
-                    {item.artikelnummer || '-'}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -4631,6 +4596,27 @@ const AdminRohstoffe = () => {
             currentTab === 4 ? "Neue Gießform hinzufügen" : 
             currentTab === 5 ? "Neuen Gießwerkstoff hinzufügen" :
             "Neuen Gießzusatzstoff hinzufügen"
+          )}
+        </Button>
+        
+        {/* 🚀 PERFORMANCE: Refresh-Button mit Cache-Invalidierung */}
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={() => {
+            setLoadedTabs(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(currentTab);
+              return newSet;
+            });
+            loadData();
+          }}
+          size={isMobile ? "medium" : "large"}
+          fullWidth={isMobile}
+          sx={{ mt: isMobile ? 1 : 0 }}
+        >
+          {isMobile ? "Aktualisieren" : (
+            loadedTabs.has(currentTab) ? "Aus Cache (Aktualisieren)" : "Neu laden"
           )}
         </Button>
       </Box>

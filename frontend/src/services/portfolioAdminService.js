@@ -84,16 +84,19 @@ export const portfolioAdminService = {
       headers: getAuthHeaders()
     });
     const data = await response.json();
-    return data.success ? data.data.map(item => item.name) : [];
+    return data.success ? data.data.map(item => item.bezeichnung) : [];
   },
 
   async getSeifenformOptions() {
-    const response = await fetch(`${API_BASE}/rohseife`, {
+    // Seifenformen aus Portfolio-Items extrahieren
+    const response = await fetch(`${API_BASE}/admin/portfolio`, {
       headers: getAuthHeaders()
     });
     const data = await response.json();
     if (data.success) {
-      const formen = data.data.map(item => item.form).filter(form => form);
+      const formen = data.data
+        .filter(item => item.kategorie === 'seife' && item.seifenform)
+        .map(item => item.seifenform);
       return [...new Set(formen)]; // Duplikate entfernen
     }
     return [];
@@ -104,7 +107,7 @@ export const portfolioAdminService = {
       headers: getAuthHeaders()
     });
     const data = await response.json();
-    return data.success ? data.data.map(item => item.name) : [];
+    return data.success ? data.data.map(item => item.bezeichnung) : [];
   },
 
   // Werkstück-spezifische Options
@@ -114,7 +117,8 @@ export const portfolioAdminService = {
         headers: getAuthHeaders()
       });
       const data = await response.json();
-      return data.success ? data.data.filter(item => item.verfuegbar) : [];
+      // Alle laden (auch inaktive), damit gespeicherte IDs angezeigt werden können
+      return data.success ? data.data : [];
     } catch (error) {
       console.error('Fehler beim Laden der Gießformen:', error);
       return [];
@@ -127,7 +131,8 @@ export const portfolioAdminService = {
         headers: getAuthHeaders()
       });
       const data = await response.json();
-      return data.success ? data.data.filter(item => item.verfuegbar) : [];
+      // Alle laden (auch inaktive), damit gespeicherte IDs angezeigt werden können
+      return data.success ? data.data : [];
     } catch (error) {
       console.error('Fehler beim Laden der Gießwerkstoffe:', error);
       return [];
