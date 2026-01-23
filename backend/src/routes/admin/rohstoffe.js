@@ -55,7 +55,7 @@ const generateNextInventarnummer = async () => {
 // @access  Private (Admin only)
 router.get('/giessformen', async (req, res) => {
   try {
-    const giessformen = await Giessform.find({}).sort({ reihenfolge: 1, name: 1 });
+    const giessformen = await Giessform.find({}).sort({ reihenfolge: 1, name: 1 }).lean();
     
     res.json({
       success: true,
@@ -228,7 +228,7 @@ router.delete('/giessformen/:id', async (req, res) => {
 // @access  Private (Admin only)
 router.get('/giesswerkstoff', async (req, res) => {
   try {
-    const giesswerkstoff = await Giesswerkstoff.find({}).sort({ reihenfolge: 1, bezeichnung: 1 });
+    const giesswerkstoff = await Giesswerkstoff.find({}).sort({ reihenfolge: 1, name: 1 }).lean();
     
     res.json({
       success: true,

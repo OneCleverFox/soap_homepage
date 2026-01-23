@@ -10,6 +10,15 @@ const path = require('path');
 
 console.log('🚀 Starting production setup...');
 
+// Load .env file if NODE_ENV is not production (for local testing)
+if (process.env.NODE_ENV !== 'production') {
+  const envPath = path.join(__dirname, '..', '.env');
+  if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+    console.log('✅ Loaded .env file for local testing');
+  }
+}
+
 // 1. Ensure upload directories exist
 const ensureDirectories = () => {
   const dirs = [

@@ -755,6 +755,32 @@ async function getBestellungsStatistiken() {
             }
           }
         ],
+        // Neue Statistik: Bestellungen die verpackt werden müssen
+        zuVerpacken: [
+          { 
+            $match: { 
+              status: { $in: ['bezahlt'] }, // Bezahlte Bestellungen die verpackt werden müssen
+              $or: [
+                { 'zahlung.status': { $in: ['bezahlt', 'completed'] } },
+                { status: 'bezahlt' }
+              ]
+            } 
+          },
+          { 
+            $project: {
+              bestellnummer: 1,
+              besteller: 1,
+              rechnungsadresse: 1,
+              artikel: 1,
+              preise: 1,
+              status: 1,
+              createdAt: 1,
+              zahlung: 1
+            }
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 5 }
+        ],
         // Neue Statistik: Bestellungen die versendet werden müssen
         zuVersenden: [
           { 
@@ -782,16 +808,12 @@ async function getBestellungsStatistiken() {
           { $sort: { createdAt: -1 } },
           { $limit: 5 } // Top 5 neueste
         ],
-        // Neue Statistik: Bestellungen die bestätigt werden müssen  
+        // Neue Statistik: Bestellungen aus Anfragen die bestätigt werden müssen  
         zuBestaetigen: [
           { 
             $match: { 
-              status: { $in: ['bezahlt'] }, // Bezahlte Bestellungen die bestätigt werden müssen
-              $or: [
-                { 'zahlung.status': { $in: ['bezahlt', 'completed'] } }, // Bezahlte Bestellungen
-                { 'zahlung.status': 'ausstehend', 'payment.status': 'completed' }, // Alternative Zahlungsfelder
-                { status: 'bezahlt' } // Direkt als bezahlt markierte Bestellungen
-              ]
+              status: { $in: ['neu'] }, // Neue Bestellungen
+              sourceInquiryId: { $exists: true, $ne: null } // Nur Bestellungen die aus Anfragen entstanden sind
             } 
           },
           { 
@@ -803,7 +825,8 @@ async function getBestellungsStatistiken() {
               preise: 1,
               status: 1,
               createdAt: 1,
-              zahlung: 1
+              zahlung: 1,
+              sourceInquiryId: 1
             }
           },
           { $sort: { createdAt: -1 } },
@@ -819,6 +842,7 @@ async function getBestellungsStatistiken() {
     nachStatus: stats[0].nachStatus,
     umsatzLetzter30Tage: stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0,
     bestellungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlBestellungen || 0,
+    zuVerpacken: stats[0].zuVerpacken || [],
     zuVersenden: stats[0].zuVersenden || [],
     zuBestaetigen: stats[0].zuBestaetigen || []
   };
@@ -1038,39 +1062,65 @@ async function getProduktionsKapazitaetsAnalyse() {
   const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } }).lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
   
-  // 2. Alle Rohstoffe laden
-  const [rohseifen, duftoele, verpackungen] = await Promise.all([
+  // 2. Alle Rohstoffe parallel laden
+  const [rohseifen, duftoele, verpackungen, zusatzinhaltsstoffe] = await Promise.all([
     Rohseife.find({ verfuegbar: true }).lean(),
     Duftoil.find({ verfuegbar: true }).lean(),
-    Verpackung.find({ verfuegbar: true }).lean()
+    Verpackung.find({ verfuegbar: true }).lean(),
+    ZusatzInhaltsstoff.find().lean()
   ]);
   
-  console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen`);
+  console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen, ${zusatzinhaltsstoffe.length} Zusatzinhaltsstoffe`);
   
-  // 3. Bestände der Fertigprodukte abrufen
-  const bestandsAbfrage = await Bestand.find({ typ: 'produkt' });
+  // 3. Bestände für Fertigprodukte UND Zusatzinhaltsstoffe abrufen
+  const [fertigproduktBestaende, zusatzstoffBestaende] = await Promise.all([
+    Bestand.find({ typ: 'produkt' }).lean(),
+    Bestand.find({ typ: 'zusatzinhaltsstoff' }).lean()
+  ]);
+  
   const bestandsMap = new Map();
-  bestandsAbfrage.forEach(bestand => {
+  fertigproduktBestaende.forEach(bestand => {
     if (bestand.artikelId) {
       bestandsMap.set(bestand.artikelId.toString(), bestand.menge || 0);
     }
   });
-  console.log(`📊 ${bestandsMap.size} Bestandseinträge geladen`);
   
-  // 4. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
+  const zusatzstoffBestandsMap = new Map();
+  zusatzstoffBestaende.forEach(bestand => {
+    if (bestand.artikelId) {
+      zusatzstoffBestandsMap.set(bestand.artikelId.toString(), bestand.menge || 0);
+    }
+  });
+  
+  console.log(`📊 ${bestandsMap.size} Fertigprodukt-Bestände und ${zusatzstoffBestandsMap.size} Zusatzstoff-Bestände geladen`);
+  
+  // 4. Maps für schnellere Lookups erstellen
+  const rohseifenMap = new Map(rohseifen.map(r => [r.bezeichnung.toLowerCase(), r]));
+  const duftoeleMap = new Map(duftoele.map(d => [d.bezeichnung.toLowerCase(), d]));
+  const verpackungenMap = new Map(verpackungen.map(v => [v.bezeichnung.toLowerCase(), v]));
+  const zusatzstoffeMap = new Map(zusatzinhaltsstoffe.map(z => [z.bezeichnung.toLowerCase(), z]));
+  
+  // 5. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
   const produktionsAnalyse = [];
   
   for (const produkt of portfolioProdukte) {
-    const analyse = await analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen);
+    const analyse = analysiereProduktionskapazitaet(
+      produkt, 
+      rohseifenMap, 
+      duftoeleMap, 
+      verpackungenMap,
+      zusatzstoffeMap,
+      zusatzstoffBestandsMap
+    );
     // Aktuellen Fertigproduktbestand hinzufügen
     analyse.aktuellerBestand = bestandsMap.get(produkt._id.toString()) || 0;
     produktionsAnalyse.push(analyse);
   }
   
-  // 5. Nach limitierendem Faktor sortieren (niedrigste Produktionsmenge zuerst)
+  // 6. Nach limitierendem Faktor sortieren (niedrigste Produktionsmenge zuerst)
   produktionsAnalyse.sort((a, b) => a.maxProduktion - b.maxProduktion);
   
-  // 6. Zusammenfassung erstellen
+  // 7. Zusammenfassung erstellen
   const zusammenfassung = erstelleProduktionsZusammenfassung(produktionsAnalyse);
   
   console.log('✅ Produktionskapazitäts-Analyse abgeschlossen');
@@ -1083,7 +1133,7 @@ async function getProduktionsKapazitaetsAnalyse() {
 }
 
 // Analysiert die Produktionskapazität für ein einzelnes Produkt
-async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, verpackungen) {
+function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, verpackungenMap, zusatzstoffeMap, zusatzstoffBestandsMap) {
   // Seife-Beschreibung für Dual-Soap erweitern
   let seifeBeschreibung = produkt.seife;
   const istDualSeife = produkt.rohseifenKonfiguration?.verwendeZweiRohseifen;
@@ -1119,12 +1169,8 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
     const gewichtVerteilung = produkt.rohseifenKonfiguration.gewichtVerteilung || 
                               { seife1Prozent: 50, seife2Prozent: 50 };
     
-    // Seife 1 (Hauptseife)
-    const rohseife1 = rohseifen.find(r => 
-      r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
-      r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
-      produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
-    );
+    // Seife 1 (Hauptseife) - Map-Lookup
+    const rohseife1 = rohseifenMap.get(produkt.seife.toLowerCase());
     
     if (rohseife1) {
       const benoetigt1 = Math.round(produkt.gramm * (gewichtVerteilung.seife1Prozent / 100));
@@ -1150,12 +1196,8 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
       minProduktion = 0;
     }
     
-    // Seife 2 (zweite Rohseife)
-    const rohseife2 = rohseifen.find(r => 
-      r.bezeichnung.toLowerCase() === produkt.rohseifenKonfiguration.seife2.toLowerCase() ||
-      r.bezeichnung.toLowerCase().includes(produkt.rohseifenKonfiguration.seife2.toLowerCase()) ||
-      produkt.rohseifenKonfiguration.seife2.toLowerCase().includes(r.bezeichnung.toLowerCase())
-    );
+    // Seife 2 (zweite Rohseife) - Map-Lookup
+    const rohseife2 = rohseifenMap.get(produkt.rohseifenKonfiguration.seife2.toLowerCase());
     
     if (rohseife2) {
       const benoetigt2 = Math.round(produkt.gramm * (gewichtVerteilung.seife2Prozent / 100));
@@ -1182,12 +1224,8 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
     }
     
   } else {
-    // STANDARD: Eine Rohseife analysieren
-    const rohseife = rohseifen.find(r => 
-      r.bezeichnung.toLowerCase() === produkt.seife.toLowerCase() ||
-      r.bezeichnung.toLowerCase().includes(produkt.seife.toLowerCase()) ||
-      produkt.seife.toLowerCase().includes(r.bezeichnung.toLowerCase())
-    );
+    // STANDARD: Eine Rohseife analysieren - Map-Lookup
+    const rohseife = rohseifenMap.get(produkt.seife.toLowerCase());
     
     if (rohseife) {
       const benoetigt = produkt.gramm; // Gramm pro Produkt
@@ -1214,13 +1252,9 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
     }
   }
   
-  // 2. Duftöl analysieren (falls erforderlich)
+  // 2. Duftöl analysieren (falls erforderlich) - Map-Lookup
   if (produkt.aroma && produkt.aroma !== 'Neutral' && produkt.aroma !== '' && produkt.aroma !== 'Keine') {
-    const duftoel = duftoele.find(d => 
-      d.bezeichnung.toLowerCase() === produkt.aroma.toLowerCase() ||
-      d.bezeichnung.toLowerCase().includes(produkt.aroma.toLowerCase()) ||
-      produkt.aroma.toLowerCase().includes(d.bezeichnung.toLowerCase())
-    );
+    const duftoel = duftoeleMap.get(produkt.aroma.toLowerCase());
     
     if (duftoel) {
       // Dosierung: 1 Tropfen pro 50g Seife
@@ -1250,12 +1284,8 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
     }
   }
   
-  // 3. Verpackung analysieren
-  const verpackung = verpackungen.find(v => 
-    v.bezeichnung.toLowerCase() === produkt.verpackung.toLowerCase() ||
-    v.bezeichnung.toLowerCase().includes(produkt.verpackung.toLowerCase()) ||
-    produkt.verpackung.toLowerCase().includes(v.bezeichnung.toLowerCase())
-  );
+  // 3. Verpackung analysieren - Map-Lookup
+  const verpackung = verpackungenMap.get(produkt.verpackung.toLowerCase());
   
   if (verpackung) {
     const verfuegbareVerpackungen = verpackung.aktuellVorrat;
@@ -1289,23 +1319,14 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
       if (zusatz && zusatz.inhaltsstoffName && typeof zusatz.inhaltsstoffName === 'string' && zusatz.inhaltsstoffName.trim() !== '') {
         console.log(`🧪 [DEBUG] Suche Bestand für Zusatz: ${zusatz.inhaltsstoffName}, ID: ${zusatz.id || zusatz._id}`);
         
-        // Zuerst den ZusatzInhaltsstoff finden um die richtige ID zu bekommen
-        const zusatzinhaltsstoff = await ZusatzInhaltsstoff.findOne({
-          bezeichnung: zusatz.inhaltsstoffName
-        });
+        // Map-Lookup statt DB-Query
+        const zusatzinhaltsstoff = zusatzstoffeMap.get(zusatz.inhaltsstoffName.toLowerCase());
         
         if (zusatzinhaltsstoff) {
           console.log(`🧪 [DEBUG] ZusatzInhaltsstoff gefunden:`, zusatzinhaltsstoff.bezeichnung, zusatzinhaltsstoff._id);
           
-          // Dann den Bestand mit der korrekten artikelId suchen
-          const bestand = await Bestand.findOne({
-            typ: 'zusatzinhaltsstoff',
-            artikelId: zusatzinhaltsstoff._id
-          });
-          
-          console.log(`🧪 [DEBUG] Bestand gefunden:`, bestand);
-          
-          if (bestand) {
+          // Bestand aus der vorgeladenen Map holen statt DB-Query
+          const bestandMenge = zusatzstoffBestandsMap.get(zusatzinhaltsstoff._id.toString()) || 0;
             // Berechne die benötigte Menge basierend auf der Portfolio-Konfiguration
             let benoetigt = 0;
             if (zusatz.menge && typeof zusatz.menge === 'number' && zusatz.menge > 0) {
@@ -1327,7 +1348,7 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
               benoetigt = Math.round(produkt.gramm * 0.01);
             }
             
-            const verfuegbar = bestand.menge || 0;
+            const verfuegbar = bestandMenge;
             const maxProduktionZusatz = benoetigt > 0 ? Math.floor(verfuegbar / benoetigt) : 0;
             
             console.log(`🧪 [DEBUG] ${zusatz.inhaltsstoffName}: benötigt=${benoetigt}g, verfügbar=${verfuegbar}g, maxProduktion=${maxProduktionZusatz}`);
@@ -1350,12 +1371,6 @@ async function analysiereProduktionskapazitaet(produkt, rohseifen, duftoele, ver
               minProduktion = maxProduktionZusatz;
               analyse.limitierenderFaktor = 'zusatzinhaltsstoff';
             }
-          } else {
-            console.log(`🧪 [DEBUG] Kein Bestand für ${zusatz.inhaltsstoffName} gefunden - verhindere Produktion`);
-            analyse.probleme.push(`Zusatzinhaltsstoff "${zusatz.inhaltsstoffName}" - Bestand nicht gefunden`);
-            // Zusatzinhaltsstoff ohne Bestand verhindert Produktion
-            minProduktion = 0;
-          }
         } else {
           console.log(`🧪 [DEBUG] ZusatzInhaltsstoff "${zusatz.inhaltsstoffName}" nicht in Datenbank gefunden`);
           analyse.probleme.push(`Zusatzinhaltsstoff "${zusatz.inhaltsstoffName}" nicht definiert`);
