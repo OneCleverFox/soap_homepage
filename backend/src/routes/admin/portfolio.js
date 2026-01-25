@@ -246,6 +246,7 @@ router.put('/:id', async (req, res) => {
         laenge: parseFloat(updateData.abmessungen.laenge) || 0,
         breite: parseFloat(updateData.abmessungen.breite) || 0,
         hoehe: parseFloat(updateData.abmessungen.hoehe) || 0,
+        durchmesser: parseFloat(updateData.abmessungen.durchmesser) || 0,
         einheit: updateData.abmessungen.einheit || 'cm'
       };
     }

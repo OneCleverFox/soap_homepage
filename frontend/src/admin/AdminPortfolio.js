@@ -110,7 +110,8 @@ const AdminPortfolio = () => {
     abmessungen: {
       laenge: '',
       breite: '',
-      hoehe: ''
+      hoehe: '',
+      durchmesser: ''
     },
     beschreibung: {
       kurz: '',
@@ -209,7 +210,7 @@ const AdminPortfolio = () => {
       processedValue = isNaN(numValue) ? '' : numValue;
     }
 
-    // Spezialbehandlung: Wenn Gießform gewählt wird, lade Abmessungen automatisch
+    // Spezialbehandlung: Wenn Gießform gewählt wird, lade Abmessungen, Gewicht und Durchmesser automatisch
     if (name === 'giessform' && value) {
       try {
         const selectedGiessform = giessformOptions.find(g => g._id === value);
@@ -218,14 +219,21 @@ const AdminPortfolio = () => {
           const laengeCm = selectedGiessform.laengeMm ? (selectedGiessform.laengeMm / 10).toFixed(1) : '';
           const breiteCm = selectedGiessform.breiteMm ? (selectedGiessform.breiteMm / 10).toFixed(1) : '';
           const tiefeCm = selectedGiessform.tiefeMm ? (selectedGiessform.tiefeMm / 10).toFixed(1) : '';
+          const durchmesserCm = selectedGiessform.durchmesserMm ? (selectedGiessform.durchmesserMm / 10).toFixed(1) : '';
+          
+          // Gewicht aus Volumen berechnen (volumenMl = Gewicht in Gramm für Gips, ca. 1:1)
+          // Für andere Materialien könnte man mit Dichte-Faktoren arbeiten
+          const gewichtGramm = selectedGiessform.volumenMl || '';
           
           setFormData(prev => ({
             ...prev,
             giessform: value,
+            gramm: gewichtGramm,
             abmessungen: {
               laenge: laengeCm,
               breite: breiteCm,
-              hoehe: tiefeCm
+              hoehe: tiefeCm,
+              durchmesser: durchmesserCm
             }
           }));
           return;
@@ -292,7 +300,8 @@ const AdminPortfolio = () => {
       abmessungenFromGiessform = {
         laenge: item.giessform.laengeMm ? (item.giessform.laengeMm / 10).toFixed(1) : '',
         breite: item.giessform.breiteMm ? (item.giessform.breiteMm / 10).toFixed(1) : '',
-        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : ''
+        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : '',
+        durchmesser: item.giessform.durchmesserMm ? (item.giessform.durchmesserMm / 10).toFixed(1) : ''
       };
     }
     
@@ -318,7 +327,8 @@ const AdminPortfolio = () => {
         // Verwende Abmessungen aus Item, falls vorhanden, sonst aus Gießform
         laenge: (item.abmessungen && item.abmessungen.laenge) || abmessungenFromGiessform.laenge || '',
         breite: (item.abmessungen && item.abmessungen.breite) || abmessungenFromGiessform.breite || '',
-        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || ''
+        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || '',
+        durchmesser: (item.abmessungen && item.abmessungen.durchmesser) || abmessungenFromGiessform.durchmesser || ''
       },
       beschreibung: {
         kurz: (item.beschreibung && item.beschreibung.kurz) || '',
@@ -354,13 +364,12 @@ const AdminPortfolio = () => {
       }
       
       if (formData.kategorie === 'werkstuck') {
-        // Für Werkstücke: Setze Seifenfelder auf leere Strings
+        // Für Werkstücke: Setze nur Seifenfelder auf leere Strings
         submitData.seife = '';
         submitData.aroma = '';
         submitData.seifenform = '';
         submitData.verpackung = '';
-        submitData.zusatz = '';
-        submitData.optional = '';
+        // NICHT zusatz und optional überschreiben - die können auch für Werkstücke genutzt werden!
         
         // Stelle sicher dass giessform und giesswerkstoff als ObjectId oder undefined gesetzt sind
         // WICHTIG: Leere Strings vermeiden, die zu Validation-Fehlern führen
@@ -1270,6 +1279,7 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.laenge || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
+                    helperText="Für rechteckige Formen"
                   />
                 </Grid>
 
@@ -1282,6 +1292,7 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.breite || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
+                    helperText="Für rechteckige Formen"
                   />
                 </Grid>
 
@@ -1294,6 +1305,19 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.hoehe || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Durchmesser (cm)"
+                    name="abmessungen.durchmesser"
+                    type="number"
+                    value={formData.abmessungen?.durchmesser || ''}
+                    onChange={handleInputChange}
+                    inputProps={{ min: 0, step: 0.1 }}
+                    helperText="Für runde Formen"
                   />
                 </Grid>
               </>
