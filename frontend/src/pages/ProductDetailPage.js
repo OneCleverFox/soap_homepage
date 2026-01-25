@@ -531,7 +531,6 @@ const ProductDetailPage = () => {
         <Grid item xs={12}>
           {product.beschreibung?.lang && (
             <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-```
               <Typography variant="h5" fontWeight="bold" gutterBottom>Beschreibung</Typography>
               <Typography sx={{ whiteSpace: 'pre-line' }}>{product.beschreibung.lang}</Typography>
             </Paper>
