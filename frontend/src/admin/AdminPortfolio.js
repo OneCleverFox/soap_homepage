@@ -124,8 +124,11 @@ const AdminPortfolio = () => {
 
   // Portfolio Items laden
   useEffect(() => {
-    loadPortfolioItems();
-    loadOptions();
+    const loadData = async () => {
+      await loadOptions(); // Erst Optionen laden
+      await loadPortfolioItems(); // Dann Portfolio-Items
+    };
+    loadData();
   }, []);
 
   // Items nach Kategorie filtern
@@ -171,7 +174,18 @@ const AdminPortfolio = () => {
         portfolioAdminService.getGiesswerkstoffOptions()
       ]);
       
-      setGiessformOptions(giessformen || []);
+      console.log('🔍 Geladene Gießformen:', giessformen);
+      console.log('🔍 Geladene Gießwerkstoffe:', giesswerkstoff);
+      
+      // Sortiere Gießformen nach Inventarnummer absteigend (GF035, GF034, ...)
+      const sortedGiessformen = (giessformen || []).sort((a, b) => {
+        // Extrahiere Nummer aus Inventarnummer (z.B. "GF015" -> 15)
+        const numA = parseInt(a.inventarnummer?.replace(/\D/g, '') || '0');
+        const numB = parseInt(b.inventarnummer?.replace(/\D/g, '') || '0');
+        return numB - numA; // Absteigend sortieren
+      });
+      
+      setGiessformOptions(sortedGiessformen);
       setGiesswerkstoffOptions(giesswerkstoff || []);
     } catch (err) {
       console.error('Fehler beim Laden der Optionen:', err);
@@ -185,7 +199,7 @@ const AdminPortfolio = () => {
     }
   };
 
-  const handleInputChange = (e) => {
+  const handleInputChange = async (e) => {
     const { name, value, type, checked } = e.target;
 
     // Spezielle Behandlung für Zahlenfelder um NaN zu vermeiden
@@ -193,6 +207,32 @@ const AdminPortfolio = () => {
     if (name === 'reihenfolge' && value !== '') {
       const numValue = parseInt(value, 10);
       processedValue = isNaN(numValue) ? '' : numValue;
+    }
+
+    // Spezialbehandlung: Wenn Gießform gewählt wird, lade Abmessungen automatisch
+    if (name === 'giessform' && value) {
+      try {
+        const selectedGiessform = giessformOptions.find(g => g._id === value);
+        if (selectedGiessform) {
+          // Konvertiere mm in cm für konsistente Darstellung
+          const laengeCm = selectedGiessform.laengeMm ? (selectedGiessform.laengeMm / 10).toFixed(1) : '';
+          const breiteCm = selectedGiessform.breiteMm ? (selectedGiessform.breiteMm / 10).toFixed(1) : '';
+          const tiefeCm = selectedGiessform.tiefeMm ? (selectedGiessform.tiefeMm / 10).toFixed(1) : '';
+          
+          setFormData(prev => ({
+            ...prev,
+            giessform: value,
+            abmessungen: {
+              laenge: laengeCm,
+              breite: breiteCm,
+              hoehe: tiefeCm
+            }
+          }));
+          return;
+        }
+      } catch (err) {
+        console.error('Fehler beim Laden der Gießform-Abmessungen:', err);
+      }
     }
 
     if (name.includes('.')) {
@@ -238,6 +278,24 @@ const AdminPortfolio = () => {
   const handleEdit = (item) => {
     setEditingItem(item);
     
+    // Extrahiere IDs korrekt - Backend kann ObjectId-Objekte oder Strings zurückgeben
+    const extractId = (field) => {
+      if (!field) return '';
+      if (typeof field === 'string') return field;
+      if (field._id) return field._id;
+      return field.toString ? field.toString() : '';
+    };
+    
+    // Wenn Gießform als Objekt zurückgegeben wird, extrahiere Abmessungen
+    let abmessungenFromGiessform = {};
+    if (item.giessform && typeof item.giessform === 'object' && item.giessform.laengeMm) {
+      abmessungenFromGiessform = {
+        laenge: item.giessform.laengeMm ? (item.giessform.laengeMm / 10).toFixed(1) : '',
+        breite: item.giessform.breiteMm ? (item.giessform.breiteMm / 10).toFixed(1) : '',
+        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : ''
+      };
+    }
+    
     // Vollständige Datenstruktur für das Bearbeiten
     const editFormData = {
       ...initialFormData,
@@ -249,17 +307,18 @@ const AdminPortfolio = () => {
       aroma: item.aroma || '',
       seifenform: item.seifenform || '',
       verpackung: item.verpackung || '',
-      giessform: item.giessform || '',
-      giesswerkstoff: item.giesswerkstoff || '',
+      giessform: extractId(item.giessform),
+      giesswerkstoff: extractId(item.giesswerkstoff),
       optional: item.optional || '',
       reihenfolge: item.reihenfolge || '',
       aktiv: item.aktiv !== undefined ? item.aktiv : false,
       istMischung: item.rohseifenKonfiguration?.verwendeZweiRohseifen || false,
       rohseifenKonfiguration: item.rohseifenKonfiguration || null,
       abmessungen: {
-        laenge: (item.abmessungen && item.abmessungen.laenge) || '',
-        breite: (item.abmessungen && item.abmessungen.breite) || '',
-        hoehe: (item.abmessungen && item.abmessungen.hoehe) || ''
+        // Verwende Abmessungen aus Item, falls vorhanden, sonst aus Gießform
+        laenge: (item.abmessungen && item.abmessungen.laenge) || abmessungenFromGiessform.laenge || '',
+        breite: (item.abmessungen && item.abmessungen.breite) || abmessungenFromGiessform.breite || '',
+        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || ''
       },
       beschreibung: {
         kurz: (item.beschreibung && item.beschreibung.kurz) || '',
@@ -283,6 +342,17 @@ const AdminPortfolio = () => {
         submitData.rohseifenKonfiguration.verwendeZweiRohseifen = true;
       }
       
+      // Verhindere leere Strings für numerische Werte
+      if (!submitData.preis || submitData.preis === '' || submitData.preis === 'NaN') {
+        delete submitData.preis; // Behalte alten Wert im Backend
+      }
+      if (!submitData.gramm || submitData.gramm === '' || submitData.gramm === 'NaN') {
+        delete submitData.gramm;
+      }
+      if (!submitData.reihenfolge || submitData.reihenfolge === '' || submitData.reihenfolge === 'NaN') {
+        delete submitData.reihenfolge;
+      }
+      
       if (formData.kategorie === 'werkstuck') {
         // Für Werkstücke: Setze Seifenfelder auf leere Strings
         submitData.seife = '';
@@ -291,11 +361,22 @@ const AdminPortfolio = () => {
         submitData.verpackung = '';
         submitData.zusatz = '';
         submitData.optional = '';
+        
+        // Stelle sicher dass giessform und giesswerkstoff als ObjectId oder undefined gesetzt sind
+        // WICHTIG: Leere Strings vermeiden, die zu Validation-Fehlern führen
+        if (!submitData.giessform || submitData.giessform === '') {
+          delete submitData.giessform;
+        }
+        if (!submitData.giesswerkstoff || submitData.giesswerkstoff === '') {
+          delete submitData.giesswerkstoff;
+        }
       } else {
-        // Für Seifen: Setze Werkstückfelder auf null
-        submitData.giessform = null;
-        submitData.giesswerkstoff = null;
+        // Für Seifen: Entferne Werkstückfelder komplett
+        delete submitData.giessform;
+        delete submitData.giesswerkstoff;
       }
+      
+      console.log('📤 Sende Portfolio-Daten:', submitData);
       
       if (editingItem) {
         await portfolioAdminService.update(editingItem._id, submitData);
@@ -307,8 +388,8 @@ const AdminPortfolio = () => {
       loadPortfolioItems();
       setFormData(initialFormData);
     } catch (err) {
-      console.error('Fehler beim Speichern:', err);
-      setError('Fehler beim Speichern des Portfolio Items');
+      console.error('❌ Fehler beim Speichern:', err);
+      setError(err.response?.data?.message || err.message || 'Fehler beim Speichern des Portfolio Items');
     }
   };
 

@@ -45,7 +45,10 @@ const upload = multer({
 // @access  Private (Admin only)
 router.get('/', async (req, res) => {
   try {
-    const products = await Portfolio.find({}).sort({ reihenfolge: 1, createdAt: -1 });
+    const products = await Portfolio.find({})
+      .populate('giessform', 'inventarnummer name form material verfuegbar laengeMm breiteMm tiefeMm')
+      .populate('giesswerkstoff', 'bezeichnung typ konsistenz verfuegbar')
+      .sort({ reihenfolge: 1, createdAt: -1 });
     
     res.json({
       success: true,
@@ -183,6 +186,9 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
+    console.log('📥 PORTFOLIO UPDATE - Komplette Request Body:', JSON.stringify(updateData, null, 2));
+    console.log('📥 PORTFOLIO UPDATE - Preis-Wert:', updateData.preis, 'Type:', typeof updateData.preis);
+
     const product = await Portfolio.findById(id);
     if (!product) {
       return res.status(404).json({
@@ -216,9 +222,15 @@ router.put('/:id', async (req, res) => {
       if (updateData[field] !== undefined) {
         if (field === 'gramm' || field === 'reihenfolge') {
           const numValue = parseInt(updateData[field]);
-          product[field] = isNaN(numValue) ? undefined : numValue;
+          if (!isNaN(numValue)) {
+            product[field] = numValue;
+          }
         } else if (field === 'preis') {
-          product[field] = parseFloat(updateData[field]);
+          const preisValue = parseFloat(updateData[field]);
+          if (!isNaN(preisValue)) {
+            product[field] = preisValue;
+          }
+          // Wenn NaN, behalte den alten Wert - setze nichts
         } else if (field === 'giesswerkstoff' || field === 'giessform') {
           // Für Werkstück-Felder: null/undefined-Werte explizit setzen
           product[field] = updateData[field] || undefined;
@@ -227,6 +239,16 @@ router.put('/:id', async (req, res) => {
         }
       }
     });
+
+    // Abmessungen separat handhaben
+    if (updateData.abmessungen) {
+      product.abmessungen = {
+        laenge: parseFloat(updateData.abmessungen.laenge) || 0,
+        breite: parseFloat(updateData.abmessungen.breite) || 0,
+        hoehe: parseFloat(updateData.abmessungen.hoehe) || 0,
+        einheit: updateData.abmessungen.einheit || 'cm'
+      };
+    }
 
     // Beschreibungsfelder separat handhaben
     if (updateData.beschreibung) {
