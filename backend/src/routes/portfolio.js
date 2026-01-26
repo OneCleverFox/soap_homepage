@@ -20,8 +20,16 @@ let portfolioCache = global.portfolioCache || {
   timestamp: 0,
   ttl: 10 * 60 * 1000, // 10 Minuten (Balance zwischen Performance und Aktualität)
   lastHit: 0,
-  hitCount: 0
+  hitCount: 0,
+  version: 2 // 🆕 Version erhöht = Cache wird invalidiert
 };
+
+// Cache-Version-Check: Invalidiere bei Version-Mismatch
+if (global.portfolioCache && global.portfolioCache.version !== portfolioCache.version) {
+  logger.info('🔄 Cache version mismatch - invalidating old cache');
+  portfolioCache.data = null;
+  portfolioCache.timestamp = 0;
+}
 
 // Synchronisiere mit globalem Cache
 global.portfolioCache = portfolioCache;
@@ -34,6 +42,7 @@ function invalidatePortfolioCache() {
   cacheManager.invalidateProductCache();
   logger.info('🗑️ Portfolio cache invalidated');
 }
+
 const { optimizeMainImage } = require('../middleware/imageOptimization');
 
 // Multer-Konfiguration für Produktbilder
@@ -67,6 +76,12 @@ const upload = multer({
 });
 
 const router = express.Router();
+
+// 🆕 DEV: Cache manuell leeren
+router.get('/dev/clear-cache', (req, res) => {
+  invalidatePortfolioCache();
+  res.json({ success: true, message: 'Portfolio cache cleared' });
+});
 
 // DEBUG Route - Portfolio-Status prüfen
 router.get('/debug/portfolio-status', async (req, res) => {
@@ -312,13 +327,42 @@ router.get('/', async (req, res) => {
     // Wenn includeInactive=true oder includeUnavailable=true, werden alle Produkte (aktiv + inaktiv) geladen
     
     // 🚀 PERFORMANCE: Migration entfernt - läuft nur einmalig beim Server-Start
+    // ⚡ CRITICAL: Bilder ausschließen um MongoDB Memory Limit zu vermeiden (33MB)
+    // ⚡ CRITICAL: allowDiskUse funktioniert NUR mit Aggregation, nicht mit .find()
+    const startTime = Date.now();
     
-    const portfolioItems = await Portfolio.find(filter)
-      .sort({ aktiv: -1, reihenfolge: 1, name: 1 })
-      .lean(); // 🚀 PERFORMANCE: lean() für 2-5x schnellere Queries
+    // ULTIMATE FIX: MongoDB allowDiskUse wird einfach NICHT übergeben (Mongoose/Driver Bug)
+    // LÖSUNG: Lade Daten OHNE Sort, sortiere dann in JavaScript!
+    console.log('🔧 Loading data WITHOUT MongoDB sort (will sort in JavaScript)...');
+    console.log('🔍 Filter:', JSON.stringify(filter));
+    
+    const db = Portfolio.db;
+    const collectionName = Portfolio.collection.name;
+    
+    // Lade OHNE $sort - kein Memory Limit Problem!
+    const portfolioItems = await db.collection(collectionName).aggregate([
+      { $match: filter },
+      { $project: { 'bilder.hauptbildData.data': 0, 'bilder.galerie': 0 } }
+    ]).toArray();
+    
+    // Sortiere in JavaScript - sehr schnell für <100 Items!
+    portfolioItems.sort((a, b) => {
+      // Sortierung: aktiv DESC, reihenfolge ASC, name ASC
+      if (a.aktiv !== b.aktiv) return (b.aktiv ? 1 : 0) - (a.aktiv ? 1 : 0);
+      if (a.reihenfolge !== b.reihenfolge) return (a.reihenfolge || 0) - (b.reihenfolge || 0);
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`✅ Portfolio geladen: ${portfolioItems.length} Items in ${queryTime}ms`);
 
     // 🚀 PERFORMANCE: Lade ALLE Bestände in einer einzigen Query
-    const portfolioIds = portfolioItems.map(item => item._id);
+    // 🔧 WICHTIG: MongoDB Native Driver gibt ObjectId anders zurück als Mongoose
+    // Konvertiere zu ObjectId für Mongoose Queries
+    const mongoose = require('mongoose');
+    const ObjectId = mongoose.Types.ObjectId;
+    
+    const portfolioIds = portfolioItems.map(item => new ObjectId(item._id));
     const allBestaende = await Bestand.find({ 
       artikelId: { $in: portfolioIds },
       typ: 'produkt'
@@ -330,6 +374,28 @@ router.get('/', async (req, res) => {
       bestandMap.set(bestand.artikelId.toString(), bestand);
     });
 
+    // ⚡ PERFORMANCE: Lade Bild-Informationen für hasBild-Flags
+    // Nur _id und Bild-Felder laden (sehr klein, keine Base64-Daten)
+    console.log('🖼️ Loading image info for', portfolioIds.length, 'items...');
+    const itemsWithImages = await Portfolio.find(
+      { _id: { $in: portfolioIds } },
+      { _id: 1, 'bilder.hauptbildData.data': 1, 'bilder.galerie': 1 }
+    ).lean();
+    
+    console.log('🖼️ Found image data for', itemsWithImages.length, 'items');
+    
+    const imageMap = new Map();
+    itemsWithImages.forEach(img => {
+      const hasHauptbild = !!(img.bilder?.hauptbildData?.data && img.bilder.hauptbildData.data.length > 0);
+      const hasGalerie = !!(img.bilder?.galerie && img.bilder.galerie.length > 0);
+      console.log(`📸 Item ${img._id}: hasHauptbild=${hasHauptbild}, hasGalerie=${hasGalerie}, bildDataLength=${img.bilder?.hauptbildData?.data?.length || 0}`);
+      
+      imageMap.set(img._id.toString(), {
+        hasHauptbild,
+        hasGalerie
+      });
+    });
+    
     // Verarbeite Portfolio-Items ohne zusätzliche DB-Queries
     const portfolioWithBestand = portfolioItems.map(item => {
       const itemObj = item; // lean() liefert bereits Plain Objects
@@ -337,6 +403,18 @@ router.get('/', async (req, res) => {
       // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
       if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
         itemObj.aktiv = false; // Default für undefined/null Werte
+      }
+      
+      // Füge Bild-Flags hinzu (verhindert 404-Requests im Frontend)
+      const imageInfo = imageMap.get(item._id.toString());
+      if (imageInfo) {
+        itemObj.hasHauptbild = imageInfo.hasHauptbild;
+        itemObj.hasGalerie = imageInfo.hasGalerie;
+        console.log(`✅ Setze Bild-Flags für ${item.name}: hasHauptbild=${imageInfo.hasHauptbild}`);
+      } else {
+        itemObj.hasHauptbild = false;
+        itemObj.hasGalerie = false;
+        console.log(`❌ Keine Bild-Info gefunden für ${item.name} (ID: ${item._id.toString()})`);
       }
       
       // Hole Bestand aus Map (O(1) statt DB-Query)
@@ -381,6 +459,81 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Portfolio-Daten'
+    });
+  }
+});
+
+// 🖼️ IMAGE SERVING: Hauptbild on-demand laden
+router.get('/:id/hauptbild', async (req, res) => {
+  try {
+    const portfolioItem = await Portfolio.findById(req.params.id)
+      .select('bilder.hauptbildData')
+      .lean();
+    
+    if (!portfolioItem?.bilder?.hauptbildData?.data) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Hauptbild nicht gefunden' 
+      });
+    }
+    
+    const imageData = portfolioItem.bilder.hauptbildData;
+    
+    // Base64 zu Buffer konvertieren
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type verwenden (oder Default)
+    const mimeType = imageData.contentType || 'image/jpeg';
+    
+    // Cache-Header (1 Stunde)
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Hauptbild Load Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler beim Laden des Hauptbildes' 
+    });
+  }
+});
+
+// 🖼️ IMAGE SERVING: Galerie-Bild on-demand laden
+router.get('/:id/galerie/:index', async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const imageIndex = parseInt(index, 10);
+    
+    const portfolioItem = await Portfolio.findById(id)
+      .select('bilder.galerie')
+      .lean();
+    
+    if (!portfolioItem?.bilder?.galerie || !portfolioItem.bilder.galerie[imageIndex]) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Galerie-Bild nicht gefunden' 
+      });
+    }
+    
+    const imageData = portfolioItem.bilder.galerie[imageIndex];
+    
+    // Base64 zu Buffer konvertieren
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type verwenden
+    const mimeType = imageData.contentType || 'image/jpeg';
+    
+    // Cache-Header (1 Stunde)
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Galerie-Bild Load Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler beim Laden des Galerie-Bildes' 
     });
   }
 });
@@ -519,11 +672,11 @@ router.get('/with-prices', async (req, res) => {
     }
     
     console.log('🔄 Cache miss or expired, fetching fresh data...');
-    // 1. Portfolio Items laden (⚡ NUR aktive Items mit optimiertem Index!)
+    // 1. Portfolio Items laden (⚡ SORT FIRST, dann SELECT!)
     const portfolioStart = Date.now();
     const portfolioItems = await Portfolio.find({ aktiv: true })
-      .sort({ reihenfolge: 1, name: 1 })
-      .allowDiskUse(true) // ⚡ Erlaube externe Sortierung für große Datensätze
+      .sort({ reihenfolge: 1, name: 1 })  // ✅ ERST sortieren (nutzt Index)
+      .select('-bilder')  // ✅ DANN Bilder ausschließen
       .lean(); // lean() für bessere Performance
     
     console.log(`📋 Portfolio items loaded (${portfolioItems.length}): ${Date.now() - portfolioStart}ms`);
@@ -612,44 +765,20 @@ router.get('/with-prices', async (req, res) => {
         // Verfügbarkeit: Produkt muss aktiv sein UND Bestand haben
         const istVerfuegbar = item.aktiv !== false && verfuegbareMenge > 0;
         
-        // 🚀 OPTIMIERT: Bilder-URLs statt Base64 für bessere Performance
+        // 🚀 OPTIMIERT: Bild-URLs generieren (auch wenn Bilder nicht geladen wurden)
         let imageData = { hauptbild: null, galerie: [] };
         
-        // Nur Bild-ID/Referenz senden, nicht die Base64-Daten
-        if (item.bilder?.hauptbild) {
-          // Wenn es ein data:image URL ist, extrahiere nur den Typ
-          if (item.bilder.hauptbild.startsWith('data:image/')) {
-            const mimeMatch = item.bilder.hauptbild.match(/^data:(image\/\w+);base64,/);
-            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-            // Sende nur Metadaten, nicht die Bilddaten
-            imageData.hauptbild = {
-              url: `/api/portfolio/${item._id}/image/main`,
-              type: mimeType
-            };
-          } else {
-            imageData.hauptbild = item.bilder.hauptbild;
-          }
-        }
+        // Da wir .select('-bilder') verwenden, haben wir die Bilddaten nicht
+        // → Generiere URLs direkt basierend auf der Produkt-ID
+        imageData.hauptbild = {
+          url: `/api/portfolio/${item._id}/image/main`,
+          type: 'image/jpeg'  // Default Typ
+        };
         
-        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map((imageObj, index) => {
-            if (typeof imageObj === 'string') {
-              if (imageObj.startsWith('data:image/')) {
-                const mimeMatch = imageObj.match(/^data:(image\/\w+);base64,/);
-                const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-                return {
-                  url: `/api/portfolio/${item._id}/image/gallery/${index}`,
-                  type: mimeType
-                };
-              }
-              return imageObj;
-            }
-            return {
-              url: `/api/portfolio/${item._id}/image/gallery/${index}`,
-              type: imageObj.type || 'image/jpeg'
-            };
-          });
-        }
+        // Galerie-Bilder: Erstelle URLs für potenzielle Bilder (0-10)
+        // Die tatsächliche Anzahl wird beim Abruf geprüft
+        imageData.galerie = [];
+        // Leer lassen - Galerie wird nur beim Einzelabruf geladen
         
         // Preis-Logik: Verwende gespeicherten Preis, falls vorhanden, sonst berechne automatisch
         const gespeicherterPreis = item.preis || 0;
@@ -684,10 +813,7 @@ router.get('/with-prices', async (req, res) => {
             menge: verfuegbareMenge,
             einheit: 'Stück'
           },
-          bilder: {
-            ...item.bilder,
-            ...imageData
-          }
+          bilder: imageData  // ✅ NUR optimierte Bild-URLs, keine Base64-Daten!
         };
         
         console.log(`✅ ${item.name}: ${Date.now() - itemStart}ms`);
@@ -700,41 +826,14 @@ router.get('/with-prices', async (req, res) => {
         const verfuegbareMenge = bestand ? bestand.menge : 0;
         const istVerfuegbar = verfuegbareMenge > 0;
         
-        // 🚀 OPTIMIERT: Bilder-URLs auch im Fehlerfall
-        const imageData = { hauptbild: null, galerie: [] };
-        
-        if (item.bilder?.hauptbild) {
-          if (item.bilder.hauptbild.startsWith('data:image/')) {
-            const mimeMatch = item.bilder.hauptbild.match(/^data:(image\/\w+);base64,/);
-            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-            imageData.hauptbild = {
-              url: `/api/portfolio/${item._id}/image/main`,
-              type: mimeType
-            };
-          } else {
-            imageData.hauptbild = item.bilder.hauptbild;
-          }
-        }
-        
-        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map((imageObj, index) => {
-            if (typeof imageObj === 'string') {
-              if (imageObj.startsWith('data:image/')) {
-                const mimeMatch = imageObj.match(/^data:(image\/\w+);base64,/);
-                const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-                return {
-                  url: `/api/portfolio/${item._id}/image/main`,
-                  type: mimeType
-                };
-              }
-              return imageObj;
-            }
-            return {
-              url: `/api/portfolio/${item._id}/image/gallery/${index}`,
-              type: imageObj.type || 'image/jpeg'
-            };
-          });
-        }
+        // 🚀 OPTIMIERT: Bild-URLs auch im Fehlerfall (Bilder nicht geladen wegen .select('-bilder'))
+        const imageData = { 
+          hauptbild: {
+            url: `/api/portfolio/${item._id}/image/main`,
+            type: 'image/jpeg'
+          },
+          galerie: [] 
+        };
         
         // Preis-Logik auch bei Fehlern: Verwende gespeicherten Preis, falls vorhanden
         const gespeicherterPreis = item.preis || 0;
@@ -751,10 +850,7 @@ router.get('/with-prices', async (req, res) => {
             menge: verfuegbareMenge,
             einheit: 'Stück'
           },
-          bilder: {
-            ...item.bilder,
-            ...imageData
-          }
+          bilder: imageData  // ✅ NUR optimierte Bild-URLs, keine Base64-Daten!
         };
       }
     });
@@ -1191,10 +1287,10 @@ router.get('/:id/image/main', async (req, res) => {
     const mimeType = matches[1];
     const imageBuffer = Buffer.from(matches[2], 'base64');
 
-    // Cache-Header für Browser-Caching (1 Jahr)
+    // Cache-Header für Browser-Caching (1 Stunde - kürzere Zeit wegen Updates)
     res.set({
       'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'public, max-age=3600',
       'Content-Length': imageBuffer.length
     });
 
@@ -1229,10 +1325,10 @@ router.get('/:id/image/gallery/:index', async (req, res) => {
     const mimeType = matches[1];
     const imageBuffer = Buffer.from(matches[2], 'base64');
 
-    // Cache-Header für Browser-Caching (1 Jahr)
+    // Cache-Header für Browser-Caching (1 Stunde - kürzere Zeit wegen Updates)
     res.set({
       'Content-Type': mimeType,
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'public, max-age=3600',
       'Content-Length': imageBuffer.length
     });
 
@@ -1283,7 +1379,7 @@ router.get('/image/:filename', (req, res) => {
     }
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 Jahr Cache
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 Stunde Cache
     
     const stream = fs.createReadStream(imagePath);
     stream.pipe(res);

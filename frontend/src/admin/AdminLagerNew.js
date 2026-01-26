@@ -3,6 +3,7 @@ import { useAdminState } from '../hooks/useAdminState';
 import { useAdminSearch } from '../hooks/useAdminSearch';
 import toast from 'react-hot-toast';
 import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
+import LazyImage from '../components/LazyImage';
 import {
   Container,
   Paper,
@@ -115,6 +116,28 @@ const formatBestandDisplay = (item, bestand, currentTabKey) => {
   }
   
   return bestand || 0;
+};
+
+// 🖼️ Helper: Portfolio Hauptbild URL generieren
+const getPortfolioImageUrl = (item) => {
+  if (!item) return null;
+  
+  // Prüfe ob Bild vorhanden ist (verhindert 404-Requests)
+  if (!item.hasHauptbild) return null;
+  
+  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  return `${API_BASE}/portfolio/${item._id}/hauptbild`;
+};
+
+// 🖼️ Helper: Portfolio Galerie-Bild URL generieren  
+const getPortfolioGalerieUrl = (item, index) => {
+  if (!item || index === undefined) return null;
+  
+  // Prüfe ob Galerie vorhanden ist
+  if (!item.hasGalerie) return null;
+  
+  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  return `${API_BASE}/portfolio/${item._id}/galerie/${index}`;
 };
 
 const AdminLager = () => {
@@ -1491,14 +1514,24 @@ const AdminLager = () => {
   const renderCell = (item, column) => {
     switch (column.key) {
       case 'bilder':
+        const imageUrl = getPortfolioImageUrl(item);
+        const placeholderChar = (item.name || item.bezeichnung || '?')[0];
+        
         return (
-          <Avatar
-            src={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage((item.name || item.bezeichnung || '?')[0])}
-            sx={{ width: 50, height: 50 }}
-            variant="rounded"
-          >
-            {(item.name || item.bezeichnung || '?')[0]}
-          </Avatar>
+          <Box sx={{ width: 50, height: 50 }}>
+            <LazyImage
+              src={imageUrl}
+              alt={item.name || item.bezeichnung || 'Produkt'}
+              fallbackSrc={getPlaceholderImage(placeholderChar)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                borderRadius: '4px'
+              }}
+              sizes="50px"
+            />
+          </Box>
         );
       
       case 'aktiv':

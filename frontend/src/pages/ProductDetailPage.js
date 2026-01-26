@@ -208,7 +208,10 @@ const ProductDetailPage = () => {
         </Alert>
         <Button 
           startIcon={<ArrowBack />} 
-          onClick={() => navigate('/products')}
+          onClick={() => {
+            const lastProductsUrl = sessionStorage.getItem('lastProductsUrl') || '/products';
+            navigate(lastProductsUrl);
+          }}
           variant="contained"
         >
           Zurück zur Übersicht
@@ -221,7 +224,10 @@ const ProductDetailPage = () => {
     <Container maxWidth="lg" sx={{ py: isMobile ? 2 : 4 }}>
       <Button 
         startIcon={<ArrowBack />} 
-        onClick={() => navigate('/products')} 
+        onClick={() => {
+          const lastProductsUrl = sessionStorage.getItem('lastProductsUrl') || '/products';
+          navigate(lastProductsUrl);
+        }} 
         sx={{ mb: isMobile ? 2 : 3 }}
         variant="outlined"
         size={isMobile ? "small" : "medium"}

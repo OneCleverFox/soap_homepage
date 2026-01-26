@@ -17,9 +17,10 @@ const getAuthHeadersFormData = () => ({
 
 export const portfolioAdminService = {
   // Portfolio CRUD
-  async getAll() {
+  async getAll(signal) {
     const response = await fetch(`${API_BASE}/admin/portfolio`, {
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
+      signal  // ✅ AbortSignal für Request-Abbruch
     });
     return response.json();
   },
@@ -70,7 +71,11 @@ export const portfolioAdminService = {
 
   // Image Delete
   async deleteImage(productId, imageType, imageIndex = '') {
-    const url = `${API_BASE}/admin/portfolio/${productId}/image/${imageType}${imageIndex ? `/${imageIndex}` : ''}`;
+    // Wichtig: imageIndex kann 0 sein (erstes Galeriebild)!
+    const indexPath = imageIndex !== '' && imageIndex !== null && imageIndex !== undefined 
+      ? `/${imageIndex}` 
+      : '';
+    const url = `${API_BASE}/admin/portfolio/${productId}/image/${imageType}${indexPath}`;
     const response = await fetch(url, {
       method: 'DELETE',
       headers: getAuthHeaders()

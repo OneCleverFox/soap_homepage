@@ -84,7 +84,7 @@ class CacheManager {
       }
       
       const products = await Portfolio.find({ isActive: true })
-        .select('name seife aroma gramm preis beschreibung bilder')
+        .select('-bilder.hauptbildData.data -bilder.galerie') // ⚡ CRITICAL: Nur Bilder ausschließen (Inclusion+Exclusion nicht erlaubt)
         .lean();
         
       this.mediumCache.set(key, products);

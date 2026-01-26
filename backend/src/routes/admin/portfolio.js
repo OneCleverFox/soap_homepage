@@ -45,16 +45,102 @@ const upload = multer({
 // @access  Private (Admin only)
 router.get('/', async (req, res) => {
   try {
-    const products = await Portfolio.find({})
-      .populate('giessform', 'inventarnummer name form material verfuegbar laengeMm breiteMm tiefeMm')
-      .populate('giesswerkstoff', 'bezeichnung typ konsistenz verfuegbar')
-      .sort({ reihenfolge: 1, createdAt: -1 })
-      .allowDiskUse(true);  // Erlaubt externe Sortierung für große Datenmengen
+    const startTime = Date.now();
+    console.log('📋 Admin Portfolio: Lade Produkte...');
+    
+    // 🚀 KRITISCHE OPTIMIERUNG: Aggregation um Bilder-Metadaten ohne Base64 zu laden
+    const products = await Portfolio.aggregate([
+      // Alle Produkte auswählen
+      { $match: {} },
+      
+      // Felder projizieren - bilder.galerie nur mit Metadaten, ohne data-Feld
+      { $project: {
+        name: 1,
+        seife: 1,
+        gramm: 1,
+        aroma: 1,
+        seifenform: 1,
+        zusatz: 1,
+        optional: 1,
+        verpackung: 1,
+        preis: 1,
+        beschreibung: 1,
+        weblink: 1,
+        aktiv: 1,
+        reihenfolge: 1,
+        rohseifenKonfiguration: 1,
+        zusatzinhaltsstoffe: 1,
+        abmessungen: 1,
+        giesswerkstoffKonfiguration: 1,
+        giesszusatzstoffe: 1,
+        kategorie: 1,
+        giessform: 1,
+        giesswerkstoff: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        // Bilder-Struktur OHNE Base64-Daten
+        'bilder.galerie': {
+          $map: {
+            input: { $ifNull: ['$bilder.galerie', []] },
+            as: 'img',
+            in: {
+              contentType: '$$img.contentType',
+              alt_text: '$$img.alt_text'
+            }
+          }
+        }
+      }},
+      
+      // Sortierung
+      { $sort: { reihenfolge: 1, createdAt: -1 } }
+    ]);
+    
+    // Populate nach Aggregation manuell
+    await Portfolio.populate(products, [
+      { path: 'giessform', select: 'inventarnummer name form material verfuegbar laengeMm breiteMm tiefeMm' },
+      { path: 'giesswerkstoff', select: 'bezeichnung typ konsistenz verfuegbar' }
+    ]);
+    
+    const dbDuration = Date.now() - startTime;
+    console.log(`⚡ DB Query abgeschlossen: ${dbDuration}ms - ${products.length} Produkte (OHNE Bilder!)`);
+    
+    // 🚀 Bild-URLs generieren (ohne die echten Bilddaten zu haben)
+    const optimizedProducts = products.map(product => {
+      // Da wir .lean() verwenden, ist product bereits ein Plain Object
+      
+      if (!product.bilder) {
+        product.bilder = {};
+      }
+      
+      // Hauptbild-URL setzen mit Cache-Busting-Timestamp
+      const timestamp = product.updatedAt ? new Date(product.updatedAt).getTime() : Date.now();
+      product.bilder.hauptbild = {
+        url: `/api/portfolio/${product._id}/image/main?t=${timestamp}`,
+        type: 'image/jpeg'
+      };
+      
+      // Galerie-URLs generieren (wenn galerie existiert)
+      // Hinweis: galerie ist ein Array, aber ohne data-Felder wegen .select()
+      if (product.bilder.galerie && Array.isArray(product.bilder.galerie)) {
+        product.bilder.galerie = product.bilder.galerie.map((img, index) => ({
+          url: `/api/portfolio/${product._id}/image/gallery/${index}?t=${timestamp}`,
+          type: img.contentType || 'image/jpeg',
+          alt_text: img.alt_text || ''
+        }));
+      } else {
+        product.bilder.galerie = [];
+      }
+      
+      return product;
+    });
+    
+    const totalDuration = Date.now() - startTime;
+    console.log(`✅ Admin Portfolio: Komplett in ${totalDuration}ms (DB: ${dbDuration}ms, Transform: ${totalDuration - dbDuration}ms)`);
     
     res.json({
       success: true,
-      count: products.length,
-      data: products
+      count: optimizedProducts.length,
+      data: optimizedProducts
     });
   } catch (error) {
     console.error('Admin Portfolio Load Error:', error);
@@ -515,7 +601,7 @@ router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
         product.bilder.hauptbild = '';
         product.bilder.alt_text = '';
       }
-    } else if (imageType === 'galerie' && imageIndex !== undefined) {
+    } else if ((imageType === 'galerie' || imageType === 'gallery') && imageIndex !== undefined) {
       const index = parseInt(imageIndex);
       if (index >= 0 && index < product.bilder.galerie.length) {
         const galerieImage = product.bilder.galerie[index];
@@ -684,10 +770,43 @@ router.get('/:id', async (req, res) => {
       });
     }
     
+    // 🚀 OPTIMIERUNG: Konvertiere Base64-Bilder zu URLs
+    const productObj = product.toObject();
+    const imageData = { hauptbild: null, galerie: [] };
+    
+    if (productObj.bilder?.hauptbild) {
+      if (productObj.bilder.hauptbild.startsWith('data:image/')) {
+        const mimeMatch = productObj.bilder.hauptbild.match(/^data:(image\/\w+);base64,/);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        imageData.hauptbild = {
+          url: `/api/portfolio/${product._id}/image/main`,
+          type: mimeType
+        };
+      } else {
+        imageData.hauptbild = productObj.bilder.hauptbild;
+      }
+    }
+    
+    if (productObj.bilder?.galerie && productObj.bilder.galerie.length > 0) {
+      imageData.galerie = productObj.bilder.galerie.map((img, index) => {
+        if (typeof img === 'string' && img.startsWith('data:image/')) {
+          const mimeMatch = img.match(/^data:(image\/\w+);base64,/);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          return {
+            url: `/api/portfolio/${product._id}/image/gallery/${index}`,
+            type: mimeType
+          };
+        }
+        return img;
+      });
+    }
+    
+    productObj.bilder = imageData;
+    
     console.log('✅ Portfolio item loaded:', product.name);
     res.json({
       success: true,
-      data: product
+      data: productObj
     });
   } catch (error) {
     console.error('Admin Portfolio Item Load Error:', error);

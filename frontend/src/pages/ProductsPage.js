@@ -44,12 +44,10 @@ import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { getImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
 import stockEventService from '../services/stockEventService';
-
-// API Base URL für Bild-URLs
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const ProductsPage = React.memo(() => {
   const navigate = useNavigate();
@@ -64,6 +62,12 @@ const ProductsPage = React.memo(() => {
   // URL-Parameter für Kategorie
   const [searchParams, setSearchParams] = useSearchParams();
   const kategorieFromURL = searchParams.get('kategorie') || 'alle';
+  
+  // 🔖 Speichere aktuelle URL mit Filtern für Zurück-Navigation
+  useEffect(() => {
+    const currentPath = window.location.pathname + window.location.search;
+    sessionStorage.setItem('lastProductsUrl', currentPath);
+  }, [searchParams]);
   
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
@@ -251,6 +255,25 @@ const ProductsPage = React.memo(() => {
       
       const response = await portfolioAPI.getWithPrices();
       const productsData = response.data?.data || response.data || [];
+      
+      // 🔍 DEBUG: Prüfe Bildformat
+      if (productsData.length > 0) {
+        const firstProduct = productsData[0];
+        console.log('🔍 DEBUG Bildformat:', {
+          hauptbild: firstProduct.bilder?.hauptbild,
+          istObjekt: typeof firstProduct.bilder?.hauptbild === 'object',
+          istString: typeof firstProduct.bilder?.hauptbild === 'string',
+          laenge: typeof firstProduct.bilder?.hauptbild === 'string' ? firstProduct.bilder.hauptbild.length : 'N/A',
+          galerieAnzahl: firstProduct.bilder?.galerie?.length || 0,
+          galerieErstesBild: firstProduct.bilder?.galerie?.[0],
+          galerieIstString: typeof firstProduct.bilder?.galerie?.[0] === 'string',
+          galerieLaenge: typeof firstProduct.bilder?.galerie?.[0] === 'string' ? firstProduct.bilder.galerie[0].length : 'N/A'
+        });
+        
+        // Größe der Response berechnen
+        const responseSizeKB = (JSON.stringify(productsData).length / 1024).toFixed(2);
+        console.log('📊 Response Größe:', responseSizeKB + ' KB');
+      }
       
       // Vanilla Dream Dual-Soap Konfiguration validiert ✅
       
@@ -750,7 +773,7 @@ const ProductsPage = React.memo(() => {
           <Grid container spacing={isMobile ? 2 : 4}>
             {filteredProducts.map((product, index) => (
           <Grid item xs={12} sm={6} md={4} key={product._id}>
-            <Fade in={true} timeout={300} style={{ transitionDelay: `${Math.min(index * 50, 200)}ms` }}>
+            <Fade in={true} timeout={200} style={{ transitionDelay: `${Math.min(index * 30, 150)}ms` }}>
               <Card 
                 sx={{ 
                   height: '100%',
@@ -758,8 +781,6 @@ const ProductsPage = React.memo(() => {
                   flexDirection: 'column',
                   transition: 'all 0.2s ease-in-out',
                   cursor: 'pointer',
-                  contentVisibility: 'auto', // Browser optimiert Rendering
-                  containIntrinsicSize: '1px 600px', // Geschätzte Größe für besseres Scrolling
                   '&:hover': {
                     transform: isMobile ? 'none' : 'translateY(-4px)',
                     boxShadow: isMobile ? 2 : '0 8px 24px rgba(0,0,0,0.15)'
@@ -786,7 +807,7 @@ const ProductsPage = React.memo(() => {
                       alt={`${product.name} - Handgemachte Naturseife (${product.gramm}g)`}
                       height={isMobile ? 200 : 300}
                       objectFit="cover"
-                      priority={index < 3} // 🚀 Erste 3 Bilder haben Priorität
+                      priority={index < (isMobile ? 6 : 3)} // 🚀 Mobile: Erste 6 Bilder (2 Reihen), Desktop: 3 (1 Reihe)
                       fallback={
                         <Box
                           sx={{
