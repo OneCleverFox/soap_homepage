@@ -44,6 +44,7 @@ import { portfolioAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { getImageUrl } from '../utils/imageUtils';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
 import stockEventService from '../services/stockEventService';
@@ -420,29 +421,6 @@ const ProductsPage = React.memo(() => {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', err);
       toast.error('Fehler beim Hinzufügen zum Warenkorb');
     }
-  };
-
-  // Helper-Funktion um relative Bild-URLs in absolute URLs umzuwandeln
-  const getImageUrl = (imageUrl) => {
-    if (!imageUrl) return null;
-    
-    // Wenn es ein Base64-Bild ist (data:image/...), direkt zurückgeben
-    if (imageUrl.startsWith('data:image/')) {
-      return imageUrl;
-    }
-    
-    // Wenn die URL bereits mit http/https beginnt, direkt zurückgeben
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    
-    // Legacy: Wenn die URL mit /api beginnt, Backend-Host hinzufügen
-    if (imageUrl.startsWith('/api')) {
-      return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
-    }
-    
-    // Ansonsten vollständige API-URL bauen
-    return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
   };
 
   // Helper-Funktion um den Preis eines Produkts zu ermitteln
