@@ -278,17 +278,10 @@ const ProductsPage = React.memo(() => {
       }
       setRetryCount(0); // Reset retry count on success
       
-      // ⚡ OPTIMIZED CACHING: Cache nur essenzielle Daten ohne Bilder
+      // ⚡ OPTIMIZED CACHING: Daten können jetzt gecacht werden (nur URLs, keine Base64)
       try {
-        // Entferne Bild-Daten vom Cache um Quota zu schonen
-        const cacheableData = productsData.map(product => ({
-          ...product,
-          bild: undefined,  // Entferne Base64-Bilder
-          bildUrl: product.bildUrl  // Behalte nur die URL
-        }));
-        
         sessionStorage.setItem('cachedProducts', JSON.stringify({
-          data: cacheableData,
+          data: productsData,  // Bilder sind jetzt URLs statt Base64
           timestamp: Date.now(),
           cacheAge: response.data?.cacheAge || 0,
           cached: response.data?.cached || false
@@ -429,9 +422,21 @@ const ProductsPage = React.memo(() => {
     }
   };
 
-  // Helper-Funktion um relative Bild-URLs in absolute URLs umzuwandeln
-  const getImageUrl = (imageUrl) => {
-    if (!imageUrl) return null;
+  // Helper-Funktion um Bild-URLs zu verarbeiten (optimiert für neue URL-Struktur)
+  const getImageUrl = (imageData) => {
+    if (!imageData) return null;
+    
+    // Neue Struktur: { url: '/api/portfolio/:id/image/main', type: 'image/jpeg' }
+    if (typeof imageData === 'object' && imageData.url) {
+      // Wenn die URL bereits mit /api beginnt, Backend-Host hinzufügen
+      if (imageData.url.startsWith('/api')) {
+        return `${API_BASE_URL.replace('/api', '')}${imageData.url}`;
+      }
+      return imageData.url;
+    }
+    
+    // Legacy: String-URLs (Base64 oder externe URLs)
+    const imageUrl = imageData;
     
     // Wenn es ein Base64-Bild ist (data:image/...), direkt zurückgeben
     if (imageUrl.startsWith('data:image/')) {
