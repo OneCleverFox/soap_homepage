@@ -48,7 +48,8 @@ router.get('/', async (req, res) => {
     const products = await Portfolio.find({})
       .populate('giessform', 'inventarnummer name form material verfuegbar laengeMm breiteMm tiefeMm')
       .populate('giesswerkstoff', 'bezeichnung typ konsistenz verfuegbar')
-      .sort({ reihenfolge: 1, createdAt: -1 });
+      .sort({ reihenfolge: 1, createdAt: -1 })
+      .allowDiskUse(true);  // Erlaubt externe Sortierung für große Datenmengen
     
     res.json({
       success: true,
