@@ -278,10 +278,17 @@ const ProductsPage = React.memo(() => {
       }
       setRetryCount(0); // Reset retry count on success
       
-      // ⚡ OPTIMIZED CACHING: Cache-Strategie für bessere Performance
+      // ⚡ OPTIMIZED CACHING: Cache nur essenzielle Daten ohne Bilder
       try {
+        // Entferne Bild-Daten vom Cache um Quota zu schonen
+        const cacheableData = productsData.map(product => ({
+          ...product,
+          bild: undefined,  // Entferne Base64-Bilder
+          bildUrl: product.bildUrl  // Behalte nur die URL
+        }));
+        
         sessionStorage.setItem('cachedProducts', JSON.stringify({
-          data: productsData,
+          data: cacheableData,
           timestamp: Date.now(),
           cacheAge: response.data?.cacheAge || 0,
           cached: response.data?.cached || false
