@@ -47,10 +47,29 @@ import {
   CloudUpload as CloudUploadIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import LazyImage from '../components/LazyImage';  // 🚀 Performance-optimierte Lazy Loading
 
 const API_BASE = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:5000/api' 
   : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
+
+// 🚀 PERFORMANCE: Helper für Image-URLs (vermeidet Base64 in Listen)
+const getGiessformImageUrl = (item) => {
+  if (!item || !item._id) return null;
+  // Wenn kein Bild vorhanden, return null für Fallback
+  if (!item.bild && !item.hasBild) return null;
+  // Wenn bereits Base64 geladen (z.B. nach Edit), verwende es
+  if (item.bild && item.bild.startsWith('data:image')) return item.bild;
+  // Sonst: Lade über optimierte Image-Route
+  return `${API_BASE}/admin/rohstoffe/giessformen/${item._id}/image`;
+};
+
+const getGiesswerkstoffImageUrl = (item) => {
+  if (!item || !item._id) return null;
+  if (!item.bild && !item.hasBild) return null;
+  if (item.bild && item.bild.startsWith('data:image')) return item.bild;
+  return `${API_BASE}/admin/rohstoffe/giesswerkstoff/${item._id}/image`;
+};
 
 // Axios Interceptor für Token
 const getAuthHeaders = () => {
@@ -1632,36 +1651,37 @@ const AdminRohstoffe = () => {
             {filteredData.map((item) => (
               <TableRow key={item._id}>
                 <TableCell>
-                  {item.bild ? (
-                    <Box 
-                      component="img" 
-                      src={item.bild} 
-                      alt={item.name}
-                      sx={{
-                        width: 50,
-                        height: 50,
-                        objectFit: 'cover',
-                        borderRadius: 1,
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => handleOpenDialog('edit', item)}
-                    />
-                  ) : (
-                    <Box 
-                      sx={{
-                        width: 50,
-                        height: 50,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: 'grey.100',
-                        borderRadius: 1,
-                        color: 'grey.500'
-                      }}
-                    >
-                      📷
-                    </Box>
-                  )}
+                  <LazyImage
+                    src={getGiessformImageUrl(item)}
+                    alt={item.name}
+                    height={50}
+                    objectFit="cover"
+                    priority={false}
+                    sx={{
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      width: 50
+                    }}
+                    onClick={() => handleOpenDialog('edit', item)}
+                    fallback={
+                      <Box 
+                        sx={{
+                          width: 50,
+                          height: 50,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: 'grey.100',
+                          borderRadius: 1,
+                          color: 'grey.500',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleOpenDialog('edit', item)}
+                      >
+                        📷
+                      </Box>
+                    }
+                  />
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" fontWeight="medium">
@@ -1860,36 +1880,37 @@ const AdminRohstoffe = () => {
             {filteredData.map((item) => (
               <TableRow key={item._id}>
                 <TableCell>
-                  {item.bild ? (
-                    <Box 
-                      component="img" 
-                      src={item.bild} 
-                      alt={item.bezeichnung}
-                      sx={{
-                        width: 50,
-                        height: 50,
-                        objectFit: 'cover',
-                        borderRadius: 1,
-                        cursor: 'pointer'
-                      }}
-                      onClick={() => handleOpenDialog('edit', item)}
-                    />
-                  ) : (
-                    <Box 
-                      sx={{
-                        width: 50,
-                        height: 50,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: 'grey.100',
-                        borderRadius: 1,
-                        color: 'grey.500'
-                      }}
-                    >
-                      📷
-                    </Box>
-                  )}
+                  <LazyImage
+                    src={getGiesswerkstoffImageUrl(item)}
+                    alt={item.bezeichnung}
+                    height={50}
+                    objectFit="cover"
+                    priority={false}
+                    sx={{
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      width: 50
+                    }}
+                    onClick={() => handleOpenDialog('edit', item)}
+                    fallback={
+                      <Box 
+                        sx={{
+                          width: 50,
+                          height: 50,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          bgcolor: 'grey.100',
+                          borderRadius: 1,
+                          color: 'grey.500',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleOpenDialog('edit', item)}
+                      >
+                        📷
+                      </Box>
+                    }
+                  />
                 </TableCell>
                 <TableCell>
                   <Box>

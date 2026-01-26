@@ -51,16 +51,34 @@ const generateNextInventarnummer = async () => {
 // =====================
 
 // @route   GET /api/admin/rohstoffe/giessformen
-// @desc    Alle Gießformen abrufen
+// @desc    Alle Gießformen abrufen (OPTIMIERT: ohne Bilder)
 // @access  Private (Admin only)
 router.get('/giessformen', async (req, res) => {
   try {
-    const giessformen = await Giessform.find({}).sort({ reihenfolge: 1, name: 1 }).lean();
+    const startTime = Date.now();
+    
+    // 🚀 PERFORMANCE: Bilder ausschließen (Base64 kann mehrere MB groß sein!)
+    const giessformen = await Giessform.find({})
+      .select('-bild')  // Bild ausschließen
+      .sort({ reihenfolge: 1, name: 1 })
+      .lean();
+    
+    // 🎯 Prüfe ob Bilder existieren (ohne sie zu laden)
+    const giessformenWithImageFlag = await Promise.all(giessformen.map(async (item) => {
+      const hasImage = await Giessform.findById(item._id).select('bild').lean();
+      return {
+        ...item,
+        hasBild: !!(hasImage && hasImage.bild)
+      };
+    }));
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Gießformen geladen: ${giessformen.length} Items in ${duration}ms (OHNE Bilder)`);
     
     res.json({
       success: true,
       count: giessformen.length,
-      data: giessformen
+      data: giessformenWithImageFlag
     });
   } catch (error) {
     console.error('Gießformen Load Error:', error);
@@ -224,16 +242,34 @@ router.delete('/giessformen/:id', async (req, res) => {
 // =====================
 
 // @route   GET /api/admin/rohstoffe/giesswerkstoff
-// @desc    Alle Gießwerkstoffe abrufen
+// @desc    Alle Gießwerkstoffe abrufen (OPTIMIERT: ohne Bilder)
 // @access  Private (Admin only)
 router.get('/giesswerkstoff', async (req, res) => {
   try {
-    const giesswerkstoff = await Giesswerkstoff.find({}).sort({ reihenfolge: 1, name: 1 }).lean();
+    const startTime = Date.now();
+    
+    // 🚀 PERFORMANCE: Bilder ausschließen
+    const giesswerkstoff = await Giesswerkstoff.find({})
+      .select('-bild')  // Bild ausschließen
+      .sort({ reihenfolge: 1, name: 1 })
+      .lean();
+    
+    // 🎯 Prüfe ob Bilder existieren
+    const giesswerkstoffWithImageFlag = await Promise.all(giesswerkstoff.map(async (item) => {
+      const hasImage = await Giesswerkstoff.findById(item._id).select('bild').lean();
+      return {
+        ...item,
+        hasBild: !!(hasImage && hasImage.bild)
+      };
+    }));
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ Gießwerkstoffe geladen: ${giesswerkstoff.length} Items in ${duration}ms (OHNE Bilder)`);
     
     res.json({
       success: true,
       count: giesswerkstoff.length,
-      data: giesswerkstoff
+      data: giesswerkstoffWithImageFlag
     });
   } catch (error) {
     console.error('Gießwerkstoff Load Error:', error);
@@ -389,6 +425,90 @@ router.put('/giesswerkstoff/:id/mischkonfiguration', async (req, res) => {
     res.status(500).json({ 
       message: 'Fehler beim Aktualisieren der Mischkonfiguration',
       error: error.message 
+    });
+  }
+});
+
+// =====================
+// IMAGE SERVING ROUTES
+// =====================
+
+// @route   GET /api/admin/rohstoffe/giessformen/:id/image
+// @desc    Gießformen-Bild abrufen
+// @access  Private (Admin only)
+router.get('/giessformen/:id/image', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const giessform = await Giessform.findById(id).select('bild').lean();
+    
+    if (!giessform || !giessform.bild) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bild nicht gefunden'
+      });
+    }
+
+    // Parse Base64 Bild
+    const base64Data = giessform.bild.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type aus Base64-String extrahieren
+    const contentTypeMatch = giessform.bild.match(/^data:(image\/\w+);base64,/);
+    const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
+    
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=3600',  // 1 Stunde Cache
+      'Content-Length': buffer.length
+    });
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Gießform Image Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Bildes'
+    });
+  }
+});
+
+// @route   GET /api/admin/rohstoffe/giesswerkstoff/:id/image
+// @desc    Gießwerkstoff-Bild abrufen
+// @access  Private (Admin only)
+router.get('/giesswerkstoff/:id/image', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const giesswerkstoff = await Giesswerkstoff.findById(id).select('bild').lean();
+    
+    if (!giesswerkstoff || !giesswerkstoff.bild) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bild nicht gefunden'
+      });
+    }
+
+    // Parse Base64 Bild
+    const base64Data = giesswerkstoff.bild.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type aus Base64-String extrahieren
+    const contentTypeMatch = giesswerkstoff.bild.match(/^data:(image\/\w+);base64,/);
+    const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/jpeg';
+    
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=3600',  // 1 Stunde Cache
+      'Content-Length': buffer.length
+    });
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Gießwerkstoff Image Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Bildes'
     });
   }
 });

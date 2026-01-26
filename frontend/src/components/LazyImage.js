@@ -30,6 +30,7 @@ const LazyImage = ({
   onLoad,
   onError,
   priority = false,
+  fallbackSrc, // Destructure to prevent passing to DOM
   ...props
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -47,7 +48,7 @@ const LazyImage = ({
 
     const currentImg = imgRef.current; // Copy ref for cleanup
 
-    // Observer erstellen
+    // Observer erstellen mit optimierten Mobile-Settings
     observerRef.current = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -61,8 +62,8 @@ const LazyImage = ({
         });
       },
       {
-        rootMargin: '200px', // Lade 200px bevor sichtbar für mobile Performance
-        threshold: 0.01
+        rootMargin: '400px', // Größeres Margin für Mobile - lädt früher beim Scrollen
+        threshold: 0.01 // Minimaler threshold für schnellstes Triggern
       }
     );
 
@@ -127,6 +128,10 @@ const LazyImage = ({
       height={height}
       overflow="hidden"
       bgcolor="grey.50"
+      sx={{
+        contentVisibility: 'auto', // Browser optimiert Rendering off-screen Elements
+        containIntrinsicSize: `auto ${height}px` // Geschätzte Größe für besseres Scrolling
+      }}
       {...props}
     >
       {/* Minimales Skeleton - nur Hintergrundfarbe statt Animation */}
@@ -155,13 +160,18 @@ const LazyImage = ({
           loading={priority ? 'eager' : 'lazy'} // Priority: eager, sonst lazy
           decoding="async" // Async Dekodierung für bessere Performance
           fetchpriority={priority ? 'high' : 'auto'} // HTML-Attribut für Priorität (Chrome/Edge)
+          // Mobile-optimierte Größen-Hints für Browser
+          sizes="(max-width: 600px) 100vw, (max-width: 960px) 50vw, 33vw"
           style={{
             width: '100%',
             height: '100%',
             objectFit: objectFit,
             opacity: isLoaded ? 1 : 0,
             transition: 'opacity 0.2s ease-in', // Schnellere Transition
-            display: 'block'
+            display: 'block',
+            // GPU-Acceleration für smootheres Rendering
+            transform: 'translateZ(0)',
+            willChange: isLoaded ? 'auto' : 'opacity'
           }}
         />
       )}
