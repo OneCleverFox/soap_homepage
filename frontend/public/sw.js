@@ -1,25 +1,55 @@
 // Service Worker für Glücksmomente Website
 // Optimiert für mobile Performance und Network-Probleme
 
-const API_CACHE = 'gluecksmomente-api-v3';
+const API_CACHE = 'gluecksmomente-api-v4';
+const IMAGE_CACHE = 'gluecksmomente-images-v1';
 
-// Install event - Nur API Cache vorbereiten
+// Install event - Cache vorbereiten
 self.addEventListener('install', (event) => {
-  console.log('SW: Installing v3...');
+  console.log('SW: Installing v4...');
   event.waitUntil(
-    caches.open(API_CACHE).then(() => {
-      console.log('SW: API cache ready');
+    Promise.all([
+      caches.open(API_CACHE),
+      caches.open(IMAGE_CACHE)
+    ]).then(() => {
+      console.log('SW: Caches ready');
       self.skipWaiting(); // Erzwinge sofortige Aktivierung
     })
   );
 });
 
-// Fetch event - Nur wichtige API-Endpunkte cachen
+// Fetch event - API und Bilder cachen
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Nur wichtige API-Anfragen cachen (portfolio und company-info)
+  // Portfolio-Bilder cachen (neue URL-Struktur)
+  if (url.pathname.includes('/api/portfolio/') && url.pathname.includes('/image/')) {
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          if (cachedResponse) {
+            // Bilder sind immutable - immer aus Cache nehmen
+            return cachedResponse;
+          }
+          
+          // Bild vom Server laden und cachen
+          return fetch(request).then((networkResponse) => {
+            if (networkResponse && networkResponse.ok) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => {
+            console.log('SW: Failed to load image:', url.pathname);
+            return new Response('', { status: 404 });
+          });
+        });
+      })
+    );
+    return;
+  }
+
+  // API-Anfragen cachen (portfolio und company-info)
   if (url.pathname.includes('/api/portfolio') || url.pathname.includes('/api/company-info')) {
     event.respondWith(
       caches.open(API_CACHE).then((cache) => {
@@ -27,12 +57,10 @@ self.addEventListener('fetch', (event) => {
           // Stale-while-revalidate: Zeige Cache, update im Hintergrund
           const fetchPromise = fetch(request).then((networkResponse) => {
             if (networkResponse && networkResponse.ok) {
-              // Clone response für Cache
               cache.put(request, networkResponse.clone());
             }
             return networkResponse;
           }).catch(() => {
-            // Fallback bei Network-Fehlern
             if (cachedResponse) {
               console.log('SW: Using cache fallback for:', url.pathname);
               return cachedResponse;
@@ -40,7 +68,6 @@ self.addEventListener('fetch', (event) => {
             throw new Error('Network error and no cache available');
           });
 
-          // Gebe Cache zurück wenn vorhanden, sonst warte auf Netzwerk
           return cachedResponse || fetchPromise;
         });
       })
@@ -53,13 +80,13 @@ self.addEventListener('fetch', (event) => {
 
 // Activate event - Bereinige alte Caches
 self.addEventListener('activate', (event) => {
-  console.log('SW: Activating v3...');
+  console.log('SW: Activating v4...');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           // Lösche alte Cache-Versionen
-          if (cacheName !== API_CACHE) {
+          if (cacheName !== API_CACHE && cacheName !== IMAGE_CACHE) {
             console.log('SW: Deleting old cache:', cacheName);
             return caches.delete(cacheName);
           }

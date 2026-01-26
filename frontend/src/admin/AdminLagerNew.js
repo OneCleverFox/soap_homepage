@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminState } from '../hooks/useAdminState';
 import { useAdminSearch } from '../hooks/useAdminSearch';
 import toast from 'react-hot-toast';
+import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
 import {
   Container,
   Paper,
@@ -1492,7 +1493,7 @@ const AdminLager = () => {
       case 'bilder':
         return (
           <Avatar
-            src={item.bilder?.hauptbild}
+            src={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage((item.name || item.bezeichnung || '?')[0])}
             sx={{ width: 50, height: 50 }}
             variant="rounded"
           >
