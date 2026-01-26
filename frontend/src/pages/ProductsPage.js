@@ -422,41 +422,6 @@ const ProductsPage = React.memo(() => {
     }
   };
 
-  // Helper-Funktion um Bild-URLs zu verarbeiten (optimiert für neue URL-Struktur)
-  const getImageUrl = (imageData) => {
-    if (!imageData) return null;
-    
-    // Neue Struktur: { url: '/api/portfolio/:id/image/main', type: 'image/jpeg' }
-    if (typeof imageData === 'object' && imageData.url) {
-      // Wenn die URL bereits mit /api beginnt, Backend-Host hinzufügen
-      if (imageData.url.startsWith('/api')) {
-        return `${API_BASE_URL.replace('/api', '')}${imageData.url}`;
-      }
-      return imageData.url;
-    }
-    
-    // Legacy: String-URLs (Base64 oder externe URLs)
-    const imageUrl = imageData;
-    
-    // Wenn es ein Base64-Bild ist (data:image/...), direkt zurückgeben
-    if (imageUrl.startsWith('data:image/')) {
-      return imageUrl;
-    }
-    
-    // Wenn die URL bereits mit http/https beginnt, direkt zurückgeben
-    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-      return imageUrl;
-    }
-    
-    // Legacy: Wenn die URL mit /api beginnt, Backend-Host hinzufügen
-    if (imageUrl.startsWith('/api')) {
-      return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
-    }
-    
-    // Ansonsten vollständige API-URL bauen
-    return `${API_BASE_URL.replace('/api', '')}${imageUrl}`;
-  };
-
   // Helper-Funktion um den Preis eines Produkts zu ermitteln
   const getProductPrice = (product) => {
     return product.preis || product.verkaufspreis || 0;
