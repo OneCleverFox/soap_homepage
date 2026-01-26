@@ -321,15 +321,21 @@ const portfolioSchema = new mongoose.Schema({
   timestamps: true // Erstellt automatisch createdAt und updatedAt
 });
 
-// Indizes für bessere Performance
-// portfolioSchema.index({ name: 1 }); // ENTFERNT - wird durch unique: true automatisch erstellt
+// ⚡ PERFORMANCE-OPTIMIERTE INDICES für MongoDB Sort Operations
+// Verhindert "Sort exceeded memory limit" Fehler durch effiziente Indexnutzung
+
+// 1. Public Route: GET /api/portfolio/with-prices
+//    Query: .find({ aktiv: true }).sort({ reihenfolge: 1, name: 1 })
+portfolioSchema.index({ aktiv: 1, reihenfolge: 1, name: 1 });
+
+// 2. Admin Route: GET /api/admin/portfolio
+//    Query: .find({}).sort({ reihenfolge: 1, createdAt: -1 })
+portfolioSchema.index({ reihenfolge: 1, createdAt: -1 });
+
+// 3. Einzelne Indices für Lookups und Filterung
 portfolioSchema.index({ seife: 1 });
 portfolioSchema.index({ aroma: 1 });
-portfolioSchema.index({ reihenfolge: 1 });
-
-// ⚡ PERFORMANCE BOOST: Index für aktive Produkte (kritisch für /with-prices)
-portfolioSchema.index({ aktiv: 1 });
-portfolioSchema.index({ aktiv: 1, reihenfolge: 1 }); // Compound für sortierte Abfrage
+portfolioSchema.index({ kategorie: 1 });  // Bereits als inline index definiert, hier zur Dokumentation
 
 // Pre-save Hook für Datenvalidierung
 portfolioSchema.pre('save', function(next) {
