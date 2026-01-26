@@ -523,6 +523,7 @@ router.get('/with-prices', async (req, res) => {
     const portfolioStart = Date.now();
     const portfolioItems = await Portfolio.find({ aktiv: true })
       .sort({ reihenfolge: 1, name: 1 })
+      .allowDiskUse(true) // ⚡ Erlaube externe Sortierung für große Datensätze
       .lean(); // lean() für bessere Performance
     
     console.log(`📋 Portfolio items loaded (${portfolioItems.length}): ${Date.now() - portfolioStart}ms`);
