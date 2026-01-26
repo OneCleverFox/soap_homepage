@@ -647,15 +647,12 @@ const AdminPortfolio = () => {
                     <CardMedia
                       component="img"
                       sx={{ height: { xs: 180, sm: 200 } }}
-                      image={item.bilder?.hauptbild 
-                        ? item.bilder.hauptbild  // Direkte Base64-Data-URL nutzen
-                        : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPktlaW4gQmlsZDwvdGV4dD48L3N2Zz4='
-                      }
+                      image={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage('Kein Bild')}
                       alt={item.name}
                       sx={{ objectFit: 'cover' }}
                       onError={(e) => {
                         console.log('Bild konnte nicht geladen werden:', item.bilder?.hauptbild);
-                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjVmNWY1Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OTk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPktlaW4gQmlsZDwvdGV4dD48L3N2Zz4=';
+                        e.target.src = getPlaceholderImage('Fehler beim Laden');
                       }}
                     />
                     
