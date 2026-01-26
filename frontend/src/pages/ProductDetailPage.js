@@ -84,8 +84,19 @@ const ProductDetailPage = () => {
     }
   };
 
-  const getImageUrl = (url) => {
-    if (!url) return null;
+  const getImageUrl = (imageData) => {
+    if (!imageData) return null;
+    
+    // Neue Struktur: { url: '/api/portfolio/:id/image/main', type: 'image/jpeg' }
+    if (typeof imageData === 'object' && imageData.url) {
+      if (imageData.url.startsWith('/api')) {
+        return `${API_BASE_URL.replace('/api', '')}${imageData.url}`;
+      }
+      return imageData.url;
+    }
+    
+    // Legacy: String-URLs
+    const url = imageData;
     // Base64-Bilder direkt zurückgeben
     if (url.startsWith('data:image/')) return url;
     if (url.startsWith('http')) return url;

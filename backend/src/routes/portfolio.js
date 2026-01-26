@@ -612,17 +612,43 @@ router.get('/with-prices', async (req, res) => {
         // Verfügbarkeit: Produkt muss aktiv sein UND Bestand haben
         const istVerfuegbar = item.aktiv !== false && verfuegbareMenge > 0;
         
-        // Bilder-URLs hinzufügen (optimiert)
+        // 🚀 OPTIMIERT: Bilder-URLs statt Base64 für bessere Performance
         let imageData = { hauptbild: null, galerie: [] };
         
+        // Nur Bild-ID/Referenz senden, nicht die Base64-Daten
         if (item.bilder?.hauptbild) {
-          imageData.hauptbild = item.bilder.hauptbild;
+          // Wenn es ein data:image URL ist, extrahiere nur den Typ
+          if (item.bilder.hauptbild.startsWith('data:image/')) {
+            const mimeMatch = item.bilder.hauptbild.match(/^data:(image\/\w+);base64,/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            // Sende nur Metadaten, nicht die Bilddaten
+            imageData.hauptbild = {
+              url: `/api/portfolio/${item._id}/image/main`,
+              type: mimeType
+            };
+          } else {
+            imageData.hauptbild = item.bilder.hauptbild;
+          }
         }
         
         if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map(imageObj => 
-            typeof imageObj === 'string' ? imageObj : imageObj.url
-          );
+          imageData.galerie = item.bilder.galerie.map((imageObj, index) => {
+            if (typeof imageObj === 'string') {
+              if (imageObj.startsWith('data:image/')) {
+                const mimeMatch = imageObj.match(/^data:(image\/\w+);base64,/);
+                const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                return {
+                  url: `/api/portfolio/${item._id}/image/gallery/${index}`,
+                  type: mimeType
+                };
+              }
+              return imageObj;
+            }
+            return {
+              url: `/api/portfolio/${item._id}/image/gallery/${index}`,
+              type: imageObj.type || 'image/jpeg'
+            };
+          });
         }
         
         // Preis-Logik: Verwende gespeicherten Preis, falls vorhanden, sonst berechne automatisch
@@ -673,19 +699,41 @@ router.get('/with-prices', async (req, res) => {
         const bestand = bestandMap.get(item._id.toString());
         const verfuegbareMenge = bestand ? bestand.menge : 0;
         const istVerfuegbar = verfuegbareMenge > 0;
-        const imageData = {
-          hauptbild: null,
-          galerie: []
-        };
+        
+        // 🚀 OPTIMIERT: Bilder-URLs auch im Fehlerfall
+        const imageData = { hauptbild: null, galerie: [] };
         
         if (item.bilder?.hauptbild) {
-          imageData.hauptbild = item.bilder.hauptbild;
+          if (item.bilder.hauptbild.startsWith('data:image/')) {
+            const mimeMatch = item.bilder.hauptbild.match(/^data:(image\/\w+);base64,/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+            imageData.hauptbild = {
+              url: `/api/portfolio/${item._id}/image/main`,
+              type: mimeType
+            };
+          } else {
+            imageData.hauptbild = item.bilder.hauptbild;
+          }
         }
         
         if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map(imageObj => 
-            typeof imageObj === 'string' ? imageObj : imageObj.url
-          );
+          imageData.galerie = item.bilder.galerie.map((imageObj, index) => {
+            if (typeof imageObj === 'string') {
+              if (imageObj.startsWith('data:image/')) {
+                const mimeMatch = imageObj.match(/^data:(image\/\w+);base64,/);
+                const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                return {
+                  url: `/api/portfolio/${item._id}/image/main`,
+                  type: mimeType
+                };
+              }
+              return imageObj;
+            }
+            return {
+              url: `/api/portfolio/${item._id}/image/gallery/${index}`,
+              type: imageObj.type || 'image/jpeg'
+            };
+          });
         }
         
         // Preis-Logik auch bei Fehlern: Verwende gespeicherten Preis, falls vorhanden
@@ -1118,6 +1166,80 @@ router.post('/:id/upload-image', auth, upload.single('image'), optimizeMainImage
       success: false,
       message: 'Fehler beim Hochladen des Bildes'
     });
+  }
+});
+
+// @route   GET /api/portfolio/:id/image/main
+// @desc    Hauptbild für Portfolio-Produkt servieren (optimiert)
+// @access  Public
+router.get('/:id/image/main', async (req, res) => {
+  try {
+    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    
+    if (!product || !product.bilder?.hauptbild) {
+      return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
+    }
+
+    const base64Data = product.bilder.hauptbild;
+    
+    // Extrahiere MIME-Type und Base64-Daten
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
+    }
+
+    const mimeType = matches[1];
+    const imageBuffer = Buffer.from(matches[2], 'base64');
+
+    // Cache-Header für Browser-Caching (1 Jahr)
+    res.set({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Length': imageBuffer.length
+    });
+
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Fehler beim Laden des Hauptbildes:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Laden des Bildes' });
+  }
+});
+
+// @route   GET /api/portfolio/:id/image/gallery/:index
+// @desc    Galeriebild für Portfolio-Produkt servieren (optimiert)
+// @access  Public
+router.get('/:id/image/gallery/:index', async (req, res) => {
+  try {
+    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    const index = parseInt(req.params.index);
+    
+    if (!product || !product.bilder?.galerie || !product.bilder.galerie[index]) {
+      return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
+    }
+
+    const imageObj = product.bilder.galerie[index];
+    const base64Data = typeof imageObj === 'string' ? imageObj : imageObj.url;
+    
+    // Extrahiere MIME-Type und Base64-Daten
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
+    }
+
+    const mimeType = matches[1];
+    const imageBuffer = Buffer.from(matches[2], 'base64');
+
+    // Cache-Header für Browser-Caching (1 Jahr)
+    res.set({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Length': imageBuffer.length
+    });
+
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Fehler beim Laden des Galeriebildes:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Laden des Bildes' });
   }
 });
 
