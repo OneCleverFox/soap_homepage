@@ -20,8 +20,16 @@ let portfolioCache = global.portfolioCache || {
   timestamp: 0,
   ttl: 10 * 60 * 1000, // 10 Minuten (Balance zwischen Performance und Aktualität)
   lastHit: 0,
-  hitCount: 0
+  hitCount: 0,
+  version: 2 // 🆕 Version erhöht = Cache wird invalidiert
 };
+
+// Cache-Version-Check: Invalidiere bei Version-Mismatch
+if (global.portfolioCache && global.portfolioCache.version !== portfolioCache.version) {
+  logger.info('🔄 Cache version mismatch - invalidating old cache');
+  portfolioCache.data = null;
+  portfolioCache.timestamp = 0;
+}
 
 // Synchronisiere mit globalem Cache
 global.portfolioCache = portfolioCache;
@@ -34,6 +42,7 @@ function invalidatePortfolioCache() {
   cacheManager.invalidateProductCache();
   logger.info('🗑️ Portfolio cache invalidated');
 }
+
 const { optimizeMainImage } = require('../middleware/imageOptimization');
 
 // Multer-Konfiguration für Produktbilder
@@ -67,6 +76,12 @@ const upload = multer({
 });
 
 const router = express.Router();
+
+// 🆕 DEV: Cache manuell leeren
+router.get('/dev/clear-cache', (req, res) => {
+  invalidatePortfolioCache();
+  res.json({ success: true, message: 'Portfolio cache cleared' });
+});
 
 // DEBUG Route - Portfolio-Status prüfen
 router.get('/debug/portfolio-status', async (req, res) => {
@@ -296,91 +311,140 @@ async function calculatePortfolioPrice(portfolioItem) {
 // @access  Public (aktive), Admin (alle mit includeInactive=true)
 router.get('/', async (req, res) => {
   try {
-    // 🚀 PERFORMANCE: Stelle sicher dass aktiv-Index existiert
-    await Portfolio.collection.createIndex({ aktiv: 1, reihenfolge: 1 }, { background: true }).catch(() => {});
+    console.log('🔍 [PORTFOLIO] Lade Produkte aus Portfolio...');
     
     const { includeInactive, includeUnavailable } = req.query;
-    
-    // Unterstütze beide Parameter für Konsistenz
     const shouldIncludeInactive = includeInactive === 'true' || includeUnavailable === 'true';
     
     // Filter-Query basierend auf Parameter
     let filter = {};
     if (!shouldIncludeInactive) {
-      filter.aktiv = true; // Nur aktive Produkte für normale Benutzer
+      // Unterstütze beide Feldnamen: isActive und aktiv
+      filter.$or = [
+        { isActive: true },
+        { aktiv: true }
+      ];
     }
-    // Wenn includeInactive=true oder includeUnavailable=true, werden alle Produkte (aktiv + inaktiv) geladen
     
-    // 🚀 PERFORMANCE: Migration entfernt - läuft nur einmalig beim Server-Start
+    const startTime = Date.now();
     
+    // ⚡ LÖSUNG: Lade Daten OHNE Sortierung - verhindert MongoDB Memory Limit Fehler
+    // Sortierung erfolgt lokal in Node.js (siehe unten)
     const portfolioItems = await Portfolio.find(filter)
-      .sort({ aktiv: -1, reihenfolge: 1, name: 1 })
-      .lean(); // 🚀 PERFORMANCE: lean() für 2-5x schnellere Queries
-
-    // 🚀 PERFORMANCE: Lade ALLE Bestände in einer einzigen Query
-    const portfolioIds = portfolioItems.map(item => item._id);
-    const allBestaende = await Bestand.find({ 
-      artikelId: { $in: portfolioIds },
-      typ: 'produkt'
-    }).lean();
+      .select('-bilder.hauptbildData.data -bilder.galerie') // Schließe große Bild-Daten aus
+      .lean() // Bessere Performance
+      .exec();
     
-    // Erstelle Map für O(1) Lookup
-    const bestandMap = new Map();
-    allBestaende.forEach(bestand => {
-      bestandMap.set(bestand.artikelId.toString(), bestand);
-    });
-
-    // Verarbeite Portfolio-Items ohne zusätzliche DB-Queries
-    const portfolioWithBestand = portfolioItems.map(item => {
-      const itemObj = item; // lean() liefert bereits Plain Objects
+    const queryTime = Date.now() - startTime;
+    console.log(`📦 [PORTFOLIO] ${portfolioItems.length} Produkte aus DB geladen in ${queryTime}ms`);
+    
+    // ⚡ LOKALE SORTIERUNG in Node.js (kein MongoDB Memory Limit!)
+    portfolioItems.sort((a, b) => {
+      // Primäre Sortierung: reihenfolge (falls vorhanden)
+      const orderA = a.reihenfolge || 999999;
+      const orderB = b.reihenfolge || 999999;
       
-      // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
-      if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
-        itemObj.aktiv = false; // Default für undefined/null Werte
+      if (orderA !== orderB) {
+        return orderA - orderB;
       }
       
-      // Hole Bestand aus Map (O(1) statt DB-Query)
-      const bestand = bestandMap.get(item._id.toString());
+      // Sekundäre Sortierung: createdAt (neueste zuerst)
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
       
-      // Füge Bestand-Informationen im erwarteten Format hinzu
-      if (bestand) {
-        itemObj.bestand = {
-          menge: bestand.menge || 0,
-          einheit: bestand.einheit || 'Stück',
-          verfuegbar: (bestand.menge || 0) > 0
-        };
-      } else {
-        itemObj.bestand = {
-          menge: 0,
-          einheit: 'Stück',
-          verfuegbar: false
-        };
-      }
-      
-      // Legacy-Felder für Kompatibilität
-      itemObj.verfuegbareMenge = itemObj.bestand.menge;
-      itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
-      itemObj.bestandId = bestand ? bestand._id : null;
-      
-      return itemObj;
+      return dateB - dateA;
     });
-
-    // Debug-Log für die Antwort
-    const activeCount = portfolioWithBestand.filter(item => item.aktiv === true).length;
-    const inactiveCount = portfolioWithBestand.filter(item => item.aktiv === false).length;
     
-    logger.info(`📊 Portfolio Response: ${portfolioWithBestand.length} total (${activeCount} aktiv, ${inactiveCount} inaktiv) - includeInactive: ${shouldIncludeInactive}`);
-
-    res.status(200).json({
-      success: true,
-      count: portfolioWithBestand.length,
-      data: portfolioWithBestand
-    });
+    const sortTime = Date.now() - startTime - queryTime;
+    console.log(`🔄 [PORTFOLIO] Lokal sortiert in ${sortTime}ms`);
+    console.log(`✅ [PORTFOLIO] ${portfolioItems.length} Produkte fertig verarbeitet`);
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`⚡ [PORTFOLIO] Gesamt-Antwortzeit: ${totalTime}ms`);
+    
+    // Sende einfache Response
+    res.json(portfolioItems);
+    
   } catch (error) {
-    console.error('Portfolio Fetch Error:', error);
+    console.error('❌ [PORTFOLIO] Fehler beim Laden der Produkte:', error);
     res.status(500).json({
-      success: false,
-      message: 'Fehler beim Abrufen der Portfolio-Daten'
+      message: 'Fehler beim Laden der Produkte',
+      error: error.message
+    });
+  }
+});
+
+// 🖼️ IMAGE SERVING: Hauptbild on-demand laden
+router.get('/:id/hauptbild', async (req, res) => {
+  try {
+    const portfolioItem = await Portfolio.findById(req.params.id)
+      .select('bilder.hauptbildData')
+      .lean();
+    
+    if (!portfolioItem?.bilder?.hauptbildData?.data) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Hauptbild nicht gefunden' 
+      });
+    }
+    
+    const imageData = portfolioItem.bilder.hauptbildData;
+    
+    // Base64 zu Buffer konvertieren
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type verwenden (oder Default)
+    const mimeType = imageData.contentType || 'image/jpeg';
+    
+    // Cache-Header (1 Stunde)
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Hauptbild Load Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler beim Laden des Hauptbildes' 
+    });
+  }
+});
+
+// 🖼️ IMAGE SERVING: Galerie-Bild on-demand laden
+router.get('/:id/galerie/:index', async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const imageIndex = parseInt(index, 10);
+    
+    const portfolioItem = await Portfolio.findById(id)
+      .select('bilder.galerie')
+      .lean();
+    
+    if (!portfolioItem?.bilder?.galerie || !portfolioItem.bilder.galerie[imageIndex]) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Galerie-Bild nicht gefunden' 
+      });
+    }
+    
+    const imageData = portfolioItem.bilder.galerie[imageIndex];
+    
+    // Base64 zu Buffer konvertieren
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Content-Type verwenden
+    const mimeType = imageData.contentType || 'image/jpeg';
+    
+    // Cache-Header (1 Stunde)
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Galerie-Bild Load Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Fehler beim Laden des Galerie-Bildes' 
     });
   }
 });
@@ -519,10 +583,11 @@ router.get('/with-prices', async (req, res) => {
     }
     
     console.log('🔄 Cache miss or expired, fetching fresh data...');
-    // 1. Portfolio Items laden (⚡ NUR aktive Items mit optimiertem Index!)
+    // 1. Portfolio Items laden (⚡ SORT FIRST, dann SELECT!)
     const portfolioStart = Date.now();
     const portfolioItems = await Portfolio.find({ aktiv: true })
-      .sort({ reihenfolge: 1, name: 1 })
+      .sort({ reihenfolge: 1, name: 1 })  // ✅ ERST sortieren (nutzt Index)
+      .select('-bilder')  // ✅ DANN Bilder ausschließen
       .lean(); // lean() für bessere Performance
     
     console.log(`📋 Portfolio items loaded (${portfolioItems.length}): ${Date.now() - portfolioStart}ms`);
@@ -611,18 +676,20 @@ router.get('/with-prices', async (req, res) => {
         // Verfügbarkeit: Produkt muss aktiv sein UND Bestand haben
         const istVerfuegbar = item.aktiv !== false && verfuegbareMenge > 0;
         
-        // Bilder-URLs hinzufügen (optimiert)
+        // 🚀 OPTIMIERT: Bild-URLs generieren (auch wenn Bilder nicht geladen wurden)
         let imageData = { hauptbild: null, galerie: [] };
         
-        if (item.bilder?.hauptbild) {
-          imageData.hauptbild = item.bilder.hauptbild;
-        }
+        // Da wir .select('-bilder') verwenden, haben wir die Bilddaten nicht
+        // → Generiere URLs direkt basierend auf der Produkt-ID
+        imageData.hauptbild = {
+          url: `/api/portfolio/${item._id}/image/main`,
+          type: 'image/jpeg'  // Default Typ
+        };
         
-        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map(imageObj => 
-            typeof imageObj === 'string' ? imageObj : imageObj.url
-          );
-        }
+        // Galerie-Bilder: Erstelle URLs für potenzielle Bilder (0-10)
+        // Die tatsächliche Anzahl wird beim Abruf geprüft
+        imageData.galerie = [];
+        // Leer lassen - Galerie wird nur beim Einzelabruf geladen
         
         // Preis-Logik: Verwende gespeicherten Preis, falls vorhanden, sonst berechne automatisch
         const gespeicherterPreis = item.preis || 0;
@@ -657,10 +724,7 @@ router.get('/with-prices', async (req, res) => {
             menge: verfuegbareMenge,
             einheit: 'Stück'
           },
-          bilder: {
-            ...item.bilder,
-            ...imageData
-          }
+          bilder: imageData  // ✅ NUR optimierte Bild-URLs, keine Base64-Daten!
         };
         
         console.log(`✅ ${item.name}: ${Date.now() - itemStart}ms`);
@@ -672,20 +736,15 @@ router.get('/with-prices', async (req, res) => {
         const bestand = bestandMap.get(item._id.toString());
         const verfuegbareMenge = bestand ? bestand.menge : 0;
         const istVerfuegbar = verfuegbareMenge > 0;
-        const imageData = {
-          hauptbild: null,
-          galerie: []
+        
+        // 🚀 OPTIMIERT: Bild-URLs auch im Fehlerfall (Bilder nicht geladen wegen .select('-bilder'))
+        const imageData = { 
+          hauptbild: {
+            url: `/api/portfolio/${item._id}/image/main`,
+            type: 'image/jpeg'
+          },
+          galerie: [] 
         };
-        
-        if (item.bilder?.hauptbild) {
-          imageData.hauptbild = item.bilder.hauptbild;
-        }
-        
-        if (item.bilder?.galerie && item.bilder.galerie.length > 0) {
-          imageData.galerie = item.bilder.galerie.map(imageObj => 
-            typeof imageObj === 'string' ? imageObj : imageObj.url
-          );
-        }
         
         // Preis-Logik auch bei Fehlern: Verwende gespeicherten Preis, falls vorhanden
         const gespeicherterPreis = item.preis || 0;
@@ -702,10 +761,7 @@ router.get('/with-prices', async (req, res) => {
             menge: verfuegbareMenge,
             einheit: 'Stück'
           },
-          bilder: {
-            ...item.bilder,
-            ...imageData
-          }
+          bilder: imageData  // ✅ NUR optimierte Bild-URLs, keine Base64-Daten!
         };
       }
     });
@@ -1120,6 +1176,80 @@ router.post('/:id/upload-image', auth, upload.single('image'), optimizeMainImage
   }
 });
 
+// @route   GET /api/portfolio/:id/image/main
+// @desc    Hauptbild für Portfolio-Produkt servieren (optimiert)
+// @access  Public
+router.get('/:id/image/main', async (req, res) => {
+  try {
+    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    
+    if (!product || !product.bilder?.hauptbild) {
+      return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
+    }
+
+    const base64Data = product.bilder.hauptbild;
+    
+    // Extrahiere MIME-Type und Base64-Daten
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
+    }
+
+    const mimeType = matches[1];
+    const imageBuffer = Buffer.from(matches[2], 'base64');
+
+    // Cache-Header für Browser-Caching (1 Stunde - kürzere Zeit wegen Updates)
+    res.set({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=3600',
+      'Content-Length': imageBuffer.length
+    });
+
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Fehler beim Laden des Hauptbildes:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Laden des Bildes' });
+  }
+});
+
+// @route   GET /api/portfolio/:id/image/gallery/:index
+// @desc    Galeriebild für Portfolio-Produkt servieren (optimiert)
+// @access  Public
+router.get('/:id/image/gallery/:index', async (req, res) => {
+  try {
+    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    const index = parseInt(req.params.index);
+    
+    if (!product || !product.bilder?.galerie || !product.bilder.galerie[index]) {
+      return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
+    }
+
+    const imageObj = product.bilder.galerie[index];
+    const base64Data = typeof imageObj === 'string' ? imageObj : imageObj.url;
+    
+    // Extrahiere MIME-Type und Base64-Daten
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
+    }
+
+    const mimeType = matches[1];
+    const imageBuffer = Buffer.from(matches[2], 'base64');
+
+    // Cache-Header für Browser-Caching (1 Stunde - kürzere Zeit wegen Updates)
+    res.set({
+      'Content-Type': mimeType,
+      'Cache-Control': 'public, max-age=3600',
+      'Content-Length': imageBuffer.length
+    });
+
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Fehler beim Laden des Galeriebildes:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Laden des Bildes' });
+  }
+});
+
 // @route   GET /api/portfolio/image/:filename
 // @desc    Produktbild servieren (wird nicht mehr benötigt, da Base64 verwendet wird)
 // @access  Public
@@ -1160,7 +1290,7 @@ router.get('/image/:filename', (req, res) => {
     }
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 Jahr Cache
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 Stunde Cache
     
     const stream = fs.createReadStream(imagePath);
     stream.pipe(res);

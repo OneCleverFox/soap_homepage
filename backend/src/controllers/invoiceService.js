@@ -373,6 +373,63 @@ class InvoiceService {
         .populate('customer.customerId', 'vorname nachname firma')
         .populate('template', 'name');
 
+      // ⚡ BESTANDSVERWALTUNG: Artikel automatisch vom Bestand abbuchen
+      console.log(`📦 [BESTAND] Buche Artikel für Rechnung ${invoiceNumber} aus...`);
+      const Bestand = require('../models/Bestand');
+      const Bewegung = require('../models/Bewegung');
+      
+      for (const item of processedItems) {
+        if (item.productId) {
+          try {
+            // Finde Bestand für dieses Produkt
+            const bestand = await Bestand.findOne({
+              artikelId: item.productId,
+              typ: 'produkt'
+            });
+
+            if (bestand) {
+              const alteMenge = bestand.menge;
+              const neueMenge = Math.max(0, alteMenge - item.quantity);
+              
+              // Bestand aktualisieren
+              bestand.menge = neueMenge;
+              bestand.letzteAenderung = new Date();
+              await bestand.save();
+
+              // Bewegung protokollieren
+              const bewegung = new Bewegung({
+                typ: 'ausgang',
+                bestandId: bestand._id,
+                artikel: {
+                  typ: 'produkt',
+                  artikelId: item.productId,
+                  name: item.productData.name
+                },
+                menge: item.quantity,
+                einheit: bestand.einheit || 'Stück',
+                bestandVorher: alteMenge,
+                bestandNachher: neueMenge,
+                grund: 'Verkauf (Rechnung)',
+                referenz: {
+                  typ: 'rechnung',
+                  id: savedInvoice._id
+                },
+                notizen: `Ausgebucht für Rechnung ${invoiceNumber} - ${item.productData.name}`,
+                userId: req.user?.userId || req.user?.id || 'System'
+              });
+              await bewegung.save();
+
+              console.log(`✅ [BESTAND] ${item.productData.name}: ${alteMenge} → ${neueMenge} (${item.quantity} ausgebucht)`);
+            } else {
+              console.warn(`⚠️ [BESTAND] Kein Bestand gefunden für Produkt-ID: ${item.productId} (${item.productData.name})`);
+            }
+          } catch (bestandError) {
+            console.error(`❌ [BESTAND] Fehler beim Ausbuchen von ${item.productData.name}:`, bestandError);
+            // Fehler bei Bestandsbuchung sollte Rechnungserstellung nicht blockieren
+          }
+        }
+      }
+
       // E-Mail an Kunden versenden, falls gewünscht
       if (sendEmailToCustomer && customer.customerData.email) {
         try {
