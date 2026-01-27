@@ -39,7 +39,6 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Add as AddIcon,
-  Menu as MenuIcon,
   LocalShipping,
   ShoppingCart,
   Category,
@@ -47,6 +46,7 @@ import {
   FilterList as FilterIcon
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
+import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
 
 const AdminPortfolio = () => {
   const theme = useTheme();
@@ -646,10 +646,9 @@ const AdminPortfolio = () => {
                   <Box sx={{ position: 'relative' }}>
                     <CardMedia
                       component="img"
-                      sx={{ height: { xs: 180, sm: 200 } }}
+                      sx={{ height: { xs: 180, sm: 200 }, objectFit: 'cover' }}
                       image={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage('Kein Bild')}
                       alt={item.name}
-                      sx={{ objectFit: 'cover' }}
                       onError={(e) => {
                         console.log('Bild konnte nicht geladen werden:', item.bilder?.hauptbild);
                         e.target.src = getPlaceholderImage('Fehler beim Laden');
