@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Paper,
   Button,
@@ -33,9 +33,7 @@ import {
   Card,
   CardContent,
   CardMedia,
-  CardActions,
-  TablePagination,
-  Fade  // ✅ Für Animationen
+  CardActions
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -49,7 +47,6 @@ import {
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
 import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
-import LazyImage from '../components/LazyImage';  // ✅ Performance-optimierte Lazy Loading
 
 const AdminPortfolio = () => {
   const theme = useTheme();
@@ -61,12 +58,7 @@ const AdminPortfolio = () => {
   const [open, setOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [imagesLoading, setImagesLoading] = useState(true);  // Separate für Bilder
   const [error, setError] = useState(null);
-
-  // 📄 Pagination State
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(12);  // 12 Items pro Seite (3x4 Grid)
 
   // Navigation State
   const [selectedCategory, setSelectedCategory] = useState('alle');
@@ -118,8 +110,7 @@ const AdminPortfolio = () => {
     abmessungen: {
       laenge: '',
       breite: '',
-      hoehe: '',
-      durchmesser: ''
+      hoehe: ''
     },
     beschreibung: {
       kurz: '',
@@ -131,31 +122,36 @@ const AdminPortfolio = () => {
 
   const [formData, setFormData] = useState(initialFormData);
 
-  // ✅ Funktionen VOR useEffect definieren (wegen Dependencies)
-  const loadPortfolioItems = useCallback(async (signal) => {
+  // Portfolio Items laden
+  useEffect(() => {
+    const loadData = async () => {
+      await loadOptions(); // Erst Optionen laden
+      await loadPortfolioItems(); // Dann Portfolio-Items
+    };
+    loadData();
+  }, []);
+
+  // Items nach Kategorie filtern
+  useEffect(() => {
+    if (selectedCategory === 'alle') {
+      setFilteredItems(portfolioItems);
+    } else {
+      setFilteredItems(portfolioItems.filter(item => item.kategorie === selectedCategory));
+    }
+  }, [portfolioItems, selectedCategory]);
+
+  const loadPortfolioItems = async () => {
     try {
       setLoading(true);
-      const startTime = performance.now();
-      console.log('⏱️ Portfolio API-Call startet...');
-      
-      const response = await portfolioAdminService.getAll(signal);
-      
-      const duration = performance.now() - startTime;
-      console.log(`✅ Portfolio API-Call abgeschlossen in ${duration.toFixed(0)}ms - ${response.data?.length || 0} Produkte`);
-      
-      if (!signal?.aborted) {
-        // ✅ SOFORT setzen, damit Cards erscheinen (Bilder laden separat)
-        setPortfolioItems(response.data || []);
-        setLoading(false); // ✅ Loading SOFORT beenden → Cards werden gerendert
-      }
+      const response = await portfolioAdminService.getAll();
+      setPortfolioItems(response.data || []);
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error('❌ Fehler beim Laden der Portfolio Items:', err);
-        setError('Fehler beim Laden der Portfolio Items');
-      }
+      console.error('Fehler beim Laden der Portfolio Items:', err);
+      setError('Fehler beim Laden der Portfolio Items');
+    } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   const loadOptions = async () => {
     try {
@@ -196,50 +192,6 @@ const AdminPortfolio = () => {
     }
   };
 
-  // Portfolio Items laden
-  useEffect(() => {
-    const abortController = new AbortController();
-    console.log('📡 Portfolio: Lade Daten...');
-    
-    const loadData = async () => {
-      await loadOptions(); // Erst Optionen laden
-      await loadPortfolioItems(abortController.signal); // Dann Portfolio-Items
-    };
-    loadData();
-    
-    return () => {
-      console.log('🛑 Portfolio: Abbruch - Komponente wird unmounted');
-      abortController.abort();
-    };
-  }, [loadPortfolioItems]);
-
-  // Items nach Kategorie filtern (memoized)
-  useEffect(() => {
-    setPage(0);  // Reset pagination bei Filter-Änderung
-    if (selectedCategory === 'alle') {
-      setFilteredItems(portfolioItems);
-    } else {
-      setFilteredItems(portfolioItems.filter(item => item.kategorie === selectedCategory));
-    }
-  }, [portfolioItems, selectedCategory]);
-
-  // ⚡ Paginierte Items (memoized für Performance)
-  const paginatedItems = useMemo(() => {
-    const startIndex = page * rowsPerPage;
-    return filteredItems.slice(startIndex, startIndex + rowsPerPage);
-  }, [filteredItems, page, rowsPerPage]);
-
-  // Pagination Handler
-  const handleChangePage = useCallback((event, newPage) => {
-    setPage(newPage);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const handleChangeRowsPerPage = useCallback((event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  }, []);
-
   const handleCategorySelect = (categoryId) => {
     setSelectedCategory(categoryId);
     if (isMobile) {
@@ -257,7 +209,7 @@ const AdminPortfolio = () => {
       processedValue = isNaN(numValue) ? '' : numValue;
     }
 
-    // Spezialbehandlung: Wenn Gießform gewählt wird, lade Abmessungen, Gewicht und Durchmesser automatisch
+    // Spezialbehandlung: Wenn Gießform gewählt wird, lade Abmessungen automatisch
     if (name === 'giessform' && value) {
       try {
         const selectedGiessform = giessformOptions.find(g => g._id === value);
@@ -266,21 +218,14 @@ const AdminPortfolio = () => {
           const laengeCm = selectedGiessform.laengeMm ? (selectedGiessform.laengeMm / 10).toFixed(1) : '';
           const breiteCm = selectedGiessform.breiteMm ? (selectedGiessform.breiteMm / 10).toFixed(1) : '';
           const tiefeCm = selectedGiessform.tiefeMm ? (selectedGiessform.tiefeMm / 10).toFixed(1) : '';
-          const durchmesserCm = selectedGiessform.durchmesserMm ? (selectedGiessform.durchmesserMm / 10).toFixed(1) : '';
-          
-          // Gewicht aus Volumen berechnen (volumenMl = Gewicht in Gramm für Gips, ca. 1:1)
-          // Für andere Materialien könnte man mit Dichte-Faktoren arbeiten
-          const gewichtGramm = selectedGiessform.volumenMl || '';
           
           setFormData(prev => ({
             ...prev,
             giessform: value,
-            gramm: gewichtGramm,
             abmessungen: {
               laenge: laengeCm,
               breite: breiteCm,
-              hoehe: tiefeCm,
-              durchmesser: durchmesserCm
+              hoehe: tiefeCm
             }
           }));
           return;
@@ -347,8 +292,7 @@ const AdminPortfolio = () => {
       abmessungenFromGiessform = {
         laenge: item.giessform.laengeMm ? (item.giessform.laengeMm / 10).toFixed(1) : '',
         breite: item.giessform.breiteMm ? (item.giessform.breiteMm / 10).toFixed(1) : '',
-        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : '',
-        durchmesser: item.giessform.durchmesserMm ? (item.giessform.durchmesserMm / 10).toFixed(1) : ''
+        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : ''
       };
     }
     
@@ -374,8 +318,7 @@ const AdminPortfolio = () => {
         // Verwende Abmessungen aus Item, falls vorhanden, sonst aus Gießform
         laenge: (item.abmessungen && item.abmessungen.laenge) || abmessungenFromGiessform.laenge || '',
         breite: (item.abmessungen && item.abmessungen.breite) || abmessungenFromGiessform.breite || '',
-        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || '',
-        durchmesser: (item.abmessungen && item.abmessungen.durchmesser) || abmessungenFromGiessform.durchmesser || ''
+        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || ''
       },
       beschreibung: {
         kurz: (item.beschreibung && item.beschreibung.kurz) || '',
@@ -411,12 +354,13 @@ const AdminPortfolio = () => {
       }
       
       if (formData.kategorie === 'werkstuck') {
-        // Für Werkstücke: Setze nur Seifenfelder auf leere Strings
+        // Für Werkstücke: Setze Seifenfelder auf leere Strings
         submitData.seife = '';
         submitData.aroma = '';
         submitData.seifenform = '';
         submitData.verpackung = '';
-        // NICHT zusatz und optional überschreiben - die können auch für Werkstücke genutzt werden!
+        submitData.zusatz = '';
+        submitData.optional = '';
         
         // Stelle sicher dass giessform und giesswerkstoff als ObjectId oder undefined gesetzt sind
         // WICHTIG: Leere Strings vermeiden, die zu Validation-Fehlern führen
@@ -553,9 +497,7 @@ const AdminPortfolio = () => {
   const handleImageDelete = async (productId, imageType, imageIndex = '') => {
     if (window.confirm('Möchten Sie dieses Bild wirklich löschen?')) {
       try {
-        // Übersetze deutsche Begriffe zu API-Endpunkten
-        const apiImageType = imageType === 'galerie' ? 'gallery' : imageType;
-        await portfolioAdminService.deleteImage(productId, apiImageType, imageIndex);
+        await portfolioAdminService.deleteImage(productId, imageType, imageIndex);
         loadPortfolioItems();
       } catch (err) {
         console.error('Fehler beim Löschen:', err);
@@ -695,62 +637,22 @@ const AdminPortfolio = () => {
             </Alert>
           )}
 
-          {/* Cards Grid - nur paginierte Items rendern */}
+          {/* Cards Grid */}
           <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
-            {loading && portfolioItems.length === 0 ? (
-              // ✅ Skeleton Cards während des ersten Ladens
-              Array.from({ length: 12 }).map((_, index) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={`skeleton-${index}`}>
-                  <Card sx={{ height: '100%' }}>
-                    <Box sx={{ height: 200, bgcolor: '#f5f5f5' }} />
-                    <CardContent>
-                      <Box sx={{ height: 24, bgcolor: '#e0e0e0', mb: 1, borderRadius: 1 }} />
-                      <Box sx={{ height: 16, bgcolor: '#e0e0e0', width: '60%', borderRadius: 1 }} />
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))
-            ) : (
-              // ✅ Echte Cards sofort anzeigen (auch wenn noch loading=true)
-              paginatedItems.map((item, index) => (
+            {filteredItems.map((item) => (
               <Grid item xs={12} sm={6} md={4} lg={3} key={item._id}>
-                <Fade in={true} timeout={200} style={{ transitionDelay: `${Math.min(index * 30, 150)}ms` }}>
-                <Card sx={{ 
-                  height: '100%', 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: isMobile ? 'none' : 'translateY(-4px)',
-                    boxShadow: isMobile ? 2 : '0 8px 24px rgba(0,0,0,0.15)'
-                  }
-                }}>
+                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   {/* Product Image mit Upload */}
                   <Box sx={{ position: 'relative' }}>
-                    <LazyImage
-                      src={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage('Kein Bild')}
+                    <CardMedia
+                      component="img"
+                      sx={{ height: { xs: 180, sm: 200 }, objectFit: 'cover' }}
+                      image={getImageUrl(item.bilder?.hauptbild) || getPlaceholderImage('Kein Bild')}
                       alt={item.name}
-                      height={isMobile ? 180 : 200}
-                      objectFit="cover"
-                      priority={index < (isMobile ? 6 : 3)}  // 🚀 Mobile: 6, Desktop: 3
                       onError={(e) => {
                         console.log('Bild konnte nicht geladen werden:', item.bilder?.hauptbild);
+                        e.target.src = getPlaceholderImage('Fehler beim Laden');
                       }}
-                      fallback={
-                        <Box
-                          sx={{
-                            height: isMobile ? 180 : 200,
-                            bgcolor: '#f5f5f5',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <Typography variant="body2" color="text.secondary">
-                            Kein Bild
-                          </Typography>
-                        </Box>
-                      }
                     />
                     
                     {/* Hauptbild Upload Button */}
@@ -858,39 +760,18 @@ const AdminPortfolio = () => {
                       </Typography>
                       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(50px, 1fr))', gap: { xs: 0.5, sm: 1 }, maxWidth: '100%' }}>
                         {/* Vorhandene Galeriebilder */}
-                        {item.bilder?.galerie && item.bilder.galerie.slice(0, 4).map((img, idx) => (
-                          <Box key={idx} sx={{ position: 'relative' }}>
-                            <LazyImage
-                              src={getImageUrl(img) || getPlaceholderImage(`Galerie ${idx + 1}`)}
-                              alt={img.alt_text || `Galerie ${idx + 1}`}
-                              height={60}
-                              objectFit="cover"
-                              priority={false}  // Gallery-Bilder haben keine Priorität
-                              onError={(e) => {
-                                console.log('Galeriebild konnte nicht geladen werden:', img);
-                              }}
-                              sx={{
+                        {item.bilder?.galerie && item.bilder.galerie.slice(0, 4).map((img, index) => (
+                          <Box key={index} sx={{ position: 'relative' }}>
+                            <img 
+                              src={img.url || img}  // Base64-Data-URL direkt aus Datenbank
+                              alt={`Galerie ${index + 1}`}
+                              style={{
+                                width: '100%',
+                                aspectRatio: '1',
+                                objectFit: 'cover',
                                 borderRadius: '4px',
                                 border: '1px solid #ddd'
                               }}
-                              fallback={
-                                <Box
-                                  sx={{
-                                    width: '100%',
-                                    height: 60,
-                                    bgcolor: '#f5f5f5',
-                                    borderRadius: '4px',
-                                    border: '1px solid #ddd',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                  }}
-                                >
-                                  <Typography variant="caption" color="text.secondary">
-                                    {idx + 1}
-                                  </Typography>
-                                </Box>
-                              }
                             />
                             <IconButton
                               size="small"
@@ -904,7 +785,7 @@ const AdminPortfolio = () => {
                                 color: 'white',
                                 '&:hover': { bgcolor: 'error.dark' }
                               }}
-                              onClick={() => handleImageDelete(item._id, 'galerie', idx)}
+                              onClick={() => handleImageDelete(item._id, 'galerie', index)}
                             >
                               <DeleteIcon sx={{ fontSize: 10 }} />
                             </IconButton>
@@ -966,28 +847,9 @@ const AdminPortfolio = () => {
                     </IconButton>
                   </CardActions>
                 </Card>
-                </Fade>
               </Grid>
-              ))
-            )}
+            ))}
           </Grid>
-
-          {/* ✅ Pagination Controls */}
-          {filteredItems.length > rowsPerPage && (
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
-              <TablePagination
-                component="div"
-                count={filteredItems.length}
-                page={page}
-                onPageChange={handleChangePage}
-                rowsPerPage={rowsPerPage}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-                rowsPerPageOptions={[8, 12, 24, 48]}
-                labelRowsPerPage="Produkte pro Seite:"
-                labelDisplayedRows={({ from, to, count }) => `${from}-${to} von ${count}`}
-              />
-            </Box>
-          )}
 
           {filteredItems.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
@@ -1404,7 +1266,6 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.laenge || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
-                    helperText="Für rechteckige Formen"
                   />
                 </Grid>
 
@@ -1417,7 +1278,6 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.breite || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
-                    helperText="Für rechteckige Formen"
                   />
                 </Grid>
 
@@ -1430,19 +1290,6 @@ const AdminPortfolio = () => {
                     value={formData.abmessungen?.hoehe || ''}
                     onChange={handleInputChange}
                     inputProps={{ min: 0, step: 0.1 }}
-                  />
-                </Grid>
-
-                <Grid item xs={12} sm={4}>
-                  <TextField
-                    fullWidth
-                    label="Durchmesser (cm)"
-                    name="abmessungen.durchmesser"
-                    type="number"
-                    value={formData.abmessungen?.durchmesser || ''}
-                    onChange={handleInputChange}
-                    inputProps={{ min: 0, step: 0.1 }}
-                    helperText="Für runde Formen"
                   />
                 </Grid>
               </>

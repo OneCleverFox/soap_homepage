@@ -16,6 +16,8 @@
     "test": "echo \"No tests specified - Backend running\" && exit 0",
     "postinstall": "npm rebuild sharp --platform=linux --arch=x64 || npm install sharp --platform=linux --arch=x64 || echo 'Sharp installation failed - continuing without image optimization'",
     "setup:optimizations": "node scripts/setupOptimizations.js",
+    "create-portfolio-indexes": "node src/scripts/createPortfolioIndexes.js",
+    "deduct-invoice-stock": "node src/scripts/retroactiveInvoiceStockDeduction.js",
     "logs:view": "tail -f logs/combined.log",
     "logs:errors": "tail -f logs/error.log",
     "cache:clear": "node -e \"require('./src/utils/cacheManager').cacheManager.flush(); console.log('Cache cleared');\""
