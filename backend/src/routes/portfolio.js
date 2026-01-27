@@ -362,12 +362,16 @@ router.get('/', async (req, res) => {
     const totalTime = Date.now() - startTime;
     console.log(`⚡ [PORTFOLIO] Gesamt-Antwortzeit: ${totalTime}ms`);
     
-    // Sende einfache Response
-    res.json(portfolioItems);
+    // Sende konsistente Response im success-Format
+    res.json({
+      success: true,
+      data: portfolioItems
+    });
     
   } catch (error) {
     console.error('❌ [PORTFOLIO] Fehler beim Laden der Produkte:', error);
     res.status(500).json({
+      success: false,
       message: 'Fehler beim Laden der Produkte',
       error: error.message
     });
