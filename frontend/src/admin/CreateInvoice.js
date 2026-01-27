@@ -127,9 +127,9 @@ const CreateInvoice = () => {
     }
     try {
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 [FRONTEND] Sende Request an /api/admin/products');
+        console.log('🔍 [FRONTEND] Sende Request an /api/portfolio');
       }
-      const response = await fetch(`${API_BASE_URL}/admin/products`, {
+      const response = await fetch(`${API_BASE_URL}/portfolio`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

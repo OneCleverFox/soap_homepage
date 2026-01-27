@@ -311,154 +311,65 @@ async function calculatePortfolioPrice(portfolioItem) {
 // @access  Public (aktive), Admin (alle mit includeInactive=true)
 router.get('/', async (req, res) => {
   try {
-    // 🚀 PERFORMANCE: Stelle sicher dass aktiv-Index existiert
-    await Portfolio.collection.createIndex({ aktiv: 1, reihenfolge: 1 }, { background: true }).catch(() => {});
+    console.log('🔍 [PORTFOLIO] Lade Produkte aus Portfolio...');
     
     const { includeInactive, includeUnavailable } = req.query;
-    
-    // Unterstütze beide Parameter für Konsistenz
     const shouldIncludeInactive = includeInactive === 'true' || includeUnavailable === 'true';
     
     // Filter-Query basierend auf Parameter
     let filter = {};
     if (!shouldIncludeInactive) {
-      filter.aktiv = true; // Nur aktive Produkte für normale Benutzer
+      // Unterstütze beide Feldnamen: isActive und aktiv
+      filter.$or = [
+        { isActive: true },
+        { aktiv: true }
+      ];
     }
-    // Wenn includeInactive=true oder includeUnavailable=true, werden alle Produkte (aktiv + inaktiv) geladen
     
-    // 🚀 PERFORMANCE: Migration entfernt - läuft nur einmalig beim Server-Start
-    // ⚡ CRITICAL: Bilder ausschließen um MongoDB Memory Limit zu vermeiden (33MB)
-    // ⚡ CRITICAL: allowDiskUse funktioniert NUR mit Aggregation, nicht mit .find()
     const startTime = Date.now();
     
-    // ULTIMATE FIX: MongoDB allowDiskUse wird einfach NICHT übergeben (Mongoose/Driver Bug)
-    // LÖSUNG: Lade Daten OHNE Sort, sortiere dann in JavaScript!
-    console.log('🔧 Loading data WITHOUT MongoDB sort (will sort in JavaScript)...');
-    console.log('🔍 Filter:', JSON.stringify(filter));
-    
-    const db = Portfolio.db;
-    const collectionName = Portfolio.collection.name;
-    
-    // Lade OHNE $sort - kein Memory Limit Problem!
-    const portfolioItems = await db.collection(collectionName).aggregate([
-      { $match: filter },
-      { $project: { 'bilder.hauptbildData.data': 0, 'bilder.galerie': 0 } }
-    ]).toArray();
-    
-    // Sortiere in JavaScript - sehr schnell für <100 Items!
-    portfolioItems.sort((a, b) => {
-      // Sortierung: aktiv DESC, reihenfolge ASC, name ASC
-      if (a.aktiv !== b.aktiv) return (b.aktiv ? 1 : 0) - (a.aktiv ? 1 : 0);
-      if (a.reihenfolge !== b.reihenfolge) return (a.reihenfolge || 0) - (b.reihenfolge || 0);
-      return (a.name || '').localeCompare(b.name || '');
-    });
+    // ⚡ LÖSUNG: Lade Daten OHNE Sortierung - verhindert MongoDB Memory Limit Fehler
+    // Sortierung erfolgt lokal in Node.js (siehe unten)
+    const portfolioItems = await Portfolio.find(filter)
+      .select('-bilder.hauptbildData.data -bilder.galerie') // Schließe große Bild-Daten aus
+      .lean() // Bessere Performance
+      .exec();
     
     const queryTime = Date.now() - startTime;
-    console.log(`✅ Portfolio geladen: ${portfolioItems.length} Items in ${queryTime}ms`);
-
-    // 🚀 PERFORMANCE: Lade ALLE Bestände in einer einzigen Query
-    // 🔧 WICHTIG: MongoDB Native Driver gibt ObjectId anders zurück als Mongoose
-    // Konvertiere zu ObjectId für Mongoose Queries
-    const mongoose = require('mongoose');
-    const ObjectId = mongoose.Types.ObjectId;
+    console.log(`📦 [PORTFOLIO] ${portfolioItems.length} Produkte aus DB geladen in ${queryTime}ms`);
     
-    const portfolioIds = portfolioItems.map(item => new ObjectId(item._id));
-    const allBestaende = await Bestand.find({ 
-      artikelId: { $in: portfolioIds },
-      typ: 'produkt'
-    }).lean();
-    
-    // Erstelle Map für O(1) Lookup
-    const bestandMap = new Map();
-    allBestaende.forEach(bestand => {
-      bestandMap.set(bestand.artikelId.toString(), bestand);
-    });
-
-    // ⚡ PERFORMANCE: Lade Bild-Informationen für hasBild-Flags
-    // Nur _id und Bild-Felder laden (sehr klein, keine Base64-Daten)
-    console.log('🖼️ Loading image info for', portfolioIds.length, 'items...');
-    const itemsWithImages = await Portfolio.find(
-      { _id: { $in: portfolioIds } },
-      { _id: 1, 'bilder.hauptbildData.data': 1, 'bilder.galerie': 1 }
-    ).lean();
-    
-    console.log('🖼️ Found image data for', itemsWithImages.length, 'items');
-    
-    const imageMap = new Map();
-    itemsWithImages.forEach(img => {
-      const hasHauptbild = !!(img.bilder?.hauptbildData?.data && img.bilder.hauptbildData.data.length > 0);
-      const hasGalerie = !!(img.bilder?.galerie && img.bilder.galerie.length > 0);
-      console.log(`📸 Item ${img._id}: hasHauptbild=${hasHauptbild}, hasGalerie=${hasGalerie}, bildDataLength=${img.bilder?.hauptbildData?.data?.length || 0}`);
+    // ⚡ LOKALE SORTIERUNG in Node.js (kein MongoDB Memory Limit!)
+    portfolioItems.sort((a, b) => {
+      // Primäre Sortierung: reihenfolge (falls vorhanden)
+      const orderA = a.reihenfolge || 999999;
+      const orderB = b.reihenfolge || 999999;
       
-      imageMap.set(img._id.toString(), {
-        hasHauptbild,
-        hasGalerie
-      });
-    });
-    
-    // Verarbeite Portfolio-Items ohne zusätzliche DB-Queries
-    const portfolioWithBestand = portfolioItems.map(item => {
-      const itemObj = item; // lean() liefert bereits Plain Objects
-      
-      // Stelle sicher, dass aktiv-Feld einen Boolean-Wert hat
-      if (itemObj.aktiv === undefined || itemObj.aktiv === null) {
-        itemObj.aktiv = false; // Default für undefined/null Werte
+      if (orderA !== orderB) {
+        return orderA - orderB;
       }
       
-      // Füge Bild-Flags hinzu (verhindert 404-Requests im Frontend)
-      const imageInfo = imageMap.get(item._id.toString());
-      if (imageInfo) {
-        itemObj.hasHauptbild = imageInfo.hasHauptbild;
-        itemObj.hasGalerie = imageInfo.hasGalerie;
-        console.log(`✅ Setze Bild-Flags für ${item.name}: hasHauptbild=${imageInfo.hasHauptbild}`);
-      } else {
-        itemObj.hasHauptbild = false;
-        itemObj.hasGalerie = false;
-        console.log(`❌ Keine Bild-Info gefunden für ${item.name} (ID: ${item._id.toString()})`);
-      }
+      // Sekundäre Sortierung: createdAt (neueste zuerst)
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
       
-      // Hole Bestand aus Map (O(1) statt DB-Query)
-      const bestand = bestandMap.get(item._id.toString());
-      
-      // Füge Bestand-Informationen im erwarteten Format hinzu
-      if (bestand) {
-        itemObj.bestand = {
-          menge: bestand.menge || 0,
-          einheit: bestand.einheit || 'Stück',
-          verfuegbar: (bestand.menge || 0) > 0
-        };
-      } else {
-        itemObj.bestand = {
-          menge: 0,
-          einheit: 'Stück',
-          verfuegbar: false
-        };
-      }
-      
-      // Legacy-Felder für Kompatibilität
-      itemObj.verfuegbareMenge = itemObj.bestand.menge;
-      itemObj.mindestbestand = bestand ? bestand.mindestbestand : 0;
-      itemObj.bestandId = bestand ? bestand._id : null;
-      
-      return itemObj;
+      return dateB - dateA;
     });
-
-    // Debug-Log für die Antwort
-    const activeCount = portfolioWithBestand.filter(item => item.aktiv === true).length;
-    const inactiveCount = portfolioWithBestand.filter(item => item.aktiv === false).length;
     
-    logger.info(`📊 Portfolio Response: ${portfolioWithBestand.length} total (${activeCount} aktiv, ${inactiveCount} inaktiv) - includeInactive: ${shouldIncludeInactive}`);
-
-    res.status(200).json({
-      success: true,
-      count: portfolioWithBestand.length,
-      data: portfolioWithBestand
-    });
+    const sortTime = Date.now() - startTime - queryTime;
+    console.log(`🔄 [PORTFOLIO] Lokal sortiert in ${sortTime}ms`);
+    console.log(`✅ [PORTFOLIO] ${portfolioItems.length} Produkte fertig verarbeitet`);
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`⚡ [PORTFOLIO] Gesamt-Antwortzeit: ${totalTime}ms`);
+    
+    // Sende einfache Response
+    res.json(portfolioItems);
+    
   } catch (error) {
-    console.error('Portfolio Fetch Error:', error);
+    console.error('❌ [PORTFOLIO] Fehler beim Laden der Produkte:', error);
     res.status(500).json({
-      success: false,
-      message: 'Fehler beim Abrufen der Portfolio-Daten'
+      message: 'Fehler beim Laden der Produkte',
+      error: error.message
     });
   }
 });
