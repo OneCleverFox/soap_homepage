@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminState } from '../hooks/useAdminState';
 import { useAdminSearch } from '../hooks/useAdminSearch';
 import toast from 'react-hot-toast';
-import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
+import { getPlaceholderImage } from '../utils/imageUtils';
 import LazyImage from '../components/LazyImage';
 import {
   Container,
@@ -24,7 +24,6 @@ import {
   InputAdornment,
   Card,
   CardContent,
-  Avatar,
   Stack,
   Tooltip,
   CircularProgress,
@@ -127,17 +126,6 @@ const getPortfolioImageUrl = (item) => {
   
   const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
   return `${API_BASE}/portfolio/${item._id}/hauptbild`;
-};
-
-// 🖼️ Helper: Portfolio Galerie-Bild URL generieren  
-const getPortfolioGalerieUrl = (item, index) => {
-  if (!item || index === undefined) return null;
-  
-  // Prüfe ob Galerie vorhanden ist
-  if (!item.hasGalerie) return null;
-  
-  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-  return `${API_BASE}/portfolio/${item._id}/galerie/${index}`;
 };
 
 const AdminLager = () => {
@@ -414,7 +402,7 @@ const AdminLager = () => {
       const finalTime = performance.now() - startTime;
       console.log(`⏱️ [${tabKey}] Total time (with state update): ${finalTime.toFixed(2)}ms`);
     }
-  }, [makeAPICall, loadedTabs]);
+  }, [makeAPICall, loadedTabs, loading, setLoading]);
   
   // Initial: Lade nur den ersten Tab
   useEffect(() => {
