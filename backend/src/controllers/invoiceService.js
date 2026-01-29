@@ -123,12 +123,7 @@ class InvoiceService {
             pendingAmount: { 
               $sum: {
                 $cond: [
-                  {
-                    $and: [
-                      { $ne: ['$payment.status', 'paid'] },
-                      { $eq: ['$payment.paidDate', null] }
-                    ]
-                  },
+                  { $ne: ['$status', 'paid'] },
                   '$amounts.total',
                   0
                 ]
@@ -137,12 +132,7 @@ class InvoiceService {
             paidAmount: { 
               $sum: {
                 $cond: [
-                  {
-                    $or: [
-                      { $eq: ['$payment.status', 'paid'] },
-                      { $ne: ['$payment.paidDate', null] }
-                    ]
-                  },
+                  { $eq: ['$status', 'paid'] },
                   '$amounts.total',
                   0
                 ]

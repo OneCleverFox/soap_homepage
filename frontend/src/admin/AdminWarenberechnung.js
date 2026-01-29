@@ -128,7 +128,7 @@ const AdminWarenberechnung = () => {
         setCalculation(null);
       }
     }
-  }, [portfolioProducts, categoryFilter, statusFilter, selectedProduct]);
+  }, [portfolioProducts, categoryFilter, statusFilter, selectedProduct, calculateProductCosts]);
 
   const loadPortfolioProducts = async () => {
     try {

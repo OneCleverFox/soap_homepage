@@ -64,27 +64,27 @@ class PDFService {
         ...(template?.companyInfo || {})
       };
       
-      // PDF generieren
+      // PDF generieren - optimiert für volle DIN A4 Breite
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
         displayHeaderFooter: true,
         headerTemplate: `
-          <div style="font-size: 8px; margin: 0 20px; width: 100%; border-bottom: 1px solid #ddd; padding-bottom: 2px;">
+          <div style="font-size: 9px; margin: 0 8px; width: 100%; border-bottom: 1px solid #ddd; padding-bottom: 3px;">
             <span style="float: left;">${companyInfo.name || 'Rechnung'}</span>
             <span style="float: right;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></span>
           </div>
         `,
         footerTemplate: `
-          <div style="font-size: 8px; margin: 0 20px; width: 100%; text-align: center; border-top: 1px solid #ddd; padding-top: 2px;">
+          <div style="font-size: 9px; margin: 0 8px; width: 100%; text-align: center; border-top: 1px solid #ddd; padding-top: 3px;">
             <span>${companyInfo.name} | ${companyInfo.contact?.email || ''}</span>
           </div>
         `,
         margin: {
-          top: '30mm',
-          right: '20mm',
-          bottom: '25mm',
-          left: '20mm'
+          top: '20mm',
+          right: '8mm',
+          bottom: '18mm',
+          left: '8mm'
         }
       });
       
@@ -239,8 +239,8 @@ class PDFService {
         
         body {
           font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
-          font-size: 9pt;
-          line-height: 1.3;
+          font-size: 11pt;
+          line-height: 1.4;
           color: #2c3e50;
           background: white;
           -webkit-print-color-adjust: exact;
@@ -252,7 +252,7 @@ class PDFService {
           min-height: 297mm;
           max-width: 210mm;
           margin: 0 auto;
-          padding: 15mm 20mm;
+          padding: 5mm 8mm;
           background: white;
           position: relative;
           display: flex;
@@ -264,11 +264,12 @@ class PDFService {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin-bottom: 20mm;
-          padding-bottom: 5mm;
+          margin: -5mm -8mm 15mm -8mm;
+          padding: 6mm 8mm 5mm 8mm;
           border-bottom: 2px solid #3498db;
           page-break-inside: avoid;
           min-height: 25mm;
+          background: #f8f9fa;
         }
         
         .company-info {
@@ -277,7 +278,7 @@ class PDFService {
         }
         
         .company-name {
-          font-size: 14pt;
+          font-size: 16pt;
           font-weight: 700;
           color: #2c3e50;
           margin-bottom: 3mm;
@@ -285,16 +286,16 @@ class PDFService {
         }
         
         .company-address {
-          font-size: 8pt;
+          font-size: 10pt;
           color: #34495e;
-          line-height: 1.2;
+          line-height: 1.3;
           margin-bottom: 2mm;
         }
         
         .company-contact {
-          font-size: 8pt;
+          font-size: 10pt;
           color: #34495e;
-          line-height: 1.2;
+          line-height: 1.3;
         }
         
         .invoice-title-section {
@@ -304,14 +305,14 @@ class PDFService {
         }
         
         .invoice-title {
-          font-size: 16pt;
+          font-size: 18pt;
           font-weight: 700;
           color: #3498db;
           margin-bottom: 5mm;
         }
         
         .invoice-meta {
-          font-size: 8pt;
+          font-size: 10pt;
           color: #34495e;
           text-align: right;
         }
@@ -336,7 +337,7 @@ class PDFService {
         }
         
         .customer-label {
-          font-size: 8pt;
+          font-size: 10pt;
           color: #7f8c8d;
           margin-bottom: 2mm;
           text-transform: uppercase;
@@ -344,10 +345,10 @@ class PDFService {
         }
         
         .customer-address {
-          font-size: 9pt;
+          font-size: 11pt;
           color: #2c3e50;
-          line-height: 1.3;
-          max-width: 80mm;
+          line-height: 1.4;
+          max-width: 90mm;
         }
         
         .customer-name {
@@ -374,7 +375,7 @@ class PDFService {
           width: 100%;
           border-collapse: collapse;
           margin-bottom: 5mm;
-          font-size: 8pt;
+          font-size: 10pt;
         }
         
         .products-table th {
@@ -384,7 +385,7 @@ class PDFService {
           text-align: left;
           font-weight: 600;
           border: 1px solid #bdc3c7;
-          font-size: 7pt;
+          font-size: 10pt;
         }
         
         .products-table td {
@@ -405,18 +406,18 @@ class PDFService {
           font-weight: 600;
           color: #2c3e50;
           margin-bottom: 1mm;
-          font-size: 8pt;
+          font-size: 10pt;
         }
         
         .product-sku {
-          font-size: 7pt;
+          font-size: 9pt;
           color: #7f8c8d;
         }
         
         .product-description {
-          font-size: 7pt;
+          font-size: 9pt;
           color: #34495e;
-          line-height: 1.2;
+          line-height: 1.3;
         }
         
         /* ===== TOTALS SECTION ===== */
@@ -429,8 +430,8 @@ class PDFService {
         }
         
         .totals-table {
-          width: 60mm;
-          font-size: 8pt;
+          width: 70mm;
+          font-size: 10pt;
           border-collapse: collapse;
         }
         
@@ -455,20 +456,20 @@ class PDFService {
           border-bottom: 2px solid #3498db;
           background: #ecf0f1;
           font-weight: 700;
-          font-size: 9pt;
+          font-size: 12pt;
           color: #2c3e50;
         }
         
         /* ===== FOOTER SECTION ===== */
         .invoice-footer {
-          margin-top: auto;
-          padding: 5mm 4mm;
+          margin: auto -8mm -5mm -8mm;
+          padding: 5mm 8mm;
           background: #f8f9fa;
-          border-radius: 2mm;
-          border: 1px solid #dee2e6;
+          border-radius: 0;
+          border: none;
           border-top: 2px solid #3498db;
           page-break-inside: avoid;
-          font-size: 7pt;
+          font-size: 9pt;
           min-height: 25mm;
         }
         
@@ -484,7 +485,7 @@ class PDFService {
         }
         
         .footer-column h4 {
-          font-size: 8pt;
+          font-size: 10pt;
           color: #3498db;
           margin-bottom: 2mm;
           font-weight: 700;
@@ -535,27 +536,27 @@ class PDFService {
         
         .footer-bank-item strong {
           color: #3498db;
-          font-size: 6pt;
+          font-size: 8pt;
           text-transform: uppercase;
           margin-bottom: 1mm;
           font-weight: 700;
         }
         
         .footer-bank-item span {
-          font-size: 7pt;
+          font-size: 9pt;
           color: #34495e;
           font-weight: 500;
         }
         
         .footer-legal {
           text-align: center;
-          font-size: 6pt;
+          font-size: 8pt;
           color: #7f8c8d;
           font-style: italic;
           margin-top: 3mm;
           padding-top: 2mm;
           border-top: 1px solid #e9ecef;
-          line-height: 1.1;
+          line-height: 1.2;
         }
         
         .footer-legal strong {

@@ -41,7 +41,8 @@ import {
   FilterList as FilterIcon,
   Delete as DeleteIcon,
   Close as CloseIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -80,11 +81,14 @@ const InvoiceList = () => {
   // UI State
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editedInvoice, setEditedInvoice] = useState(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [actionMenuInvoice, setActionMenuInvoice] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [savingInvoice, setSavingInvoice] = useState(false);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -203,55 +207,35 @@ const InvoiceList = () => {
   };
 
   const getStatusColor = (invoice) => {
-    // Farblogik basierend auf tatsächlichem Zahlungsstatus
-    if (invoice.payment && (invoice.payment.status === 'paid' || invoice.payment.paidDate)) {
-      return 'success'; // Grün für bezahlt
-    }
-    
-    if (invoice.status === 'paid') {
-      return 'success'; // Grün für bezahlt
-    }
-    
+    // Prüfe ob überfällig (sent aber Fälligkeitsdatum überschritten)
     if (invoice.status === 'sent' && invoice.isOverdue) {
       return 'error'; // Rot für überfällig
     }
     
+    // Standard Status-Mapping
     switch (invoice.status) {
       case 'draft': return 'default';
       case 'sent': return 'warning'; // Orange für ausstehende Zahlung
-      case 'paid': return 'success';
+      case 'paid': return 'success'; // Grün für bezahlt
       case 'overdue': return 'error';
       case 'cancelled': return 'secondary';
-      case 'pending': return 'info';
       default: return 'default';
     }
   };
 
   const getStatusText = (invoice) => {
-    // NEUER WORKFLOW: Zahlungsstatus = Rechnungsstatus
-    // 1. Prüfe echte Bezahlung (payment.status oder paidDate)
-    if (invoice.payment && (invoice.payment.status === 'paid' || invoice.payment.paidDate)) {
-      return 'Bezahlt';
-    }
-    
-    // 2. Prüfe wenn Rechnung als paid markiert ist (für manuelle Bezahlung)
-    if (invoice.status === 'paid') {
-      return 'Bezahlt';
-    }
-    
-    // 3. Prüfe Überfälligkeit für versendete Rechnungen
+    // Prüfe Überfälligkeit für versendete Rechnungen
     if (invoice.status === 'sent' && invoice.isOverdue) {
       return 'Überfällig';
     }
     
-    // 4. Standard Status-Mapping
+    // Standard Status-Mapping
     switch (invoice.status) {
       case 'draft': return 'Entwurf';
       case 'sent': return 'Versendet - Zahlung ausstehend';
       case 'paid': return 'Bezahlt';
       case 'overdue': return 'Überfällig';  
       case 'cancelled': return 'Storniert';
-      case 'pending': return 'Zum Versenden bereit';
       default: return invoice.status;
     }
   };
@@ -445,23 +429,25 @@ const InvoiceList = () => {
   };
 
   // Bezahlstatus-Hilfsfunktionen
-  const getPaymentStatusText = (paymentMethod) => {
-    if (!paymentMethod) return 'Unbezahlt';
-    
-    const methodMap = {
-      'paypal': 'PayPal',
-      'stripe': 'Kreditkarte',
-      'bank_transfer': 'Überweisung',
-      'invoice': 'Rechnung'
-    };
-    
-    return methodMap[paymentMethod] || 'Bezahlt';
+  const getPaymentStatusText = (invoice) => {
+    // Prüfe den Rechnungsstatus, nicht die Zahlungsmethode
+    if (invoice.status === 'paid') {
+      const methodMap = {
+        'paypal': 'PayPal',
+        'stripe': 'Kreditkarte',
+        'bank_transfer': 'Überweisung',
+        'bar': 'Barzahlung',
+        'invoice': 'Rechnung'
+      };
+      return methodMap[invoice.payment?.method] || 'Bezahlt';
+    }
+    return 'Unbezahlt';
   };
 
   // Zusätzliche Hilfsfunktionen aus AdminInvoiceManagement
-  const getPaymentStatusColor = (paymentMethod) => {
-    if (!paymentMethod) return 'warning';
-    return 'success';
+  const getPaymentStatusColor = (invoice) => {
+    if (invoice.status === 'paid') return 'success';
+    return 'warning';
   };
 
   const formatCurrency = (amount) => {
@@ -516,6 +502,117 @@ const InvoiceList = () => {
   const closeActionMenu = () => {
     setActionMenuAnchor(null);
     setActionMenuInvoice(null);
+  };
+
+  const openEditDialog = async (invoice) => {
+    try {
+      // Lade vollständige Rechnungsdetails zum Bearbeiten
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoice._id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setEditedInvoice(data.data);
+          setEditDialogOpen(true);
+        } else {
+          showSnackbar('Fehler beim Laden der Rechnung', 'error');
+        }
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Rechnung:', error);
+      showSnackbar('Fehler beim Laden der Rechnung', 'error');
+    }
+  };
+
+  const handleEditChange = (field, value) => {
+    setEditedInvoice(prev => {
+      const keys = field.split('.');
+      if (keys.length === 1) {
+        return { ...prev, [field]: value };
+      }
+      
+      // Nested field update (z.B. "customer.customerData.firstName")
+      const updated = { ...prev };
+      let current = updated;
+      for (let i = 0; i < keys.length - 1; i++) {
+        current[keys[i]] = { ...current[keys[i]] };
+        current = current[keys[i]];
+      }
+      current[keys[keys.length - 1]] = value;
+      return updated;
+    });
+  };
+
+  const handleItemChange = (index, field, value) => {
+    setEditedInvoice(prev => {
+      const items = [...prev.items];
+      const item = { ...items[index] };
+      
+      // Handle nested productData fields
+      if (field === 'name' || field === 'description') {
+        item.productData = { 
+          ...item.productData, 
+          [field]: value 
+        };
+        // Also update top-level field for compatibility
+        item[field] = value;
+      } else {
+        item[field] = field === 'quantity' || field === 'unitPrice' ? parseFloat(value) || 0 : value;
+      }
+      
+      // Recalculate item total
+      item.total = (item.quantity || 0) * (item.unitPrice || 0);
+      
+      items[index] = item;
+      
+      // Recalculate amounts
+      const subtotal = items.reduce((sum, item) => sum + (item.total || 0), 0);
+      const total = subtotal + (prev.amounts?.shippingCost || 0);
+      
+      return {
+        ...prev,
+        items,
+        amounts: {
+          ...prev.amounts,
+          subtotal,
+          total
+        }
+      };
+    });
+  };
+
+  const saveInvoice = async () => {
+    try {
+      setSavingInvoice(true);
+      
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${editedInvoice._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(editedInvoice)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        showSnackbar('Rechnung erfolgreich aktualisiert', 'success');
+        setEditDialogOpen(false);
+        loadInvoices(); // Reload list
+      } else {
+        showSnackbar(data.message || 'Fehler beim Speichern', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern der Rechnung:', error);
+      showSnackbar('Fehler beim Speichern der Rechnung', 'error');
+    } finally {
+      setSavingInvoice(false);
+    }
   };
 
   return (
@@ -830,8 +927,8 @@ const InvoiceList = () => {
                         <TableCell>
                           <Chip
                             size="small"
-                            label={getPaymentStatusText(invoice.payment?.method)}
-                            color={getPaymentStatusColor(invoice.payment?.method)}
+                            label={getPaymentStatusText(invoice)}
+                            color={getPaymentStatusColor(invoice)}
                           />
                         </TableCell>
                         <TableCell>
@@ -888,6 +985,13 @@ const InvoiceList = () => {
           Anzeigen
         </MenuItem>
         <MenuItem onClick={() => {
+          openEditDialog(actionMenuInvoice);
+          closeActionMenu();
+        }}>
+          <EditIcon sx={{ mr: 1 }} fontSize="small" />
+          Bearbeiten
+        </MenuItem>
+        <MenuItem onClick={() => {
           previewInvoice(actionMenuInvoice._id);
           closeActionMenu();
         }}>
@@ -901,9 +1005,7 @@ const InvoiceList = () => {
           <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
           PDF herunterladen
         </MenuItem>
-        {actionMenuInvoice && 
-         !(actionMenuInvoice.payment && (actionMenuInvoice.payment.status === 'paid' || actionMenuInvoice.payment.paidDate)) && 
-         actionMenuInvoice.status !== 'paid' && (
+        {actionMenuInvoice && actionMenuInvoice.status !== 'paid' && (
           <MenuItem onClick={() => {
             markAsPaid(actionMenuInvoice._id);
             closeActionMenu();
@@ -1070,6 +1172,302 @@ const InvoiceList = () => {
               Schließen
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Bearbeitungs-Dialog */}
+      <Dialog 
+        open={editDialogOpen} 
+        onClose={() => setEditDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            height: isMobile ? '100vh' : 'auto',
+            maxHeight: isMobile ? 'none' : '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          pb: isMobile ? 1 : 2,
+          fontSize: isMobile ? '1.25rem' : '1.5rem'
+        }}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <EditIcon />
+            Rechnung bearbeiten: {editedInvoice?.invoiceNumber}
+          </Box>
+          {isMobile && (
+            <IconButton 
+              onClick={() => setEditDialogOpen(false)}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ px: isMobile ? 2 : 3 }}>
+          {editedInvoice && (
+            <Grid container spacing={isMobile ? 2 : 3}>
+              {/* Kundendaten */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Kundendaten</Typography>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Vorname"
+                  value={editedInvoice.customer?.customerData?.firstName || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.firstName', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Nachname"
+                  value={editedInvoice.customer?.customerData?.lastName || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.lastName', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Firma (optional)"
+                  value={editedInvoice.customer?.customerData?.company || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.company', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="E-Mail"
+                  value={editedInvoice.customer?.customerData?.email || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.email', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Straße"
+                  value={editedInvoice.customer?.customerData?.street || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.street', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  label="PLZ"
+                  value={editedInvoice.customer?.customerData?.postalCode || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.postalCode', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <TextField
+                  fullWidth
+                  label="Stadt"
+                  value={editedInvoice.customer?.customerData?.city || ''}
+                  onChange={(e) => handleEditChange('customer.customerData.city', e.target.value)}
+                />
+              </Grid>
+
+              {/* Rechnungsdaten */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Rechnungsdaten</Typography>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Rechnungsdatum"
+                  type="date"
+                  value={editedInvoice.dates?.invoiceDate ? 
+                    new Date(editedInvoice.dates.invoiceDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleEditChange('dates.invoiceDate', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth
+                  label="Fälligkeitsdatum"
+                  type="date"
+                  value={editedInvoice.dates?.dueDate ? 
+                    new Date(editedInvoice.dates.dueDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleEditChange('dates.dueDate', e.target.value)}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Zahlungsmethode</InputLabel>
+                  <Select
+                    value={
+                      editedInvoice.payment?.method && 
+                      ['Überweisung', 'PayPal', 'Barzahlung'].includes(editedInvoice.payment.method) 
+                        ? editedInvoice.payment.method 
+                        : 'Überweisung'
+                    }
+                    onChange={(e) => handleEditChange('payment.method', e.target.value)}
+                    label="Zahlungsmethode"
+                  >
+                    <MenuItem value="Überweisung">Überweisung</MenuItem>
+                    <MenuItem value="PayPal">PayPal</MenuItem>
+                    <MenuItem value="Barzahlung">Barzahlung</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Artikel */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>Artikel</Typography>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Artikel</TableCell>
+                        <TableCell>Beschreibung</TableCell>
+                        <TableCell width="100px">Menge</TableCell>
+                        <TableCell width="120px">Einzelpreis</TableCell>
+                        <TableCell width="120px">Gesamt</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {editedInvoice.items?.map((item, index) => (
+                        <TableRow key={index}>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              value={item.productData?.name || item.name || ''}
+                              onChange={(e) => handleItemChange(index, 'name', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              multiline
+                              value={item.productData?.description || item.description || ''}
+                              onChange={(e) => handleItemChange(index, 'description', e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              value={item.quantity || 0}
+                              onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                              inputProps={{ min: 0, step: 1 }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              value={item.unitPrice || 0}
+                              onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)}
+                              inputProps={{ min: 0, step: 0.01 }}
+                              InputProps={{
+                                endAdornment: '€'
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}€
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+
+              {/* Summen */}
+              <Grid item xs={12}>
+                <Box display="flex" justifyContent="flex-end" sx={{ mt: 2 }}>
+                  <Box sx={{ minWidth: 300 }}>
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2">Zwischensumme:</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" align="right">
+                          {editedInvoice.amounts?.subtotal?.toFixed(2)}€
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          label="Versandkosten"
+                          type="number"
+                          value={editedInvoice.amounts?.shippingCost || 0}
+                          onChange={(e) => {
+                            const shippingCost = parseFloat(e.target.value) || 0;
+                            const subtotal = editedInvoice.amounts?.subtotal || 0;
+                            setEditedInvoice(prev => ({
+                              ...prev,
+                              amounts: {
+                                ...prev.amounts,
+                                shippingCost,
+                                total: subtotal + shippingCost
+                              }
+                            }));
+                          }}
+                          inputProps={{ min: 0, step: 0.01 }}
+                          InputProps={{
+                            endAdornment: '€'
+                          }}
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" align="right" sx={{ mt: 1 }}>
+                          {editedInvoice.amounts?.shippingCost?.toFixed(2) || '0.00'}€
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="h6">Gesamtbetrag:</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="h6" align="right">
+                          {editedInvoice.amounts?.total?.toFixed(2)}€
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ 
+          p: isMobile ? 2 : 3,
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 1 : 0
+        }}>
+          <Button 
+            onClick={() => setEditDialogOpen(false)}
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+          >
+            Abbrechen
+          </Button>
+          <Button 
+            variant="contained"
+            onClick={saveInvoice}
+            disabled={savingInvoice}
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+            startIcon={savingInvoice ? null : <CheckCircleIcon />}
+          >
+            {savingInvoice ? 'Speichert...' : 'Speichern'}
+          </Button>
         </DialogActions>
       </Dialog>
 
