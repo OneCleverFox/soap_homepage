@@ -30,7 +30,7 @@ const LazyImage = ({
   onLoad,
   onError,
   priority = false,
-  fallbackSrc, // Destructure to prevent passing to DOM
+  fallbackSrc: _fallbackSrc, // Destructure to prevent passing to DOM
   ...props
 }) => {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -47,6 +47,29 @@ const LazyImage = ({
     if (isLoaded) return;
 
     const currentImg = imgRef.current; // Copy ref for cleanup
+
+    // 🔧 FIX: Prüfe sofort ob Element bereits im Viewport ist (wichtig nach Filtern!)
+    const checkIfInViewport = () => {
+      if (!currentImg) return false;
+      const rect = currentImg.getBoundingClientRect();
+      const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+      const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+      
+      // Element ist sichtbar wenn es innerhalb des Viewports (+ großes Margin) ist
+      const margin = 400; // Gleicher Wert wie rootMargin
+      return (
+        rect.top < windowHeight + margin &&
+        rect.bottom > -margin &&
+        rect.left < windowWidth + margin &&
+        rect.right > -margin
+      );
+    };
+
+    // Wenn Element bereits sichtbar ist, sofort laden
+    if (checkIfInViewport()) {
+      setIsInView(true);
+      return; // Kein Observer nötig
+    }
 
     // Observer erstellen mit optimierten Mobile-Settings
     observerRef.current = new IntersectionObserver(
@@ -86,8 +109,14 @@ const LazyImage = ({
   };
 
   const handleError = (e) => {
-    console.error('Fehler beim Laden des Bildes:', src);
-    setHasError(true);
+    // Nur echte Fehler loggen, nicht 404 (fehlende Bilder)
+    if (e?.target?.naturalWidth === 0 && e?.target?.naturalHeight === 0) {
+      // Kein Bild vorhanden (404) - kein Error-Log nötig
+      setHasError(true);
+    } else {
+      console.error('Fehler beim Laden des Bildes:', src);
+      setHasError(true);
+    }
     if (onError) onError(e);
   };
 

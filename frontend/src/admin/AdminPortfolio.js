@@ -110,7 +110,8 @@ const AdminPortfolio = () => {
     abmessungen: {
       laenge: '',
       breite: '',
-      hoehe: ''
+      hoehe: '',
+      durchmesser: ''
     },
     beschreibung: {
       kurz: '',
@@ -218,6 +219,10 @@ const AdminPortfolio = () => {
           const laengeCm = selectedGiessform.laengeMm ? (selectedGiessform.laengeMm / 10).toFixed(1) : '';
           const breiteCm = selectedGiessform.breiteMm ? (selectedGiessform.breiteMm / 10).toFixed(1) : '';
           const tiefeCm = selectedGiessform.tiefeMm ? (selectedGiessform.tiefeMm / 10).toFixed(1) : '';
+          const durchmesserCm = selectedGiessform.durchmesserMm ? (selectedGiessform.durchmesserMm / 10).toFixed(1) : '';
+          
+          // Berechne Gewicht aus Volumen (1ml Seife ≈ 1g)
+          const gewichtGramm = selectedGiessform.volumenMl ? selectedGiessform.volumenMl.toString() : '';
           
           setFormData(prev => ({
             ...prev,
@@ -225,8 +230,10 @@ const AdminPortfolio = () => {
             abmessungen: {
               laenge: laengeCm,
               breite: breiteCm,
-              hoehe: tiefeCm
-            }
+              hoehe: tiefeCm,
+              durchmesser: durchmesserCm
+            },
+            gramm: gewichtGramm
           }));
           return;
         }
@@ -292,7 +299,8 @@ const AdminPortfolio = () => {
       abmessungenFromGiessform = {
         laenge: item.giessform.laengeMm ? (item.giessform.laengeMm / 10).toFixed(1) : '',
         breite: item.giessform.breiteMm ? (item.giessform.breiteMm / 10).toFixed(1) : '',
-        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : ''
+        hoehe: item.giessform.tiefeMm ? (item.giessform.tiefeMm / 10).toFixed(1) : '',
+        durchmesser: item.giessform.durchmesserMm ? (item.giessform.durchmesserMm / 10).toFixed(1) : ''
       };
     }
     
@@ -318,7 +326,8 @@ const AdminPortfolio = () => {
         // Verwende Abmessungen aus Item, falls vorhanden, sonst aus Gießform
         laenge: (item.abmessungen && item.abmessungen.laenge) || abmessungenFromGiessform.laenge || '',
         breite: (item.abmessungen && item.abmessungen.breite) || abmessungenFromGiessform.breite || '',
-        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || ''
+        hoehe: (item.abmessungen && item.abmessungen.hoehe) || abmessungenFromGiessform.hoehe || '',
+        durchmesser: (item.abmessungen && item.abmessungen.durchmesser) || abmessungenFromGiessform.durchmesser || ''
       },
       beschreibung: {
         kurz: (item.beschreibung && item.beschreibung.kurz) || '',
@@ -1292,6 +1301,18 @@ const AdminPortfolio = () => {
                     inputProps={{ min: 0, step: 0.1 }}
                   />
                 </Grid>
+
+                <Grid item xs={12} sm={4}>
+                  <TextField
+                    fullWidth
+                    label="Durchmesser (cm)"
+                    name="abmessungen.durchmesser"
+                    type="number"
+                    value={formData.abmessungen?.durchmesser || ''}
+                    onChange={handleInputChange}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
               </>
             )}
 
@@ -1347,7 +1368,7 @@ const AdminPortfolio = () => {
                   </Typography>
                 </Grid>
                 
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12}>
                   <TextField
                     fullWidth
                     label="Kurzbeschreibung"
@@ -1355,12 +1376,12 @@ const AdminPortfolio = () => {
                     value={formData.beschreibung.kurz}
                     onChange={handleInputChange}
                     multiline
-                    rows={2}
+                    rows={4}
                     helperText="Kurze Produktbeschreibung für Übersichten"
                   />
                 </Grid>
 
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12}>
                   <TextField
                     fullWidth
                     label="Lange Beschreibung"
@@ -1368,13 +1389,13 @@ const AdminPortfolio = () => {
                     value={formData.beschreibung.lang}
                     onChange={handleInputChange}
                     multiline
-                    rows={2}
+                    rows={10}
                     helperText="Detaillierte Produktbeschreibung"
                   />
                 </Grid>
 
                 {formData.kategorie === 'seife' && (
-                  <Grid item xs={12} sm={6}>
+                  <Grid item xs={12}>
                     <TextField
                       fullWidth
                       label="Inhaltsstoffe"
@@ -1382,13 +1403,13 @@ const AdminPortfolio = () => {
                       value={formData.beschreibung.inhaltsstoffe}
                       onChange={handleInputChange}
                       multiline
-                      rows={2}
+                      rows={4}
                       helperText="Liste der Inhaltsstoffe"
                     />
                   </Grid>
                 )}
 
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12}>
                   <TextField
                     fullWidth
                     label="Anwendung/Pflegehinweise"
@@ -1396,7 +1417,7 @@ const AdminPortfolio = () => {
                     value={formData.beschreibung.anwendung}
                     onChange={handleInputChange}
                     multiline
-                    rows={2}
+                    rows={4}
                     helperText={formData.kategorie === 'seife' ? 'Anwendungshinweise für die Seife' : 'Pflegehinweise für das Werkstück'}
                   />
                 </Grid>
