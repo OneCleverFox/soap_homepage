@@ -1034,11 +1034,39 @@ function getRevenueRelevantInvoicesFilter() {
   };
 }
 
+// Cache für production-capacity (5 Minuten)
+let productionCapacityCache = null;
+let productionCapacityCacheTime = null;
+const PRODUCTION_CACHE_TTL = 5 * 60 * 1000; // 5 Minuten
+
+// Cache-Invalidierungsfunktion
+function invalidateProductionCapacityCache() {
+  productionCapacityCache = null;
+  productionCapacityCacheTime = null;
+  console.log('🗑️ Production Capacity Cache invalidiert');
+}
+
 // GET /api/dashboard/production-capacity - Produktionskapazitäts-Analyse
 router.get('/production-capacity', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const now = Date.now();
+    
+    // Cache-Check
+    if (productionCapacityCache && productionCapacityCacheTime && (now - productionCapacityCacheTime < PRODUCTION_CACHE_TTL)) {
+      console.log('📦 Verwende gecachte Produktionskapazitäts-Daten');
+      return res.json({
+        success: true,
+        data: productionCapacityCache,
+        cached: true
+      });
+    }
+    
     console.log('📊 Starte Produktionskapazitäts-Analyse...');
     const kapazitaetsAnalyse = await getProduktionsKapazitaetsAnalyse();
+    
+    // Cache speichern
+    productionCapacityCache = kapazitaetsAnalyse;
+    productionCapacityCacheTime = now;
     
     res.json({
       success: true,
@@ -1058,24 +1086,26 @@ router.get('/production-capacity', authenticateToken, requireAdmin, async (req, 
 async function getProduktionsKapazitaetsAnalyse() {
   console.log('🔍 Analysiere Produktionskapazität basierend auf Rohstoffen...');
   
-  // 1. Alle aktiven Portfolio-Produkte laden
-  const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } }).lean();
+  // 1. Alle aktiven Portfolio-Produkte laden (nur benötigte Felder)
+  const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } })
+    .select('name seife aroma verpackung gramm rohseifenKonfiguration zusatzinhaltsstoffe')
+    .lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
   
-  // 2. Alle Rohstoffe parallel laden
+  // 2. Alle Rohstoffe parallel laden (nur benötigte Felder)
   const [rohseifen, duftoele, verpackungen, zusatzinhaltsstoffe] = await Promise.all([
-    Rohseife.find({ verfuegbar: true }).lean(),
-    Duftoil.find({ verfuegbar: true }).lean(),
-    Verpackung.find({ verfuegbar: true }).lean(),
-    ZusatzInhaltsstoff.find().lean()
+    Rohseife.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
+    Duftoil.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
+    Verpackung.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
+    ZusatzInhaltsstoff.find().select('bezeichnung').lean()
   ]);
   
   console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen, ${zusatzinhaltsstoffe.length} Zusatzinhaltsstoffe`);
   
-  // 3. Bestände für Fertigprodukte UND Zusatzinhaltsstoffe abrufen
+  // 3. Bestände für Fertigprodukte UND Zusatzinhaltsstoffe abrufen (nur benötigte Felder)
   const [fertigproduktBestaende, zusatzstoffBestaende] = await Promise.all([
-    Bestand.find({ typ: 'produkt' }).lean(),
-    Bestand.find({ typ: 'zusatzinhaltsstoff' }).lean()
+    Bestand.find({ typ: 'produkt' }).select('artikelId menge').lean(),
+    Bestand.find({ typ: 'zusatzinhaltsstoff' }).select('artikelId menge').lean()
   ]);
   
   const bestandsMap = new Map();
@@ -1439,3 +1469,4 @@ function erstelleProduktionsZusammenfassung(produktionsAnalyse) {
 }
 
 module.exports = router;
+module.exports.invalidateProductionCapacityCache = invalidateProductionCapacityCache;

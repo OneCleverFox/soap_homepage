@@ -92,8 +92,10 @@ const AdminEmailConfiguration = () => {
   const loadTemplates = async () => {
     try {
       const response = await api.get('/admin/email-templates');
-      if (response.data.success && response.data.templates) {
-        setTemplates(response.data.templates);
+      if (response.data.success) {
+        // Response kann templates ODER emailConfigs enthalten
+        const templates = response.data.templates || response.data.emailConfigs || {};
+        setTemplates(templates);
       } else {
         console.warn('Templates response invalid:', response.data);
         setTemplates({});
