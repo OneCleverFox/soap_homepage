@@ -123,7 +123,24 @@ class InvoiceService {
             pendingAmount: { 
               $sum: {
                 $cond: [
-                  { $ne: ['$status', 'paid'] },
+                  {
+                    $and: [
+                      { $ne: ['$status', 'paid'] },
+                      {
+                        $or: [
+                          { $eq: ['$payment.status', null] },
+                          { $ne: ['$payment.status', 'paid'] }
+                        ]
+                      },
+                      {
+                        $or: [
+                          { $eq: ['$payment.paidDate', null] },
+                          { $eq: ['$payment.paidDate', undefined] },
+                          { $not: '$payment.paidDate' }
+                        ]
+                      }
+                    ]
+                  },
                   '$amounts.total',
                   0
                 ]
@@ -132,7 +149,13 @@ class InvoiceService {
             paidAmount: { 
               $sum: {
                 $cond: [
-                  { $eq: ['$status', 'paid'] },
+                  {
+                    $or: [
+                      { $eq: ['$status', 'paid'] },
+                      { $eq: ['$payment.status', 'paid'] },
+                      { $ne: ['$payment.paidDate', null] }
+                    ]
+                  },
                   '$amounts.total',
                   0
                 ]
@@ -617,6 +640,7 @@ class InvoiceService {
 
       // Zusätzliche Felder für bezahlt Status
       if (status === 'paid') {
+        updateData['payment.status'] = 'paid';
         updateData['payment.paidDate'] = paidDate || new Date();
         if (paidAmount) updateData['payment.paidAmount'] = paidAmount;
         if (paymentReference) updateData['payment.paymentReference'] = paymentReference;

@@ -6,20 +6,11 @@ class DatabaseOptimizer {
   
   // MongoDB Index-Empfehlungen basierend auf häufigen Queries
   static async createRecommendedIndexes() {
-    // Nur in Development Indizes erstellen
     if (!logger.isDevelopment) {
       return;
     }
 
-    // Warte auf vollständige DB-Verbindung
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⏳ Waiting for database connection...');
-      return;
-    }
-
-    // Prüfe ob db verfügbar ist
-    if (!mongoose.connection.db) {
-      console.log('⏳ Database not ready yet, skipping index creation...');
+    if (mongoose.connection.readyState !== 1 || !mongoose.connection.db) {
       return;
     }
     const collections = {
@@ -80,37 +71,23 @@ class DatabaseOptimizer {
             
             // Überspringe wenn Index bereits existiert
             if (existingIndexNames.includes(indexName)) {
-              console.log(`⏭️ Index already exists: ${collectionName} - ${indexName}`);
               continue;
             }
             
             await collection.createIndex(index, { background: true });
-            console.log(`✅ Index created: ${collectionName} - ${JSON.stringify(index)}`);
           } catch (indexError) {
-            if (indexError.code === 86) { // IndexKeySpecsConflict
-              console.log(`⏭️ Index exists (conflict): ${collectionName} - ${JSON.stringify(index)}`);
-            } else {
-              console.error(`❌ Failed to create specific index for ${collectionName}:`, indexError.message);
-            }
+            // Stille Fehlerbehandlung
           }
         }
       } catch (error) {
-        console.error(`❌ Failed to access collection ${collectionName}:`, error.message);
+        // Stille Fehlerbehandlung
       }
     }
   }
   
-  // Query Performance Monitoring
+  // Query Performance Monitoring - deaktiviert für saubere Logs
   static enableSlowQueryLogging() {
-    // Slow Query Logging nur in Development
-    if (logger.isDevelopment) {
-      mongoose.set('debug', (collectionName, method, query, doc, options) => {
-        console.log(`🔍 MongoDB Query: ${collectionName}.${method}`, {
-          query: JSON.stringify(query),
-          options: JSON.stringify(options)
-        });
-      });
-    }
+    // Logging deaktiviert - nur bei Bedarf aktivieren
   }
   
   // Connection Pool Optimization

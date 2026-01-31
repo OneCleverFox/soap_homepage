@@ -22,6 +22,7 @@ const InquirySuccessPage = lazy(() => import('./pages/InquirySuccessPage'));
 const OrderTrackingPage = lazy(() => import('./pages/OrderTrackingPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
+const GalleryPage = lazy(() => import('./pages/GalleryPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const EmailVerificationPage = lazy(() => import('./pages/EmailVerificationPage'));
@@ -126,6 +127,7 @@ function App() {
                       <Route path="/order-payment-success" element={<OrderPaymentSuccess />} />
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
                       <Route path="/about" element={<AboutPage />} />
+                      <Route path="/gallery" element={<GalleryPage />} />
                       <Route path="/contact" element={<ContactPage />} />
                       <Route path="/gallery" element={<GalleryPage />} />
                       <Route path="/login" element={<LoginPage />} />
@@ -373,6 +375,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <InvoiceList />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/galerie"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminGallery />
                 </ProtectedRoute>
               </>
             }

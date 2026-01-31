@@ -7,6 +7,7 @@ const compression = require('compression');
 
 // Import Optimization Utilities
 const logger = require('./utils/logger');
+const startupLogger = require('./utils/startupLogger');
 const DatabaseOptimizer = require('./utils/databaseOptimizer');
 const DatabaseDebugger = require('./utils/databaseDebugger');
 const { cacheManager } = require('./utils/cacheManager');
@@ -14,16 +15,14 @@ const { globalErrorHandler, notFoundHandler, asyncHandler } = require('./middlew
 const { performanceMonitor, trackRequest } = require('./utils/performanceMonitor');
 const { IPAnonymizer } = require('./utils/ipAnonymizer');
 
-// VERSION MARKER - Railway Deployment Check
+// VERSION MARKER
 const APP_VERSION = '2.0.0-optimized';
-logger.info('');
-logger.info(` BACKEND VERSION: ${APP_VERSION}`);
-logger.info(' BUILD DATE:', new Date().toISOString());
-logger.info('');
 
-// Dotenv Configuration - nur fr lokale Entwicklung
+// Print Header
+startupLogger.printHeader();
+
+// Dotenv Configuration - nur für lokale Entwicklung
 if (process.env.NODE_ENV !== 'production') {
-  // Lokal: Lade .env (Fallback zu .env.development)
   const fs = require('fs');
   const envPath = path.resolve(__dirname, '..');
   
@@ -36,19 +35,12 @@ if (process.env.NODE_ENV !== 'production') {
     path: path.resolve(envPath, envFile)
   });
   
-  logger.info(` Loaded environment from: ${envFile}`);
-  logger.info(` NODE_ENV: ${process.env.NODE_ENV}`);
-  logger.info(` PORT: ${process.env.PORT}`);
-  logger.info(`  DATABASE_MODE: ${process.env.DATABASE_MODE}`);
-  
-  // PayPal Debug Info
-  logger.info(` PAYPAL_SANDBOX_CLIENT_ID: ${process.env.PAYPAL_SANDBOX_CLIENT_ID ? 'SET' : 'NOT SET'}`);
-  logger.info(` PAYPAL_LIVE_CLIENT_ID: ${process.env.PAYPAL_LIVE_CLIENT_ID ? 'SET' : 'NOT SET'}`);
+  startupLogger.env('NODE_ENV', process.env.NODE_ENV);
+  startupLogger.env('DATABASE_MODE', process.env.DATABASE_MODE);
+  startupLogger.env('PAYPAL_SANDBOX_CLIENT_ID', !!process.env.PAYPAL_SANDBOX_CLIENT_ID);
+  startupLogger.env('PAYPAL_LIVE_CLIENT_ID', !!process.env.PAYPAL_LIVE_CLIENT_ID);
 } else {
-  // Production (Railway): Nutzt Environment Variables direkt
-  logger.info(' Production Mode: Using Railway Environment Variables');
-  logger.info(` NODE_ENV: ${process.env.NODE_ENV}`);
-  logger.info(` PORT: ${process.env.PORT}`);
+  startupLogger.env('NODE_ENV', 'production');
 }
 
 // Route Imports
@@ -88,11 +80,10 @@ if (process.env.NODE_ENV === 'production' || process.env.TRUST_PROXY === 'true')
 
 // Performance Optimizations - nur in Development
 if (process.env.NODE_ENV !== 'production' && !process.env.RAILWAY_ENVIRONMENT) {
-  app.use(compression()); // GZIP compression
-  app.use(trackRequest); // Performance monitoring
-  
-  // Start Performance Monitoring
+  app.use(compression());
+  app.use(trackRequest);
   performanceMonitor.startMonitoring();
+  startupLogger.service('Performance Monitoring', true);
 }
 
 // CORS-Konfiguration
@@ -249,25 +240,22 @@ const ensureUploadDirectories = () => {
   try {
     if (!fs.existsSync(uploadsPath)) {
       fs.mkdirSync(uploadsPath, { recursive: true });
-      console.log(' Created uploads directory:', uploadsPath);
     }
     if (!fs.existsSync(productsPath)) {
       fs.mkdirSync(productsPath, { recursive: true });
-      console.log(' Created products directory:', productsPath);
     }
-    console.log(' Upload directories ready');
+    startupLogger.ok('Upload Directories');
   } catch (error) {
-    console.warn(' Could not create upload directories:', error.message);
+    startupLogger.error('Upload Directories', error.message);
   }
 };
 
-// Create upload directories
 ensureUploadDirectories();
 
 // Static Files (fr Produktbilder etc.)
 app.use('/uploads', express.static('uploads'));
 
-// Kritische Environment Variables prfen
+// Kritische Environment Variables prüfen
 function validateCriticalEnvVars() {
   const critical = [
     'JWT_SECRET',
@@ -277,64 +265,36 @@ function validateCriticalEnvVars() {
   const missing = critical.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
-    console.error(' KRITISCHE SICHERHEITSLCKE:');
-    console.error(' Fehlende Environment Variables:', missing);
-    console.error(' SERVER WIRD NICHT GESTARTET');
+    missing.forEach(key => startupLogger.error(`ENV: ${key}`, 'MISSING - CRITICAL'));
+    console.error('\n⛔ SERVER START ABORTED - Critical environment variables missing\n');
     process.exit(1);
   }
   
-  // Warnung bei fehlender E-Mail-Konfiguration
-  if (!process.env.RESEND_API_KEY) {
-    console.warn(' RESEND_API_KEY nicht konfiguriert - E-Mail-Service deaktiviert');
-  }
+  startupLogger.env('JWT_SECRET', !!process.env.JWT_SECRET, true);
+  startupLogger.env('MONGODB_URI', !!process.env.MONGODB_URI, true);
+  startupLogger.env('RESEND_API_KEY', !!process.env.RESEND_API_KEY);
   
-  // Warnung bei schwachen JWT Secrets
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
-    console.warn(' JWT_SECRET ist zu kurz (< 32 Zeichen)');
+    startupLogger.warn('JWT_SECRET', 'Too short (< 32 characters)');
   }
-  
-  console.log(' Kritische Environment Variables validiert');
 }
 
 validateCriticalEnvVars();
 const DATABASE_MODE = process.env.DATABASE_MODE || 'production';
 
-// IMMER MongoDB Atlas URI aus Environment Variables verwenden - NIEMALS Hardcoded!
+// IMMER MongoDB Atlas URI aus Environment Variables verwenden
 const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGODB_URI_PROD;
 
 if (!MONGODB_URI) {
-  console.error(' KRITISCHER FEHLER: MONGODB_URI nicht in Environment Variables gefunden!');
-  console.error(' Prfen Sie Ihre .env Datei');
+  startupLogger.error('MongoDB URI', 'Not configured in environment');
   process.exit(1);
 }
 
-console.log(' DOTENV_KEY Status:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
-console.log(' Database Mode:', DATABASE_MODE.toUpperCase());
-console.log(' Umgebung: IMMER PRODUKTIVE MONGODB ATLAS DATENBANK');
-console.log(' MongoDB URI verwendet:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-
-// MongoDB Connection mit Retry-Logik fr Railway
+// MongoDB Connection mit Retry-Logik
 async function connectToMongoDB(retries = 5, delay = 5000) {
   if (!MONGODB_URI) {
-    console.error(' MONGODB_URI ist nicht definiert!');
-    console.error(' Prfen Sie Ihre Environment Variables:');
-    console.error('   - DOTENV_KEY:', process.env.DOTENV_KEY ? 'GESETZT' : 'NICHT GESETZT');
-    console.error('   - MONGODB_URI:', process.env.MONGODB_URI ? 'GESETZT' : 'NICHT GESETZT');
-    console.error('   - MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'GESETZT' : 'NICHT GESETZT');
+    startupLogger.error('MongoDB URI', 'Not configured');
     return;
-  }
-
-  console.log(' Verbinde mit MongoDB:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-  
-  // Debug: Zeige aktuelle IP-Adresse fr Whitelist-Check
-  try {
-    const fetch = require('node-fetch');
-    const response = await fetch('https://api.ipify.org?format=json');
-    const { ip } = await response.json();
-    console.log(' Aktuelle ffentliche IP-Adresse:', ip);
-    console.log(' Diese IP muss in MongoDB Atlas Whitelist stehen!');
-  } catch (ipError) {
-    console.warn(' Konnte aktuelle IP nicht ermitteln:', ipError.message);
   }
   
   // Optimierte Mongoose Verbindungsoptionen
@@ -343,15 +303,12 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await mongoose.connect(MONGODB_URI, mongooseOptions);
-      logger.success('MongoDB erfolgreich verbunden');
-      logger.info(' Database:', mongoose.connection.db ? mongoose.connection.db.databaseName : 'connecting...');
-      logger.info(' Host:', mongoose.connection.host || 'connecting...');
-      logger.info(` Verbindung hergestellt nach ${attempt} Versuch(en)`);
+      
+      startupLogger.ok('MongoDB Connection', `${mongoose.connection.db ? mongoose.connection.db.databaseName : 'connected'} @ ${mongoose.connection.host}`);
       
       // Database Optimization Setup - nur in Development
       if (process.env.NODE_ENV !== 'production' && !process.env.RAILWAY_ENVIRONMENT) {
         try {
-          // Warte auf vollstndige DB-Bereitschaft
           const isReady = await DatabaseDebugger.waitForConnection(5000);
           
           if (isReady) {
@@ -359,30 +316,22 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
             await DatabaseOptimizer.createRecommendedIndexes();
             DatabaseOptimizer.enableSlowQueryLogging();
             await cacheManager.warmupCache();
-          } else {
-            logger.warning(' Optimization skipped - database not fully ready');
+            startupLogger.ok('Database Optimization');
           }
         } catch (optimizationError) {
-          logger.warning(' Optimization setup failed (non-critical):', optimizationError.message);
+          startupLogger.warn('Database Optimization', optimizationError.message);
         }
       }
       
-      return; // Erfolg - beende Funktion
+      return;
     } catch (err) {
-      logger.error(` MongoDB Verbindungsfehler (Versuch ${attempt}/${retries}):`, {
-        message: err.message,
-        name: err.name,
-        code: err.code
-      });
+      if (attempt === retries) {
+        startupLogger.error('MongoDB Connection', `Failed after ${retries} attempts`);
+      }
       
       if (attempt < retries) {
-        const waitTime = delay * attempt; // Exponential backoff
-        logger.warning(` Warte ${waitTime/1000} Sekunden vor nchstem Versuch...`);
+        const waitTime = delay * attempt;
         await new Promise(resolve => setTimeout(resolve, waitTime));
-      } else {
-        logger.critical(' Aktuelle URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@'));
-        logger.critical(' Alle Verbindungsversuche fehlgeschlagen!');
-        logger.warning(' Backend luft ohne Datenbankverbindung weiter...');
       }
     }
   }
@@ -391,28 +340,20 @@ async function connectToMongoDB(retries = 5, delay = 5000) {
 // Starte MongoDB Verbindung
 connectToMongoDB();
 
-// MongoDB Verbindungsevents berwachen
+// MongoDB Verbindungsevents überwachen - stille Überwachung
 mongoose.connection.on('connected', () => {
-  logger.success(' Mongoose Verbindung hergestellt');
+  if (!startupLogger.checks.find(c => c.name.includes('MongoDB'))) {
+    startupLogger.ok('MongoDB Connected');
+  }
 });
 
 mongoose.connection.on('error', (err) => {
-  logger.error(' Mongoose Verbindungsfehler:', err);
+  logger.error('MongoDB Error:', err);
 });
 
 mongoose.connection.on('disconnected', () => {
-  logger.warning(' Mongoose Verbindung getrennt');
-  // In Development: Weniger aggressive Wiederverbindung
   if (mongoose.connection.readyState === 0 && process.env.NODE_ENV === 'development') {
-    console.log(' Versuche Wiederverbindung in 10 Sekunden...');
-    setTimeout(async () => {
-      try {
-        await connectToMongoDB();
-        console.log(' Wiederverbindung erfolgreich');
-      } catch (err) {
-        console.error(' Wiederverbindung fehlgeschlagen:', err.message);
-      }
-    }, 10000); // 10 Sekunden warten
+    setTimeout(() => connectToMongoDB().catch(console.error), 10000);
   }
 });
 
@@ -526,11 +467,8 @@ app.use(globalErrorHandler);
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
-  logger.success(` Server luft auf Port ${PORT}`);
-  logger.info(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(` API verfgbar unter: http://localhost:${PORT}/api`);
-  logger.info(` Health Check: http://localhost:${PORT}/api/health`);
-  logger.info(` Extended Health: http://localhost:${PORT}/api/health-extended`);
+  startupLogger.printChecklist();
+  startupLogger.printSummary(PORT);
   
   // Upload-Cleanup starten
   require('./utils/uploadCleanup');

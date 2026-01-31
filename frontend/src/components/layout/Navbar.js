@@ -295,6 +295,7 @@ const Navbar = () => {
     { label: 'Home', path: '/', icon: '🏠' },
     { label: 'Produkte', path: '/products', icon: '🛍️' },
     { label: 'Das sind wir', path: '/about', icon: 'ℹ️' },
+    { label: 'Galerie', path: '/gallery', icon: '🖼️' },
     { label: 'Kontakt', path: '/contact', icon: '📧' }
   ];
 
@@ -308,6 +309,7 @@ const Navbar = () => {
   const adminNavItems = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
     { label: 'Portfolio-Verwaltung', path: '/admin/portfolio', icon: '🎨' },
+    { label: 'Galerie-Verwaltung', path: '/admin/galerie', icon: '🖼️' },
     { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
     { label: 'Bestellverwaltung', path: '/admin/bestellungen', icon: '📋' },
     { label: 'Anfragen-Verwaltung', path: '/admin/anfragen', icon: '📨' },

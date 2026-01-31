@@ -30,6 +30,7 @@ const Footer = () => {
     ],
     company: [
       { label: 'Das sind wir', path: '/about' },
+      { label: 'Galerie', path: '/gallery' },
       { label: 'Kontakt', path: '/contact' }
     ],
     legal: [

@@ -28,15 +28,12 @@ class DatabaseDebugger {
       const status = this.getConnectionStatus();
       
       if (status.isReady && status.hasDb) {
-        console.log('✅ Database connection ready');
         return true;
       }
       
-      console.log(`⏳ Waiting for DB connection... Status: ${status.status}, hasDb: ${status.hasDb}`);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
-    console.warn('⚠️ Database connection timeout');
     return false;
   }
   
@@ -44,16 +41,13 @@ class DatabaseDebugger {
     const status = this.getConnectionStatus();
     
     if (!status.isReady || !status.hasDb) {
-      console.warn('⚠️ Database not ready for collection access');
       return false;
     }
     
     try {
-      const collections = await mongoose.connection.db.listCollections().toArray();
-      console.log(`✅ Database accessible, found ${collections.length} collections`);
+      await mongoose.connection.db.listCollections().toArray();
       return true;
     } catch (error) {
-      console.error('❌ Collection access failed:', error.message);
       return false;
     }
   }

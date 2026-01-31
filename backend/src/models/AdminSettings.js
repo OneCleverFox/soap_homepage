@@ -90,6 +90,20 @@ const adminSettingsSchema = new mongoose.Schema({
     }
   },
   
+  // Galerie-Einstellungen
+  gallery: {
+    autoPlayInterval: {
+      type: Number,
+      default: 5000, // 5 Sekunden in Millisekunden
+      min: 1000,
+      max: 30000
+    },
+    autoPlayEnabled: {
+      type: Boolean,
+      default: true
+    }
+  },
+  
   // Metadaten
   lastUpdated: {
     type: Date,

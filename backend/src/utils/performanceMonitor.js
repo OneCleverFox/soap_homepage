@@ -234,7 +234,7 @@ class PerformanceMonitor {
       logger.info('Performance Summary', this.getHealthMetrics());
     }, 300000);
     
-    console.log('📊 Performance monitoring started');
+    // Stilles Monitoring - keine Startup-Logs
   }
 }
 

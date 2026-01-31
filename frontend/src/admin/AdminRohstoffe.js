@@ -3522,6 +3522,7 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.tiefeMm || 30}
               onChange={handleInputChange}
+              onFocus={(e) => e.target.select()}
               required
               inputProps={{ min: 1 }}
               helperText="mm"
@@ -3536,6 +3537,7 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.laengeMm || ''}
               onChange={handleInputChange}
+              onFocus={(e) => e.target.select()}
               inputProps={{ min: 1 }}
               helperText="mm (bei rechteckigen)"
             />
@@ -3549,6 +3551,7 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.breiteMm || ''}
               onChange={handleInputChange}
+              onFocus={(e) => e.target.select()}
               inputProps={{ min: 1 }}
               helperText="mm (bei rechteckigen)"
             />
@@ -3562,6 +3565,7 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.durchmesserMm || ''}
               onChange={handleInputChange}
+              onFocus={(e) => e.target.select()}
               inputProps={{ min: 1 }}
               helperText="mm (bei runden)"
             />
@@ -3582,6 +3586,7 @@ const AdminRohstoffe = () => {
               type="number"
               value={formData.volumenMl || 100}
               onChange={handleInputChange}
+              onFocus={(e) => e.target.select()}
               required
               inputProps={{ min: 1 }}
               helperText="ml Füllmenge"

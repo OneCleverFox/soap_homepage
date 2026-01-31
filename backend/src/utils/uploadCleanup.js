@@ -9,14 +9,12 @@ const cleanupUploads = () => {
   const uploadsDir = path.join(__dirname, '../uploads/products');
   
   if (!fs.existsSync(uploadsDir)) {
-    console.log('📁 Upload-Verzeichnis existiert nicht:', uploadsDir);
     return;
   }
 
   const files = fs.readdirSync(uploadsDir);
   const now = Date.now();
-  const oneHour = 60 * 60 * 1000; // 1 Stunde in ms
-  let cleaned = 0;
+  const oneHour = 60 * 60 * 1000;
 
   files.forEach(file => {
     const filePath = path.join(uploadsDir, file);
@@ -27,19 +25,11 @@ const cleanupUploads = () => {
       
       if (age > oneHour) {
         fs.unlinkSync(filePath);
-        cleaned++;
-        console.log('🗑️ Alte Datei gelöscht:', file);
       }
     } catch (error) {
-      console.warn('⚠️ Fehler beim Bereinigen von:', file, error.message);
+      // Stille Fehlerbehandlung
     }
   });
-
-  if (cleaned > 0) {
-    console.log(`✅ ${cleaned} alte Upload-Dateien bereinigt`);
-  } else {
-    console.log('✨ Keine alten Upload-Dateien gefunden');
-  }
 };
 
 // Cleanup alle 30 Minuten ausführen

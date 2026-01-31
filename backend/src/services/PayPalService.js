@@ -3,8 +3,7 @@ const AdminSettings = require('../models/AdminSettings');
 
 class PayPalService {
   constructor() {
-    console.log('💳 PayPal Service initialisiert');
-    console.log('💳 NODE_ENV:', process.env.NODE_ENV);
+    // Stille Initialisierung
     this.currentConfig = null;
     this.client = null;
   }
@@ -17,42 +16,28 @@ class PayPalService {
       
       // Prüfe ob PayPal in Admin-Einstellungen deaktiviert ist
       if (!dbConfig.enabled) {
-        console.log('💳 PayPal ist in den Admin-Einstellungen deaktiviert');
         this.currentConfig = { enabled: false };
         return false;
       }
-      
-      console.log(`💳 PayPal Client wird aktualisiert - DB-Modus: ${dbConfig.mode}`);
       
       // Bestimme Credentials aus Umgebungsvariablen basierend auf dem Modus
       let clientId, clientSecret, isLive;
       
       if (dbConfig.mode === 'live') {
-        // Live-Umgebung: Verwende explizite Live-Credentials
         clientId = process.env.PAYPAL_LIVE_CLIENT_ID;
         clientSecret = process.env.PAYPAL_LIVE_CLIENT_SECRET;
         isLive = true;
-        console.log('🚀 PayPal Live-Modus aktiviert');
       } else {
-        // Sandbox-Umgebung: Verwende explizite Sandbox-Credentials mit Fallback
         clientId = process.env.PAYPAL_SANDBOX_CLIENT_ID || process.env.PAYPAL_CLIENT_ID;
         clientSecret = process.env.PAYPAL_SANDBOX_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET;
         isLive = false;
-        console.log('🧪 PayPal Sandbox-Modus aktiviert');
       }
       
       // Prüfe ob Credentials in Umgebungsvariablen vorhanden sind
       if (!clientId || !clientSecret) {
-        console.log('❌ PayPal Credentials nicht in Umgebungsvariablen gefunden:');
-        console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_ID:`, clientId ? 'Gesetzt' : 'NICHT GESETZT');
-        console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_SECRET:`, clientSecret ? 'Gesetzt' : 'NICHT GESETZT');
         this.currentConfig = { enabled: false };
         return false;
       }
-      
-      console.log('💳 PayPal Credentials gefunden:');
-      console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_ID: Gesetzt`);
-      console.log(`💳 PAYPAL_${isLive ? 'LIVE' : 'SANDBOX'}_CLIENT_SECRET: Gesetzt`);
       
       const environment = isLive 
         ? new paypal.core.LiveEnvironment(clientId, clientSecret)

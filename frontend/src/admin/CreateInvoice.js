@@ -144,11 +144,17 @@ const CreateInvoice = () => {
       
       const data = await response.json();
       console.log('🔍 [FRONTEND] Response Data:', data);
-      if (data.success) {
+      
+      // Die Portfolio-API gibt direkt ein Array zurück
+      if (Array.isArray(data)) {
+        console.log('🔍 [FRONTEND] Setze Produkte:', data.length);
+        setProducts(data);
+      } else if (data.success) {
+        // Fallback für andere API-Formate
         console.log('🔍 [FRONTEND] Setze Produkte:', data.data?.length || 0);
         setProducts(data.data || []);
       } else {
-        console.error('🔍 [FRONTEND] API Fehler:', data);
+        console.error('🔍 [FRONTEND] Unerwartetes Datenformat:', data);
       }
     } catch (error) {
       console.error('🔍 [FRONTEND] Netzwerk Fehler beim Laden der Produkte:', error);
