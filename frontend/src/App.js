@@ -36,7 +36,6 @@ const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const InquiryPaymentSuccess = lazy(() => import('./pages/InquiryPaymentSuccess'));
 const InquiryPaymentCancel = lazy(() => import('./pages/InquiryPaymentCancel'));
 const OrderPaymentSuccess = lazy(() => import('./pages/OrderPaymentSuccess'));
-const GalleryPage = lazy(() => import('./pages/GalleryPage'));
 
 // Legal Pages
 const ImpressumPage = lazy(() => import('./pages/ImpressumPage'));
