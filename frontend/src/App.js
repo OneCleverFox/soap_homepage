@@ -35,6 +35,7 @@ const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const InquiryPaymentSuccess = lazy(() => import('./pages/InquiryPaymentSuccess'));
 const InquiryPaymentCancel = lazy(() => import('./pages/InquiryPaymentCancel'));
 const OrderPaymentSuccess = lazy(() => import('./pages/OrderPaymentSuccess'));
+const GalleryPage = lazy(() => import('./pages/GalleryPage'));
 
 // Legal Pages
 const ImpressumPage = lazy(() => import('./pages/ImpressumPage'));
@@ -61,6 +62,7 @@ const AdminEmailConfiguration = lazy(() => import('./admin/AdminEmailConfigurati
 const AdminInvoiceDesigner = lazy(() => import('./admin/AdminInvoiceDesigner'));
 const CreateInvoice = lazy(() => import('./admin/CreateInvoice'));
 const InvoiceList = lazy(() => import('./admin/InvoiceList'));
+const AdminGallery = lazy(() => import('./admin/AdminGallery'));
 
 // Hook um zu prüfen ob Footer angezeigt werden soll
 const useShowFooter = () => {
@@ -125,6 +127,7 @@ function App() {
                       <Route path="/order-tracking" element={<OrderTrackingPage />} />
                       <Route path="/about" element={<AboutPage />} />
                       <Route path="/contact" element={<ContactPage />} />
+                      <Route path="/gallery" element={<GalleryPage />} />
                       <Route path="/login" element={<LoginPage />} />
                       <Route path="/register" element={<RegisterPage />} />
                       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -337,6 +340,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <AdminEmailConfiguration />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/gallery"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminGallery />
                 </ProtectedRoute>
               </>
             }
