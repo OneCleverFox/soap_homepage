@@ -347,6 +347,31 @@ router.get('/', async (req, res) => {
     const queryTime = Date.now() - startTime;
     console.log(`📦 [PORTFOLIO] ${portfolioItems.length} Produkte aus DB geladen in ${queryTime}ms`);
     
+    // Lade Bestände für Admin-Ansicht (wenn includeUnavailable=true)
+    if (shouldIncludeInactive) {
+      const bestandStart = Date.now();
+      const alleBestaende = await Bestand.find({ typ: 'produkt' })
+        .select('artikelId menge')
+        .lean();
+      
+      const bestandMap = new Map(
+        alleBestaende.map(b => [b.artikelId.toString(), b.menge || 0])
+      );
+      
+      // Füge Bestandsinformationen zu jedem Produkt hinzu
+      portfolioItems.forEach(item => {
+        const bestandMenge = bestandMap.get(item._id.toString()) || 0;
+        item.bestand = {
+          menge: bestandMenge,
+          verfuegbar: bestandMenge > 0,
+          einheit: 'Stück'
+        };
+        item.verfuegbareMenge = bestandMenge; // Alias für Kompatibilität
+      });
+      
+      console.log(`📊 [PORTFOLIO] Bestände geladen in ${Date.now() - bestandStart}ms`);
+    }
+    
     // ⚡ LOKALE SORTIERUNG in Node.js (kein MongoDB Memory Limit!)
     portfolioItems.sort((a, b) => {
       // Primäre Sortierung: reihenfolge (falls vorhanden)
