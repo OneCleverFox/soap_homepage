@@ -14,6 +14,15 @@ const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
 const { asyncHandler } = require('../middleware/errorHandler');
 
+// Dashboard cache invalidation
+let invalidateProductionCapacityCache;
+try {
+  const dashboardModule = require('./dashboard');
+  invalidateProductionCapacityCache = dashboardModule.invalidateProductionCapacityCache || (() => {});
+} catch (err) {
+  invalidateProductionCapacityCache = () => {};
+}
+
 // ⚡ OPTIMIZED CACHE: Intelligente Cache-Strategie
 let portfolioCache = global.portfolioCache || {
   data: null,
@@ -932,6 +941,7 @@ router.post('/', auth, async (req, res) => {
 
     // Cache invalidieren nach erfolgreichem Erstellen
     invalidatePortfolioCache();
+    invalidateProductionCapacityCache();
     
     res.status(201).json({
       success: true,
@@ -991,6 +1001,7 @@ router.put('/:id', auth, async (req, res) => {
     
     // Zusätzliche Cache-Invalidierung
     invalidatePortfolioCache();
+    invalidateProductionCapacityCache();
     
     res.status(200).json({
       success: true,
