@@ -4,6 +4,9 @@
   "description": "Frontend für Gluecksmomente Homepage - Online Shop und Admin Panel - PRODUKTIV",
   "private": true,
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.15.0",
@@ -15,7 +18,6 @@
     "dayjs": "^1.11.10",
     "framer-motion": "^10.16.16",
     "react": "^18.2.0",
-    "react-beautiful-dnd": "^13.1.1",
     "react-color": "^2.19.3",
     "react-dom": "^18.2.0",
     "react-helmet-async": "^2.0.4",
@@ -24,18 +26,19 @@
     "react-intersection-observer": "^9.5.3",
     "react-query": "^3.39.3",
     "react-router-dom": "^6.8.0",
-    "react-scripts": "^5.0.1",
     "recharts": "^2.15.4",
     "swiper": "^11.0.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "baseline-browser-mapping": "^2.9.19",
     "cross-env": "^7.0.3",
-    "eslint": "^8.55.0",
+    "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
     "prettier": "^3.1.0",
+    "react-scripts": "^5.0.1",
     "typescript": "^4.9.5"
   },
   "scripts": {
@@ -50,12 +53,6 @@
     "format": "prettier --write src/**/*.{js,jsx,ts,tsx,css,md}"
   },
   "proxy": "http://localhost:5000",
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
   "browserslist": {
     "production": [
       ">0.2%",

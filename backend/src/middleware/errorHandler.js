@@ -117,6 +117,11 @@ const asyncHandler = (fn) => (req, res, next) => {
 
 // Not Found Handler
 const notFoundHandler = (req, res, next) => {
+  // Ignoriere Webpack HMR Requests während der Entwicklung
+  if (req.originalUrl.includes('.hot-update.')) {
+    return res.status(404).end();
+  }
+  
   const error = new ErrorHandler(`Route ${req.originalUrl} not found`, 404);
   next(error);
 };

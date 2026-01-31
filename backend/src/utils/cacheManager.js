@@ -53,11 +53,11 @@ class CacheManager {
   setupEventListeners() {
     // Cache statistics
     this.shortCache.on('set', (key, value) => {
-      console.log(`📦 Short Cache SET: ${key}`);
+      // Stille Speicherung
     });
     
     this.shortCache.on('expired', (key, value) => {
-      console.log(`⏰ Short Cache EXPIRED: ${key}`);
+      // Stille Ablauf-Behandlung
     });
   }
   
@@ -220,11 +220,8 @@ class CacheManager {
     // Prüfe DB-Verbindung vor Cache-Operationen
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      console.log('⏳ Database not ready for cache warmup, skipping...');
       return;
     }
-    
-    console.log('🔥 Starting cache warmup...');
     
     try {
       // Pre-load frequently accessed data mit Timeout
@@ -241,10 +238,8 @@ class CacheManager {
           setTimeout(() => reject(new Error('Cache warmup timeout')), 5000)
         )
       ]);
-      
-      console.log('✅ Cache warmup completed');
     } catch (error) {
-      console.warn('⚠️ Cache warmup failed (non-critical):', error.message);
+      // Stille Fehlerbehandlung
     }
   }
   
@@ -253,7 +248,6 @@ class CacheManager {
     this.shortCache.flushAll();
     this.mediumCache.flushAll();
     this.longCache.flushAll();
-    console.log('🧹 All caches cleared');
   }
 }
 

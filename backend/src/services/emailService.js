@@ -40,9 +40,7 @@ class EmailService {
     
     this.isDisabled = false;
     
-    console.log(`📧 [EmailService] Initialized for ${this.environment} environment`);
-    console.log(`📧 [EmailService] From: ${this.fromName} <${this.fromEmail}>`);
-    console.log(`📧 [EmailService] Production Mode: ${this.isProduction}`);
+    // Stille Initialisierung - Logs nur bei Fehlern
   }
 
   // E-Mail-Logging in MongoDB
