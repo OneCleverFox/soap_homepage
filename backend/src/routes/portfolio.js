@@ -14,6 +14,15 @@ const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
 const { asyncHandler } = require('../middleware/errorHandler');
 
+// Dashboard cache invalidation
+let invalidateProductionCapacityCache;
+try {
+  const dashboardModule = require('./dashboard');
+  invalidateProductionCapacityCache = dashboardModule.invalidateProductionCapacityCache || (() => {});
+} catch (err) {
+  invalidateProductionCapacityCache = () => {};
+}
+
 // ⚡ OPTIMIZED CACHE: Intelligente Cache-Strategie
 let portfolioCache = global.portfolioCache || {
   data: null,
@@ -338,30 +347,32 @@ router.get('/', async (req, res) => {
     const queryTime = Date.now() - startTime;
     console.log(`📦 [PORTFOLIO] ${portfolioItems.length} Produkte aus DB geladen in ${queryTime}ms`);
     
-    // 🔄 Lade Bestandsinformationen für alle Produkte
-    const bestandStartTime = Date.now();
-    const portfolioIds = portfolioItems.map(item => item._id);
-    const bestaende = await Bestand.find({
-      typ: 'produkt',
-      artikelId: { $in: portfolioIds }
-    }).lean();
-    
-    // Erstelle Map für schnellen Zugriff
-    const bestandMap = new Map();
-    bestaende.forEach(b => {
-      bestandMap.set(b.artikelId.toString(), b);
-    });
-    
-    const bestandTime = Date.now() - bestandStartTime;
-    console.log(`📊 [PORTFOLIO] ${bestaende.length} Bestandseinträge geladen in ${bestandTime}ms`);
-    
-    // Füge Bestandsinformationen zu Produkten hinzu
-    portfolioItems.forEach(item => {
-      const bestand = bestandMap.get(item._id.toString());
-      item.bestand = bestand || { menge: 0, einheit: 'Stück' };
-      // Auch als hasHauptbild Flag setzen für Bildanzeige
-      item.hasHauptbild = !!(item.bilder?.hauptbildData);
-    });
+    // Lade Bestände für Admin-Ansicht (wenn includeUnavailable=true)
+    let bestandTime = 0;
+    if (shouldIncludeInactive) {
+      const bestandStart = Date.now();
+      const alleBestaende = await Bestand.find({ typ: 'produkt' })
+        .select('artikelId menge')
+        .lean();
+      
+      const bestandMap = new Map(
+        alleBestaende.map(b => [b.artikelId.toString(), b.menge || 0])
+      );
+      
+      // Füge Bestandsinformationen zu jedem Produkt hinzu
+      portfolioItems.forEach(item => {
+        const bestandMenge = bestandMap.get(item._id.toString()) || 0;
+        item.bestand = {
+          menge: bestandMenge,
+          verfuegbar: bestandMenge > 0,
+          einheit: 'Stück'
+        };
+        item.verfuegbareMenge = bestandMenge; // Alias für Kompatibilität
+      });
+      
+      bestandTime = Date.now() - bestandStart;
+      console.log(`📊 [PORTFOLIO] Bestände geladen in ${bestandTime}ms`);
+    }
     
     // ⚡ LOKALE SORTIERUNG in Node.js (kein MongoDB Memory Limit!)
     portfolioItems.sort((a, b) => {
@@ -387,7 +398,7 @@ router.get('/', async (req, res) => {
     const totalTime = Date.now() - startTime;
     console.log(`⚡ [PORTFOLIO] Gesamt-Antwortzeit: ${totalTime}ms`);
     
-    // Sende konsistente Response im success-Format
+    // Sende Response im Standard-Format
     res.json({
       success: true,
       data: portfolioItems
@@ -961,6 +972,7 @@ router.post('/', auth, async (req, res) => {
 
     // Cache invalidieren nach erfolgreichem Erstellen
     invalidatePortfolioCache();
+    invalidateProductionCapacityCache();
     
     res.status(201).json({
       success: true,
@@ -1020,6 +1032,7 @@ router.put('/:id', auth, async (req, res) => {
     
     // Zusätzliche Cache-Invalidierung
     invalidatePortfolioCache();
+    invalidateProductionCapacityCache();
     
     res.status(200).json({
       success: true,
