@@ -252,7 +252,6 @@ const Navbar = () => {
       window.removeEventListener('inquiryViewed', handleInquiryAction);
       window.removeEventListener('inquiryActioned', handleInquiryAction);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]); // Nur von user abhängig - Funktionen werden bewusst nicht als Dependency hinzugefügt
 
   const handleDrawerToggle = () => {

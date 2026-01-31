@@ -427,7 +427,6 @@ const AdminLager = () => {
     return () => {
       isMounted = false;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Leere Dependencies - nur beim Mount
   
   // Lade Tab-Daten wenn Tab gewechselt wird
