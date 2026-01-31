@@ -45,7 +45,6 @@ const InquirySuccessPage = () => {
     if (inquiryId) {
       clearCartInBackground();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inquiryId]); // Nur von inquiryId abhängig, clearCart bewusst ausgeschlossen
 
   const formatPrice = (price) => {

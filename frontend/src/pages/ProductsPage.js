@@ -348,7 +348,6 @@ const ProductsPage = React.memo(() => {
         setLoading(false);
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Produkte nach Kategorie filtern
@@ -593,7 +592,6 @@ const ProductsPage = React.memo(() => {
       unsubscribeStock(); // Stock-Event-Listener entfernen
       window.removeEventListener('inventoryUpdated', handleInventoryUpdate);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps  
   }, []); // Empty deps - useCallback handles fetchProducts deps
 
   if (initialLoading && products.length === 0) {

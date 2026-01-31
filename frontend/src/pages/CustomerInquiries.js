@@ -106,7 +106,7 @@ const CustomerInquiries = () => {
         console.log('📅 Anfragen-Seite besucht - lastViewed aktualisiert');
       }
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // Anfrage-Details anzeigen
   const showInquiryDetails = async (inquiryId) => {
