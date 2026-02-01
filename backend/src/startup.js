@@ -43,11 +43,10 @@ const ensureDirectories = () => {
 const testSharp = () => {
   try {
     const sharp = require('sharp');
-    console.log('📸 Sharp successfully loaded - Image optimization available');
+    console.log('📸 Sharp loaded - Image optimization enabled');
     return true;
   } catch (error) {
-    console.warn('⚠️ Sharp not available - Images will be served without optimization');
-    console.warn('   Error:', error.message);
+    console.warn('⚠️ Sharp not available - Images will be served unoptimized');
     return false;
   }
 };
