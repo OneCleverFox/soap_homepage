@@ -25,7 +25,7 @@ const bewegungSchema = new mongoose.Schema({
   artikel: {
     typ: {
       type: String,
-      enum: ['rohseife', 'duftoil', 'verpackung', 'produkt', 'fertigprodukt'],
+      enum: ['rohseife', 'duftoil', 'verpackung', 'produkt', 'fertigprodukt', 'giesswerkstoff'],
       required: true
     },
     artikelId: {
