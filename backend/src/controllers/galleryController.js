@@ -6,7 +6,7 @@ let sharp;
 try {
   sharp = require('sharp');
 } catch (err) {
-  console.warn('⚠️ Sharp nicht verfügbar - Bildoptimierung deaktiviert:', err.message);
+  // Sharp-Warnung wird bereits in startup.js ausgegeben
 }
 
 /**

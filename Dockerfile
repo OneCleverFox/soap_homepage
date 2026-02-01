@@ -14,11 +14,8 @@ RUN apk add --no-cache \
 # Copy backend package files
 COPY backend/package*.json ./
 
-# Install dependencies with Sharp rebuild for Alpine Linux
-RUN npm ci --only=production && \
-    npm rebuild sharp --platform=linux --arch=x64 || \
-    npm install sharp --platform=linux --arch=x64 || \
-    echo "Sharp installation failed - continuing without image optimization"
+# Install dependencies (Sharp wird automatisch für Alpine kompiliert)
+RUN npm ci --only=production
 
 # Copy backend source code
 COPY backend/src ./src

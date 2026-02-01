@@ -5,11 +5,8 @@ let sharpAvailable = false;
 try {
   sharp = require('sharp');
   sharpAvailable = true;
-  // Sharp verfügbar - Bildoptimierung aktiviert
 } catch (error) {
-  console.warn('⚠️ Sharp konnte nicht geladen werden - Bildoptimierung deaktiviert');
-  console.warn('   Bilder werden ohne Optimierung durchgeleitet');
-  console.warn('   Fehler:', error.message);
+  // Sharp-Warnung wird bereits in startup.js ausgegeben
   sharpAvailable = false;
 }
 
