@@ -700,7 +700,7 @@ router.post('/inventur-new', authenticateToken, requireAdmin, async (req, res) =
                 await giesswerkstoff.save();
                 
                 giesswerkstoffBewegungen.push({
-                  typ: 'werkstuck_produktion',
+                  typ: 'produktion',
                   artikel: {
                     typ: 'giesswerkstoff',
                     artikelId: giesswerkstoff._id,
