@@ -69,8 +69,8 @@ const portfolioSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: ['seife', 'werkstuck'],
-    default: 'seife',
-    index: true // Index für bessere Performance bei Filterung
+    default: 'seife'
+    // Index wird unten per portfolioSchema.index() definiert
   },
   seifenform: {
     type: String,
