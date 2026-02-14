@@ -649,7 +649,7 @@ const AdminGallery = () => {
                     width: '100%',
                     height: isMobile ? 300 : isTablet ? 450 : 600,
                     overflow: 'hidden',
-                    backgroundColor: '#000',
+                    backgroundColor: '#f5f5f5',
                   }}
                 >
                   <Box
@@ -659,14 +659,14 @@ const AdminGallery = () => {
                     sx={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover',
+                      objectFit: 'contain',
                       animation: 'kenBurns 20s ease-in-out infinite',
                       '@keyframes kenBurns': {
                         '0%': {
                           transform: 'scale(1)',
                         },
                         '50%': {
-                          transform: 'scale(1.05)',
+                          transform: 'scale(1.08)',
                         },
                         '100%': {
                           transform: 'scale(1)',

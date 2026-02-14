@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Paper,
   Button,
@@ -33,7 +33,11 @@ import {
   Card,
   CardContent,
   CardMedia,
-  CardActions
+  CardActions,
+  ToggleButton,
+  ToggleButtonGroup,
+  Skeleton,
+  Container
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -47,7 +51,9 @@ import {
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
 import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
+import { invalidateProductsCache } from '../utils/cacheUtils';
 
+// Portfolio Admin Component
 const AdminPortfolio = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -63,6 +69,7 @@ const AdminPortfolio = () => {
   // Navigation State
   const [selectedCategory, setSelectedCategory] = useState('alle');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('alle'); // 'alle', 'aktiv', 'inaktiv'
 
   // Options für Dropdowns
   const [seifenOptions, setSeifenOptions] = useState([]);
@@ -123,8 +130,20 @@ const AdminPortfolio = () => {
 
   const [formData, setFormData] = useState(initialFormData);
 
+  // 🛡️ Guard gegen doppeltes Laden in React Strict Mode
+  const hasLoadedRef = useRef(false);
+
   // Portfolio Items laden
   useEffect(() => {
+    // Verhindere doppeltes Laden in Strict Mode
+    if (hasLoadedRef.current) {
+      console.log("⏭️ AdminPortfolio: Skipping duplicate load (Strict Mode)");
+      return;
+    }
+    
+    console.log("🚀 AdminPortfolio: Initial load starting");
+    hasLoadedRef.current = true;
+    
     const loadData = async () => {
       await loadOptions(); // Erst Optionen laden
       await loadPortfolioItems(); // Dann Portfolio-Items
@@ -132,25 +151,39 @@ const AdminPortfolio = () => {
     loadData();
   }, []);
 
-  // Items nach Kategorie filtern
+  // Items nach Kategorie und Status filtern
   useEffect(() => {
-    if (selectedCategory === 'alle') {
-      setFilteredItems(portfolioItems);
-    } else {
-      setFilteredItems(portfolioItems.filter(item => item.kategorie === selectedCategory));
+    let filtered = portfolioItems;
+    
+    // Kategorie-Filter
+    if (selectedCategory !== 'alle') {
+      filtered = filtered.filter(item => item.kategorie === selectedCategory);
     }
-  }, [portfolioItems, selectedCategory]);
+    
+    // Status-Filter
+    if (statusFilter === 'aktiv') {
+      filtered = filtered.filter(item => item.aktiv === true);
+    } else if (statusFilter === 'inaktiv') {
+      filtered = filtered.filter(item => item.aktiv !== true);
+    }
+    
+    setFilteredItems(filtered);
+  }, [portfolioItems, selectedCategory, statusFilter]);
 
-  const loadPortfolioItems = async () => {
+  const loadPortfolioItems = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       const response = await portfolioAdminService.getAll();
       setPortfolioItems(response.data || []);
     } catch (err) {
       console.error('Fehler beim Laden der Portfolio Items:', err);
       setError('Fehler beim Laden der Portfolio Items');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -387,14 +420,28 @@ const AdminPortfolio = () => {
       
       console.log('📤 Sende Portfolio-Daten:', submitData);
       
+      // Merke alte Werte für Cache-Invalidierung
+      const wasActive = editingItem?.aktiv;
+      const willBeActive = submitData.aktiv;
+      
       if (editingItem) {
         await portfolioAdminService.update(editingItem._id, submitData);
+        
+        // Cache nur invalidieren wenn aktiv-Status sich ändert
+        if (wasActive !== willBeActive) {
+          invalidateProductsCache(`Portfolio Item "${submitData.name}" ${willBeActive ? 'aktiviert' : 'deaktiviert'}`);
+        }
       } else {
         await portfolioAdminService.create(submitData);
+        
+        // Bei neuem Item: Cache invalidieren wenn es aktiv erstellt wird
+        if (willBeActive) {
+          invalidateProductsCache(`Neues Portfolio Item "${submitData.name}" erstellt`);
+        }
       }
       
       setOpen(false);
-      loadPortfolioItems();
+      loadPortfolioItems(true); // Silent reload - kein Loading-State
       setFormData(initialFormData);
     } catch (err) {
       console.error('❌ Fehler beim Speichern:', err);
@@ -405,8 +452,17 @@ const AdminPortfolio = () => {
   const handleDelete = async (id) => {
     if (window.confirm('Sind Sie sicher, dass Sie dieses Portfolio Item löschen möchten?')) {
       try {
+        // Finde das Item für Logging
+        const item = portfolioItems.find(i => i._id === id);
+        
         await portfolioAdminService.delete(id);
-        loadPortfolioItems();
+        
+        // Cache invalidieren wenn ein aktives Item gelöscht wird
+        if (item?.aktiv) {
+          invalidateProductsCache(`Portfolio Item "${item.name}" gelöscht`);
+        }
+        
+        loadPortfolioItems(true); // Silent reload - kein Loading-State
       } catch (err) {
         console.error('Fehler beim Löschen:', err);
         setError('Fehler beim Löschen des Portfolio Items');
@@ -494,7 +550,13 @@ const AdminPortfolio = () => {
       formData.append('isHauptbild', imageType === 'hauptbild' ? 'true' : 'false');  // Backend erwartet isHauptbild
       
       await portfolioAdminService.uploadImage(productId, formData);
-      loadPortfolioItems(); // Neu laden um aktualisierte Bilder zu zeigen
+      
+      // ⚡ OPTIMIERUNG: Nur das betroffene Item aktualisieren statt alles neu zu laden
+      const response = await portfolioAdminService.getById(productId);
+      const updatedItem = response.data || response; // Extrahiere data aus Response
+      setPortfolioItems(prevItems => 
+        prevItems.map(item => item._id === productId ? updatedItem : item)
+      );
     } catch (err) {
       console.error('Fehler beim Upload:', err);
       setError('Fehler beim Hochladen des Bildes');
@@ -507,7 +569,13 @@ const AdminPortfolio = () => {
     if (window.confirm('Möchten Sie dieses Bild wirklich löschen?')) {
       try {
         await portfolioAdminService.deleteImage(productId, imageType, imageIndex);
-        loadPortfolioItems();
+        
+        // ⚡ OPTIMIERUNG: Nur das betroffene Item aktualisieren statt alles neu zu laden
+        const response = await portfolioAdminService.getById(productId);
+        const updatedItem = response.data || response; // Extrahiere data aus Response
+        setPortfolioItems(prevItems => 
+          prevItems.map(item => item._id === productId ? updatedItem : item)
+        );
       } catch (err) {
         console.error('Fehler beim Löschen:', err);
         setError('Fehler beim Löschen des Bildes');
@@ -518,6 +586,38 @@ const AdminPortfolio = () => {
   // Render Navigation
   const renderNavigation = () => (
     <List>
+      {/* Status Filter ganz oben */}
+      <ListItem sx={{ flexDirection: 'column', alignItems: 'stretch', px: 2, py: 2 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1.5 }}>
+          Status:
+        </Typography>
+        <ToggleButtonGroup
+          value={statusFilter}
+          exclusive
+          onChange={(event, newValue) => newValue && setStatusFilter(newValue)}
+          size="small"
+          fullWidth
+          sx={{ 
+            mb: 0.5,
+            '& .MuiToggleButton-root': {
+              py: 0.75,
+              fontSize: '0.875rem'
+            }
+          }}
+        >
+          <ToggleButton value="alle">
+            Alle
+          </ToggleButton>
+          <ToggleButton value="aktiv">
+            ✅<br/>Aktiv
+          </ToggleButton>
+          <ToggleButton value="inaktiv">
+            🚫<br/>Inaktiv
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </ListItem>
+      <Divider />
+      
       <ListItem>
         <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
           Portfolio Kategorien
@@ -551,14 +651,45 @@ const AdminPortfolio = () => {
   );
 
   if (loading) {
-    return <Typography>Laden...</Typography>;
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Skeleton variant="text" width={200} height={40} />
+          <Skeleton variant="text" width={300} height={24} sx={{ mt: 1 }} />
+        </Box>
+        <Grid container spacing={3}>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={item}>
+              <Card>
+                <Skeleton variant="rectangular" height={200} />
+                <CardContent>
+                  <Skeleton variant="text" width="80%" height={28} />
+                  <Skeleton variant="text" width="60%" height={20} sx={{ mt: 1 }} />
+                  <Skeleton variant="text" width="40%" height={20} sx={{ mt: 0.5 }} />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    );
   }
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      {/* Desktop Sidebar */}
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Desktop Sidebar - FIXIERT */}
       {!isMobile && (
-        <Box sx={{ width: 240, flexShrink: 0, bgcolor: 'grey.50', borderRight: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ 
+          width: 240, 
+          flexShrink: 0, 
+          bgcolor: 'grey.50', 
+          borderRight: '1px solid', 
+          borderColor: 'divider',
+          overflowY: 'auto',
+          height: '100vh',
+          position: 'sticky',
+          top: 0
+        }}>
           {renderNavigation()}
         </Box>
       )}
@@ -603,8 +734,8 @@ const AdminPortfolio = () => {
         {renderNavigation()}
       </Drawer>
 
-      {/* Main Content */}
-      <Box sx={{ flexGrow: 1, p: { xs: 0, sm: 2, md: 3 } }}>
+      {/* Main Content - SCROLLBAR */}
+      <Box sx={{ flexGrow: 1, p: { xs: 0, sm: 2, md: 3 }, overflowY: 'auto', height: '100vh' }}>
         <Paper sx={{ p: { xs: 1.5, sm: 2, md: 3 }, m: { xs: 0, sm: 0 }, borderRadius: { xs: 0, sm: 1 } }}>
           {/* Header */}
           <Box sx={{ 

@@ -25,6 +25,13 @@ export const portfolioAdminService = {
     return response.json();
   },
 
+  async getById(id) {
+    const response = await fetch(`${API_BASE}/admin/portfolio/${id}`, {
+      headers: getAuthHeaders()
+    });
+    return response.json();
+  },
+
   async create(productData) {
     const response = await fetch(`${API_BASE}/admin/portfolio`, {
       method: 'POST',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Container,
@@ -60,10 +60,17 @@ const AdminWarenberechnung = () => {
   const [categoryFilter, setCategoryFilter] = useState('alle'); // 'alle', 'seife', 'werkstuck'
   const [statusFilter, setStatusFilter] = useState('alle'); // 'alle', 'aktiv', 'inaktiv'
   
+  // Ref um doppelte Aufrufe in React Strict Mode zu verhindern
+  const loadingRef = useRef(false);
+  
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   useEffect(() => {
+    // Verhindere doppeltes Laden in React Strict Mode
+    if (loadingRef.current) return;
+    
+    loadingRef.current = true;
     loadPortfolioProducts();
   }, []);
 
@@ -137,7 +144,10 @@ const AdminWarenberechnung = () => {
       console.log('Lade Portfolio-Produkte (inklusive inaktive)...');
       
       // Lade ALLE Produkte (aktiv + inaktiv) für Admin-Warenberechnung
-      const response = await api.get('/portfolio?includeInactive=true');
+      const response = await api.get('/portfolio?includeInactive=true', {
+        timeout: 20000 // 20 Sekunden Timeout
+      });
+      
       console.log('Portfolio-Produkte geladen:', response.data);
       
       // API gibt { success: true, count: X, data: [...] } zurück
@@ -296,6 +306,13 @@ const AdminWarenberechnung = () => {
                       fontStyle: product.aktiv ? 'normal' : 'italic'
                     }}
                   >
+                    {product.preis > 0 ? (
+                      <span style={{ fontWeight: 'bold', color: '#2e7d32', marginRight: '8px' }}>
+                        {product.preis.toFixed(2)} €
+                      </span>
+                    ) : (
+                      <span style={{ color: '#d32f2f', marginRight: '8px' }}>❗</span>
+                    )}
                     {!product.aktiv && '🚫 '}
                     {product.name} 
                     {!product.aktiv && ' (INAKTIV)'}
@@ -398,6 +415,13 @@ const AdminWarenberechnung = () => {
                     fontStyle: product.aktiv ? 'normal' : 'italic'
                   }}
                 >
+                  {product.preis > 0 ? (
+                    <span style={{ fontWeight: 'bold', color: '#2e7d32', marginRight: '8px' }}>
+                      {product.preis.toFixed(2)} €
+                    </span>
+                  ) : (
+                    <span style={{ color: '#d32f2f', marginRight: '8px' }}>❗</span>
+                  )}
                   {!product.aktiv && '🚫 '}
                   {product.name} 
                   {!product.aktiv && ' (INAKTIV)'}
@@ -480,6 +504,13 @@ const AdminWarenberechnung = () => {
                       fontStyle: product.aktiv ? 'normal' : 'italic'
                     }}
                   >
+                    {product.preis > 0 ? (
+                      <span style={{ fontWeight: 'bold', color: '#2e7d32', marginRight: '8px' }}>
+                        {product.preis.toFixed(2)} €
+                      </span>
+                    ) : (
+                      <span style={{ color: '#d32f2f', marginRight: '8px' }}>❗</span>
+                    )}
                     {product.kategorie === 'werkstuck' ? '🏺' : '🧼'} 
                     {product.name}
                     {!product.aktiv && ' (INAKTIV)'}

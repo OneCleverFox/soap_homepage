@@ -3,7 +3,9 @@
  * Optimiert für die neue URL-basierte Bildarchitektur
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+const API_BASE_URL = process.env.NODE_ENV === 'development' 
+  ? 'http://localhost:5000/api' 
+  : (process.env.REACT_APP_API_URL || 'https://soap-homepage-backend-production.up.railway.app/api');
 
 /**
  * Konvertiert Bild-Daten (URL-Objekt oder Legacy Base64) zu einer verwendbaren URL
