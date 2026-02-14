@@ -1136,7 +1136,7 @@ const AdminDashboard = () => {
                                   {produkt.produktName.length > 25 ? `${produkt.produktName.substring(0, 25)}...` : produkt.produktName}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
-                                  {produkt.grammProEinheit}g • {produkt.seife}
+                                  {produkt.grammProEinheit}g • {produkt.kategorie === 'werkstuck' ? '🏺 Werkstück' : produkt.seife}
                                 </Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
                                   <Typography variant="caption" color="text.secondary" sx={{ mr: 1, fontSize: '0.7rem' }}>
@@ -1145,6 +1145,8 @@ const AdminDashboard = () => {
                                   <Chip 
                                     label={
                                       produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
+                                      produkt.limitierenderFaktor === 'giesswerkstoff' ? 'Gießwerkstoff' :
+                                      produkt.limitierenderFaktor === 'bestand' ? 'Lagerbestand' :
                                       produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' :
                                       produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'Zusatzstoff' : 'Verpackung'
                                     }
@@ -1153,6 +1155,8 @@ const AdminDashboard = () => {
                                       fontSize: '0.65rem',
                                       height: 18,
                                       backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'giesswerkstoff' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'bestand' ? 'warning.main' :
                                                       produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 
                                                       produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'secondary.main' : 'info.main',
                                       color: 'white',
@@ -1253,7 +1257,7 @@ const AdminDashboard = () => {
                                   {produkt.produktName}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  {produkt.grammProEinheit}g • {produkt.seife}
+                                  {produkt.grammProEinheit}g • {produkt.kategorie === 'werkstuck' ? '🏺 Werkstück' : produkt.seife}
                                 </Typography>
                               </TableCell>
                               <TableCell align="center">
@@ -1286,12 +1290,16 @@ const AdminDashboard = () => {
                                   <Chip 
                                     label={
                                       produkt.limitierenderFaktor === 'rohseife' ? 'Rohseife' :
+                                      produkt.limitierenderFaktor === 'giesswerkstoff' ? 'Gießwerkstoff' :
+                                      produkt.limitierenderFaktor === 'bestand' ? 'Lagerbestand' :
                                       produkt.limitierenderFaktor === 'duftoel' ? 'Duftöl' :
                                       produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'Zusatzstoff' : 'Verpackung'
                                     }
                                     size="small"
                                     sx={{
                                       backgroundColor: produkt.limitierenderFaktor === 'rohseife' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'giesswerkstoff' ? 'error.main' :
+                                                      produkt.limitierenderFaktor === 'bestand' ? 'warning.main' :
                                                       produkt.limitierenderFaktor === 'duftoel' ? 'warning.main' : 
                                                       produkt.limitierenderFaktor === 'zusatzinhaltsstoff' ? 'secondary.main' : 'info.main',
                                       color: 'white',
@@ -1340,6 +1348,10 @@ const AdminDashboard = () => {
                         <strong>Hauptlimitierung:</strong> {
                           Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
                             .sort(([,a], [,b]) => b - a)[0][0] === 'rohseife' ? 'Rohseife' :
+                          Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
+                            .sort(([,a], [,b]) => b - a)[0][0] === 'giesswerkstoff' ? 'Gießwerkstoff' :
+                          Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
+                            .sort(([,a], [,b]) => b - a)[0][0] === 'bestand' ? 'Lagerbestand (nicht konfiguriert)' :
                           Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)
                             .sort(([,a], [,b]) => b - a)[0][0] === 'duftoel' ? 'Duftöle' : 'Verpackungen'
                         } ({Object.entries(produktionsKapazitaet.zusammenfassung.limitierungen)

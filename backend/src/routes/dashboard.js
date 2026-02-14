@@ -12,6 +12,8 @@ const Duftoil = require('../models/Duftoil');
 const Verpackung = require('../models/Verpackung');
 const Invoice = require('../models/Invoice');
 const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
+const Giesswerkstoff = require('../models/Giesswerkstoff');
+const Giessform = require('../models/Giessform');
 
 // @route   GET /api/dashboard/overview
 // @desc    Haupt-Dashboard Übersicht mit allen wichtigen KPIs
@@ -1153,10 +1155,12 @@ async function getProdukteZurProduktionSchnell(portfolioItems, alleBestaende) {
         return {
           _id: portfolio._id,
           produktName: portfolio.name,
+          kategorie: portfolio.kategorie || 'seife', // NEU: Kategorie hinzufügen
           portfolio: {
             name: portfolio.name,
             seife: portfolio.seife,
-            aroma: portfolio.aroma
+            aroma: portfolio.aroma,
+            kategorie: portfolio.kategorie || 'seife' // NEU
           },
           aktuellerBestand,
           mindestbestand,
@@ -1252,19 +1256,23 @@ async function getProduktionsKapazitaetsAnalyse() {
   
   // 1. Alle aktiven Portfolio-Produkte laden (nur benötigte Felder)
   const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } })
-    .select('name seife aroma verpackung gramm kategorie rohseifenKonfiguration zusatzinhaltsstoffe')
+    .select('name seife aroma verpackung gramm kategorie rohseifenKonfiguration zusatzinhaltsstoffe giessform giesswerkstoff giesswerkstoffKonfiguration')
+    .populate('giessform', 'name inventarnummer zustand')
+    .populate('giesswerkstoff', 'bezeichnung aktuellVorrat einheit')
     .lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
   
   // 2. Alle Rohstoffe parallel laden (nur benötigte Felder)
-  const [rohseifen, duftoele, verpackungen, zusatzinhaltsstoffe] = await Promise.all([
+  const [rohseifen, duftoele, verpackungen, zusatzinhaltsstoffe, giesswerkstoffe, giessformen] = await Promise.all([
     Rohseife.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
     Duftoil.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
     Verpackung.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
-    ZusatzInhaltsstoff.find().select('bezeichnung').lean()
+    ZusatzInhaltsstoff.find().select('bezeichnung').lean(),
+    Giesswerkstoff.find().select('bezeichnung aktuellVorrat einheit').lean(),
+    Giessform.find({ zustand: { $in: ['neu', 'gut', 'gebraucht'] } }).select('name inventarnummer zustand').lean()
   ]);
   
-  console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen, ${zusatzinhaltsstoffe.length} Zusatzinhaltsstoffe`);
+  console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen, ${zusatzinhaltsstoffe.length} Zusatzinhaltsstoffe, ${giesswerkstoffe.length} Gießwerkstoffe, ${giessformen.length} Gießformen`);
   
   // 3. Bestände für Fertigprodukte UND Zusatzinhaltsstoffe abrufen (nur benötigte Felder)
   const [fertigproduktBestaende, zusatzstoffBestaende] = await Promise.all([
@@ -1293,6 +1301,8 @@ async function getProduktionsKapazitaetsAnalyse() {
   const duftoeleMap = new Map(duftoele.map(d => [d.bezeichnung.toLowerCase(), d]));
   const verpackungenMap = new Map(verpackungen.map(v => [v.bezeichnung.toLowerCase(), v]));
   const zusatzstoffeMap = new Map(zusatzinhaltsstoffe.map(z => [z.bezeichnung.toLowerCase(), z]));
+  const giesswerkstoffMap = new Map(giesswerkstoffe.map(g => [g._id.toString(), g]));
+  const giessformMap = new Map(giessformen.map(gf => [gf._id.toString(), gf]));
   
   // 5. Für jedes Produkt die maximale Produktionsmenge basierend auf Rohstoffen berechnen
   const produktionsAnalyse = [];
@@ -1304,7 +1314,10 @@ async function getProduktionsKapazitaetsAnalyse() {
       duftoeleMap, 
       verpackungenMap,
       zusatzstoffeMap,
-      zusatzstoffBestandsMap
+      zusatzstoffBestandsMap,
+      giesswerkstoffMap,
+      giessformMap,
+      bestandsMap
     );
     // Aktuellen Fertigproduktbestand hinzufügen
     analyse.aktuellerBestand = bestandsMap.get(produkt._id.toString()) || 0;
@@ -1327,7 +1340,7 @@ async function getProduktionsKapazitaetsAnalyse() {
 }
 
 // Analysiert die Produktionskapazität für ein einzelnes Produkt
-function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, verpackungenMap, zusatzstoffeMap, zusatzstoffBestandsMap) {
+function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, verpackungenMap, zusatzstoffeMap, zusatzstoffBestandsMap, giesswerkstoffMap, giessformMap, bestandsMap) {
   // Seife-Beschreibung für Dual-Soap erweitern
   let seifeBeschreibung = produkt.seife;
   const istDualSeife = produkt.rohseifenKonfiguration?.verwendeZweiRohseifen;
@@ -1354,6 +1367,157 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
   
   let minProduktion = Infinity;
   
+  // ========== WERKSTÜCK-LOGIK ==========
+  if (produkt.kategorie === 'werkstuck') {
+    // 1. Gießwerkstoff analysieren
+    // populate() gibt das volle Objekt zurück, nicht nur die ID
+    if (produkt.giesswerkstoff) {
+      const giesswerkstoffObj = produkt.giesswerkstoff; // populate() Objekt
+      const giesswerkstoffId = giesswerkstoffObj._id || giesswerkstoffObj;
+      
+      // Versuche zuerst aus dem populate()-Objekt zu lesen
+      if (giesswerkstoffObj.bezeichnung && giesswerkstoffObj.aktuellVorrat !== undefined) {
+        const benoetigt = produkt.gramm; // Gramm pro Werkstück
+        const verfuegbar = giesswerkstoffObj.aktuellVorrat;
+        const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
+        
+        analyse.rohstoffBedarf.push({
+          typ: 'giesswerkstoff',
+          name: giesswerkstoffObj.bezeichnung,
+          benoetigt: benoetigt,
+          einheit: giesswerkstoffObj.einheit || 'g',
+          verfuegbar: verfuegbar,
+          maxProduktion: maxProduktionGiesswerkstoff,
+          ausreichend: verfuegbar >= benoetigt
+        });
+        
+        if (maxProduktionGiesswerkstoff < minProduktion) {
+          minProduktion = maxProduktionGiesswerkstoff;
+          analyse.limitierenderFaktor = 'giesswerkstoff';
+        }
+      } else {
+        // Fallback: Versuche aus Map zu holen
+        const giesswerkstoff = giesswerkstoffMap.get(giesswerkstoffId.toString());
+        
+        if (giesswerkstoff) {
+          const benoetigt = produkt.gramm;
+          const verfuegbar = giesswerkstoff.aktuellVorrat;
+          const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
+          
+          analyse.rohstoffBedarf.push({
+            typ: 'giesswerkstoff',
+            name: giesswerkstoff.bezeichnung,
+            benoetigt: benoetigt,
+            einheit: giesswerkstoff.einheit || 'g',
+            verfuegbar: verfuegbar,
+            maxProduktion: maxProduktionGiesswerkstoff,
+            ausreichend: verfuegbar >= benoetigt
+          });
+          
+          if (maxProduktionGiesswerkstoff < minProduktion) {
+            minProduktion = maxProduktionGiesswerkstoff;
+            analyse.limitierenderFaktor = 'giesswerkstoff';
+          }
+        } else {
+          analyse.probleme.push(`Gießwerkstoff nicht gefunden (ID: ${giesswerkstoffId})`);
+          minProduktion = 0;
+        }
+      }
+    } else {
+      // FALLBACK: Kein Gießwerkstoff zugewiesen
+      // Für Werkstücke ohne Gießwerkstoff-Konfiguration: Nimm aktuellen Fertigprodukt-Bestand
+      // Der Bestand repräsentiert bereits produzierte Werkstücke, die auf Lager sind
+      const aktuellerBestand = bestandsMap.get(produkt._id.toString()) || 0;
+      
+      analyse.probleme.push('⚠️ Gießwerkstoff nicht konfiguriert - Zeige aktuellen Bestand');
+      analyse.rohstoffBedarf.push({
+        typ: 'bestand',
+        name: 'Aktuelle Fertigware (auf Lager)',
+        benoetigt: 0,
+        einheit: 'Stück',
+        verfuegbar: aktuellerBestand,
+        maxProduktion: aktuellerBestand,
+        ausreichend: aktuellerBestand > 0,
+        hinweis: 'Gießwerkstoff nicht konfiguriert - Bestand als Referenz'
+      });
+      
+      // Setze Produktion auf Bestand (keine neue Produktion möglich ohne Gießwerkstoff-Daten)
+      minProduktion = aktuellerBestand;
+      analyse.limitierenderFaktor = 'bestand';
+    }
+    
+    // 2. Gießform analysieren (optional - kann mehrfach verwendet werden)
+    if (produkt.giessform) {
+      const giessformObj = produkt.giessform; // populate() Objekt
+      const giessformId = giessformObj._id || giessformObj;
+      
+      // Versuche zuerst aus dem populate()-Objekt zu lesen
+      if (giessformObj.name) {
+        analyse.rohstoffBedarf.push({
+          typ: 'giessform',
+          name: giessformObj.name,
+          benoetigt: 1,
+          einheit: 'Stück (wiederverwendbar)',
+          verfuegbar: 1,
+          maxProduktion: Infinity, // Unbegrenzt wiederverwendbar
+          ausreichend: true,
+          inventarnummer: giessformObj.inventarnummer,
+          zustand: giessformObj.zustand
+        });
+      } else {
+        // Fallback: Versuche aus Map zu holen
+        const giessform = giessformMap.get(giessformId.toString());
+        
+        if (giessform) {
+          analyse.rohstoffBedarf.push({
+            typ: 'giessform',
+            name: giessform.name,
+            benoetigt: 1,
+            einheit: 'Stück (wiederverwendbar)',
+            verfuegbar: 1,
+            maxProduktion: Infinity,
+            ausreichend: true,
+            inventarnummer: giessform.inventarnummer,
+            zustand: giessform.zustand
+          });
+        }
+      }
+    }
+    
+    // 3. Verpackung analysieren (wie bei Seifen)
+    if (produkt.verpackung) {
+      const verpackung = verpackungenMap.get(produkt.verpackung.toLowerCase());
+      
+      if (verpackung) {
+        const verfuegbareVerpackungen = verpackung.aktuellVorrat;
+        const maxProduktionVerpackung = verfuegbareVerpackungen;
+        
+        analyse.rohstoffBedarf.push({
+          typ: 'verpackung',
+          name: verpackung.bezeichnung,
+          benoetigt: 1,
+          einheit: 'Stück',
+          verfuegbar: verfuegbareVerpackungen,
+          maxProduktion: maxProduktionVerpackung,
+          ausreichend: verfuegbareVerpackungen >= 1
+        });
+        
+        if (maxProduktionVerpackung < minProduktion) {
+          minProduktion = maxProduktionVerpackung;
+          analyse.limitierenderFaktor = 'verpackung';
+        }
+      } else {
+        analyse.probleme.push(`Verpackung "${produkt.verpackung}" nicht gefunden`);
+        minProduktion = 0;
+      }
+    }
+    
+    // Finale Produktionsmenge für Werkstück
+    analyse.maxProduktion = minProduktion === Infinity ? 0 : minProduktion;
+    return analyse;
+  }
+  
+  // ========== SEIFEN-LOGIK (wie bisher) ==========
   // 1. Rohseifen analysieren (DUAL-SOAP Support)
   const istweiRohseifen = produkt.rohseifenKonfiguration?.verwendeZweiRohseifen;
   
