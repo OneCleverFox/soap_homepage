@@ -19,31 +19,59 @@ const ZusatzInhaltsstoff = require('../models/ZusatzInhaltsstoff');
 router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
   try {
     console.log('📊 Dashboard Overview wird generiert...');
+    const startTime = performance.now();
     
-    // Paralles Laden aller Dashboard-Daten für optimale Performance
-    const [
-      fertigprodukteOhneBestand,
-      rohstoffeUnterMindestbestand,
-      meistverkaufteProdukte,
-      produkteZurProduktion,
-      fertigprodukteNiedrigerBestand,
-      bestellungsStatistiken,
-      rechnungsStatistiken,
-      inquiryStatistiken,
-      rohstoffStatistiken,
-      gesamtStatistiken
-    ] = await Promise.all([
-      getFertigprodukteOhneBestand(),
-      getRohstoffeUnterMindestbestand(),
-      getMeistverkaufteProdukte(),
-      getProdukteZurProduktion(),
-      getFertigprodukteNiedrigerBestand(),
-      getBestellungsStatistiken(),
-      getRechnungsStatistiken(),
-      getInquiryStatistiken(),
-      getRohstoffStatistiken(),
-      getGesamtStatistiken()
+    // ⚡ PERFORMANCE PROFILING: Zeit jede Funktion
+    // ⚡ KRITISCHE OPTIMIERUNG: Portfolio & Bestand nur EINMAL laden (statt 2x!)
+    // ⚡ ULTRA-KRITISCH: Bilder ausschließen! (34s → <1s bei 35 Produkten)
+    // Base64-Bilder können 500KB-2MB pro Produkt sein = 17.5MB+ Übertragung!
+    console.time('⏱️  0. Gemeinsame Portfolio & Bestand Daten');
+    const [portfolioItems, alleBestaende] = await Promise.all([
+      Portfolio.find({ aktiv: true })
+        .select('-bilder -hauptbildData -galleriebilder') // ⚡ KEINE BILDER!
+        .lean(),
+      Bestand.find({ typ: 'produkt' }).lean()
     ]);
+    console.timeEnd('⏱️  0. Gemeinsame Portfolio & Bestand Daten');
+    
+    console.time('⏱️  1. getFertigprodukteOhneBestand');
+    const fertigprodukteOhneBestand = getFertigprodukteOhneBestandSync(portfolioItems, alleBestaende);
+    console.timeEnd('⏱️  1. getFertigprodukteOhneBestand');
+    
+    console.time('⏱️  2. getRohstoffeUnterMindestbestand');
+    const rohstoffeUnterMindestbestand = await getRohstoffeUnterMindestbestand();
+    console.timeEnd('⏱️  2. getRohstoffeUnterMindestbestand');
+    
+    console.time('⏱️  3. getMeistverkaufteProdukte');
+    const meistverkaufteProdukte = await getMeistverkaufteProdukte();
+    console.timeEnd('⏱️  3. getMeistverkaufteProdukte');
+    
+    console.time('⏱️  4. getFertigprodukteNiedrigerBestand');
+    const fertigprodukteNiedrigerBestand = getFertigprodukteNiedrigerBestandSync(portfolioItems, alleBestaende);
+    console.timeEnd('⏱️  4. getFertigprodukteNiedrigerBestand');
+    
+    console.time('⏱️  5. getBestellungsStatistiken');
+    const bestellungsStatistiken = await getBestellungsStatistiken();
+    console.timeEnd('⏱️  5. getBestellungsStatistiken');
+    
+    console.time('⏱️  6. getRechnungsStatistiken');
+    const rechnungsStatistiken = await getRechnungsStatistiken();
+    console.timeEnd('⏱️  6. getRechnungsStatistiken');
+    
+    console.time('⏱️  7. getInquiryStatistiken');
+    const inquiryStatistiken = await getInquiryStatistiken();
+    console.timeEnd('⏱️  7. getInquiryStatistiken');
+    
+    console.time('⏱️  8. getRohstoffStatistiken');
+    const rohstoffStatistiken = await getRohstoffStatistiken();
+    console.timeEnd('⏱️  8. getRohstoffStatistiken');
+    
+    console.time('⏱️  9. getGesamtStatistiken');
+    const gesamtStatistiken = await getGesamtStatistiken();
+    console.timeEnd('⏱️  9. getGesamtStatistiken');
+    
+    const totalTime = performance.now() - startTime;
+    console.log(`⚡ Alle Dashboard-Daten geladen in ${totalTime.toFixed(0)}ms`);
 
     const dashboardData = {
       // Kritische Warnungen
@@ -54,7 +82,7 @@ router.get('/overview', authenticateToken, requireAdmin, async (req, res) => {
       
       // Produktionspriorität
       produktion: {
-        produkteZurProduktion: produkteZurProduktion.slice(0, 10), // Top 10
+        produkteZurProduktion: await getProdukteZurProduktionSchnell(portfolioItems, alleBestaende),
         rohstoffeBenoetigt: rohstoffeUnterMindestbestand, // Alle Rohstoffe unter Mindestbestand
         fertigprodukteNiedrigerBestand: fertigprodukteNiedrigerBestand.slice(0, 3) // Top 3 mit niedrigstem Bestand
       },
@@ -259,23 +287,23 @@ router.get('/produkte-zur-produktion', authenticateToken, requireAdmin, async (r
 
 // Hilfsfunktionen für Dashboard-Daten
 
-async function getFertigprodukteOhneBestand() {
-  console.log('🔍 Lade Fertigprodukte ohne Bestand...');
+// ⚡ OPTIMIERT: Synchrone Funktion nimmt bereits geladene Daten als Parameter
+function getFertigprodukteOhneBestandSync(portfolioItems, alleBestaende) {
+  // Bestand-Map erstellen für O(1) Lookup
+  const bestandMap = new Map();
+  alleBestaende.forEach(b => {
+    bestandMap.set(b.artikelId.toString(), b);
+  });
   
-  // Alle aktiven Portfolio-Items laden
-  const portfolioItems = await Portfolio.find({ aktiv: true }).lean();
-  
-  // Für jedes Portfolio-Item den Bestand prüfen
-  const produkteOhneBestand = [];
-  
-  for (const item of portfolioItems) {
-    const bestand = await Bestand.findOne({
-      artikelId: item._id,
-      typ: 'produkt'
-    });
-    
-    // Produkt hat keinen Bestand oder Bestand ist 0
-    if (!bestand || bestand.menge === 0) {
+  // Produkte ohne Bestand filtern
+  const produkteOhneBestand = portfolioItems
+    .filter(item => {
+      const bestand = bestandMap.get(item._id.toString());
+      return !bestand || bestand.menge === 0;
+    })
+    .map(item => {
+      const bestand = bestandMap.get(item._id.toString());
+      
       // Seife-Beschreibung für Dual-Soap erweitern
       let seifeBeschreibung = item.seife;
       const istDualSeife = item.rohseifenKonfiguration?.verwendeZweiRohseifen;
@@ -286,7 +314,7 @@ async function getFertigprodukteOhneBestand() {
         seifeBeschreibung = `${item.seife} (${gewichtVerteilung.seife1Prozent}%) + ${item.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
       }
       
-      produkteOhneBestand.push({
+      return {
         _id: item._id,
         name: item.name,
         seife: seifeBeschreibung,
@@ -296,16 +324,26 @@ async function getFertigprodukteOhneBestand() {
         aktuellerBestand: bestand ? bestand.menge : 0,
         mindestbestand: bestand ? bestand.mindestbestand : 0,
         einheit: bestand ? bestand.einheit : 'Stück'
-      });
-    }
-  }
+      };
+    });
   
-  console.log(`📊 ${produkteOhneBestand.length} Fertigprodukte ohne Bestand gefunden`);
+  // console.log(`📊 ${produkteOhneBestand.length} Fertigprodukte ohne Bestand gefunden`);
   return produkteOhneBestand;
 }
 
+// ⚡ Async Wrapper für Endpoint-Kompatibilität
+async function getFertigprodukteOhneBestand() {
+  const [portfolioItems, alleBestaende] = await Promise.all([
+    Portfolio.find({ aktiv: true })
+      .select('-bilder -hauptbildData -galleriebilder') // ⚡ KEINE BILDER!
+      .lean(),
+    Bestand.find({ typ: 'produkt' }).lean()
+  ]);
+  return getFertigprodukteOhneBestandSync(portfolioItems, alleBestaende);
+}
+
 async function getRohstoffeUnterMindestbestand() {
-  console.log('🔍 Lade Rohstoffe unter Mindestbestand...');
+  // console.log('🔍 Lade Rohstoffe unter Mindestbestand...');
   
   const rohstoffeUnterMindest = [];
   
@@ -363,44 +401,24 @@ async function getRohstoffeUnterMindestbestand() {
   // Sortieren nach größter Differenz
   rohstoffeUnterMindest.sort((a, b) => b.differenz - a.differenz);
   
-  console.log(`📊 ${rohstoffeUnterMindest.length} Rohstoffe unter Mindestbestand gefunden`);
-  rohstoffeUnterMindest.forEach((item, i) => {
-    console.log(`   ${i+1}. ${item.bezeichnung} (${item.typ}): ${item.menge} < ${item.mindestbestand} ${item.einheit}`);
-  });
+  // console.log(`📊 ${rohstoffeUnterMindest.length} Rohstoffe unter Mindestbestand gefunden`);
   
   return rohstoffeUnterMindest;
 }
 
 async function getMeistverkaufteProdukte() {
-  console.log('🔍 Lade meistverkaufte Produkte aus Rechnungen...');
+  // console.log('🔍 Lade meistverkaufte Produkte aus Rechnungen...');
   
-  // Aktuelles Jahr und letztes Jahr für mehr Daten
+  // ⚡ OPTIMIERT: Nur aktuelles Jahr statt 2 Jahre
   const currentYear = new Date().getFullYear();
-  const lastYear = currentYear - 1;
+  const yearStart = new Date(currentYear, 0, 1);
   
-  console.log(`🔍 Suche in Jahren: ${currentYear} und ${lastYear}`);
-  
-  // Verkaufsdaten aus Rechnungen aggregieren (erweitert um beide Jahre)
+  // Verkaufsdaten aus Rechnungen aggregieren
   const verkaufsDaten = await Invoice.aggregate([
     {
       $match: {
-        $or: [
-          // Reguläre Rechnungen (sent, paid, pending)
-          { status: { $in: ['sent', 'paid', 'pending'] } },
-          // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
-          { 
-            status: 'draft', 
-            $or: [
-              { 'payment.paidAmount': { $gt: 0 } },
-              { 'payment.paidDate': { $exists: true } },
-              { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } }
-            ]
-          }
-        ],
-        'dates.invoiceDate': {
-          $gte: new Date(lastYear, 0, 1),
-          $lte: new Date(currentYear, 11, 31, 23, 59, 59)
-        }
+        status: { $in: ['sent', 'paid', 'pending'] }, // Vereinfacht: nur einfache Status
+        'dates.invoiceDate': { $gte: yearStart }
       }
     },
     {
@@ -408,49 +426,33 @@ async function getMeistverkaufteProdukte() {
     },
     {
       $group: {
-        _id: {
-          productName: '$items.productData.name',
-          year: { $year: '$dates.invoiceDate' }
-        },
+        _id: '$items.productData.name',
         produktName: { $first: '$items.productData.name' },
         verkaufteMenge: { $sum: '$items.quantity' },
         verkaufsWert: { $sum: '$items.total' },
-        anzahlRechnungen: { $sum: 1 },
-        jahr: { $first: { $year: '$dates.invoiceDate' } }
+        anzahlRechnungen: { $sum: 1 }
       }
     },
     {
       $sort: { verkaufteMenge: -1 }
     },
     {
-      $limit: 10
+      $limit: 10 // Top 10 für Dropdown-Filter
     }
   ]);
   
-  console.log(`📊 ${verkaufsDaten.length} meistverkaufte Produkte aus Rechnungen ${lastYear}-${currentYear} analysiert`);
-  verkaufsDaten.forEach((item, i) => {
-    console.log(`   ${i+1}. ${item.produktName} (${item.jahr}): ${item.verkaufteMenge} Stück (${item.verkaufsWert.toFixed(2)}€)`);
-  });
-  
-  return verkaufsDaten.slice(0, 3); // Nur Top 3 zurückgeben
+  // Jahr hinzufügen damit Frontend filtern kann
+  return verkaufsDaten.map(item => ({
+    ...item,
+    jahr: currentYear
+  }));
 }
 
 async function getProdukteZurProduktion() {
-  console.log('🔍 Berechne Produkte zur Produktion (Bestellungen + Rechnungen)...');
+  // console.log('🔍 Berechne Produkte zur Produktion (Bestellungen + Rechnungen)...');
   
   try {
     const last90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    
-    // Prüfe sowohl Bestellungen als auch Rechnungen
-    const totalOrders = await Order.countDocuments({});
-    const totalInvoices = await Invoice.countDocuments({});
-    console.log(`📊 Total Bestellungen in DB: ${totalOrders}`);
-    console.log(`📊 Total Rechnungen in DB: ${totalInvoices}`);
-    
-    const recentInvoices = await Invoice.countDocuments({
-      'dates.invoiceDate': { $gte: last90Days }
-    });
-    console.log(`📊 Rechnungen letzte 90 Tage: ${recentInvoices}`);
   
   // Sammle Verkaufsdaten aus Bestellungen
   const verkaufsDataOrders = await Order.aggregate([
@@ -513,17 +515,25 @@ async function getProdukteZurProduktion() {
     }
   ]);
 
-  console.log(`📊 Verkaufsdaten aus ${verkaufsDataOrders.length} Bestellungen und ${verkaufsDataInvoices.length} Rechnungen gesammelt`);
+  // console.log(`📊 Verkaufsdaten aus ${verkaufsDataOrders.length} Bestellungen und ${verkaufsDataInvoices.length} Rechnungen gesammelt`);
 
-  // Kombiniere beide Datenquellen und matche mit Portfolio
+  // ⚡ OPTIMIERT: Alle Portfolio-Items und Bestände einmal laden statt N+1 Queries
+  const [allePortfolioItems, alleBestaende] = await Promise.all([
+    Portfolio.find({ aktiv: true }).lean(),
+    Bestand.find({ typ: 'produkt' }).lean()
+  ]);
+  
+  // Maps für O(1) Lookup erstellen
+  const portfolioMapById = new Map(allePortfolioItems.map(p => [p._id.toString(), p]));
+  const portfolioMapByName = new Map(allePortfolioItems.map(p => [p.name.toLowerCase(), p]));
+  const bestandMap = new Map(alleBestaende.map(b => [b.artikelId.toString(), b]));
+  
+  // Kombiniere beide Datenquellen
   const allVerkaufsdaten = [...verkaufsDataOrders];
   
   // Füge Rechnungsdaten hinzu, matche über den Namen mit Portfolio
   for (const invoiceData of verkaufsDataInvoices) {
-    const portfolio = await Portfolio.findOne({ 
-      name: { $regex: new RegExp(invoiceData.produktName, 'i') },
-      aktiv: true 
-    }).lean();
+    const portfolio = portfolioMapByName.get(invoiceData.produktName.toLowerCase());
     
     if (portfolio) {
       const existingOrder = allVerkaufsdaten.find(order => 
@@ -548,76 +558,68 @@ async function getProdukteZurProduktion() {
     }
   }
 
-  console.log(`📊 ${allVerkaufsdaten.length} Produkte mit Verkaufsdaten gefunden`);
+  // console.log(`📊 ${allVerkaufsdaten.length} Produkte mit Verkaufsdaten gefunden`);
 
-  // Kombiniere mit Bestandsdaten und berechne Priorität
-  const produktionsPriorität = [];
+  // Kombiniere mit Bestandsdaten und berechne Priorität (ohne zusätzliche DB-Queries)
+  const produktionsPriorität = allVerkaufsdaten
+    .filter(verkaufsdaten => verkaufsdaten._id)
+    .map(verkaufsdaten => {
+      const portfolio = portfolioMapById.get(verkaufsdaten._id.toString());
+      if (!portfolio) return null;
+      
+      const bestand = bestandMap.get(verkaufsdaten._id.toString());
+      const aktuellerBestand = bestand?.menge || 0;
+      const mindestbestand = bestand?.mindestbestand || 2;
+      const verkaufsrateProTag = verkaufsdaten.verkaufteMenge90Tage / 90;
+      
+      const voraussichtlicheReichweite = verkaufsrateProTag > 0 ? 
+        aktuellerBestand / verkaufsrateProTag : 999;
 
-  for (const verkaufsdaten of allVerkaufsdaten) {
-    if (!verkaufsdaten._id) continue;
+      // Berechne Prioritätsscore
+      const prioritaetsScore = 
+        (10 - aktuellerBestand) * 2 +           // Niedrigerer Bestand = höhere Priorität
+        verkaufsrateProTag * 5 +                // Höhere Verkaufsrate = höhere Priorität  
+        (aktuellerBestand <= mindestbestand ? 10 : 0); // Bonus wenn unter Mindestbestand
 
-    // Lade Portfolio-Details
-    const portfolio = await Portfolio.findById(verkaufsdaten._id).lean();
-    if (!portfolio || !portfolio.aktiv) continue;
+      // Seife-Beschreibung für Dual-Soap erweitern
+      let seifeBeschreibung = portfolio.seife;
+      const istDualSeife = portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen;
+      
+      if (istDualSeife && portfolio.rohseifenKonfiguration.seife2) {
+        const gewichtVerteilung = portfolio.rohseifenKonfiguration.gewichtVerteilung || 
+                                  { seife1Prozent: 50, seife2Prozent: 50 };
+        seifeBeschreibung = `${portfolio.seife} (${gewichtVerteilung.seife1Prozent}%) + ${portfolio.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
+      }
 
-    // Lade Bestandsdaten
-    const bestand = await Bestand.findOne({
-      artikelId: verkaufsdaten._id,
-      typ: 'produkt'
-    }).lean();
-
-    const aktuellerBestand = bestand?.menge || 0;
-    const mindestbestand = bestand?.mindestbestand || 2;
-    const verkaufsrateProTag = verkaufsdaten.verkaufteMenge90Tage / 90;
-    
-    const voraussichtlicheReichweite = verkaufsrateProTag > 0 ? 
-      aktuellerBestand / verkaufsrateProTag : 999;
-
-    // Berechne Prioritätsscore
-    const prioritaetsScore = 
-      (10 - aktuellerBestand) * 2 +           // Niedrigerer Bestand = höhere Priorität
-      verkaufsrateProTag * 5 +                // Höhere Verkaufsrate = höhere Priorität  
-      (aktuellerBestand <= mindestbestand ? 10 : 0); // Bonus wenn unter Mindestbestand
-
-    produktionsPriorität.push({
-      _id: verkaufsdaten._id,
-      produktName: verkaufsdaten.produktName || portfolio.name,
-      portfolio: {
-        name: portfolio.name,
-        seife: (() => {
-          // Seife-Beschreibung für Dual-Soap erweitern
-          let seifeBeschreibung = portfolio.seife;
-          const istDualSeife = portfolio.rohseifenKonfiguration?.verwendeZweiRohseifen;
-          
-          if (istDualSeife && portfolio.rohseifenKonfiguration.seife2) {
-            const gewichtVerteilung = portfolio.rohseifenKonfiguration.gewichtVerteilung || 
-                                      { seife1Prozent: 50, seife2Prozent: 50 };
-            seifeBeschreibung = `${portfolio.seife} (${gewichtVerteilung.seife1Prozent}%) + ${portfolio.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
-          }
-          return seifeBeschreibung;
-        })(),
-        aroma: portfolio.aroma,
-        gramm: portfolio.gramm
-      },
-      aktuellerBestand,
-      mindestbestand,
-      verkaufteMenge90Tage: verkaufsdaten.verkaufteMenge90Tage,
-      verkaufsrateProTag: Math.round(verkaufsrateProTag * 100) / 100,
-      voraussichtlicheReichweite: Math.round(voraussichtlicheReichweite),
-      prioritaetsScore: Math.round(prioritaetsScore * 10) / 10,
-      anzahlTransaktionen: verkaufsdaten.anzahlTransaktionen,
-      quelle: verkaufsdaten.quelle
-    });
-  }
+      return {
+        _id: verkaufsdaten._id,
+        produktName: verkaufsdaten.produktName || portfolio.name,
+        portfolio: {
+          name: portfolio.name,
+          seife: seifeBeschreibung,
+          aroma: portfolio.aroma,
+          gramm: portfolio.gramm
+        },
+        aktuellerBestand,
+        mindestbestand,
+        verkaufteMenge90Tage: verkaufsdaten.verkaufteMenge90Tage,
+        verkaufsrateProTag: Math.round(verkaufsrateProTag * 100) / 100,
+        voraussichtlicheReichweite: Math.round(voraussichtlicheReichweite),
+        prioritaetsScore: Math.round(prioritaetsScore * 10) / 10,
+        anzahlTransaktionen: verkaufsdaten.anzahlTransaktionen,
+        quelle: verkaufsdaten.quelle
+      };
+    })
+    .filter(Boolean); // Entferne null-Werte
 
   // Sortiere nach Prioritätsscore
-  produktionsPriorität.sort((a, b) => b.prioritaetsScore - a.prioritaetsScore);
+  produktionsPriorität.sort((a,b) => b.prioritaetsScore - a.prioritaetsScore);
   const topProdukte = produktionsPriorität.slice(0, 15);
 
-  console.log(`📊 ${produktionsPriorität.length} Produkte für Produktionsplanung analysiert`);
-  topProdukte.forEach((item, i) => {
-    console.log(`   ${i+1}. ${item.produktName} - Verkauft: ${item.verkaufteMenge90Tage} - Bestand: ${item.aktuellerBestand} - Score: ${item.prioritaetsScore} - Quellen: ${item.quelle?.join(', ')}`);
-  });
+  // console.log(`📊 ${produktionsPriorität.length} Produkte für Produktionsplanung analysiert`);
+  // topProdukte.forEach((item, i) => {
+  //   console.log(`   ${i+1}. ${item.produktName} - Verkauft: ${item.verkaufteMenge90Tage} - Bestand: ${item.aktuellerBestand} - Score: ${item.prioritaetsScore} - Quellen: ${item.quelle?.join(', ')}`);
+  // });
   
   return topProdukte;
   
@@ -628,19 +630,11 @@ async function getProdukteZurProduktion() {
 }
 
 async function getRechnungsStatistiken() {
-  console.log('🔍 Lade Rechnungsstatistiken...');
+  // console.log('🔍 Lade Rechnungsstatistiken...');
   
   const heute = new Date();
   const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
-  
-  // DEBUG: Zeige alle Rechnungen der letzten 30 Tage
-  const allRecentInvoices = await Invoice.find({
-    'dates.invoiceDate': { $gte: einMonatZurueck }
-  });
-  console.log(`📊 DEBUG: ${allRecentInvoices.length} Rechnungen der letzten 30 Tage:`);
-  allRecentInvoices.forEach(inv => {
-    console.log(`   ${inv.invoiceNumber}: Status=${inv.status}, Payment=${JSON.stringify(inv.payment)}, Betrag=${inv.amounts.total}€`);
-  });
+  const dreiMonateZurueck = new Date(heute.getTime() - 90 * 24 * 60 * 60 * 1000);
   
   const stats = await Invoice.aggregate([
     {
@@ -651,6 +645,10 @@ async function getRechnungsStatistiken() {
         ],
         letzter30Tage: [
           { $match: { 'dates.invoiceDate': { $gte: einMonatZurueck } } },
+          { $count: "total" }
+        ],
+        letzter90Tage: [
+          { $match: { 'dates.invoiceDate': { $gte: dreiMonateZurueck } } },
           { $count: "total" }
         ],
         nachStatus: [
@@ -666,20 +664,7 @@ async function getRechnungsStatistiken() {
           {
             $match: {
               'dates.invoiceDate': { $gte: einMonatZurueck },
-              $or: [
-                // Reguläre Rechnungen (sent, paid, pending)
-                { status: { $in: ['sent', 'paid', 'pending'] } },
-                // Bezahlte Entwürfe (auch wenn payment.paidDate/paidAmount nicht gesetzt sind)
-                { 
-                  status: 'draft', 
-                  $or: [
-                    { 'payment.paidAmount': { $gt: 0 } },
-                    { 'payment.paidDate': { $exists: true } },
-                    { 'payment.method': { $in: ['bar', 'paypal', 'bank_transfer'] } },
-                    { 'payment.status': 'paid' }
-                  ]
-                }
-              ]
+              status: { $in: ['sent', 'paid', 'pending'] }
             }
           },
           {
@@ -687,6 +672,47 @@ async function getRechnungsStatistiken() {
               _id: null,
               gesamtumsatz: { $sum: '$amounts.total' },
               anzahlRechnungen: { $sum: 1 }
+            }
+          }
+        ],
+        umsatzLetzter90Tage: [
+          {
+            $match: {
+              'dates.invoiceDate': { $gte: dreiMonateZurueck },
+              status: { $in: ['sent', 'paid', 'pending'] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              gesamtumsatz: { $sum: '$amounts.total' },
+              anzahlRechnungen: { $sum: 1 }
+            }
+          }
+        ],
+        gesamtUmsatz: [
+          {
+            $match: {
+              status: { $in: ['sent', 'paid', 'pending'] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              gesamtumsatz: { $sum: '$amounts.total' }
+            }
+          }
+        ],
+        gesamtBezahlt: [
+          {
+            $match: {
+              status: 'paid'
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              gesamtbezahlt: { $sum: '$amounts.total' }
             }
           }
         ],
@@ -705,17 +731,26 @@ async function getRechnungsStatistiken() {
   ]);
   
   return {
+    // Gesamtübersicht
     gesamtRechnungen: stats[0].gesamt[0]?.total || 0,
+    gesamtUmsatz: stats[0].gesamtUmsatz[0]?.gesamtumsatz || 0,
+    gesamtBezahlt: stats[0].gesamtBezahlt[0]?.gesamtbezahlt || 0,
+    // 90 Tage Kennzahlen
+    rechnungenLetzter90Tage: stats[0].letzter90Tage[0]?.total || 0,
+    umsatzLetzter90Tage: stats[0].umsatzLetzter90Tage[0]?.gesamtumsatz || 0,
+    rechnungenMitUmsatz90Tage: stats[0].umsatzLetzter90Tage[0]?.anzahlRechnungen || 0,
+    // Legacy 30 Tage (optional behalten)
     rechnungenLetzter30Tage: stats[0].letzter30Tage[0]?.total || 0,
-    nachStatus: stats[0].nachStatus,
     umsatzLetzter30Tage: stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0,
     rechnungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlRechnungen || 0,
+    // Status & Overdue
+    nachStatus: stats[0].nachStatus,
     overdue: stats[0].overdue[0]?.total || 0
   };
 }
 
 async function getBestellungsStatistiken() {
-  console.log('🔍 Lade Bestellungsstatistiken...');
+  // console.log('🔍 Lade Bestellungsstatistiken...');
   
   const heute = new Date();
   const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -849,7 +884,7 @@ async function getBestellungsStatistiken() {
 }
 
 async function getInquiryStatistiken() {
-  console.log('🔍 Lade Inquiry-Statistiken...');
+  // console.log('🔍 Lade Inquiry-Statistiken...');
   
   const stats = await Inquiry.aggregate([
     {
@@ -899,7 +934,7 @@ async function getInquiryStatistiken() {
 }
 
 async function getRohstoffStatistiken() {
-  console.log('🔍 Lade Rohstoff-Statistiken...');
+  // console.log('🔍 Lade Rohstoff-Statistiken...');
   
   // Zähle Rohstoffe unter Mindestbestand direkt aus den Collections
   const [
@@ -920,11 +955,11 @@ async function getRohstoffStatistiken() {
   
   const unterMindestbestandGesamt = rohseifeUnterMindest + duftoilUnterMindest + verpackungUnterMindest;
   
-  console.log('🔍 DEBUG - Rohstoff-Statistiken:');
-  console.log(`   Rohseifen unter Mindestbestand: ${rohseifeUnterMindest}`);
-  console.log(`   Duftöle unter Mindestbestand: ${duftoilUnterMindest}`);
-  console.log(`   Verpackungen unter Mindestbestand: ${verpackungUnterMindest}`);
-  console.log(`   GESAMT unter Mindestbestand: ${unterMindestbestandGesamt}`);
+  // console.log('🔍 DEBUG - Rohstoff-Statistiken:');
+  // console.log(`   Rohseifen unter Mindestbestand: ${rohseifeUnterMindest}`);
+  // console.log(`   Duftöle unter Mindestbestand: ${duftoilUnterMindest}`);
+  // console.log(`   Verpackungen unter Mindestbestand: ${verpackungUnterMindest}`);
+  // console.log(`   GESAMT unter Mindestbestand: ${unterMindestbestandGesamt}`);
   
   return {
     rohseifeAnzahl: rohseifeCount,
@@ -936,7 +971,7 @@ async function getRohstoffStatistiken() {
 }
 
 async function getGesamtStatistiken() {
-  console.log('🔍 Lade Gesamtstatistiken...');
+  // console.log('🔍 Lade Gesamtstatistiken...');
   
   const [portfolioGesamt, portfolioAktiv, portfolioMitBestand] = await Promise.all([
     Portfolio.countDocuments({}),
@@ -952,26 +987,24 @@ async function getGesamtStatistiken() {
   };
 }
 
-async function getFertigprodukteNiedrigerBestand() {
-  console.log('🔍 Lade Fertigprodukte mit niedrigstem Bestand...');
+// ⚡ OPTIMIERT: Synchrone Funktion nimmt bereits geladene Daten als Parameter
+function getFertigprodukteNiedrigerBestandSync(portfolioItems, alleBestaende) {
+  // Bestand-Map erstellen für O(1) Lookup
+  const bestandMap = new Map();
+  alleBestaende.forEach(b => {
+    bestandMap.set(b.artikelId.toString(), b);
+  });
   
-  // Alle aktiven Portfolio-Items laden
-  const portfolioItems = await Portfolio.find({ aktiv: true }).lean();
-  
-  // Für jedes Portfolio-Item den Bestand prüfen und mit Verkaufsdaten kombinieren
-  const produkteMitBestand = [];
-  
-  for (const item of portfolioItems) {
-    const bestand = await Bestand.findOne({
-      artikelId: item._id,
-      typ: 'produkt'
-    }).lean();
-    
-    const aktuelleMenge = bestand?.menge || 0;
-    const mindestbestand = bestand?.mindestbestand || 2;
-    
-    // Nur Produkte mit Bestand > 0 (aber niedrig) einschließen
-    if (aktuelleMenge > 0) {
+  // Produkte mit Bestand verarbeiten
+  const produkteMitBestand = portfolioItems
+    .map(item => {
+      const bestand = bestandMap.get(item._id.toString());
+      const aktuelleMenge = bestand?.menge || 0;
+      const mindestbestand = bestand?.mindestbestand || 2;
+      
+      // Nur Produkte mit Bestand > 0 (aber niedrig) einschließen
+      if (aktuelleMenge === 0) return null;
+      
       // Seife-Beschreibung für Dual-Soap erweitern
       let seifeBeschreibung = item.seife;
       const istDualSeife = item.rohseifenKonfiguration?.verwendeZweiRohseifen;
@@ -982,7 +1015,7 @@ async function getFertigprodukteNiedrigerBestand() {
         seifeBeschreibung = `${item.seife} (${gewichtVerteilung.seife1Prozent}%) + ${item.rohseifenKonfiguration.seife2} (${gewichtVerteilung.seife2Prozent}%)`;
       }
       
-      produkteMitBestand.push({
+      return {
         _id: item._id,
         name: item.name,
         seife: seifeBeschreibung,
@@ -992,24 +1025,131 @@ async function getFertigprodukteNiedrigerBestand() {
         mindestbestand: mindestbestand,
         bestandsRatio: aktuelleMenge / Math.max(mindestbestand, 1), // Verhältnis zum Mindestbestand
         istNiedrig: aktuelleMenge <= mindestbestand * 1.5 // 50% Puffer über Mindestbestand
-      });
-    }
-  }
+      };
+    })
+    .filter(Boolean) // Entferne null-Werte (Produkte ohne Bestand)
+    .sort((a, b) => {
+      if (a.aktuelleMenge !== b.aktuelleMenge) {
+        return a.aktuelleMenge - b.aktuelleMenge; // Niedrigste Menge zuerst
+      }
+      return a.bestandsRatio - b.bestandsRatio; // Dann nach Bestandsratio
+    });
   
-  // Sortieren nach niedrigstem Bestand (absolut), dann nach Bestandsratio
-  produkteMitBestand.sort((a, b) => {
-    if (a.aktuelleMenge !== b.aktuelleMenge) {
-      return a.aktuelleMenge - b.aktuelleMenge; // Niedrigste Menge zuerst
-    }
-    return a.bestandsRatio - b.bestandsRatio; // Dann nach Bestandsratio
-  });
-  
-  console.log(`📊 ${produkteMitBestand.length} Fertigprodukte analysiert, Top 3 mit niedrigstem Bestand:`);
-  produkteMitBestand.slice(0, 3).forEach((produkt, i) => {
-    console.log(`   ${i+1}. ${produkt.name}: ${produkt.aktuelleMenge} Stück (Mindest: ${produkt.mindestbestand})`);
-  });
+  // console.log(`📊 ${produkteMitBestand.length} Fertigprodukte analysiert, Top 3 mit niedrigstem Bestand:`);
+  // produkteMitBestand.slice(0, 3).forEach((produkt, i) => {
+  //   console.log(`   ${i+1}. ${produkt.name}: ${produkt.aktuelleMenge} Stück (Mindest: ${produkt.mindestbestand})`);
+  // });
   
   return produkteMitBestand;
+}
+
+// ⚡ Async Wrapper für Endpoint-Kompatibilität
+async function getFertigprodukteNiedrigerBestand() {
+  const [portfolioItems, alleBestaende] = await Promise.all([
+    Portfolio.find({ aktiv: true })
+      .select('-bilder -hauptbildData -galleriebilder') // ⚡ KEINE BILDER!
+      .lean(),
+    Bestand.find({ typ: 'produkt' }).lean()
+  ]);
+  return getFertigprodukteNiedrigerBestandSync(portfolioItems, alleBestaende);
+}
+
+// ⚡ NEUE SCHNELLE VERSION: Produktionspriorität OHNE Regex-Suchen
+// Analysiert Verkaufskennzahlen der letzten 90 Tage für Produktionsentscheidungen
+async function getProdukteZurProduktionSchnell(portfolioItems, alleBestaende) {
+  try {
+    const last90Days = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    
+    // Bestand-Map erstellen
+    const bestandMap = new Map();
+    alleBestaende.forEach(b => {
+      bestandMap.set(b.artikelId.toString(), b);
+    });
+    
+    // Portfolio-Name-Map für schnelles Lookup (statt Regex!)
+    const portfolioNameMap = new Map();
+    portfolioItems.forEach(p => {
+      portfolioNameMap.set(p.name.toLowerCase().trim(), p);
+    });
+    
+    // Verkaufsdaten aus Rechnungen holen (nur Produktnamen) - LETZTE 90 TAGE
+    const verkaufsDaten = await Invoice.aggregate([
+      {
+        $match: {
+          status: { $in: ['sent', 'paid', 'pending'] },
+          'dates.invoiceDate': { $gte: last90Days }
+        }
+      },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: '$items.productData.name',
+          verkaufteMenge: { $sum: '$items.quantity' }
+        }
+      }
+    ]);
+    
+    // Verkaufs-Map erstellen
+    const verkaufsMap = new Map();
+    verkaufsDaten.forEach(v => {
+      verkaufsMap.set(v._id.toLowerCase().trim(), v.verkaufteMenge);
+    });
+    
+    // Produkte mit Priorität berechnen
+    const produktePriorität = portfolioItems
+      .map(portfolio => {
+        const bestand = bestandMap.get(portfolio._id.toString());
+        const aktuellerBestand = bestand?.menge || 0;
+        const mindestbestand = bestand?.mindestbestand || 2;
+        const verkaufteMenge90Tage = verkaufsMap.get(portfolio.name.toLowerCase().trim()) || 0;
+        
+        // Reichweite berechnen (Tage bis Bestand aufgebraucht)
+        const durchschnittVerkaufProTag = verkaufteMenge90Tage / 90;
+        const voraussichtlicheReichweite = durchschnittVerkaufProTag > 0 
+          ? Math.floor(aktuellerBestand / durchschnittVerkaufProTag)
+          : 999;
+        
+        // Prioritäts-Score berechnen (höher = dringender)
+        let prioritaetsScore = 0;
+        
+        if (aktuellerBestand === 0) {
+          prioritaetsScore = 50; // Keine Stück = höchste Priorität
+        } else if (aktuellerBestand <= mindestbestand) {
+          prioritaetsScore = 30 + (mindestbestand - aktuellerBestand);
+        } else if (voraussichtlicheReichweite < 30) {
+          prioritaetsScore = 20 + Math.floor((30 - voraussichtlicheReichweite) / 3);
+        } else if (voraussichtlicheReichweite < 60) {
+          prioritaetsScore = 10 + Math.floor((60 - voraussichtlicheReichweite) / 6);
+        }
+        
+        // Bonus für hohe Verkaufszahlen
+        if (verkaufteMenge90Tage > 10) prioritaetsScore += 5;
+        if (verkaufteMenge90Tage > 20) prioritaetsScore += 5;
+        
+        return {
+          _id: portfolio._id,
+          produktName: portfolio.name,
+          portfolio: {
+            name: portfolio.name,
+            seife: portfolio.seife,
+            aroma: portfolio.aroma
+          },
+          aktuellerBestand,
+          mindestbestand,
+          verkaufteMenge90Tage,
+          voraussichtlicheReichweite,
+          prioritaetsScore
+        };
+      })
+      .filter(p => p.verkaufteMenge90Tage > 0) // ⚡ NUR Produkte mit TATSÄCHLICHEN Verkäufen (Kundennachfrage!)
+      .sort((a, b) => b.prioritaetsScore - a.prioritaetsScore) // Höchste Priorität zuerst
+      .slice(0, 10); // Top 10
+    
+    return produktePriorität;
+  } catch (error) {
+    console.error('❌ Fehler bei getProdukteZurProduktionSchnell:', error);
+    return [];
+  }
 }
 
 // Hilfsfunktion: Ermittelt alle relevanten Rechnungen für Umsatz-Berechnungen
@@ -1341,19 +1481,19 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
   }
   
   // 4. Zusatzinhaltsstoffe analysieren
-  console.log(`🧪 [DEBUG] Produkt ${produkt.name}: zusatzinhaltsstoffe Array:`, produkt.zusatzinhaltsstoffe);
+  // console.log(`🧪 [DEBUG] Produkt ${produkt.name}: zusatzinhaltsstoffe Array:`, produkt.zusatzinhaltsstoffe);
   if (produkt.zusatzinhaltsstoffe && Array.isArray(produkt.zusatzinhaltsstoffe) && produkt.zusatzinhaltsstoffe.length > 0) {
-    console.log(`🧪 [DEBUG] Starte Zusatzinhaltsstoffe-Analyse für ${produkt.name}: ${produkt.zusatzinhaltsstoffe.length} Stoffe`);
+    // console.log(`🧪 [DEBUG] Starte Zusatzinhaltsstoffe-Analyse für ${produkt.name}: ${produkt.zusatzinhaltsstoffe.length} Stoffe`);
     for (const zusatz of produkt.zusatzinhaltsstoffe) {
-      console.log(`🧪 [DEBUG] Prüfe Zusatz:`, zusatz);
+      // console.log(`🧪 [DEBUG] Prüfe Zusatz:`, zusatz);
       if (zusatz && zusatz.inhaltsstoffName && typeof zusatz.inhaltsstoffName === 'string' && zusatz.inhaltsstoffName.trim() !== '') {
-        console.log(`🧪 [DEBUG] Suche Bestand für Zusatz: ${zusatz.inhaltsstoffName}, ID: ${zusatz.id || zusatz._id}`);
+        // console.log(`🧪 [DEBUG] Suche Bestand für Zusatz: ${zusatz.inhaltsstoffName}, ID: ${zusatz.id || zusatz._id}`);
         
         // Map-Lookup statt DB-Query
         const zusatzinhaltsstoff = zusatzstoffeMap.get(zusatz.inhaltsstoffName.toLowerCase());
         
         if (zusatzinhaltsstoff) {
-          console.log(`🧪 [DEBUG] ZusatzInhaltsstoff gefunden:`, zusatzinhaltsstoff.bezeichnung, zusatzinhaltsstoff._id);
+          // console.log(`🧪 [DEBUG] ZusatzInhaltsstoff gefunden:`, zusatzinhaltsstoff.bezeichnung, zusatzinhaltsstoff._id);
           
           // Bestand aus der vorgeladenen Map holen statt DB-Query
           const bestandMenge = zusatzstoffBestandsMap.get(zusatzinhaltsstoff._id.toString()) || 0;
@@ -1381,7 +1521,7 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
             const verfuegbar = bestandMenge;
             const maxProduktionZusatz = benoetigt > 0 ? Math.floor(verfuegbar / benoetigt) : 0;
             
-            console.log(`🧪 [DEBUG] ${zusatz.inhaltsstoffName}: benötigt=${benoetigt}g, verfügbar=${verfuegbar}g, maxProduktion=${maxProduktionZusatz}`);
+            // console.log(`🧪 [DEBUG] ${zusatz.inhaltsstoffName}: benötigt=${benoetigt}g, verfügbar=${verfuegbar}g, maxProduktion=${maxProduktionZusatz}`);
             
             analyse.rohstoffBedarf.push({
               typ: 'zusatzinhaltsstoff',
@@ -1397,21 +1537,21 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
             });
             
             if (maxProduktionZusatz < minProduktion) {
-              console.log(`🧪 [DEBUG] Neuer limitierender Faktor: zusatzinhaltsstoff (${maxProduktionZusatz} < ${minProduktion})`);
+              // console.log(`🧪 [DEBUG] Neuer limitierender Faktor: zusatzinhaltsstoff (${maxProduktionZusatz} < ${minProduktion})`);
               minProduktion = maxProduktionZusatz;
               analyse.limitierenderFaktor = 'zusatzinhaltsstoff';
             }
         } else {
-          console.log(`🧪 [DEBUG] ZusatzInhaltsstoff "${zusatz.inhaltsstoffName}" nicht in Datenbank gefunden`);
+          // console.log(`🧪 [DEBUG] ZusatzInhaltsstoff "${zusatz.inhaltsstoffName}" nicht in Datenbank gefunden`);
           analyse.probleme.push(`Zusatzinhaltsstoff "${zusatz.inhaltsstoffName}" nicht definiert`);
           minProduktion = 0;
         }
       } else {
-        console.log(`🧪 [DEBUG] Überspringe ungültigen Zusatz:`, zusatz);
+        // console.log(`🧪 [DEBUG] Überspringe ungültigen Zusatz:`, zusatz);
       }
     }
   } else {
-    console.log(`🧪 [DEBUG] Produkt ${produkt.name}: Keine Zusatzinhaltsstoffe definiert`);
+    // console.log(`🧪 [DEBUG] Produkt ${produkt.name}: Keine Zusatzinhaltsstoffe definiert`);
   }
   
   // Endgültige maximale Produktion setzen
