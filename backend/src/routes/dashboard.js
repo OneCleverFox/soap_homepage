@@ -1257,7 +1257,7 @@ async function getProduktionsKapazitaetsAnalyse() {
   // 1. Alle aktiven Portfolio-Produkte laden (nur benötigte Felder)
   const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } })
     .select('name seife aroma verpackung gramm kategorie rohseifenKonfiguration zusatzinhaltsstoffe giessform giesswerkstoff giesswerkstoffKonfiguration')
-    .populate('giessform', 'name inventarnummer zustand')
+    .populate('giessform', 'name inventarnummer zustand volumenMl')
     .populate('giesswerkstoff', 'bezeichnung aktuellVorrat einheit')
     .lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
@@ -1269,7 +1269,7 @@ async function getProduktionsKapazitaetsAnalyse() {
     Verpackung.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
     ZusatzInhaltsstoff.find().select('bezeichnung').lean(),
     Giesswerkstoff.find().select('bezeichnung aktuellVorrat einheit').lean(),
-    Giessform.find({ zustand: { $in: ['neu', 'gut', 'gebraucht'] } }).select('name inventarnummer zustand').lean()
+    Giessform.find({ zustand: { $in: ['neu', 'gut', 'gebraucht'] } }).select('name inventarnummer zustand volumenMl').lean()
   ]);
   
   console.log(`🧱 Rohstoffe geladen: ${rohseifen.length} Rohseifen, ${duftoele.length} Duftöle, ${verpackungen.length} Verpackungen, ${zusatzinhaltsstoffe.length} Zusatzinhaltsstoffe, ${giesswerkstoffe.length} Gießwerkstoffe, ${giessformen.length} Gießformen`);
@@ -1375,9 +1375,15 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
       const giesswerkstoffObj = produkt.giesswerkstoff; // populate() Objekt
       const giesswerkstoffId = giesswerkstoffObj._id || giesswerkstoffObj;
       
+      // BERECHNUNG: Volumen × Berechnungsfaktor = Benötigte Menge
+      // Nutze Gießform-Volumen (ml) und Berechnungsfaktor aus Portfolio-Konfiguration
+      const giessformObj = produkt.giessform || {};
+      const volumenMl = giessformObj.volumenMl || produkt.gramm; // Fallback: gramm-Feld
+      const berechnungsFaktor = produkt.giesswerkstoffKonfiguration?.berechnungsFaktor || 1.0;
+      const benoetigt = volumenMl * berechnungsFaktor; // Tatsächlicher Materialbedarf
+      
       // Versuche zuerst aus dem populate()-Objekt zu lesen
       if (giesswerkstoffObj.bezeichnung && giesswerkstoffObj.aktuellVorrat !== undefined) {
-        const benoetigt = produkt.gramm; // Gramm pro Werkstück
         const verfuegbar = giesswerkstoffObj.aktuellVorrat;
         const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
         
@@ -1400,7 +1406,6 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
         const giesswerkstoff = giesswerkstoffMap.get(giesswerkstoffId.toString());
         
         if (giesswerkstoff) {
-          const benoetigt = produkt.gramm;
           const verfuegbar = giesswerkstoff.aktuellVorrat;
           const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
           
@@ -1462,7 +1467,8 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
           maxProduktion: Infinity, // Unbegrenzt wiederverwendbar
           ausreichend: true,
           inventarnummer: giessformObj.inventarnummer,
-          zustand: giessformObj.zustand
+          zustand: giessformObj.zustand,
+          volumenMl: giessformObj.volumenMl
         });
       } else {
         // Fallback: Versuche aus Map zu holen
@@ -1478,7 +1484,8 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
             maxProduktion: Infinity,
             ausreichend: true,
             inventarnummer: giessform.inventarnummer,
-            zustand: giessform.zustand
+            zustand: giessform.zustand,
+            volumenMl: giessform.volumenMl
           });
         }
       }
