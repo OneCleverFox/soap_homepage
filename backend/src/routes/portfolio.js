@@ -337,10 +337,15 @@ router.get('/', async (req, res) => {
     
     const startTime = Date.now();
     
+    // ⚡ OPTIMIERUNG: Minimale Felder für Admin-Dropdowns (Warenberechnung)
+    const selectFields = shouldIncludeInactive 
+      ? 'name kategorie aktiv isActive preis gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge'
+      : '-bilder.hauptbildData.data -bilder.galerie.data -bilder.galerie.contentType';
+    
     // ⚡ LÖSUNG: Lade Daten OHNE Sortierung - verhindert MongoDB Memory Limit Fehler
     // Sortierung erfolgt lokal in Node.js (siehe unten)
     const portfolioItems = await Portfolio.find(filter)
-      .select('-bilder.hauptbildData.data -bilder.galerie') // Schließe große Bild-Daten aus
+      .select(selectFields) // Minimale Felder für Admin, normale Felder für Public
       .lean() // Bessere Performance
       .exec();
     
@@ -1223,17 +1228,32 @@ router.post('/:id/upload-image', auth, upload.single('image'), optimizeMainImage
 // @access  Public
 router.get('/:id/image/main', async (req, res) => {
   try {
-    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    const product = await Portfolio.findById(req.params.id).select('bilder name').lean();
     
-    if (!product || !product.bilder?.hauptbild) {
+    if (!product) {
+      console.log(`[Portfolio Image] Produkt nicht gefunden: ${req.params.id}`);
+      return res.status(404).json({ success: false, message: 'Produkt nicht gefunden' });
+    }
+
+    // Prüfe hauptbild und hauptbildData als Fallback
+    let base64Data = null;
+    
+    if (product.bilder?.hauptbild && product.bilder.hauptbild.trim()) {
+      base64Data = product.bilder.hauptbild;
+    } else if (product.bilder?.hauptbildData?.data && product.bilder.hauptbildData.contentType) {
+      // Fallback auf hauptbildData
+      base64Data = `data:${product.bilder.hauptbildData.contentType};base64,${product.bilder.hauptbildData.data}`;
+    }
+    
+    if (!base64Data) {
+      console.log(`[Portfolio Image] Kein Hauptbild vorhanden für Produkt: ${product.name} (${req.params.id})`);
       return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
     }
 
-    const base64Data = product.bilder.hauptbild;
-    
     // Extrahiere MIME-Type und Base64-Daten
     const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     if (!matches || matches.length !== 3) {
+      console.error(`[Portfolio Image] Ungültiges Bildformat für Produkt: ${product.name} (${req.params.id})`);
       return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
     }
 
@@ -1249,7 +1269,7 @@ router.get('/:id/image/main', async (req, res) => {
 
     res.send(imageBuffer);
   } catch (error) {
-    console.error('Fehler beim Laden des Hauptbildes:', error);
+    console.error(`[Portfolio Image] Fehler beim Laden des Hauptbildes für ${req.params.id}:`, error);
     res.status(500).json({ success: false, message: 'Fehler beim Laden des Bildes' });
   }
 });
@@ -1259,19 +1279,39 @@ router.get('/:id/image/main', async (req, res) => {
 // @access  Public
 router.get('/:id/image/gallery/:index', async (req, res) => {
   try {
-    const product = await Portfolio.findById(req.params.id).select('bilder').lean();
+    const product = await Portfolio.findById(req.params.id).select('bilder name').lean();
     const index = parseInt(req.params.index);
     
-    if (!product || !product.bilder?.galerie || !product.bilder.galerie[index]) {
+    if (!product) {
+      console.log(`[Portfolio Gallery] Produkt nicht gefunden: ${req.params.id}`);
+      return res.status(404).json({ success: false, message: 'Produkt nicht gefunden' });
+    }
+    
+    if (!product.bilder?.galerie || !product.bilder.galerie[index]) {
+      console.log(`[Portfolio Gallery] Galeriebild ${index} nicht vorhanden für Produkt: ${product.name} (${req.params.id})`);
       return res.status(404).json({ success: false, message: 'Bild nicht gefunden' });
     }
 
     const imageObj = product.bilder.galerie[index];
-    const base64Data = typeof imageObj === 'string' ? imageObj : imageObj.url;
+    
+    // Prüfe url und data/contentType als Fallbacks
+    let base64Data = null;
+    
+    if (imageObj.url && imageObj.url.trim() && imageObj.url.startsWith('data:')) {
+      base64Data = imageObj.url;
+    } else if (imageObj.data && imageObj.contentType) {
+      base64Data = `data:${imageObj.contentType};base64,${imageObj.data}`;
+    }
+    
+    if (!base64Data) {
+      console.log(`[Portfolio Gallery] Keine Bilddaten für Galeriebild ${index} von Produkt: ${product.name} (${req.params.id})`);
+      return res.status(404).json({ success: false, message: 'Bilddaten nicht gefunden' });
+    }
     
     // Extrahiere MIME-Type und Base64-Daten
     const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     if (!matches || matches.length !== 3) {
+      console.error(`[Portfolio Gallery] Ungültiges Bildformat für Galeriebild ${index} von Produkt: ${product.name} (${req.params.id})`);
       return res.status(400).json({ success: false, message: 'Ungültiges Bildformat' });
     }
 
