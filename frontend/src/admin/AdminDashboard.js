@@ -1407,47 +1407,7 @@ const AdminDashboard = () => {
                 </IconButton>
               </Box>
               
-              {/* Gesamtübersicht */}
-              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-                📊 Gesamtübersicht
-                <Chip label="Alle Rechnungen" size="small" sx={{ ml: 1, fontSize: '0.7rem' }} />
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={6} sm={4}>
-                  <Box sx={{ p: 2, bgcolor: 'primary.main', borderRadius: 2, boxShadow: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {verkaufData?.rechnungen?.gesamtRechnungen || 0}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'white', opacity: 0.9 }}>
-                      Rechnungen gesamt
-                    </Typography>
-                  </Box>
-                </Grid>
-                
-                <Grid item xs={6} sm={4}>
-                  <Box sx={{ p: 2, bgcolor: 'success.main', borderRadius: 2, boxShadow: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {formatCurrency(verkaufData?.rechnungen?.gesamtUmsatz || 0)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'white', opacity: 0.9 }}>
-                      Gesamtumsatz
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                <Grid item xs={6} sm={4}>
-                  <Box sx={{ p: 2, bgcolor: 'info.main', borderRadius: 2, boxShadow: 2 }}>
-                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {formatCurrency(verkaufData?.rechnungen?.gesamtBezahlt || 0)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'white', opacity: 0.9 }}>
-                      Bezahlt gesamt
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-
-{/* Aktuelles Kalenderjahr Kennzahlen */}
+              {/* Aktuelles Kalenderjahr Kennzahlen */}
               <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
                 📈 Verkaufskennzahlen ({new Date().getFullYear()})
                 <Chip label="Aktuelles Kalenderjahr" size="small" color="primary" sx={{ ml: 1, fontSize: '0.7rem' }} />
