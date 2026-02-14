@@ -1258,7 +1258,7 @@ async function getProduktionsKapazitaetsAnalyse() {
   const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } })
     .select('name seife aroma verpackung gramm kategorie rohseifenKonfiguration zusatzinhaltsstoffe giessform giesswerkstoff giesswerkstoffKonfiguration')
     .populate('giessform', 'name inventarnummer zustand volumenMl')
-    .populate('giesswerkstoff', 'bezeichnung aktuellVorrat einheit')
+    .populate('giesswerkstoff', 'bezeichnung aktuellerBestand einheit')
     .lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
   
@@ -1268,7 +1268,7 @@ async function getProduktionsKapazitaetsAnalyse() {
     Duftoil.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
     Verpackung.find({ verfuegbar: true }).select('bezeichnung aktuellVorrat').lean(),
     ZusatzInhaltsstoff.find().select('bezeichnung').lean(),
-    Giesswerkstoff.find().select('bezeichnung aktuellVorrat einheit').lean(),
+    Giesswerkstoff.find().select('bezeichnung aktuellerBestand einheit').lean(),
     Giessform.find({ zustand: { $in: ['neu', 'gut', 'gebraucht'] } }).select('name inventarnummer zustand volumenMl').lean()
   ]);
   
@@ -1370,6 +1370,8 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
   // ========== WERKSTÜCK-LOGIK ==========
   if (produkt.kategorie === 'werkstuck') {
     // 1. Gießwerkstoff analysieren
+    let giesswerkstoffGefunden = false;
+    
     // populate() gibt das volle Objekt zurück, nicht nur die ID
     if (produkt.giesswerkstoff) {
       const giesswerkstoffObj = produkt.giesswerkstoff; // populate() Objekt
@@ -1382,10 +1384,14 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
       const berechnungsFaktor = produkt.giesswerkstoffKonfiguration?.berechnungsFaktor || 1.0;
       const benoetigt = volumenMl * berechnungsFaktor; // Tatsächlicher Materialbedarf
       
+      console.log(`🏺 WERKSTÜCK "${produkt.name}": volumenMl=${volumenMl}, berechnungsFaktor=${berechnungsFaktor}, benötigt=${benoetigt}g`);
+      
       // Versuche zuerst aus dem populate()-Objekt zu lesen
-      if (giesswerkstoffObj.bezeichnung && giesswerkstoffObj.aktuellVorrat !== undefined) {
-        const verfuegbar = giesswerkstoffObj.aktuellVorrat;
+      if (giesswerkstoffObj.bezeichnung && giesswerkstoffObj.aktuellerBestand !== undefined) {
+        const verfuegbar = giesswerkstoffObj.aktuellerBestand;
         const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
+        
+        console.log(`   ✅ Gießwerkstoff: ${giesswerkstoffObj.bezeichnung}, verfügbar=${verfuegbar}g → Max.Produktion=${maxProduktionGiesswerkstoff}`);
         
         analyse.rohstoffBedarf.push({
           typ: 'giesswerkstoff',
@@ -1401,13 +1407,16 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
           minProduktion = maxProduktionGiesswerkstoff;
           analyse.limitierenderFaktor = 'giesswerkstoff';
         }
+        giesswerkstoffGefunden = true;
       } else {
         // Fallback: Versuche aus Map zu holen
         const giesswerkstoff = giesswerkstoffMap.get(giesswerkstoffId.toString());
         
         if (giesswerkstoff) {
-          const verfuegbar = giesswerkstoff.aktuellVorrat;
+          const verfuegbar = giesswerkstoff.aktuellerBestand;
           const maxProduktionGiesswerkstoff = Math.floor(verfuegbar / benoetigt);
+          
+          console.log(`   ✅ Gießwerkstoff (Map): ${giesswerkstoff.bezeichnung}, verfügbar=${verfuegbar}g → Max.Produktion=${maxProduktionGiesswerkstoff}`);
           
           analyse.rohstoffBedarf.push({
             typ: 'giesswerkstoff',
@@ -1423,18 +1432,26 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
             minProduktion = maxProduktionGiesswerkstoff;
             analyse.limitierenderFaktor = 'giesswerkstoff';
           }
+          giesswerkstoffGefunden = true;
         } else {
-          analyse.probleme.push(`Gießwerkstoff nicht gefunden (ID: ${giesswerkstoffId})`);
-          minProduktion = 0;
+          console.log(`   ⚠️ Gießwerkstoff nicht gefunden (ID: ${giesswerkstoffId}) → Fallback zu Bestand`);
+          analyse.probleme.push(`⚠️ Gießwerkstoff-ID existiert, aber Material nicht gefunden`);
         }
       }
-    } else {
-      // FALLBACK: Kein Gießwerkstoff zugewiesen
+    }
+    
+    // FALLBACK: Kein Gießwerkstoff ODER nicht gefunden
+    if (!giesswerkstoffGefunden) {
       // Für Werkstücke ohne Gießwerkstoff-Konfiguration: Nimm aktuellen Fertigprodukt-Bestand
       // Der Bestand repräsentiert bereits produzierte Werkstücke, die auf Lager sind
       const aktuellerBestand = bestandsMap.get(produkt._id.toString()) || 0;
       
-      analyse.probleme.push('⚠️ Gießwerkstoff nicht konfiguriert - Zeige aktuellen Bestand');
+      console.log(`🏺 WERKSTÜCK "${produkt.name}": ⚠️ KEIN Gießwerkstoff → Zeige Bestand (${aktuellerBestand} Stück)`);
+      
+      if (!analyse.probleme.find(p => p.includes('Gießwerkstoff'))) {
+        analyse.probleme.push('⚠️ Gießwerkstoff nicht konfiguriert - Zeige aktuellen Bestand');
+      }
+      
       analyse.rohstoffBedarf.push({
         typ: 'bestand',
         name: 'Aktuelle Fertigware (auf Lager)',
