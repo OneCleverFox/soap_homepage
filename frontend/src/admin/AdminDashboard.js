@@ -382,31 +382,29 @@ const AdminDashboard = () => {
     const alleProdukte = [...produktionsKapazitaet.produkte].sort((a, b) => b.maxProduktion - a.maxProduktion);
     
     switch (produktionsFilter) {
-      case 'produzierbar':
-        return alleProdukte.filter(p => p.maxProduktion > 5);
+      case 'werkstuck':
+        return alleProdukte.filter(p => p.kategorie === 'werkstuck');
+      case 'seife':
+        return alleProdukte.filter(p => p.kategorie === 'seife');
       case 'kritisch':
         return alleProdukte.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5);
-      case 'hoechste':
-        return alleProdukte.filter(p => p.maxProduktion > 0).slice(0, 3);
-      case 'nicht-produzierbar':
-        return alleProdukte.filter(p => p.maxProduktion === 0);
+      case 'alle':
       default:
-        return alleProdukte.slice(0, 10);
+        return alleProdukte.slice(0, 20); // Top 20 alle Kategorien
     }
   };
 
   const getFilterTitle = () => {
     switch (produktionsFilter) {
-      case 'produzierbar':
-        return '✅ Gut produzierbare Produkte (>5 Stück):';
+      case 'werkstuck':
+        return '🏺 Werkstücke - Produktionskapazität:';
+      case 'seife':
+        return '🧴 Seifen - Produktionskapazität:';
       case 'kritisch':
         return '⚠️ Kritische Produkte (≤5 Stück):';
-      case 'hoechste':
-        return '🏆 Top 3 Produktionskapazitäten:';
-      case 'nicht-produzierbar':
-        return '🚫 Nicht produzierbare Produkte:';
+      case 'alle':
       default:
-        return '📦 Produzierbare Mengen pro Produkt:';
+        return '📦 Alle Produkte - Produktionskapazität (Top 20):';
     }
   };
 
@@ -977,11 +975,12 @@ const AdminDashboard = () => {
               
               {produktionsKapazitaet && produktionsKapazitaet.zusammenfassung ? (
                 <Grid container spacing={1}>
-                  <Grid item xs={6} sm={6} md={6}>
+                  {/* Seifen-Filter */}
+                  <Grid item xs={6} sm={3} md={3}>
                     <Box 
                       sx={{ 
                         p: { xs: 1, sm: 2 }, 
-                        bgcolor: produktionsFilter === 'produzierbar' ? 'primary.main' : 'primary.light', 
+                        bgcolor: produktionsFilter === 'seife' ? 'primary.main' : 'primary.light', 
                         borderRadius: 2, 
                         textAlign: 'center',
                         cursor: 'pointer',
@@ -994,24 +993,54 @@ const AdminDashboard = () => {
                           transform: 'translateY(-2px)',
                           boxShadow: 4
                         },
-                        border: produktionsFilter === 'produzierbar' ? '2px solid' : 'none',
+                        border: produktionsFilter === 'seife' ? '2px solid' : 'none',
                         borderColor: 'primary.dark'
                       }}
-                      onClick={() => setProduktionsFilter(produktionsFilter === 'produzierbar' ? 'alle' : 'produzierbar')}
+                      onClick={() => setProduktionsFilter(produktionsFilter === 'seife' ? 'alle' : 'seife')}
                     >
                       <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
-                        {produktionsKapazitaet.produkte?.filter(p => p.maxProduktion > 5).length || 0}
+                        {produktionsKapazitaet.produkte?.filter(p => p.kategorie === 'seife').length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
-                        Produzierbar
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8, fontSize: { xs: '0.6rem', sm: '0.75rem' }, display: { xs: 'none', sm: 'block' } }}>
-                        von {produktionsKapazitaet.zusammenfassung.uebersicht.gesamtProdukte || 0} gesamt
+                        🧴 Seifen
                       </Typography>
                     </Box>
                   </Grid>
                   
-                  <Grid item xs={6} sm={6} md={6}>
+                  {/* Werkstücke-Filter */}
+                  <Grid item xs={6} sm={3} md={3}>
+                    <Box 
+                      sx={{ 
+                        p: { xs: 1, sm: 2 }, 
+                        bgcolor: produktionsFilter === 'werkstuck' ? 'success.main' : 'success.light', 
+                        borderRadius: 2, 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        minHeight: { xs: 80, sm: 120 },
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: 4
+                        },
+                        border: produktionsFilter === 'werkstuck' ? '2px solid' : 'none',
+                        borderColor: 'success.dark'
+                      }}
+                      onClick={() => setProduktionsFilter(produktionsFilter === 'werkstuck' ? 'alle' : 'werkstuck')}
+                    >
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+                        {produktionsKapazitaet.produkte?.filter(p => p.kategorie === 'werkstuck').length || 0}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                        🏺 Werkstücke
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  {/* Kritisch-Filter */}
+                  <Grid item xs={6} sm={3} md={3}>
                     <Box 
                       sx={{ 
                         p: { xs: 1, sm: 2 }, 
@@ -1037,10 +1066,45 @@ const AdminDashboard = () => {
                         {produktionsKapazitaet.produkte?.filter(p => p.maxProduktion > 0 && p.maxProduktion <= 5).length || 0}
                       </Typography>
                       <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
-                        Kritisch
+                        ⚠️ Kritisch
                       </Typography>
                       <Typography variant="caption" sx={{ color: 'white', opacity: 0.8, fontSize: { xs: '0.6rem', sm: '0.75rem' }, display: { xs: 'none', sm: 'block' } }}>
                         ≤5 Stück
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  {/* Alle-Filter */}
+                  <Grid item xs={6} sm={3} md={3}>
+                    <Box 
+                      sx={{ 
+                        p: { xs: 1, sm: 2 }, 
+                        bgcolor: produktionsFilter === 'alle' ? 'info.main' : 'info.light', 
+                        borderRadius: 2, 
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        minHeight: { xs: 80, sm: 120 },
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: 4
+                        },
+                        border: produktionsFilter === 'alle' ? '2px solid' : 'none',
+                        borderColor: 'info.dark'
+                      }}
+                      onClick={() => setProduktionsFilter('alle')}
+                    >
+                      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', fontSize: { xs: '1.5rem', sm: '2.125rem' } }}>
+                        {produktionsKapazitaet.zusammenfassung.uebersicht.gesamtProdukte || 0}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: 'white', fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
+                        📦 Alle
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: 'white', opacity: 0.8, fontSize: { xs: '0.6rem', sm: '0.75rem' }, display: { xs: 'none', sm: 'block' } }}>
+                        Gesamt
                       </Typography>
                     </Box>
                   </Grid>
@@ -1371,16 +1435,16 @@ const AdminDashboard = () => {
                 </Grid>
               </Grid>
 
-              {/* 90-Tage-Kennzahlen */}
+{/* Aktuelles Kalenderjahr Kennzahlen */}
               <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-                📈 Verkaufskennzahlen (90 Tage)
-                <Chip label="Konsistent mit Produktionspriorität" size="small" color="primary" sx={{ ml: 1, fontSize: '0.7rem' }} />
+                📈 Verkaufskennzahlen ({new Date().getFullYear()})
+                <Chip label="Aktuelles Kalenderjahr" size="small" color="primary" sx={{ ml: 1, fontSize: '0.7rem' }} />
               </Typography>
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={6} sm={3}>
                   <Box sx={{ p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {verkaufData?.rechnungen?.rechnungenLetzter90Tage || 0}
+                      {verkaufData?.rechnungen?.rechnungenAktuellesJahr || 0}
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'white' }}>
                       Rechnungen
@@ -1391,7 +1455,7 @@ const AdminDashboard = () => {
                 <Grid item xs={6} sm={3}>
                   <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'white' }}>
-                      {formatCurrency(verkaufData?.rechnungen?.umsatzLetzter90Tage || 0)}
+                      {formatCurrency(verkaufData?.rechnungen?.umsatzAktuellesJahr || 0)}
                     </Typography>
                     <Typography variant="body2" sx={{ color: 'white' }}>
                       Umsatz
