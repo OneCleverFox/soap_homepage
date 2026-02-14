@@ -635,6 +635,7 @@ async function getRechnungsStatistiken() {
   const heute = new Date();
   const einMonatZurueck = new Date(heute.getTime() - 30 * 24 * 60 * 60 * 1000);
   const dreiMonateZurueck = new Date(heute.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const jahresbeginn = new Date(heute.getFullYear(), 0, 1); // 1. Januar aktuelles Jahr
   
   const stats = await Invoice.aggregate([
     {
@@ -649,6 +650,10 @@ async function getRechnungsStatistiken() {
         ],
         letzter90Tage: [
           { $match: { 'dates.invoiceDate': { $gte: dreiMonateZurueck } } },
+          { $count: "total" }
+        ],
+        aktuellesJahr: [
+          { $match: { 'dates.invoiceDate': { $gte: jahresbeginn } } },
           { $count: "total" }
         ],
         nachStatus: [
@@ -679,6 +684,21 @@ async function getRechnungsStatistiken() {
           {
             $match: {
               'dates.invoiceDate': { $gte: dreiMonateZurueck },
+              status: { $in: ['sent', 'paid', 'pending'] }
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              gesamtumsatz: { $sum: '$amounts.total' },
+              anzahlRechnungen: { $sum: 1 }
+            }
+          }
+        ],
+        umsatzAktuellesJahr: [
+          {
+            $match: {
+              'dates.invoiceDate': { $gte: jahresbeginn },
               status: { $in: ['sent', 'paid', 'pending'] }
             }
           },
@@ -735,6 +755,10 @@ async function getRechnungsStatistiken() {
     gesamtRechnungen: stats[0].gesamt[0]?.total || 0,
     gesamtUmsatz: stats[0].gesamtUmsatz[0]?.gesamtumsatz || 0,
     gesamtBezahlt: stats[0].gesamtBezahlt[0]?.gesamtbezahlt || 0,
+    // Aktuelles Kalenderjahr
+    rechnungenAktuellesJahr: stats[0].aktuellesJahr[0]?.total || 0,
+    umsatzAktuellesJahr: stats[0].umsatzAktuellesJahr[0]?.gesamtumsatz || 0,
+    rechnungenMitUmsatzJahr: stats[0].umsatzAktuellesJahr[0]?.anzahlRechnungen || 0,
     // 90 Tage Kennzahlen
     rechnungenLetzter90Tage: stats[0].letzter90Tage[0]?.total || 0,
     umsatzLetzter90Tage: stats[0].umsatzLetzter90Tage[0]?.gesamtumsatz || 0,
@@ -1228,7 +1252,7 @@ async function getProduktionsKapazitaetsAnalyse() {
   
   // 1. Alle aktiven Portfolio-Produkte laden (nur benötigte Felder)
   const portfolioProdukte = await Portfolio.find({ aktiv: { $ne: false } })
-    .select('name seife aroma verpackung gramm rohseifenKonfiguration zusatzinhaltsstoffe')
+    .select('name seife aroma verpackung gramm kategorie rohseifenKonfiguration zusatzinhaltsstoffe')
     .lean();
   console.log(`📦 ${portfolioProdukte.length} aktive Portfolio-Produkte gefunden`);
   
@@ -1317,6 +1341,7 @@ function analysiereProduktionskapazitaet(produkt, rohseifenMap, duftoeleMap, ver
   const analyse = {
     produktId: produkt._id,
     produktName: produkt.name,
+    kategorie: produkt.kategorie || 'seife', // 'seife' oder 'werkstuck'
     seife: seifeBeschreibung,
     aroma: produkt.aroma,
     verpackung: produkt.verpackung,
