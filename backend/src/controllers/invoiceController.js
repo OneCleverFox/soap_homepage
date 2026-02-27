@@ -6,15 +6,27 @@ const fsSync = require('fs');
 const logger = require('../utils/logger');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-const paypalQrPath = path.resolve(__dirname, '../../..', 'frontend', 'public', 'Paypal_QR.png');
-let paypalQrDataUrl = '';
+const paypalQrCandidatePaths = [
+  path.resolve(__dirname, '../../..', 'frontend', 'public', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'public', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'assets', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'uploads', 'Paypal_QR.png')
+];
 
-try {
-  const paypalQrBuffer = fsSync.readFileSync(paypalQrPath);
-  paypalQrDataUrl = `data:image/png;base64,${paypalQrBuffer.toString('base64')}`;
-} catch (error) {
-  console.warn(`PayPal QR nicht gefunden: ${paypalQrPath}`);
-}
+const loadPayPalQrDataUrl = () => {
+  for (const candidatePath of paypalQrCandidatePaths) {
+    if (fsSync.existsSync(candidatePath)) {
+      const paypalQrBuffer = fsSync.readFileSync(candidatePath);
+      console.log(`✅ PayPal QR geladen: ${candidatePath}`);
+      return `data:image/png;base64,${paypalQrBuffer.toString('base64')}`;
+    }
+  }
+
+  console.warn(`PayPal QR nicht gefunden. Gepruefte Pfade: ${paypalQrCandidatePaths.join(', ')}`);
+  return '';
+};
+
+let paypalQrDataUrl = loadPayPalQrDataUrl();
 
 class InvoiceController {
   // Alle Templates abrufen
