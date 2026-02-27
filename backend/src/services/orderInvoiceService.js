@@ -123,15 +123,22 @@ class OrderInvoiceService {
           land: rechnungsadresse?.land || 'Deutschland'
         },
         artikel: await Promise.all(order.artikel?.map(async (item, index) => {
-          // Beschreibung intelligent aus Portfolio-Daten generieren
-          let beschreibung = 'Handgefertigte Seife';
+          let beschreibung = '';
           
-          // Prüfe ob Portfolio-Strukturdaten im produktSnapshot verfügbar sind
           if (item.produktSnapshot) {
             const snapshot = item.produktSnapshot;
             
-            // Prüfe ob Portfolio-Strukturdaten verfügbar sind
-            if (snapshot.aroma || snapshot.seifenform || snapshot.verpackung) {
+            // 1. Direkt aus snapshot.beschreibung
+            if (snapshot.beschreibung) {
+              if (typeof snapshot.beschreibung === 'string' && snapshot.beschreibung.trim()) {
+                beschreibung = snapshot.beschreibung;
+              } else if (typeof snapshot.beschreibung === 'object' && snapshot.beschreibung !== null) {
+                beschreibung = snapshot.beschreibung.kurz?.trim() || snapshot.beschreibung.lang?.trim() || '';
+              }
+            }
+            
+            // 2. Für Seifen: Aus Strukturdaten generieren
+            if (!beschreibung && (snapshot.aroma || snapshot.seifenform || snapshot.verpackung)) {
               beschreibung = generateProductDescription({
                 aroma: snapshot.aroma,
                 seifenform: snapshot.seifenform,
@@ -139,47 +146,73 @@ class OrderInvoiceService {
                 zusatz: snapshot.zusatz,
                 optional: snapshot.optional
               });
-            } else {
-              // Live-Laden von Portfolio-Daten für ältere Bestellungen
+            }
+            
+            // 3. Live-Laden von Portfolio (für beide: Seifen und Werkstücke)
+            if (!beschreibung && snapshot.name) {
               try {
                 const portfolioItem = await Portfolio.findOne({
-                  name: { $regex: new RegExp(snapshot.name, 'i') }
+                  name: { $regex: new RegExp(`^${snapshot.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
                 }).lean();
                 
                 if (portfolioItem) {
-                  console.log(`🔄 Live-Laden Portfolio-Daten für: ${snapshot.name}`);
-                  beschreibung = generateProductDescription({
-                    aroma: portfolioItem.aroma,
-                    seifenform: portfolioItem.seifenform,
-                    verpackung: portfolioItem.verpackung,
-                    zusatz: portfolioItem.zusatz,
-                    optional: portfolioItem.optional
-                  });
+                  // Beschreibung aus Portfolio-Objekt extrahieren
+                  if (portfolioItem.beschreibung && typeof portfolioItem.beschreibung === 'object') {
+                    const kurzText = portfolioItem.beschreibung.kurz?.trim();
+                    const langText = portfolioItem.beschreibung.lang?.trim();
+                    beschreibung = kurzText || langText || '';
+                  }
+                  
+                  // Für Seifen: Aus Struktur generieren falls keine Beschreibung
+                  if (!beschreibung && portfolioItem.kategorie === 'seife' && 
+                      (portfolioItem.aroma || portfolioItem.seifenform || portfolioItem.verpackung)) {
+                    beschreibung = generateProductDescription({
+                      aroma: portfolioItem.aroma,
+                      seifenform: portfolioItem.seifenform,
+                      verpackung: portfolioItem.verpackung,
+                      zusatz: portfolioItem.zusatz,
+                      optional: portfolioItem.optional
+                    });
+                  }
+                  
+                  // Für Werkstücke ohne Beschreibung: Generiere sinnvolle Beschreibung
+                  if (!beschreibung && portfolioItem.kategorie === 'werkstuck') {
+                    // Versuche aus Giessform-Namen eine Beschreibung zu erstellen
+                    if (portfolioItem.giessform) {
+                      beschreibung = `Handgefertigtes ${portfolioItem.name} aus Gips`;
+                    } else {
+                      beschreibung = `Handgefertigtes ${portfolioItem.name}`;
+                    }
+                  }
+                  
+                  // Letzter Fallback auf Name (sollte eigentlich nie erreicht werden)
+                  if (!beschreibung) {
+                    beschreibung = portfolioItem.name;
+                  }
                 }
               } catch (error) {
-                console.warn(`⚠️ Fehler beim Live-Laden Portfolio-Daten für ${snapshot.name}:`, error);
+                console.warn(`⚠️ Fehler beim Live-Laden Portfolio für ${snapshot.name}:`, error);
               }
-              
-              // Fallback: Verwende gespeicherte Beschreibung
-              if (beschreibung === 'Handgefertigte Seife' && snapshot.beschreibung) {
-                if (typeof snapshot.beschreibung === 'string') {
-                  beschreibung = snapshot.beschreibung;
-                } else if (typeof snapshot.beschreibung === 'object') {
-                  beschreibung = snapshot.beschreibung.kurz || 
-                               snapshot.beschreibung.lang || 
-                               'Handgefertigte Seife';
-                }
-              }
+            }
+            
+            // 4. Fallback auf snapshot.name
+            if (!beschreibung && snapshot.name) {
+              beschreibung = snapshot.name;
             }
           }
           
-          // Beschreibung auf ca. 120 Zeichen begrenzen für professionelle Optik
+          // 5. Absoluter Fallback
+          if (!beschreibung) {
+            beschreibung = 'Handgefertigtes Produkt';
+          }
+          
+          // Beschreibung auf 120 Zeichen begrenzen
           if (beschreibung.length > 120) {
             beschreibung = beschreibung.substring(0, 117) + '...';
           }
           
           return {
-            artikelnummer: `ART-${(index + 1).toString().padStart(3, '0')}`, // ✅ Artikelnummer hinzufügen
+            artikelnummer: `ART-${(index + 1).toString().padStart(3, '0')}`,
             name: item.produktSnapshot?.name || 'Produktname nicht verfügbar',
             beschreibung,
             menge: item.menge || 1,
@@ -192,7 +225,11 @@ class OrderInvoiceService {
         nettosumme: order.preise?.zwischensumme || 0,
         versandkosten: order.preise?.versandkosten || 0, // ✅ Versandkosten hinzufügen
         mwst: order.preise?.mwst?.betrag || 0,
-        zahlungsmethode: order.zahlung?.methode || 'Überweisung'
+        zahlungsmethode: order.zahlung?.methode || 'Überweisung',
+        notes: {
+          customer: order.notizen?.oeffentlich || order.notizen?.kunde || '',
+          internal: order.notizen?.intern || ''
+        }
       };
 
       console.log('🧾 Generiere PDF für Bestellung:', invoiceNumber);
@@ -272,7 +309,7 @@ class OrderInvoiceService {
               status: 'sent', // ✅ Rechnung ist versendet/offen - wartet auf Zahlung
               notes: {
                 internal: `Automatisch generiert für Bestellung ${order.bestellnummer}`,
-                customer: ''
+                customer: bestellungData.notes?.customer || order.notizen?.oeffentlich || order.notizen?.kunde || ''
               },
               // Verknüpfung zur ursprünglichen Bestellung
               order: {
