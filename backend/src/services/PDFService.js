@@ -2,6 +2,7 @@ const puppeteer = require('puppeteer');
 const path = require('path');
 const fsSync = require('fs');
 const InvoiceTemplate = require('../models/InvoiceTemplate');
+const Portfolio = require('../models/Portfolio');
 
 const paypalQrCandidatePaths = [
   path.resolve(__dirname, '../../..', 'frontend', 'public', 'Paypal_QR.png'),
@@ -26,6 +27,61 @@ const loadPayPalQrDataUrl = () => {
 const paypalQrDataUrl = loadPayPalQrDataUrl();
 
 class PDFService {
+  static async enrichMissingDescriptions(bestellung) {
+    if (!bestellung || !Array.isArray(bestellung.artikel) || bestellung.artikel.length === 0) {
+      return bestellung;
+    }
+
+    const hasMissingDescription = bestellung.artikel.some((item) => {
+      const text = (item?.beschreibung || item?.description || '').trim();
+      return !text;
+    });
+
+    if (!hasMissingDescription) {
+      return bestellung;
+    }
+
+    try {
+      const portfolioItems = await Portfolio.find({}).select('name beschreibung').lean();
+      const descriptionByName = new Map();
+
+      for (const portfolioItem of portfolioItems) {
+        const key = (portfolioItem?.name || '').trim().toLowerCase();
+        if (!key) continue;
+
+        let text = '';
+        if (typeof portfolioItem.beschreibung === 'string') {
+          text = portfolioItem.beschreibung.trim();
+        } else if (portfolioItem.beschreibung && typeof portfolioItem.beschreibung === 'object') {
+          text = (portfolioItem.beschreibung.kurz || portfolioItem.beschreibung.lang || '').trim();
+        }
+
+        if (text) {
+          descriptionByName.set(key, text);
+        }
+      }
+
+      bestellung.artikel = bestellung.artikel.map((item) => {
+        const name = (item?.name || '').trim();
+        const currentText = (item?.beschreibung || item?.description || '').trim();
+        if (currentText) return item;
+
+        const fromPortfolio = descriptionByName.get(name.toLowerCase()) || '';
+        if (!fromPortfolio) return item;
+
+        return {
+          ...item,
+          beschreibung: fromPortfolio,
+          description: fromPortfolio
+        };
+      });
+    } catch (error) {
+      console.warn('⚠️ Konnte fehlende Beschreibungen nicht aus Portfolio anreichern:', error.message);
+    }
+
+    return bestellung;
+  }
+
   // 🧾 Rechnung als PDF generieren
   static async generateInvoicePDF(bestellung, providedTemplate = null) {
     let browser;
@@ -60,6 +116,8 @@ class PDFService {
       console.log('🎨 Verwende Template:', template.name);
       console.log('💰 USt-Status:', template.companyInfo?.isSmallBusiness ? 'Kleinunternehmer (keine USt)' : 'USt-pflichtig (19%)');
       console.log('📋 Template companyInfo:', JSON.stringify(template.companyInfo, null, 2));
+
+      await PDFService.enrichMissingDescriptions(bestellung);
       
       // Browser starten
       browser = await puppeteer.launch({
@@ -127,6 +185,12 @@ class PDFService {
 
   // 🎨 Template-basierte HTML Generierung (Admin-kompatibel)
   static generateTemplateBasedHTML(bestellung, template) {
+    console.log('📄 PDFService - Empfangene Notizen:', {
+      notizen_customer: bestellung.notizen?.customer,
+      notes_customer: bestellung.notes?.customer,
+      bestellung_keys: Object.keys(bestellung)
+    });
+    
     const formatPrice = (price) => {
       return new Intl.NumberFormat('de-DE', {
         style: 'currency',
@@ -213,7 +277,6 @@ class PDFService {
           <img src="${paypalQrDataUrl}" alt="PayPal QR" />
           <div class="paypal-text">
             <div><strong>${paypalBrand}</strong></div>
-            <div>PayPal Scan to Pay</div>
           </div>
         </div>
       `
@@ -221,7 +284,7 @@ class PDFService {
     const paypalHelpHtml = paypalQrDataUrl
       ? `
         <div class="paypal-help">
-          <div class="paypal-help-title">Zahlung per PayPal (Schritt fuer Schritt)</div>
+          <div class="paypal-help-title">Zahlung per PayPal</div>
           <ol class="paypal-steps">
             <li>Handy-Kamera oeffnen.</li>
             <li>QR-Code scannen.</li>
@@ -414,7 +477,8 @@ class PDFService {
         .products-section {
           flex: 1;
           margin-top: 3mm;
-          margin-bottom: 5mm;
+          margin-bottom: 2mm;
+          page-break-after: avoid;
         }
         
         .products-title {
@@ -477,32 +541,35 @@ class PDFService {
         
         /* ===== TOTALS SECTION ===== */
         .totals-wrap {
-          margin-top: 2mm;
+          margin-top: 0mm;
           margin-bottom: 15mm;
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 6mm;
+          display: grid;
+          grid-template-columns: 48.5mm 52mm 1fr;
+          column-gap: 5mm;
+          align-items: start;
           width: 100%;
           page-break-inside: avoid;
+          break-inside: avoid;
+          page-break-before: avoid;
         }
 
         .totals-wrap--no-qr {
-          justify-content: flex-end;
+          grid-template-columns: 1fr;
         }
 
         .paypal-qr {
-          width: 40mm;
+          width: 48.5mm;
           text-align: center;
           page-break-inside: avoid;
         }
 
         .paypal-qr img {
-          width: 100%;
+          width: 42.7mm;
+          max-width: 42.7mm;
           height: auto;
           background: #ffffff;
           border: 1px solid #e0e0e0;
-          padding: 1.5mm;
+          padding: 1mm;
           border-radius: 2mm;
         }
 
@@ -515,40 +582,50 @@ class PDFService {
         }
 
         .paypal-help {
-          flex: 1;
-          max-width: 70mm;
-          font-size: 10.5pt;
+          width: 52mm;
+          font-size: 8.5pt;
           color: #34495e;
-          line-height: 1.35;
+          line-height: 1.15;
+          max-width: 52mm;
         }
 
         .paypal-help-title {
           font-weight: 700;
-          margin-bottom: 1mm;
+          margin-bottom: 0.5mm;
+          font-size: 9pt;
         }
 
         .paypal-steps {
           margin: 0;
-          padding-left: 4mm;
+          padding-left: 3mm;
         }
 
         .paypal-steps li {
-          margin-bottom: 0.8mm;
+          margin-bottom: 0.3mm;
         }
 
         .totals-section {
-          display: flex;
-          justify-content: flex-end;
+          justify-self: end;
+          page-break-inside: avoid;
+          break-inside: avoid;
+          width: 70mm;
         }
         
         .totals-table {
           width: 70mm;
           font-size: 10pt;
           border-collapse: collapse;
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+
+        .totals-table tr {
+          page-break-inside: avoid;
+          break-inside: avoid;
         }
         
         .totals-table td {
-          padding: 2mm 3mm;
+          padding: 1mm 3mm;
           border-bottom: 1px solid #ecf0f1;
         }
         
@@ -570,6 +647,34 @@ class PDFService {
           font-weight: 700;
           font-size: 12pt;
           color: #2c3e50;
+        }
+        
+        /* ===== CUSTOMER NOTES SECTION ===== */
+        .customer-notes {
+          margin-top: 8mm;
+          margin-bottom: 8mm;
+          padding: 4mm 5mm;
+          background: #f8f9fa;
+          border-left: 3px solid #3498db;
+          border-radius: 2mm;
+          page-break-inside: avoid;
+        }
+        
+        .customer-notes-title {
+          font-size: 10pt;
+          font-weight: 700;
+          color: #3498db;
+          margin-bottom: 2mm;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+        }
+        
+        .customer-notes-content {
+          font-size: 11pt;
+          color: #2c3e50;
+          line-height: 1.5;
+          white-space: pre-wrap;
+          word-wrap: break-word;
         }
         
         /* ===== FOOTER SECTION ===== */
@@ -822,6 +927,14 @@ class PDFService {
             </table>
           </div>
         </div>
+
+        ${bestellung.notizen?.customer || bestellung.notes?.customer ? `
+        <!-- ===== CUSTOMER NOTES SECTION ===== -->
+        <div class="customer-notes">
+          <div class="customer-notes-title">💬 Anmerkung für Sie</div>
+          <div class="customer-notes-content">${bestellung.notizen?.customer || bestellung.notes?.customer || ''}</div>
+        </div>
+        ` : ''}
 
         <!-- ===== FOOTER SECTION ===== -->
         <div class="invoice-footer">
