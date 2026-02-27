@@ -935,7 +935,11 @@ class InvoiceService {
         })),
         gesamtsumme: invoice.amounts.total,
         versandkosten: invoice.amounts.shippingCost || 0, // ✅ Versandkosten hinzufügen
-        zahlungsmethode: invoice.payment.method || 'Überweisung'
+        zahlungsmethode: invoice.payment.method || 'Überweisung',
+        notes: {
+          customer: invoice.notes?.customer || '',
+          internal: invoice.notes?.internal || ''
+        }
       };
 
       // AKTUELLES Template aus Datenbank laden für konsistente Einstellungen
@@ -990,6 +994,10 @@ class InvoiceService {
       console.log('  - Customer populated:', !!invoice.customer.customerData);
       console.log('  - Customer Adresse:', invoice.customer.customerData?.street);
       console.log('  - Customer PLZ:', invoice.customer.customerData?.postalCode);
+      console.log('📝 Notizen:', {
+        customer: invoice.notes?.customer,
+        internal: invoice.notes?.internal
+      });
       
       // PDF mit AKTUELLEM Template generieren
       console.log('🧾 Generiere PDF für Invoice:', invoice.invoiceNumber);

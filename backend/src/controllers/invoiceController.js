@@ -1,4 +1,5 @@
 const InvoiceTemplate = require('../models/InvoiceTemplate');
+const Portfolio = require('../models/Portfolio');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs').promises;
@@ -512,7 +513,11 @@ class InvoiceController {
         nettosumme: data.order?.netTotal || 0,
         mwst: template.companyInfo?.isSmallBusiness ? 0 : (data.order?.vatTotal || 0),
         gesamtsumme: data.order?.grandTotal || 0,
-        zahlungsmethode: 'Überweisung'
+        zahlungsmethode: 'Überweisung',
+        notes: {
+          customer: data.notes?.customer || sampleData?.notes?.customer || '',
+          internal: data.notes?.internal || sampleData?.notes?.internal || ''
+        }
       };
       
       // Verwende PDFService HTML-Generierung für einheitliches Design
@@ -4110,6 +4115,28 @@ class InvoiceController {
       console.log('  - Customer PLZ:', invoice.customer?.customerData?.postalCode);
       console.log('🔍 DEBUG: Full customer object:', JSON.stringify(invoice.customer, null, 2));
 
+      const portfolioDescriptionMap = new Map();
+      try {
+        const portfolioItems = await Portfolio.find({}).select('name beschreibung').lean();
+        for (const portfolioItem of portfolioItems) {
+          const key = (portfolioItem.name || '').trim().toLowerCase();
+          if (!key) continue;
+
+          let text = '';
+          if (typeof portfolioItem.beschreibung === 'string') {
+            text = portfolioItem.beschreibung.trim();
+          } else if (portfolioItem.beschreibung && typeof portfolioItem.beschreibung === 'object') {
+            text = (portfolioItem.beschreibung.kurz || portfolioItem.beschreibung.lang || '').trim();
+          }
+
+          if (text) {
+            portfolioDescriptionMap.set(key, text);
+          }
+        }
+      } catch (portfolioError) {
+        console.warn('⚠️ Portfolio-Beschreibungen konnten nicht geladen werden:', portfolioError.message);
+      }
+
       // Daten für PDFService vorbereiten - KORRIGIERT: Verwende customer.customerData statt direktes customerData
       const bestellungData = {
         bestellnummer: invoice.invoiceNumber,
@@ -4137,22 +4164,38 @@ class InvoiceController {
           stadt: invoice.customer?.customerData?.city || '',
           land: invoice.customer?.customerData?.country || 'Deutschland'
         },
-        artikel: invoice.items.map(item => ({
-          name: item.productData?.name || 'Produktname nicht verfügbar',
-          beschreibung: item.productData?.description || 'Keine Beschreibung verfügbar',
-          sku: item.productData?.sku || '',
-          menge: item.quantity || 1,
-          preis: item.unitPrice || 0,
-          einzelpreis: item.unitPrice || 0,
-          gesamtpreis: item.total || ((item.quantity || 1) * (item.unitPrice || 0))
-        })),
+        artikel: invoice.items.map(item => {
+          const productName = (item.productData?.name || item.name || '').trim();
+          const descriptionFromInvoice = (item.productData?.description || item.description || '').trim();
+          const descriptionFromPortfolio = portfolioDescriptionMap.get(productName.toLowerCase()) || '';
+          const beschreibung = descriptionFromInvoice || descriptionFromPortfolio;
+
+          return {
+            name: productName || 'Produktname nicht verfügbar',
+            beschreibung,
+            sku: item.productData?.sku || '',
+            menge: item.quantity || 1,
+            preis: item.unitPrice || 0,
+            einzelpreis: item.unitPrice || 0,
+            gesamtpreis: item.total || ((item.quantity || 1) * (item.unitPrice || 0))
+          };
+        }),
         gesamtsumme: invoice.amounts?.total || 0,
         zahlungsmethode: invoice.payment?.method || 'Überweisung',
         nettosumme: invoice.amounts?.subtotal || 0,
-        mwst: invoice.amounts?.vatAmount || 0
+        mwst: invoice.amounts?.vatAmount || 0,
+        notes: {
+          customer: invoice.notes?.customer || '',
+          internal: invoice.notes?.internal || ''
+        }
       };
 
       console.log('🧾 Generiere PDF für gespeicherte Rechnung:', invoice.invoiceNumber);
+      console.log('📝 Notizen-Daten:', {
+        customer: invoice.notes?.customer,
+        internal: invoice.notes?.internal,
+        bestellungDataNotes: bestellungData.notes
+      });
       
       // PDF mit PDFService und Template generieren
       const PDFService = require('../services/PDFService');
