@@ -30,6 +30,7 @@ import {
   Snackbar,
   Switch,
   FormControlLabel,
+  CircularProgress,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -42,6 +43,7 @@ import {
   Close as CloseIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import ProductCatalog from './ProductCatalog';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -93,6 +95,7 @@ const CreateInvoice = () => {
   // UI State
   const [saving, setSaving] = useState(false);
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Lade initiale Daten
@@ -104,6 +107,14 @@ const CreateInvoice = () => {
     loadProducts();
     loadTemplates();
   }, []);
+
+  // Lade Produkte wenn Dialog geöffnet wird
+  useEffect(() => {
+    if (productSearchOpen && products.length === 0) {
+      console.log('🔍 [FRONTEND] Dialog geöffnet, lade Produkte...');
+      loadProducts();
+    }
+  }, [productSearchOpen]);
 
   const loadCustomers = async () => {
     try {
@@ -125,11 +136,12 @@ const CreateInvoice = () => {
     if (process.env.NODE_ENV === 'development') {
       console.log('🔍 [FRONTEND] Lade Produkte...');
     }
+    setIsLoadingProducts(true);
     try {
       if (process.env.NODE_ENV === 'development') {
         console.log('🔍 [FRONTEND] Sende Request an /api/portfolio');
       }
-      const response = await fetch(`${API_BASE_URL}/portfolio`, {
+      const response = await fetch(`${API_BASE_URL}/portfolio?includeInactive=true`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -139,6 +151,7 @@ const CreateInvoice = () => {
       
       if (!response.ok) {
         console.error('🔍 [FRONTEND] Response nicht OK:', response.status, response.statusText);
+        setIsLoadingProducts(false);
         return;
       }
       
@@ -158,6 +171,8 @@ const CreateInvoice = () => {
       }
     } catch (error) {
       console.error('🔍 [FRONTEND] Netzwerk Fehler beim Laden der Produkte:', error);
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
@@ -976,72 +991,28 @@ const CreateInvoice = () => {
         fullWidth
         fullScreen={isSmallMobile}
       >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="h6">Produkt auswählen</Typography>
-            {isSmallMobile && (
-              <IconButton onClick={() => setProductSearchOpen(false)}>
-                <CloseIcon />
-              </IconButton>
-            )}
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SearchIcon />
+            <Typography variant="h6">📦 Produkt aus Katalog</Typography>
           </Box>
+          {isSmallMobile && (
+            <IconButton onClick={() => setProductSearchOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          )}
         </DialogTitle>
-        <DialogContent>
-          {console.log('🔍 [FRONTEND] Dialog Content - Produkte:', products.length)}
-          <Grid container spacing={isSmallMobile ? 1 : 2}>
-            {products.length === 0 ? (
-              <Grid item xs={12}>
-                <Typography align="center" sx={{ py: 4 }}>
-                  Keine Produkte verfügbar
-                </Typography>
-              </Grid>
-            ) : products.map(product => (
-              <Grid item xs={12} sm={6} md={4} key={product._id}>
-                <Card 
-                  sx={{ 
-                    cursor: 'pointer', 
-                    '&:hover': { boxShadow: 4 },
-                    minHeight: isMobile ? 'auto' : 120
-                  }}
-                  onClick={() => addProduct(product)}
-                >
-                  <CardContent sx={{ p: isSmallMobile ? 2 : 3 }}>
-                    <Typography 
-                      variant="subtitle2" 
-                      gutterBottom
-                      sx={{ 
-                        fontSize: isSmallMobile ? '1rem' : '0.875rem',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      {product.name}
-                    </Typography>
-                    <Typography 
-                      variant="body2" 
-                      color="primary"
-                      sx={{ 
-                        fontSize: isSmallMobile ? '1.1rem' : '0.875rem',
-                        fontWeight: 'bold'
-                      }}
-                    >
-                      {product.preis?.toFixed(2)}€
-                    </Typography>
-                    <Typography 
-                      variant="caption" 
-                      display="block"
-                      color="textSecondary"
-                      sx={{ fontSize: isSmallMobile ? '0.8rem' : '0.75rem' }}
-                    >
-                      {product.kategorie}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+        <DialogContent sx={{ mt: 2 }}>
+          <ProductCatalog 
+            products={products}
+            isLoadingProducts={isLoadingProducts}
+            onProductSelect={addProduct}
+            isMobile={isMobile}
+            isSmallMobile={isSmallMobile}
+          />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setProductSearchOpen(false)}>
+        <DialogActions sx={{ borderTop: '1px solid #eee', p: 2 }}>
+          <Button onClick={() => setProductSearchOpen(false)} variant="outlined">
             Schließen
           </Button>
         </DialogActions>

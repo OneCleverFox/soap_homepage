@@ -28,6 +28,8 @@ import {
   Alert,
   Card,
   CardContent,
+  Checkbox,
+  FormControlLabel,
   useTheme,
   useMediaQuery
 } from '@mui/material';
@@ -45,6 +47,7 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { useNavigate, useLocation } from 'react-router-dom';
+import ProductCatalog from './ProductCatalog';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
@@ -80,11 +83,23 @@ const InvoiceList = () => {
   // UI State
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editInvoice, setEditInvoice] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [newItem, setNewItem] = useState({
+    productData: { name: '', description: '', sku: '' },
+    quantity: 1,
+    unitPrice: 0
+  });
+  const [editingItemIndex, setEditingItemIndex] = useState(null);
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [actionMenuInvoice, setActionMenuInvoice] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [productSearchDialogOpen, setProductSearchDialogOpen] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -166,6 +181,7 @@ const InvoiceList = () => {
   useEffect(() => {
     loadInvoices();
     loadStats();
+    loadProducts(); // Produkte beim Start laden für Edit-Dialog
   }, [page, rowsPerPage, filters, loadInvoices]);
 
   const loadStats = async () => {
@@ -182,6 +198,38 @@ const InvoiceList = () => {
       }
     } catch (error) {
       console.error('Fehler beim Laden der Statistiken:', error);
+    }
+  };
+
+  const loadProducts = async () => {
+    setIsLoadingProducts(true);
+    try {
+      console.log('🔍 [INVOICELIST] Lade Produkte...');
+      const response = await fetch(`${API_BASE_URL}/portfolio?includeInactive=true`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await response.json();
+      console.log('🔍 [INVOICELIST] API Response:', data);
+      
+      // API gibt {success, data: [...]} oder direkt [...] zurück
+      if (data && data.data && Array.isArray(data.data)) {
+        console.log('🔍 [INVOICELIST] Setze Produkte:', data.data.length);
+        setProducts(data.data);
+      } else if (Array.isArray(data)) {
+        console.log('🔍 [INVOICELIST] Setze Produkte direkt:', data.length);
+        setProducts(data);
+      } else {
+        console.error('🔍 [INVOICELIST] Unerwartetes Datenformat:', data);
+        setProducts([]);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Produkte:', error);
+      setProducts([]);
+    } finally {
+      setIsLoadingProducts(false);
     }
   };
 
@@ -308,6 +356,53 @@ const InvoiceList = () => {
     } catch (error) {
       console.error('Fehler beim Markieren als bezahlt:', error);
       showSnackbar('Fehler beim Markieren als bezahlt', 'error');
+    }
+  };
+
+  const markAsUnpaid = async (invoiceId) => {
+    try {
+      console.log('🔄 [MARK UNPAID] Markiere Rechnung als unbezahlt:', invoiceId);
+      
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoiceId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          status: 'sent'
+        })
+      });
+
+      const data = await response.json();
+      console.log('🔄 [MARK UNPAID] Response:', data);
+      
+      if (data.success) {
+        showSnackbar('Rechnung und zugehörige Bestellung erfolgreich als unbezahlt markiert', 'success');
+        // Aktualisiere den State sofort wenn Dialog offen ist
+        if (selectedInvoice && selectedInvoice._id === invoiceId) {
+          setSelectedInvoice(prev => ({
+            ...prev,
+            status: 'sent',
+            payment: {
+              ...prev.payment,
+              status: 'pending',
+              paidDate: null,
+              paymentReference: null
+            }
+          }));
+        }
+        // Neu laden
+        loadInvoices();
+        loadStats();
+        if (viewDialogOpen) setViewDialogOpen(false);
+      } else {
+        console.error('API Fehler:', data.message);
+        showSnackbar(data.message || 'Fehler beim Markieren als unbezahlt', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Markieren als unbezahlt:', error);
+      showSnackbar('Fehler beim Markieren als unbezahlt', 'error');
     }
   };
 
@@ -520,6 +615,185 @@ const InvoiceList = () => {
     }
     
     setViewDialogOpen(true);
+  };
+
+  const openEditDialog = async (invoice) => {
+    try {
+      // Lade vollständige Rechnungsdetails
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoice._id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setEditInvoice(data.data);
+        } else {
+          console.error('Fehler beim Laden der Rechnungsdetails:', data.message);
+          showSnackbar('Fehler beim Laden der Rechnung', 'error');
+          return;
+        }
+      } else {
+        console.error('API-Fehler beim Laden der Rechnungsdetails');
+        showSnackbar('Fehler beim Laden der Rechnung', 'error');
+        return;
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Rechnungsdetails:', error);
+      showSnackbar('Fehler beim Laden der Rechnung', 'error');
+      return;
+    }
+    
+    // Lade Produkte sofort für den Edit-Dialog
+    loadProducts();
+    setEditDialogOpen(true);
+  };
+
+  const saveInvoiceChanges = async () => {
+    if (!editInvoice) return;
+
+    setEditSaving(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${editInvoice._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(editInvoice)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showSnackbar('Rechnung erfolgreich aktualisiert', 'success');
+        setEditDialogOpen(false);
+        setEditInvoice(null);
+        loadInvoices();
+        loadStats();
+      } else {
+        showSnackbar(data.message || 'Fehler beim Speichern', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern der Rechnung:', error);
+      showSnackbar('Fehler beim Speichern der Rechnung', 'error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const addItemToEditInvoice = () => {
+    if (!newItem.productData?.name || newItem.unitPrice <= 0 || newItem.quantity <= 0) {
+      showSnackbar('Bitte alle erforderlichen Felder ausfüllen', 'error');
+      return;
+    }
+
+    setEditInvoice(prev => ({
+      ...prev,
+      items: [...(prev.items || []), { ...newItem }]
+    }));
+
+    setNewItem({
+      productData: { name: '', description: '', sku: '' },
+      quantity: 1,
+      unitPrice: 0
+    });
+    showSnackbar('Artikel hinzugefügt', 'success');
+  };
+
+  const removeItemFromEditInvoice = (index) => {
+    setEditInvoice(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateItemInEditInvoice = (index, field, value) => {
+    setEditInvoice(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      const keys = field.split('.');
+      let obj = updated.items[index];
+
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!obj[keys[i]]) {
+          obj[keys[i]] = {};
+        }
+        obj = obj[keys[i]];
+      }
+
+      obj[keys[keys.length - 1]] = field.includes('quantity') || field.includes('Price') 
+        ? parseFloat(value) 
+        : value;
+
+      return updated;
+    });
+  };
+
+  const handleEditFieldChange = (path, value) => {
+    setEditInvoice(prev => {
+      const updated = JSON.parse(JSON.stringify(prev));
+      const keys = path.split('.');
+      let obj = updated;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!obj[keys[i]]) {
+          obj[keys[i]] = {};
+        }
+        obj = obj[keys[i]];
+      }
+      
+      obj[keys[keys.length - 1]] = value;
+      return updated;
+    });
+  };
+
+  const closeEditDialog = () => {
+    setEditDialogOpen(false);
+    setEditInvoice(null);
+    setNewItem({
+      productData: { name: '', description: '', sku: '' },
+      quantity: 1,
+      unitPrice: 0
+    });
+    setEditingItemIndex(null);
+  };
+
+  const addProductFromDialog = (product) => {
+    // Prüfe ob Produkt bereits existiert
+    const existingItem = editInvoice?.items?.find(item => 
+      item.productId === product._id
+    );
+
+    if (existingItem) {
+      // Erhöhe die Menge um 1
+      setEditInvoice(prev => ({
+        ...prev,
+        items: prev.items.map(item =>
+          item.productId === product._id
+            ? { ...item, quantity: (item.quantity || 1) + 1 }
+            : item
+        )
+      }));
+    } else {
+      // Füge neues Produkt hinzu
+      const newProductItem = {
+        productId: product._id,
+        productData: {
+          name: product.name,
+          description: product.beschreibung?.kurz || product.beschreibung?.lang || product.beschreibung || '',
+          sku: product.sku || ''
+        },
+        quantity: 1,
+        unitPrice: product.preis || 0
+      };
+      setEditInvoice(prev => ({
+        ...prev,
+        items: [...prev.items, newProductItem]
+      }));
+    }
+
+    showSnackbar(`${product.name} hinzugefügt`, 'success');
   };
 
   const openActionMenu = (event, invoice) => {
@@ -902,6 +1176,13 @@ const InvoiceList = () => {
           Anzeigen
         </MenuItem>
         <MenuItem onClick={() => {
+          openEditDialog(actionMenuInvoice);
+          closeActionMenu();
+        }}>
+          <ViewIcon sx={{ mr: 1 }} fontSize="small" />
+          Bearbeiten
+        </MenuItem>
+        <MenuItem onClick={() => {
           previewInvoice(actionMenuInvoice._id);
           closeActionMenu();
         }}>
@@ -924,6 +1205,17 @@ const InvoiceList = () => {
           }} sx={{ color: 'success.main' }}>
             <CheckCircleIcon sx={{ mr: 1 }} fontSize="small" />
             Als bezahlt markieren
+          </MenuItem>
+        )}
+        {actionMenuInvoice && 
+         (actionMenuInvoice.payment && (actionMenuInvoice.payment.status === 'paid' || actionMenuInvoice.payment.paidDate) || 
+         actionMenuInvoice.status === 'paid') && (
+          <MenuItem onClick={() => {
+            markAsUnpaid(actionMenuInvoice._id);
+            closeActionMenu();
+          }} sx={{ color: 'warning.main' }}>
+            <CheckCircleIcon sx={{ mr: 1 }} fontSize="small" />
+            Als unbezahlt markieren
           </MenuItem>
         )}
         <MenuItem onClick={() => {
@@ -1067,6 +1359,21 @@ const InvoiceList = () => {
               Als bezahlt markieren
             </Button>
           )}
+          {selectedInvoice && 
+           (selectedInvoice.payment && (selectedInvoice.payment.status === 'paid' || selectedInvoice.payment.paidDate) || 
+           selectedInvoice.status === 'paid') && (
+            <Button 
+              variant="contained"
+              color="warning"
+              size={isMobile ? "large" : "medium"}
+              fullWidth={isMobile}
+              startIcon={<CheckCircleIcon />}
+              onClick={() => markAsUnpaid(selectedInvoice._id)}
+              sx={{ mr: isMobile ? 0 : 1 }}
+            >
+              Als unbezahlt markieren
+            </Button>
+          )}
           <Button 
             variant="contained"
             size={isMobile ? "large" : "medium"}
@@ -1084,6 +1391,530 @@ const InvoiceList = () => {
               Schließen
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Bearbeitungs-Dialog */}
+      <Dialog 
+        open={editDialogOpen} 
+        onClose={closeEditDialog}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            height: isMobile ? '100vh' : 'auto',
+            maxHeight: isMobile ? 'none' : '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          pb: isMobile ? 1 : 2,
+          fontSize: isMobile ? '1.25rem' : '1.5rem'
+        }}>
+          Rechnung {editInvoice?.invoiceNumber} bearbeiten
+          {isMobile && (
+            <IconButton 
+              onClick={closeEditDialog}
+              size="small"
+            >
+              <CloseIcon />
+            </IconButton>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ px: isMobile ? 2 : 3 }}>
+          {editInvoice && (
+            <Grid container spacing={isMobile ? 2 : 3} sx={{ mt: 0.5 }}>
+              {/* Kundendaten */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Kundendaten</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Vorname"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.firstName || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.firstName', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Nachname"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.lastName || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.lastName', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Firma"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.company || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.company', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Straße"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.street || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.street', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Postleitzahl"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.postalCode || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.postalCode', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Stadt"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.city || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.city', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="E-Mail"
+                  size="small"
+                  type="email"
+                  value={editInvoice.customer?.customerData?.email || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.email', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Telefon"
+                  size="small"
+                  value={editInvoice.customer?.customerData?.phone || ''}
+                  onChange={(e) => handleEditFieldChange('customer.customerData.phone', e.target.value)}
+                />
+              </Grid>
+
+              {/* Rechnungsdaten */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Rechnungsdaten</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Rechnungsdatum"
+                  size="small"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={editInvoice.dates?.invoiceDate ? new Date(editInvoice.dates.invoiceDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleEditFieldChange('dates.invoiceDate', new Date(e.target.value))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Fälligkeitsdatum"
+                  size="small"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={editInvoice.dates?.dueDate ? new Date(editInvoice.dates.dueDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleEditFieldChange('dates.dueDate', new Date(e.target.value))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Lieferdatum"
+                  size="small"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  value={editInvoice.dates?.deliveryDate ? new Date(editInvoice.dates.deliveryDate).toISOString().split('T')[0] : ''}
+                  onChange={(e) => handleEditFieldChange('dates.deliveryDate', new Date(e.target.value))}
+                />
+              </Grid>
+
+              {/* Artikel/Produkte */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Bestellte Artikel</Typography>
+              </Grid>
+
+              {/* Artikel-Tabelle */}
+              <Grid item xs={12}>
+                <TableContainer component={Paper} sx={{ border: '1px solid #e0e0e0' }}>
+                  <Table size="small" sx={{ minWidth: 500 }}>
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                        <TableCell sx={{ fontWeight: 700, width: '35%' }}><strong>Produktname</strong></TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, width: '15%' }}><strong>Menge</strong></TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, width: '20%' }}><strong>Einzelpreis</strong></TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, width: '20%' }}><strong>Gesamt</strong></TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 700, width: '10%' }}><strong>Aktion</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {editInvoice.items && editInvoice.items.length > 0 ? (
+                        editInvoice.items.map((item, index) => (
+                          <TableRow key={index} hover sx={{ '&:last-child td': { border: 0 } }}>
+                            <TableCell>
+                              <Box sx={{ py: 1 }}>
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  label="Produktname"
+                                  value={item.productData?.name || ''}
+                                  onChange={(e) => updateItemInEditInvoice(index, 'productData.name', e.target.value)}
+                                  variant="outlined"
+                                  sx={{ mb: 1 }}
+                                />
+                                <TextField
+                                  fullWidth
+                                  size="small"
+                                  label="Beschreibung"
+                                  value={item.productData?.description || ''}
+                                  onChange={(e) => updateItemInEditInvoice(index, 'productData.description', e.target.value)}
+                                  variant="outlined"
+                                  multiline
+                                  rows={2}
+                                />
+                              </Box>
+                            </TableCell>
+                            <TableCell align="center">
+                              <TextField
+                                size="small"
+                                type="number"
+                                inputProps={{ step: '1', min: '1' }}
+                                value={item.quantity || 1}
+                                onChange={(e) => updateItemInEditInvoice(index, 'quantity', e.target.value)}
+                                variant="outlined"
+                                sx={{ width: '70px' }}
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              <TextField
+                                size="small"
+                                type="number"
+                                inputProps={{ step: '0.01', min: '0' }}
+                                value={item.unitPrice || 0}
+                                onChange={(e) => updateItemInEditInvoice(index, 'unitPrice', e.target.value)}
+                                variant="outlined"
+                                sx={{ width: '100px' }}
+                                InputProps={{ endAdornment: '€' }}
+                              />
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600, color: '#1976d2' }}>
+                              {((item.quantity || 1) * (item.unitPrice || 0)).toFixed(2)}€
+                            </TableCell>
+                            <TableCell align="center">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => removeItemFromEditInvoice(index)}
+                                title="Artikel entfernen"
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                            <Typography color="textSecondary">Keine Artikel vorhanden</Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+
+              {/* Artikel hinzufügen */}
+              <Grid item xs={12}>
+                <Paper sx={{ p: 3, backgroundColor: '#e8f5e9', border: '2px solid #81c784' }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 700, mb: 3, color: '#2e7d32', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📦 <span>Neuen Artikel hinzufügen</span>
+                  </Typography>
+                  
+                  <Grid container spacing={2}>
+                    {/* Produktauswahl via Katalog */}
+                    <Grid item xs={12}>
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          🔍 <span>Option 1: Aus Katalog wählen (Empfohlen)</span>
+                        </Typography>
+                      </Box>
+                      <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<SearchIcon />}
+                        onClick={() => {
+                          setProductSearchDialogOpen(true);
+                          if (products.length === 0) {
+                            loadProducts();
+                          }
+                        }}
+                        sx={{
+                          py: 1.5,
+                          fontWeight: 600,
+                          backgroundColor: '#ffffff'
+                        }}
+                      >
+                        Produktkatalog durchsuchen
+                      </Button>
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#1976d2', fontWeight: 500 }}>
+                        ✓ Kategorien, Suche und inaktive Produkte verfügbar
+                      </Typography>
+                    </Grid>
+
+                    {/* Oder Trennlinie */}
+                    <Grid item xs={12}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 1 }}>
+                        <Box sx={{ flex: 1, height: 2, backgroundColor: '#c8e6c9' }} />
+                        <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 600 }}>ODER</Typography>
+                        <Box sx={{ flex: 1, height: 2, backgroundColor: '#c8e6c9' }} />
+                      </Box>
+                    </Grid>
+
+                    {/* Manuelles Hinzufügen */}
+                    <Grid item xs={12}>
+                      <Box sx={{ mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                          ✏️ <span>Option 2: Manuell eingeben</span>
+                        </Typography>
+                      </Box>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Produktname *"
+                        placeholder="z.B. Spezial-Seife"
+                        value={newItem.productData?.name || ''}
+                        onChange={(e) => setNewItem(prev => ({
+                          ...prev,
+                          productData: { ...prev.productData, name: e.target.value }
+                        }))}
+                        variant="outlined"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Beschreibung (optional)"
+                        placeholder="z.B. 100g Bio-Seife"
+                        value={newItem.productData?.description || ''}
+                        onChange={(e) => setNewItem(prev => ({
+                          ...prev,
+                          productData: { ...prev.productData, description: e.target.value }
+                        }))}
+                        variant="outlined"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        type="number"
+                        label="Einzelpreis (€) *"
+                        placeholder="0.00"
+                        inputProps={{ step: '0.01', min: '0' }}
+                        value={newItem.unitPrice}
+                        onChange={(e) => setNewItem(prev => ({
+                          ...prev,
+                          unitPrice: parseFloat(e.target.value) || 0
+                        }))}
+                        variant="outlined"
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        color="success"
+                        onClick={addItemToEditInvoice}
+                        sx={{ fontWeight: 600, py: 1.5 }}
+                      >
+                        ➕ Hinzufügen
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              </Grid>
+
+              {/* Beträge */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Beträge</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Versandkosten"
+                  size="small"
+                  type="number"
+                  inputProps={{ step: '0.01' }}
+                  value={editInvoice.amounts?.shippingCost || 0}
+                  onChange={(e) => handleEditFieldChange('amounts.shippingCost', parseFloat(e.target.value))}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="MwSt-Rate (%)"
+                  size="small"
+                  type="number"
+                  inputProps={{ step: '1', min: '0', max: '100' }}
+                  value={editInvoice.amounts?.vatRate !== undefined ? editInvoice.amounts.vatRate : 19}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                    handleEditFieldChange('amounts.vatRate', isNaN(val) ? 0 : val);
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={editInvoice.amounts?.displayVat !== false}
+                      onChange={(e) => handleEditFieldChange('amounts.displayVat', e.target.checked)}
+                    />
+                  }
+                  label="Steuern auf Rechnung ausweisen"
+                />
+              </Grid>
+
+              {/* Notizen */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Notizen</Typography>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Interne Notizen"
+                  size="small"
+                  multiline
+                  rows={3}
+                  value={editInvoice.notes?.internal || ''}
+                  onChange={(e) => handleEditFieldChange('notes.internal', e.target.value)}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Notizen für Kunden"
+                  size="small"
+                  multiline
+                  rows={3}
+                  value={editInvoice.notes?.customer || ''}
+                  onChange={(e) => handleEditFieldChange('notes.customer', e.target.value)}
+                />
+              </Grid>
+
+              {/* Zahlungsinformationen */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Zahlungsinformationen</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Zahlungsart</InputLabel>
+                  <Select
+                    label="Zahlungsart"
+                    value={editInvoice.payment?.method || 'pending'}
+                    onChange={(e) => handleEditFieldChange('payment.method', e.target.value)}
+                  >
+                    <MenuItem value="pending">Ausstehend</MenuItem>
+                    <MenuItem value="bar">Bar</MenuItem>
+                    <MenuItem value="bank_transfer">Banküberweisung</MenuItem>
+                    <MenuItem value="paypal">PayPal</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Zahlungsreferenz"
+                  size="small"
+                  value={editInvoice.payment?.paymentReference || ''}
+                  onChange={(e) => handleEditFieldChange('payment.paymentReference', e.target.value)}
+                />
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ 
+          p: isMobile ? 2 : 1,
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 1 : 0
+        }}>
+          {!isMobile && (
+            <Button onClick={closeEditDialog}>
+              Abbrechen
+            </Button>
+          )}
+          <Button 
+            variant="contained"
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+            onClick={saveInvoiceChanges}
+            disabled={editSaving}
+          >
+            {editSaving ? 'Speichert...' : 'Speichern'}
+          </Button>
+          {isMobile && (
+            <Button 
+              onClick={closeEditDialog}
+              size="large"
+              fullWidth
+            >
+              Abbrechen
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Produktkatalog Dialog */}
+      <Dialog
+        open={productSearchDialogOpen}
+        onClose={() => setProductSearchDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SearchIcon />
+            <Typography variant="h6">📦 Produktkatalog</Typography>
+          </Box>
+          {isMobile && (
+            <IconButton onClick={() => setProductSearchDialogOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <ProductCatalog
+            products={products}
+            isLoadingProducts={isLoadingProducts}
+            onProductSelect={addProductFromDialog}
+            isMobile={isMobile}
+            isSmallMobile={isMobile}
+          />
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #eee', p: 2 }}>
+          <Button onClick={() => setProductSearchDialogOpen(false)} variant="outlined">
+            Schließen
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -1106,14 +1937,14 @@ const InvoiceList = () => {
               <Typography><strong>Rechnungsnummer:</strong> {invoiceToDelete.invoiceNumber}</Typography>
               <Typography><strong>Kunde:</strong> {invoiceToDelete.customer.name}</Typography>
               <Typography><strong>Betrag:</strong> {invoiceToDelete.amounts.total.toFixed(2)}€</Typography>
-              <Typography><strong>Status:</strong> 
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography><strong>Status:</strong></Typography>
                 <Chip
                   label={getStatusText(invoiceToDelete)}
                   color={getStatusColor(invoiceToDelete)}
                   size="small"
-                  sx={{ ml: 1 }}
                 />
-              </Typography>
+              </Box>
               {invoiceToDelete.status !== 'draft' && (
                 <Typography color="warning.main" sx={{ mt: 1 }}>
                   <strong>⚠️ Warnung:</strong> Diese Rechnung ist kein Entwurf mehr. Das Löschen kann rechtliche Auswirkungen haben.

@@ -64,6 +64,7 @@ const invoiceSchema = new mongoose.Schema({
     shippingCost: { type: Number, default: 0, min: 0 },
     vatAmount: { type: Number, default: 0, min: 0 },
     vatRate: { type: Number, default: 19, min: 0, max: 100 },
+    displayVat: { type: Boolean, default: true }, // Steuern auf Rechnung anzeigen
     total: { type: Number, required: true, min: 0 }
   },
   

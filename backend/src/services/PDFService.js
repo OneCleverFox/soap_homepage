@@ -1,6 +1,29 @@
 const puppeteer = require('puppeteer');
 const path = require('path');
+const fsSync = require('fs');
 const InvoiceTemplate = require('../models/InvoiceTemplate');
+
+const paypalQrCandidatePaths = [
+  path.resolve(__dirname, '../../..', 'frontend', 'public', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'public', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'assets', 'Paypal_QR.png'),
+  path.resolve(__dirname, '..', '..', 'uploads', 'Paypal_QR.png')
+];
+
+const loadPayPalQrDataUrl = () => {
+  for (const candidatePath of paypalQrCandidatePaths) {
+    if (fsSync.existsSync(candidatePath)) {
+      const paypalQrBuffer = fsSync.readFileSync(candidatePath);
+      console.log(`✅ PayPal QR geladen: ${candidatePath}`);
+      return `data:image/png;base64,${paypalQrBuffer.toString('base64')}`;
+    }
+  }
+
+  console.warn(`PayPal QR nicht gefunden. Gepruefte Pfade: ${paypalQrCandidatePaths.join(', ')}`);
+  return '';
+};
+
+const paypalQrDataUrl = loadPayPalQrDataUrl();
 
 class PDFService {
   // 🧾 Rechnung als PDF generieren
@@ -83,7 +106,7 @@ class PDFService {
         margin: {
           top: '20mm',
           right: '8mm',
-          bottom: '18mm',
+          bottom: '8mm',
           left: '8mm'
         }
       });
@@ -183,6 +206,35 @@ class PDFService {
       console.log(`📦 Artikel ${index + 1}:`, JSON.stringify(item, null, 2));
     });
 
+    const paypalBrand = 'Gluecksmomente-Manufaktur';
+    const paypalQrHtml = paypalQrDataUrl
+      ? `
+        <div class="paypal-qr">
+          <img src="${paypalQrDataUrl}" alt="PayPal QR" />
+          <div class="paypal-text">
+            <div><strong>${paypalBrand}</strong></div>
+            <div>PayPal Scan to Pay</div>
+          </div>
+        </div>
+      `
+      : '';
+    const paypalHelpHtml = paypalQrDataUrl
+      ? `
+        <div class="paypal-help">
+          <div class="paypal-help-title">Zahlung per PayPal (Schritt fuer Schritt)</div>
+          <ol class="paypal-steps">
+            <li>Handy-Kamera oeffnen.</li>
+            <li>QR-Code scannen.</li>
+            <li>PayPal oeffnet sich automatisch.</li>
+            <li>Empfaenger pruefen: ${paypalBrand}.</li>
+            <li>Betrag eingeben.</li>
+            <li>Senden.</li>
+          </ol>
+        </div>
+      `
+      : '';
+    const totalsWrapClass = paypalQrDataUrl ? 'totals-wrap' : 'totals-wrap totals-wrap--no-qr';
+
     return `
     <!DOCTYPE html>
     <html lang="de">
@@ -264,8 +316,8 @@ class PDFService {
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          margin: -5mm -8mm 15mm -8mm;
-          padding: 6mm 8mm 5mm 8mm;
+          margin: -5mm -8mm 12mm -8mm;
+          padding: 4mm 8mm 3mm 8mm;
           border-bottom: 2px solid #3498db;
           page-break-inside: avoid;
           min-height: 25mm;
@@ -281,7 +333,7 @@ class PDFService {
           font-size: 16pt;
           font-weight: 700;
           color: #2c3e50;
-          margin-bottom: 3mm;
+          margin-bottom: 1.5mm;
           letter-spacing: -0.2px;
         }
         
@@ -289,7 +341,7 @@ class PDFService {
           font-size: 10pt;
           color: #34495e;
           line-height: 1.3;
-          margin-bottom: 2mm;
+          margin-bottom: 1mm;
         }
         
         .company-contact {
@@ -308,7 +360,7 @@ class PDFService {
           font-size: 18pt;
           font-weight: 700;
           color: #3498db;
-          margin-bottom: 5mm;
+          margin-bottom: 2.5mm;
         }
         
         .invoice-meta {
@@ -331,13 +383,14 @@ class PDFService {
         
         /* ===== CUSTOMER SECTION ===== */
         .customer-section {
-          margin-bottom: 15mm;
+          margin-top: 2mm;
+          margin-bottom: 12mm;
           page-break-inside: avoid;
-          min-height: 20mm;
+          min-height: 35mm;
         }
         
         .customer-label {
-          font-size: 10pt;
+          font-size: 9pt;
           color: #7f8c8d;
           margin-bottom: 2mm;
           text-transform: uppercase;
@@ -345,36 +398,38 @@ class PDFService {
         }
         
         .customer-address {
-          font-size: 11pt;
+          font-size: 13pt;
           color: #2c3e50;
-          line-height: 1.4;
+          line-height: 1.5;
           max-width: 90mm;
         }
         
         .customer-name {
-          font-weight: 600;
-          margin-bottom: 1mm;
+          font-weight: 700;
+          font-size: 14pt;
+          margin-bottom: 2mm;
         }
         
         /* ===== PRODUCTS TABLE ===== */
         .products-section {
           flex: 1;
-          margin-bottom: 10mm;
+          margin-top: 3mm;
+          margin-bottom: 5mm;
         }
         
         .products-title {
           font-size: 10pt;
           font-weight: 600;
           color: #2c3e50;
-          margin-bottom: 5mm;
-          padding-bottom: 2mm;
+          margin-bottom: 3mm;
+          padding-bottom: 1.5mm;
           border-bottom: 1px solid #bdc3c7;
         }
         
         .products-table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 5mm;
+          margin-bottom: 3mm;
           font-size: 10pt;
         }
         
@@ -421,12 +476,69 @@ class PDFService {
         }
         
         /* ===== TOTALS SECTION ===== */
+        .totals-wrap {
+          margin-top: 2mm;
+          margin-bottom: 15mm;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 6mm;
+          width: 100%;
+          page-break-inside: avoid;
+        }
+
+        .totals-wrap--no-qr {
+          justify-content: flex-end;
+        }
+
+        .paypal-qr {
+          width: 40mm;
+          text-align: center;
+          page-break-inside: avoid;
+        }
+
+        .paypal-qr img {
+          width: 100%;
+          height: auto;
+          background: #ffffff;
+          border: 1px solid #e0e0e0;
+          padding: 1.5mm;
+          border-radius: 2mm;
+        }
+
+        .paypal-text {
+          margin-top: 1.5mm;
+          font-size: 8pt;
+          line-height: 1.2;
+          color: #34495e;
+          font-weight: 600;
+        }
+
+        .paypal-help {
+          flex: 1;
+          max-width: 70mm;
+          font-size: 10.5pt;
+          color: #34495e;
+          line-height: 1.35;
+        }
+
+        .paypal-help-title {
+          font-weight: 700;
+          margin-bottom: 1mm;
+        }
+
+        .paypal-steps {
+          margin: 0;
+          padding-left: 4mm;
+        }
+
+        .paypal-steps li {
+          margin-bottom: 0.8mm;
+        }
+
         .totals-section {
-          margin-top: 5mm;
-          margin-bottom: 10mm;
           display: flex;
           justify-content: flex-end;
-          page-break-inside: avoid;
         }
         
         .totals-table {
@@ -462,22 +574,25 @@ class PDFService {
         
         /* ===== FOOTER SECTION ===== */
         .invoice-footer {
-          margin: auto -8mm -5mm -8mm;
-          padding: 5mm 8mm;
+          margin-top: auto;
+          margin-left: -8mm;
+          margin-right: -8mm;
+          margin-bottom: -8mm;
+          padding: 2mm 8mm 0 8mm;
           background: #f8f9fa;
           border-radius: 0;
           border: none;
           border-top: 2px solid #3498db;
           page-break-inside: avoid;
-          font-size: 9pt;
-          min-height: 25mm;
+          font-size: 8pt;
+          min-height: auto;
         }
         
         .footer-grid {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 5mm;
-          margin-bottom: 3mm;
+          gap: 3mm;
+          margin-bottom: 1mm;
         }
         
         .footer-column {
@@ -485,18 +600,18 @@ class PDFService {
         }
         
         .footer-column h4 {
-          font-size: 10pt;
+          font-size: 8pt;
           color: #3498db;
-          margin-bottom: 2mm;
+          margin-bottom: 0.5mm;
           font-weight: 700;
           display: flex;
           align-items: center;
-          gap: 1mm;
+          gap: 0.5mm;
         }
         
         .footer-column p {
-          margin: 0 0 1mm 0;
-          line-height: 1.2;
+          margin: 0 0 0.5mm 0;
+          line-height: 1.1;
           color: #34495e;
         }
         
@@ -518,11 +633,11 @@ class PDFService {
           display: flex;
           justify-content: center;
           align-items: center;
-          gap: 5mm;
-          padding: 3mm;
+          gap: 2mm;
+          padding: 1.5mm;
           background: white;
           border-radius: 2mm;
-          margin-bottom: 3mm;
+          margin-bottom: 1mm;
           border: 1px solid #e9ecef;
           flex-wrap: wrap;
         }
@@ -536,27 +651,51 @@ class PDFService {
         
         .footer-bank-item strong {
           color: #3498db;
-          font-size: 8pt;
+          font-size: 7pt;
           text-transform: uppercase;
-          margin-bottom: 1mm;
+          margin-bottom: 0.3mm;
           font-weight: 700;
         }
         
         .footer-bank-item span {
-          font-size: 9pt;
+          font-size: 8pt;
           color: #34495e;
           font-weight: 500;
         }
         
+        .footer-bank-fallback {
+          text-align: center;
+          font-size: 7pt;
+          color: #7f8c8d;
+          margin-top: 0.5mm;
+          padding: 1mm 2mm;
+          background: #f8f9fa;
+          border-radius: 2mm;
+          line-height: 1.1;
+        }
+
+        .footer-bank-fallback strong {
+          color: #34495e;
+          font-weight: 600;
+        }
+
+        .footer-bank-fallback .bank-info {
+          margin-top: 0.3mm;
+          font-style: normal;
+          color: #34495e;
+        }
+
         .footer-legal {
           text-align: center;
-          font-size: 8pt;
+          font-size: 7pt;
           color: #7f8c8d;
           font-style: italic;
-          margin-top: 3mm;
-          padding-top: 2mm;
+          margin-top: 0.5mm;
+          margin-bottom: 0;
+          padding-top: 1mm;
+          padding-bottom: 0;
           border-top: 1px solid #e9ecef;
-          line-height: 1.2;
+          line-height: 1.1;
         }
         
         .footer-legal strong {
@@ -578,9 +717,7 @@ class PDFService {
               ${companyInfo.address.country}
             </div>
             <div class="company-contact">
-              Tel: ${companyInfo.contact.phone}<br>
-              E-Mail: ${companyInfo.contact.email}<br>
-              Web: ${companyInfo.contact.website}
+              Tel: ${companyInfo.contact.phone}
             </div>
           </div>
           
@@ -652,34 +789,38 @@ class PDFService {
         </div>
 
         <!-- ===== TOTALS SECTION ===== -->
-        <div class="totals-section">
-          <table class="totals-table">
-            <tr>
-              <td class="total-label">Zwischensumme (netto):</td>
-              <td class="total-amount">${formatPrice(bestellung.nettosumme || bestellung.gesamt?.netto || 0)}</td>
-            </tr>
-            ${(!companyInfo.isSmallBusiness) ? `
-            <tr>
-              <td class="total-label">MwSt. (19%):</td>
-              <td class="total-amount">${formatPrice(bestellung.mwst || bestellung.gesamt?.mwst || 0)}</td>
-            </tr>
-            ` : `
-            <tr>
-              <td class="total-label small-business">Keine USt (§ 19 UStG):</td>
-              <td class="total-amount">0,00€</td>
-            </tr>
-            `}
-            ${bestellung.versandkosten ? `
-            <tr>
-              <td class="total-label">Versandkosten:</td>
-              <td class="total-amount">${formatPrice(bestellung.versandkosten)}</td>
-            </tr>
-            ` : ''}
-            <tr class="grand-total">
-              <td class="total-label"><strong>Gesamtbetrag:</strong></td>
-              <td class="total-amount"><strong>${formatPrice(bestellung.gesamtsumme || bestellung.gesamt?.brutto || 0)}</strong></td>
-            </tr>
-          </table>
+        <div class="${totalsWrapClass}">
+          ${paypalQrHtml}
+          ${paypalHelpHtml}
+          <div class="totals-section">
+            <table class="totals-table">
+              <tr>
+                <td class="total-label">Zwischensumme (netto):</td>
+                <td class="total-amount">${formatPrice(bestellung.nettosumme || bestellung.gesamt?.netto || 0)}</td>
+              </tr>
+              ${(!companyInfo.isSmallBusiness) ? `
+              <tr>
+                <td class="total-label">MwSt. (19%):</td>
+                <td class="total-amount">${formatPrice(bestellung.mwst || bestellung.gesamt?.mwst || 0)}</td>
+              </tr>
+              ` : `
+              <tr>
+                <td class="total-label small-business">Keine USt (§ 19 UStG):</td>
+                <td class="total-amount">0,00€</td>
+              </tr>
+              `}
+              ${bestellung.versandkosten ? `
+              <tr>
+                <td class="total-label">Versandkosten:</td>
+                <td class="total-amount">${formatPrice(bestellung.versandkosten)}</td>
+              </tr>
+              ` : ''}
+              <tr class="grand-total">
+                <td class="total-label"><strong>Gesamtbetrag:</strong></td>
+                <td class="total-amount"><strong>${formatPrice(bestellung.gesamtsumme || bestellung.gesamt?.brutto || 0)}</strong></td>
+              </tr>
+            </table>
+          </div>
         </div>
 
         <!-- ===== FOOTER SECTION ===== -->
@@ -711,32 +852,14 @@ class PDFService {
             </div>
           </div>
           
-          <!-- Zahlungsmodalitäten -->
-          <div class="footer-bank">
-            <div class="footer-bank-item">
-              <strong>💵 Zahlung</strong>
-              <span>Sofort fällig</span>
+          <!-- Bankverbindung (Notfall) -->
+          <div class="footer-bank-fallback">
+            <strong>Bankverbindung (nur im Notfall, falls PayPal nicht funktioniert):</strong><br>
+            <div class="bank-info">
+              ${companyInfo.bankDetails.bankName} | IBAN: ${companyInfo.bankDetails.iban} | BIC: ${companyInfo.bankDetails.bic}
             </div>
-            <div class="footer-bank-item">
-              <strong>📱 PayPal</strong>
-              <span>Bevorzugt</span>
-            </div>
-            <div class="footer-bank-item">
-              <strong>💰 Bar</strong>
-              <span>Bei Abholung</span>
-            </div>
-            ${((!companyInfo.isSmallBusiness && companyInfo.taxInfo?.useVat !== false) || template?.layout?.footer?.showBankDetails) ? `
-            <div class="footer-bank-item">
-              <strong>🏦 Bank</strong>
-              <span>${companyInfo.bankDetails.bankName}</span>
-            </div>
-            <div class="footer-bank-item">
-              <strong>💳 IBAN</strong>
-              <span>${companyInfo.bankDetails.iban}</span>
-            </div>
-            ` : ''}
           </div>
-          
+
           <!-- Rechtliche Hinweise -->
           <div class="footer-legal">
             <strong>

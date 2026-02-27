@@ -600,6 +600,32 @@ class InvoiceService {
       delete updateData.invoiceNumber;
       delete updateData.sequenceNumber;
 
+      // 🔧 Fix: Berechne fehlende total Felder in items
+      if (updateData.items && Array.isArray(updateData.items)) {
+        updateData.items = updateData.items.map(item => {
+          if (!item.total && item.quantity && item.unitPrice) {
+            item.total = item.quantity * item.unitPrice;
+          }
+          return item;
+        });
+
+        // 🔧 Berechne amounts neu wenn items geändert wurden
+        const subtotal = updateData.items.reduce((sum, item) => sum + (item.total || 0), 0);
+        const shippingCost = updateData.amounts?.shippingCost || 0;
+        const vatRate = updateData.amounts?.vatRate || 0;
+        const displayVat = updateData.amounts?.displayVat !== false;
+        
+        const vatAmount = displayVat ? (subtotal * vatRate / 100) : 0;
+        const total = subtotal + shippingCost + vatAmount;
+
+        if (!updateData.amounts) {
+          updateData.amounts = {};
+        }
+        updateData.amounts.subtotal = subtotal;
+        updateData.amounts.vatAmount = vatAmount;
+        updateData.amounts.total = total;
+      }
+
       const invoice = await Invoice.findByIdAndUpdate(
         id,
         updateData,
@@ -640,10 +666,18 @@ class InvoiceService {
 
       // Zusätzliche Felder für bezahlt Status
       if (status === 'paid') {
-        updateData['payment.status'] = 'paid';
+        updateData['payment.method'] = 'bar'; // oder die ursprüngliche Zahlungsmethode
         updateData['payment.paidDate'] = paidDate || new Date();
         if (paidAmount) updateData['payment.paidAmount'] = paidAmount;
         if (paymentReference) updateData['payment.paymentReference'] = paymentReference;
+      }
+
+      // 🔄 Felder komplett zurücksetzen wenn Status auf 'sent' gesetzt wird (unbezahlt)
+      if (status === 'sent') {
+        updateData['payment.method'] = 'pending';
+        updateData['payment.paidDate'] = null;
+        updateData['payment.paidAmount'] = 0;
+        updateData['payment.paymentReference'] = null;
       }
 
       const invoice = await Invoice.findByIdAndUpdate(
@@ -690,6 +724,39 @@ class InvoiceService {
           }
         } catch (orderError) {
           console.error('⚠️ Fehler beim Aktualisieren der Bestellung:', orderError);
+          // Nicht abbrechen - Rechnung wurde bereits aktualisiert
+        }
+      }
+
+      // 🔄 NEUE LOGIK: Wenn Rechnung als unbezahlt markiert wird, Bestellung zurücksetzen
+      if (status === 'sent' && invoice.order?.orderId) {
+        try {
+          const Order = require('../models/Order');
+          const order = await Order.findById(invoice.order.orderId);
+          
+          if (order && order.status === 'bezahlt') {
+            console.log('🔙 Rechnung als unbezahlt markiert - setze Bestellung zurück:', order.bestellnummer);
+            
+            // Bestellung auf Status vor Bezahlung zurücksetzen
+            order.status = 'bestaetigt'; // oder 'neu' je nach Präferenz
+            if (!order.zahlung) order.zahlung = {};
+            order.zahlung.status = 'pending';
+            order.zahlung.bezahltAm = null;
+            
+            // Status-Verlauf hinzufügen
+            if (!order.statusVerlauf) order.statusVerlauf = [];
+            order.statusVerlauf.push({
+              status: 'bestaetigt',
+              zeitpunkt: new Date(),
+              notiz: 'Automatisch zurückgesetzt durch Rechnung als unbezahlt markieren',
+              bearbeiter: 'System'
+            });
+            
+            await order.save();
+            console.log('✅ Bestellung erfolgreich auf "bestaetigt" zurückgesetzt');
+          }
+        } catch (orderError) {
+          console.error('⚠️ Fehler beim Zurücksetzen der Bestellung:', orderError);
           // Nicht abbrechen - Rechnung wurde bereits aktualisiert
         }
       }

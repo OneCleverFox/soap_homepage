@@ -131,7 +131,13 @@ const ProductsPage = React.memo(() => {
       </Typography>
 
       <List sx={{ p: 0 }}>
-        {kategorien.map((kategorie) => {
+        {kategorien
+          .filter((kategorie) => {
+            const count = categoryCounts[kategorie.key] || 0;
+            // "Alle" immer anzeigen, andere nur wenn Produkte vorhanden
+            return kategorie.key === "alle" || count > 0;
+          })
+          .map((kategorie) => {
           const count = categoryCounts[kategorie.key] || 0;
           const IconComponent = kategorie.icon;
 

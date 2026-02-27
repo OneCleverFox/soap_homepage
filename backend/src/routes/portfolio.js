@@ -323,11 +323,13 @@ router.get('/', async (req, res) => {
     console.log('🔍 [PORTFOLIO] Lade Produkte aus Portfolio...');
     
     const { includeInactive, includeUnavailable } = req.query;
-    const shouldIncludeInactive = includeInactive === 'true' || includeUnavailable === 'true';
+    const shouldIncludeInactive = includeInactive === 'true';
+    const shouldIncludeUnavailable = includeUnavailable === 'true';
+    const shouldIncludeAll = shouldIncludeInactive || shouldIncludeUnavailable;
     
     // Filter-Query basierend auf Parameter
     let filter = {};
-    if (!shouldIncludeInactive) {
+    if (!shouldIncludeAll) {
       // Unterstütze beide Feldnamen: isActive und aktiv
       filter.$or = [
         { isActive: true },
@@ -338,7 +340,7 @@ router.get('/', async (req, res) => {
     const startTime = Date.now();
     
     // ⚡ OPTIMIERUNG: Minimale Felder für Admin-Dropdowns (Warenberechnung)
-    const selectFields = shouldIncludeInactive 
+    const selectFields = shouldIncludeAll 
       ? 'name kategorie aktiv isActive preis gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge'
       : '-bilder.hauptbildData.data -bilder.galerie.data -bilder.galerie.contentType';
     
@@ -354,7 +356,7 @@ router.get('/', async (req, res) => {
     
     // Lade Bestände für Admin-Ansicht (wenn includeUnavailable=true)
     let bestandTime = 0;
-    if (shouldIncludeInactive) {
+    if (shouldIncludeUnavailable) {
       const bestandStart = Date.now();
       const alleBestaende = await Bestand.find({ typ: 'produkt' })
         .select('artikelId menge')
