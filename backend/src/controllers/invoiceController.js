@@ -2,8 +2,19 @@ const InvoiceTemplate = require('../models/InvoiceTemplate');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const logger = require('../utils/logger');
 const { asyncHandler } = require('../middleware/errorHandler');
+
+const paypalQrPath = path.resolve(__dirname, '../../..', 'frontend', 'public', 'Paypal_QR.png');
+let paypalQrDataUrl = '';
+
+try {
+  const paypalQrBuffer = fsSync.readFileSync(paypalQrPath);
+  paypalQrDataUrl = `data:image/png;base64,${paypalQrBuffer.toString('base64')}`;
+} catch (error) {
+  console.warn(`PayPal QR nicht gefunden: ${paypalQrPath}`);
+}
 
 class InvoiceController {
   // Alle Templates abrufen
@@ -2056,35 +2067,52 @@ class InvoiceController {
     const shipping = order.shipping || {};
     const template = data.template || {};
     const isSmallBusiness = template.companyInfo?.isSmallBusiness || false;
+    const paypalText = 'Bitte den Gesamtbetrag bequem ueber PayPal begleichen.';
+    const paypalBrand = 'Gluecksmomente-Manufaktur';
+    const paypalQrHtml = paypalQrDataUrl
+      ? `
+        <div class="paypal-qr">
+          <img src="${paypalQrDataUrl}" alt="PayPal QR" />
+          <div class="paypal-text">
+            <div><strong>${paypalBrand}</strong></div>
+            <div>PayPal Scan to Pay</div>
+            <div>${paypalText}</div>
+          </div>
+        </div>
+      `
+      : '';
     
     return `
-      <div class="totals-section no-break">
-        <table class="totals-table">
-          <tr>
-            <td class="total-label">Nettobetrag:</td>
-            <td class="total-amount">${(order.netTotal || 0).toFixed(2)}€</td>
-          </tr>
-          <tr>
-            <td class="total-label">Versandkosten:</td>
-            <td class="total-amount">${(shipping.cost || 0).toFixed(2)}€</td>
-          </tr>
-          ${!isSmallBusiness && order.vatTotal ? `
-          <tr>
-            <td class="total-label">MwSt. (${shipping.vatRate || 19}%):</td>
-            <td class="total-amount">${(order.vatTotal || 0).toFixed(2)}€</td>
-          </tr>
-          ` : ''}
-          ${isSmallBusiness ? `
-          <tr>
-            <td class="total-label small-business">Keine MwSt. (§ 19 UStG):</td>
-            <td class="total-amount">0,00€</td>
-          </tr>
-          ` : ''}
-          <tr class="grand-total">
-            <td class="total-label">Gesamtbetrag:</td>
-            <td class="total-amount">${(order.grandTotal || 0).toFixed(2)}€</td>
-          </tr>
-        </table>
+      <div class="totals-wrap no-break">
+        ${paypalQrHtml}
+        <div class="totals-section">
+          <table class="totals-table">
+            <tr>
+              <td class="total-label">Nettobetrag:</td>
+              <td class="total-amount">${(order.netTotal || 0).toFixed(2)}€</td>
+            </tr>
+            <tr>
+              <td class="total-label">Versandkosten:</td>
+              <td class="total-amount">${(shipping.cost || 0).toFixed(2)}€</td>
+            </tr>
+            ${!isSmallBusiness && order.vatTotal ? `
+            <tr>
+              <td class="total-label">MwSt. (${shipping.vatRate || 19}%):</td>
+              <td class="total-amount">${(order.vatTotal || 0).toFixed(2)}€</td>
+            </tr>
+            ` : ''}
+            ${isSmallBusiness ? `
+            <tr>
+              <td class="total-label small-business">Keine MwSt. (§ 19 UStG):</td>
+              <td class="total-amount">0,00€</td>
+            </tr>
+            ` : ''}
+            <tr class="grand-total">
+              <td class="total-label">Gesamtbetrag:</td>
+              <td class="total-amount">${(order.grandTotal || 0).toFixed(2)}€</td>
+            </tr>
+          </table>
+        </div>
       </div>
     `;
   }
@@ -2417,10 +2445,39 @@ class InvoiceController {
           }
           
           /* ===== TOTALS SECTION ===== */
+          .totals-wrap {
+            display: flex;
+            gap: 16px;
+            justify-content: flex-end;
+            align-items: flex-end;
+            margin-top: 20px;
+          }
+
+          .paypal-qr {
+            width: 120px;
+            text-align: center;
+          }
+
+          .paypal-qr img {
+            width: 100%;
+            height: auto;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+            padding: 6px;
+            border-radius: 4px;
+          }
+
+          .paypal-text {
+            margin-top: 6px;
+            font-size: 8pt;
+            line-height: 1.2;
+            color: #343a40;
+          }
+
           .totals-section {
             width: 300px;
             margin-left: auto;
-            margin-top: 20px;
+            margin-top: 0;
           }
           
           .totals-table {
