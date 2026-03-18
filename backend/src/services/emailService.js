@@ -1804,6 +1804,106 @@ class EmailService {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Sendet eine Eingangsbestätigung an den Kunden nach erfolgreichem Widerruf.
+   * @param {Object} widerruf  – gespeichertes Widerruf-Dokument aus MongoDB
+   */
+  async sendWiderrufBestaetigung(widerruf) {
+    if (this.isDisabled) {
+      console.log('📧 E-Mail-Service deaktiviert – Widerrufsbestätigung übersprungen');
+      return { success: true, simulation: true };
+    }
+
+    const {
+      customerName,
+      customerEmail,
+      orderNumber,
+      contractRef,
+      _id,
+      createdAt
+    } = widerruf;
+
+    if (!customerEmail) {
+      return { success: false, error: 'Keine Kunden-E-Mail vorhanden' };
+    }
+
+    const formatDate = (date) =>
+      new Intl.DateTimeFormat('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(new Date(date));
+
+    const refLine = orderNumber
+      ? `<strong>Bestellnummer:</strong> ${orderNumber}`
+      : contractRef
+      ? `<strong>Vertragsreferenz:</strong> ${contractRef}`
+      : null;
+
+    const htmlContent = `
+      <div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1a1a1a;">
+        <div style="background:linear-gradient(135deg,#7b3f7b 0%,#4a1f4a 100%);color:white;padding:30px;border-radius:12px 12px 0 0;text-align:center;">
+          <h1 style="margin:0;font-size:24px;">✅ Widerruf eingegangen</h1>
+          <p style="margin:12px 0 0;font-size:15px;opacity:.9;">Eingangsbestätigung gemäß § 355 BGB</p>
+        </div>
+        <div style="background:#fff;padding:28px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
+          <p>Guten Tag${customerName ? ` ${customerName}` : ''},</p>
+          <p>
+            wir bestätigen den Eingang Ihrer Widerrufserklärung. Ihr Widerruf wurde elektronisch erfasst und
+            wird nun von uns geprüft.
+          </p>
+          <div style="background:#f3e8f3;border-left:4px solid #7b3f7b;padding:14px 18px;border-radius:4px;margin:20px 0;">
+            <p style="margin:0 0 6px;font-size:13px;"><strong>Ihre Referenzdaten:</strong></p>
+            ${refLine ? `<p style="margin:0 0 4px;font-size:13px;">${refLine}</p>` : ''}
+            <p style="margin:0 0 4px;font-size:13px;"><strong>Widerrufs-ID:</strong> ${_id}</p>
+            <p style="margin:0;font-size:13px;"><strong>Eingegangen am:</strong> ${formatDate(createdAt)}</p>
+          </div>
+          <p>
+            Bitte beachten Sie: Für personalisierte Produkte, die bereits auf Ihren Wunsch hin angefertigt wurden,
+            ist das Widerrufsrecht gemäß § 312g Abs. 2 Nr. 1 BGB ausgeschlossen. Wir werden Sie gesondert
+            informieren, sofern dies für Ihre Bestellung zutrifft.
+          </p>
+          <p>
+            Wir werden Ihren Widerruf schnellstmöglich bearbeiten und Sie über das Ergebnis benachrichtigen.
+            Bei Fragen stehen wir Ihnen gerne zur Verfügung.
+          </p>
+          <p style="margin-top:24px;">
+            Mit freundlichen Grüßen,<br>
+            <strong>Glücksmomente Manufaktur</strong>
+          </p>
+        </div>
+        <p style="text-align:center;font-size:11px;color:#999;margin-top:12px;">
+          Diese E-Mail wurde automatisch generiert. Bitte antworten Sie direkt auf diese E-Mail bei Rückfragen.
+        </p>
+      </div>`;
+
+    const emailLogEntry = await this.logEmail({
+      to: customerEmail,
+      from: `${this.fromName} <${this.fromEmail}>`,
+      subject: `Eingangsbestätigung Ihres Widerrufs – Glücksmomente Manufaktur`,
+      content: `Widerrufsbestätigung für ${customerName || customerEmail}, Widerrufs-ID: ${_id}`,
+      type: 'widerruf'
+    });
+
+    try {
+      const result = await this.resend.emails.send({
+        from: `${this.fromName} <${this.fromEmail}>`,
+        to: customerEmail,
+        subject: `Eingangsbestätigung Ihres Widerrufs – Glücksmomente Manufaktur`,
+        html: htmlContent
+      });
+
+      await this.updateEmailLog(emailLogEntry, 'sent', result?.data?.id);
+      return { success: true, emailId: result?.data?.id };
+    } catch (error) {
+      console.error('❌ Fehler beim Senden der Widerrufsbestätigung:', error.message);
+      await this.updateEmailLog(emailLogEntry, 'failed', null, error.message);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = new EmailService();
