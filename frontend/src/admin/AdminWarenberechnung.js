@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Box,
   Container,
@@ -48,11 +48,12 @@ const getRundungsLabel = (option) => {
 
 const AdminWarenberechnung = () => {
   const [portfolioProducts, setPortfolioProducts] = useState([]);
-  const [filteredProducts, setFilteredProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [calculation, setCalculation] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [calculationLoading, setCalculationLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [validationErrors, setValidationErrors] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editValues, setEditValues] = useState({});
   
@@ -62,6 +63,8 @@ const AdminWarenberechnung = () => {
   
   // Ref um doppelte Aufrufe in React Strict Mode zu verhindern
   const loadingRef = useRef(false);
+  const calculationRequestRef = useRef(0);
+  const calculationCacheRef = useRef(new Map());
   
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -74,37 +77,90 @@ const AdminWarenberechnung = () => {
     loadPortfolioProducts();
   }, []);
 
-  const calculateProductCosts = useCallback(async () => {
-    if (!selectedProduct || !selectedProduct._id) {
-      console.warn('⚠️ calculateProductCosts: selectedProduct oder _id ist undefined');
+  const calculateProductCosts = useCallback(async (productId, productName = '', options = {}) => {
+    if (!productId) {
       return;
     }
 
+    const forceRefresh = Boolean(options.forceRefresh);
+
+    if (!forceRefresh && calculationCacheRef.current.has(productId)) {
+      setCalculation(calculationCacheRef.current.get(productId));
+      setError(null);
+      setCalculationLoading(false);
+      return;
+    }
+
+    const requestId = ++calculationRequestRef.current;
+
     try {
-      console.log('Lade Warenberechnung für Produkt:', selectedProduct.name, 'ID:', selectedProduct._id);
+      setCalculationLoading(true);
       
       // Lade gespeicherte Berechnung aus Datenbank
-      const response = await api.get(`/warenberechnung/portfolio/${selectedProduct._id}`);
+      const response = await api.get(`/warenberechnung/portfolio/${productId}`, {
+        retryCondition: () => false,
+        timeout: 15000
+      });
       const berechnung = response.data;
+
+      // Validierungsfall: bewusst ohne HTTP-Fehler, damit keine roten Console-Errors entstehen
+      if (berechnung?.incomplete) {
+        setCalculation(null);
+        setValidationErrors(berechnung.validationErrors || []);
+        setError(berechnung.message || 'Produktkonfiguration unvollständig');
+        return;
+      }
       
-      console.log('Warenberechnung geladen:', berechnung);
+      // Nur die letzte aktive Anfrage darf den State aktualisieren
+      if (requestId !== calculationRequestRef.current) {
+        return;
+      }
+
+      calculationCacheRef.current.set(productId, berechnung);
       setCalculation(berechnung);
+      setValidationErrors(null);
       setError(null);
 
     } catch (err) {
-      console.error('Fehler bei der Berechnung:', err);
-      setError(`Fehler beim Laden der Berechnung: ${err.message}`);
+      if (requestId !== calculationRequestRef.current) {
+        return;
+      }
+
+      const status = err.response?.status;
+      if (status && status < 500) {
+        console.warn('Validierungs-/Clientfehler bei Produkt:', productName || productId, err.response?.data?.message || err.message);
+      } else {
+        console.error('Fehler bei der Berechnung für Produkt:', productName || productId, err);
+      }
+      
+      // Extrahiere validationErrors aus Response
+      const validationErrs = err.response?.data?.validationErrors || null;
+      const errorMsg = err.response?.data?.message || err.message;
+      
+      setValidationErrors(validationErrs);
+      setError(errorMsg);
+    } finally {
+      if (requestId === calculationRequestRef.current) {
+        setCalculationLoading(false);
+      }
     }
-  }, [selectedProduct]);
+  }, []);
 
   useEffect(() => {
-    if (selectedProduct) {
-      calculateProductCosts();
+    if (selectedProduct?._id) {
+      // Alte Werte verbergen, bis die neue Berechnung da ist
+      setCalculation(null);
+      setValidationErrors(null);
+      setError(null);
+      calculateProductCosts(selectedProduct._id, selectedProduct.name);
+    } else {
+      setCalculation(null);
+      setValidationErrors(null);
+      setError(null);
     }
-  }, [selectedProduct, calculateProductCosts]);
+  }, [selectedProduct?._id, selectedProduct?.name, calculateProductCosts]);
 
-  // Filter-Logik für Produkte
-  useEffect(() => {
+  const filteredProducts = useMemo(() => {
     let filtered = [...portfolioProducts];
 
     // Kategorie-Filter
@@ -121,21 +177,37 @@ const AdminWarenberechnung = () => {
       filtered = filtered.filter(product => product.aktiv !== true);
     }
 
-    setFilteredProducts(filtered);
+    return filtered;
+  }, [portfolioProducts, categoryFilter, statusFilter]);
 
+  const selectedIdInFilteredOptions = useMemo(() => {
+    if (!selectedProduct?._id) return '';
+    return filteredProducts.some((p) => p._id === selectedProduct._id)
+      ? selectedProduct._id
+      : '';
+  }, [selectedProduct?._id, filteredProducts]);
+
+  const selectedIdInPortfolioOptions = useMemo(() => {
+    if (!selectedProduct?._id) return '';
+    return portfolioProducts.some((p) => p._id === selectedProduct._id)
+      ? selectedProduct._id
+      : '';
+  }, [selectedProduct?._id, portfolioProducts]);
+
+  // Auswahl konsistent mit aktivem Filter halten
+  useEffect(() => {
     // Wenn das aktuelle Produkt herausgefiltert wurde, wähle das erste verfügbare
-    if (selectedProduct && !filtered.find(p => p._id === selectedProduct._id)) {
-      const newSelection = filtered.length > 0 ? filtered[0] : null;
+    if (selectedProduct && !filteredProducts.find(p => p._id === selectedProduct._id)) {
+      const newSelection = filteredProducts.length > 0 ? filteredProducts[0] : null;
       setSelectedProduct(newSelection);
-      if (newSelection) {
-        // Nur laden wenn ein neues Produkt verfügbar ist
-        calculateProductCosts(newSelection);
-      } else {
-        // Berechnung zurücksetzen wenn kein Produkt verfügbar
-        setCalculation(null);
-      }
+      setCalculation(null);
+      setError(null);
     }
-  }, [portfolioProducts, categoryFilter, statusFilter, selectedProduct, calculateProductCosts]);
+
+    if (!selectedProduct && filteredProducts.length > 0) {
+      setSelectedProduct(filteredProducts[0]);
+    }
+  }, [filteredProducts, selectedProduct]);
 
   const loadPortfolioProducts = async () => {
     try {
@@ -170,11 +242,9 @@ const AdminWarenberechnung = () => {
   const handleProductChange = (event) => {
     const product = filteredProducts.find(p => p._id === event.target.value);
     setSelectedProduct(product);
-    if (product) {
-      calculateProductCosts(product);
-    } else {
-      setCalculation(null);
-    }
+    setCalculation(null);
+    setValidationErrors(null);
+    setError(null);
   };
 
   const handleEditClick = () => {
@@ -207,6 +277,9 @@ const AdminWarenberechnung = () => {
     try {
       const response = await api.put(`/warenberechnung/${calculation._id}`, editValues);
       setCalculation(response.data);
+      if (selectedProduct?._id) {
+        calculationCacheRef.current.set(selectedProduct._id, response.data);
+      }
       setEditDialogOpen(false);
     } catch (err) {
       console.error('Fehler beim Speichern:', err);
@@ -222,21 +295,34 @@ const AdminWarenberechnung = () => {
     
     try {
       console.log('🔄 Lösche bestehende Warenberechnung für Neuberechnung:', selectedProduct.name);
+      calculationCacheRef.current.delete(selectedProduct._id);
+      setValidationErrors(null);
+      setError(null);
       
       // Lösche bestehende Warenberechnung
       await api.delete(`/warenberechnung/portfolio/${selectedProduct._id}`);
       
-      // Lade Portfolio-Produkt neu um aktuelle Rohseifen-Konfiguration zu erhalten
+      // Lade Portfolio-Produkt neu, um aktuelle Konfiguration zu erhalten
       const portfolioResponse = await api.get(`/admin/portfolio/${selectedProduct._id}`);
-      setSelectedProduct(portfolioResponse.data);
+      const refreshedProduct = portfolioResponse.data;
+
+      setSelectedProduct(refreshedProduct);
+      setPortfolioProducts((prev) =>
+        prev.map((product) =>
+          product._id === refreshedProduct._id ? refreshedProduct : product
+        )
+      );
       
-      // Triggere Neuberechnung durch erneuten Aufruf
-      await calculateProductCosts();
+      // Neuberechnung explizit auslösen (ID bleibt gleich, daher nicht nur auf useEffect verlassen)
+      await calculateProductCosts(refreshedProduct._id, refreshedProduct.name, { forceRefresh: true });
       
       console.log('✅ Warenberechnung erfolgreich neu erstellt');
     } catch (err) {
       console.error('Fehler bei Neuberechnung:', err);
-      setError(`Fehler bei Neuberechnung: ${err.message}`);
+      const validationErrs = err.response?.data?.validationErrors || null;
+      const errorMsg = err.response?.data?.message || err.message;
+      setValidationErrors(validationErrs);
+      setError(`Fehler bei Neuberechnung: ${errorMsg}`);
     }
   };
 
@@ -264,6 +350,7 @@ const AdminWarenberechnung = () => {
       );
       setPortfolioProducts(updatedProducts);
       
+      setValidationErrors(null);
       setError(null);
       console.log(`Preis übernommen: ${calculation.vkPreisGerundet.toFixed(2)} € für ${selectedProduct.name}`);
     } catch (err) {
@@ -286,14 +373,104 @@ const AdminWarenberechnung = () => {
         <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
           📊 Warenberechnung
         </Typography>
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+
+        {/* Show detailed validation errors if available */}
+        {validationErrors && validationErrors.length > 0 ? (
+          <Alert severity="error" sx={{ 
+            mb: isMobile ? 2 : 3,
+            p: isMobile ? 1.5 : 2.5,
+            backgroundColor: isMobile ? '#ffebee' : '#ffcdd2',
+            borderLeft: isMobile ? '4px solid #d32f2f' : '5px solid #d32f2f'
+          }}>
+            <Typography variant={isMobile ? "body1" : "h6"} sx={{ 
+              mb: isMobile ? 0.75 : 1.5,
+              fontWeight: 700,
+              fontSize: isMobile ? '1rem' : '1.25rem'
+            }}>
+              ❌ Produktkonfiguration unvollständig
+            </Typography>
+            <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+              mb: isMobile ? 1 : 1.5,
+              display: 'block',
+              fontSize: isMobile ? '0.85rem' : '0.95rem'
+            }}>
+              Im Produkt <strong>{selectedProduct?.name}</strong> fehlen folgende Angaben:
+            </Typography>
+            <Box sx={{ pl: isMobile ? 1 : 2 }}>
+              {validationErrors.map((err, idx) => (
+                <Box key={idx} sx={{ 
+                  mb: isMobile ? 1.25 : 2, 
+                  pb: isMobile ? 1 : 1.5, 
+                  borderBottom: idx < validationErrors.length - 1 ? '1px solid rgba(211,47,47,0.2)' : 'none' 
+                }}>
+                  <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
+                    mb: 0.25,
+                    fontWeight: 600,
+                    fontSize: isMobile ? '0.9rem' : '1rem'
+                  }}>
+                    {err.label}
+                  </Typography>
+                  <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+                    mb: 0.5,
+                    display: 'block',
+                    fontSize: isMobile ? '0.8rem' : '0.9rem'
+                  }}>
+                    {err.message}
+                  </Typography>
+                  {err.solution && (
+                    <Typography variant={isMobile ? "caption" : "body2"} color="success.main" sx={{ 
+                      display: 'block', 
+                      mt: 0.5, 
+                      fontStyle: 'italic',
+                      fontSize: isMobile ? '0.8rem' : '0.9rem'
+                    }}>
+                      ✅ {err.solution}
+                    </Typography>
+                  )}
+                  {err.configLink && err.configLinkLabel && (
+                    <Box sx={{ mt: isMobile ? 0.75 : 1 }}>
+                      <Button
+                        variant="outlined"
+                        size={isMobile ? "small" : "medium"}
+                        color="error"
+                        onClick={() => window.location.href = err.configLink}
+                        sx={{ 
+                          textTransform: 'none', 
+                          cursor: 'pointer',
+                          fontSize: isMobile ? '0.75rem' : '0.9rem',
+                          py: isMobile ? 0.5 : 0.75,
+                          px: isMobile ? 1 : 1.5
+                        }}
+                      >
+                        🔗 {err.configLinkLabel}
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              ))}
+            </Box>
+            <Typography variant="caption" sx={{ 
+              mt: isMobile ? 1 : 2, 
+              display: 'block',
+              fontSize: isMobile ? '0.75rem' : '0.85rem',
+              color: 'rgba(0, 0, 0, 0.7)',
+              fontStyle: 'italic'
+            }}>
+              Klicke auf die Links oben, um die entsprechenden Admin-Seiten zu öffnen und die Konfiguration zu vervollständigen.
+            </Typography>
+          </Alert>
+        ) : (
+          /* Default error message if no validation errors */
+          <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        )}
+
         {portfolioProducts.length > 0 && (
           <Paper sx={{ p: isMobile ? 2 : 3, mt: 2 }}>
             <Typography variant="h6" gutterBottom>Andere Produkte auswählen:</Typography>
             <FormControl fullWidth size={isMobile ? "small" : "medium"}>
               <InputLabel>Produkt auswählen</InputLabel>
               <Select
-                value={selectedProduct?._id || ''}
+                value={selectedIdInPortfolioOptions}
                 onChange={handleProductChange}
                 label="Produkt auswählen"
               >
@@ -389,7 +566,7 @@ const AdminWarenberechnung = () => {
     );
   }
 
-  // Verhindert Rendering wenn kein Produkt oder Berechnung geladen ist, 
+  // Verhindert Rendering wenn kein Produkt oder Berechnung geladen ist,
   // oder wenn gefilterte Produkte verfügbar sind aber kein Produkt ausgewählt
   if ((!selectedProduct || !calculation) && filteredProducts.length > 0) {
     return (
@@ -397,12 +574,106 @@ const AdminWarenberechnung = () => {
         <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
           📊 Warenberechnung
         </Typography>
+
+        {/* Zeige IMMER validationErrors wenn sie existieren */}
+        {validationErrors && validationErrors.length > 0 && (
+          <Alert severity="error" sx={{ 
+            mb: isMobile ? 2 : 3,
+            p: isMobile ? 1.5 : 2.5,
+            backgroundColor: isMobile ? '#ffebee' : '#ffcdd2',
+            borderLeft: isMobile ? '4px solid #d32f2f' : '5px solid #d32f2f'
+          }}>
+            <Typography variant={isMobile ? "body1" : "h6"} sx={{ 
+              mb: isMobile ? 0.75 : 1.5,
+              fontWeight: 700,
+              fontSize: isMobile ? '1rem' : '1.25rem'
+            }}>
+              ❌ Produktkonfiguration unvollständig
+            </Typography>
+            <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+              mb: isMobile ? 1 : 1.5,
+              display: 'block',
+              fontSize: isMobile ? '0.85rem' : '0.95rem'
+            }}>
+              Im Produkt <strong>{selectedProduct?.name}</strong> fehlen folgende Angaben:
+            </Typography>
+            <Box sx={{ pl: isMobile ? 1 : 2 }}>
+              {validationErrors.map((err, idx) => {
+                return (
+                  <Box key={idx} sx={{ 
+                    mb: isMobile ? 1.25 : 2, 
+                    pb: isMobile ? 1 : 1.5, 
+                    borderBottom: idx < validationErrors.length - 1 ? '1px solid rgba(211,47,47,0.2)' : 'none' 
+                  }}>
+                    <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
+                      mb: 0.25,
+                      fontWeight: 600,
+                      fontSize: isMobile ? '0.9rem' : '1rem'
+                    }}>
+                      {err.label}
+                    </Typography>
+                    <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+                      mb: 0.5,
+                      display: 'block',
+                      fontSize: isMobile ? '0.8rem' : '0.9rem'
+                    }}>
+                      {err.message}
+                    </Typography>
+                    {err.solution && (
+                      <Typography variant={isMobile ? "caption" : "body2"} color="success.main" sx={{ 
+                        display: 'block', 
+                        mt: 0.5, 
+                        fontStyle: 'italic',
+                        fontSize: isMobile ? '0.8rem' : '0.9rem'
+                      }}>
+                        ✅ {err.solution}
+                      </Typography>
+                    )}
+                    {err.configLink && err.configLinkLabel && (
+                      <Box sx={{ mt: isMobile ? 0.75 : 1 }}>
+                        <Button
+                          variant="outlined"
+                          size={isMobile ? "small" : "medium"}
+                          color="error"
+                          onClick={() => window.location.href = err.configLink}
+                          sx={{ 
+                            textTransform: 'none', 
+                            cursor: 'pointer',
+                            fontSize: isMobile ? '0.75rem' : '0.9rem',
+                            py: isMobile ? 0.5 : 0.75,
+                            px: isMobile ? 1 : 1.5
+                          }}
+                        >
+                          🔗 {err.configLinkLabel}
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+            <Typography variant="caption" sx={{ 
+              mt: isMobile ? 1 : 2, 
+              display: 'block',
+              fontSize: isMobile ? '0.75rem' : '0.85rem',
+              color: 'rgba(0, 0, 0, 0.7)',
+              fontStyle: 'italic'
+            }}>
+              Klicke auf die Links oben, um die entsprechenden Admin-Seiten zu öffnen und die Konfiguration zu vervollständigen.
+            </Typography>
+          </Alert>
+        )}
+
         <Paper sx={{ p: isMobile ? 2 : 3 }}>
-          <Typography>Bitte ein Produkt auswählen...</Typography>
+          <Typography>
+            {calculationLoading && selectedProduct
+              ? `Berechnung wird geladen für: ${selectedProduct.name}...`
+              : 'Bitte ein Produkt auswählen...'}
+          </Typography>
           <FormControl fullWidth size={isMobile ? "small" : "medium"} sx={{ mt: 2 }}>
             <InputLabel>Produkt auswählen</InputLabel>
             <Select
-              value={selectedProduct?._id || ''}
+              value={selectedIdInFilteredOptions}
               onChange={handleProductChange}
               label="Produkt auswählen"
             >
@@ -442,6 +713,97 @@ const AdminWarenberechnung = () => {
       <Typography variant={isMobile ? "caption" : "body1"} color="text.secondary" sx={{ mb: isMobile ? 2 : 3, display: 'block' }}>
         Detaillierte Kostenberechnung für Portfolio-Produkte
       </Typography>
+
+      {/* Validierungsfehler anzeigen */}
+      {validationErrors && validationErrors.length > 0 && (
+        <Alert severity="error" sx={{ 
+          mb: isMobile ? 2 : 3,
+          p: isMobile ? 1.5 : 2.5,
+          backgroundColor: isMobile ? '#ffebee' : '#ffcdd2',
+          borderLeft: isMobile ? '4px solid #d32f2f' : '5px solid #d32f2f'
+        }}>
+          <Typography variant={isMobile ? "body1" : "h6"} sx={{ 
+            mb: isMobile ? 0.75 : 1.5,
+            fontWeight: 700,
+            fontSize: isMobile ? '1rem' : '1.25rem'
+          }}>
+            ❌ Produktkonfiguration unvollständig
+          </Typography>
+          <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+            mb: isMobile ? 1 : 1.5,
+            display: 'block',
+            fontSize: isMobile ? '0.85rem' : '0.95rem'
+          }}>
+            Im Produkt <strong>{selectedProduct?.name}</strong> fehlen folgende Angaben:
+          </Typography>
+          <Box sx={{ pl: isMobile ? 1 : 2 }}>
+            {validationErrors.map((err, idx) => {
+              // Get unique config links to avoid duplicates
+              const configLinkKey = `${err.configLink || 'default'}-${err.field}`;
+              return (
+                <Box key={idx} sx={{ 
+                  mb: isMobile ? 1.25 : 2, 
+                  pb: isMobile ? 1 : 1.5, 
+                  borderBottom: idx < validationErrors.length - 1 ? '1px solid rgba(211,47,47,0.2)' : 'none' 
+                }}>
+                  <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
+                    mb: 0.25,
+                    fontWeight: 600,
+                    fontSize: isMobile ? '0.9rem' : '1rem'
+                  }}>
+                    {err.label}
+                  </Typography>
+                  <Typography variant={isMobile ? "caption" : "body2"} sx={{ 
+                    mb: 0.5,
+                    display: 'block',
+                    fontSize: isMobile ? '0.8rem' : '0.9rem'
+                  }}>
+                    {err.message}
+                  </Typography>
+                  {err.solution && (
+                    <Typography variant={isMobile ? "caption" : "body2"} color="success.main" sx={{ 
+                      display: 'block', 
+                      mt: 0.5, 
+                      fontStyle: 'italic',
+                      fontSize: isMobile ? '0.8rem' : '0.9rem'
+                    }}>
+                      ✅ {err.solution}
+                    </Typography>
+                  )}
+                  {err.configLink && err.configLinkLabel && (
+                    <Box sx={{ mt: isMobile ? 0.75 : 1 }}>
+                      <Button
+                        variant="outlined"
+                        size={isMobile ? "small" : "medium"}
+                        color="error"
+                        onClick={() => window.location.href = err.configLink}
+                        sx={{ 
+                          textTransform: 'none', 
+                          cursor: 'pointer',
+                          fontSize: isMobile ? '0.75rem' : '0.9rem',
+                          py: isMobile ? 0.5 : 0.75,
+                          px: isMobile ? 1 : 1.5
+                        }}
+                      >
+                        🔗 {err.configLinkLabel}
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+          <Typography variant="caption" sx={{ 
+            mt: isMobile ? 1 : 2, 
+            display: 'block',
+            fontSize: isMobile ? '0.75rem' : '0.85rem',
+            color: 'rgba(0, 0, 0, 0.7)',
+            fontStyle: 'italic'
+          }}>
+            Klicke auf die Links oben, um die entsprechenden Admin-Seiten zu öffnen und die Konfiguration zu vervollständigen.
+          </Typography>
+        </Alert>
+      )}
 
       <Paper sx={{ p: isMobile ? 1.5 : 3, mb: isMobile ? 2 : 3 }}>
         <Grid container spacing={2}>
@@ -491,7 +853,7 @@ const AdminWarenberechnung = () => {
                 Produkt auswählen ({filteredProducts.length} von {portfolioProducts.length})
               </InputLabel>
               <Select
-                value={selectedProduct?._id || ''}
+                value={selectedIdInFilteredOptions}
                 onChange={handleProductChange}
                 label={`Produkt auswählen (${filteredProducts.length} von ${portfolioProducts.length})`}
               >
