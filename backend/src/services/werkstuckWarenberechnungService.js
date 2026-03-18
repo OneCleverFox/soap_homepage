@@ -11,7 +11,8 @@ class WerkstuckWarenberechnungService {
    * Erstellt eine Warenberechnung für ein Werkstück-Portfolio-Produkt
    */
   static async erstelleWerkstuckWarenberechnung(portfolio) {
-    console.log('🏺 Berechne Kosten für Werkstück...');
+    try {
+      console.log('🏺 Berechne Kosten für Werkstück...');
     console.log('🔍 Portfolio Debug:', {
       name: portfolio.name,
       kategorie: portfolio.kategorie,
@@ -34,8 +35,14 @@ class WerkstuckWarenberechnungService {
       console.log('🔍 Suche Gießwerkstoff:', portfolio.giesswerkstoff);
       console.log('🔍 Suche Gießform:', portfolio.giessform);
       
-      const giesswerkstoff = await Giesswerkstoff.findById(portfolio.giesswerkstoff);
-      const giessform = await Giessform.findById(portfolio.giessform);
+      const [giesswerkstoff, giessform] = await Promise.all([
+        Giesswerkstoff.findById(portfolio.giesswerkstoff)
+          .select('bezeichnung kostenProKg typ')
+          .lean(),
+        Giessform.findById(portfolio.giessform)
+          .select('name volumenMl kostenProStueck erwarteteVerwendungen')
+          .lean()
+      ]);
       
       console.log('🔍 Gefundene Objekte:', {
         giesswerkstoff: giesswerkstoff ? {
@@ -143,6 +150,14 @@ class WerkstuckWarenberechnungService {
       pauschaleFaktor: 3,
       rundungsOption: '0.50'
     };
+    } catch (err) {
+      console.error('❌ Exception in erstelleWerkstuckWarenberechnung:', {
+        message: err.message,
+        stack: err.stack?.split('\n').slice(0, 3).join('\n')
+      });
+      // Re-throw damit die Route es abfangen kann
+      throw err;
+    }
   }
   
   /**
@@ -152,8 +167,17 @@ class WerkstuckWarenberechnungService {
     const giesszusatzstoffeKonfiguration = [];
     
     if (portfolio.giesszusatzstoffe && portfolio.giesszusatzstoffe.length > 0) {
-      for (const zusatzKonfig of portfolio.giesszusatzstoffe) {
-        const zusatzstoff = await Giesszusatzstoff.findById(zusatzKonfig.zusatzstoffId);
+      const zusatzstoffe = await Promise.all(
+        portfolio.giesszusatzstoffe.map((zusatzKonfig) =>
+          Giesszusatzstoff.findById(zusatzKonfig.zusatzstoffId)
+            .select('bezeichnung unbegrenzterVorrat kostenProKg')
+            .lean()
+        )
+      );
+
+      for (let i = 0; i < portfolio.giesszusatzstoffe.length; i++) {
+        const zusatzKonfig = portfolio.giesszusatzstoffe[i];
+        const zusatzstoff = zusatzstoffe[i];
         
         if (zusatzstoff) {
           let benoetigteMenge = 0;

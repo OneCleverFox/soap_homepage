@@ -83,10 +83,18 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    const isExpectedWarenberechnungValidation =
+      error?.response?.status === 400 &&
+      error?.config?.url?.includes('/warenberechnung/portfolio/');
+
     // Performance-Tracking auch bei Fehlern
     if (error.config && error.config.metadata) {
       const duration = performance.now() - error.config.metadata.startTime;
-      console.error(`❌ Failed API call: ${error.config.url} after ${Math.round(duration)}ms`);
+      if (isExpectedWarenberechnungValidation) {
+        console.warn(`⚠️ Validation API call: ${error.config.url} after ${Math.round(duration)}ms`);
+      } else {
+        console.error(`❌ Failed API call: ${error.config.url} after ${Math.round(duration)}ms`);
+      }
     }
     
     // Retry-Logik
@@ -111,6 +119,10 @@ api.interceptors.response.use(
     const { response } = error;
     
     if (response) {
+      if (isExpectedWarenberechnungValidation) {
+        return Promise.reject(error);
+      }
+
       switch (response.status) {
         case 401:
           // Bei bestimmten nicht-kritischen Endpunkten nicht automatisch ausloggen

@@ -38,13 +38,16 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       return res.status(400).json({ message: 'Ungültige Portfolio-ID' });
     }
     
-    let berechnung = await Warenberechnung.findOne({ 
-      portfolioProdukt: portfolioId 
-    }).populate('portfolioProdukt');
+    const startTime = Date.now();
+    
+    let berechnung = await Warenberechnung.findOne({
+      portfolioProdukt: portfolioId
+    }).populate('portfolioProdukt', 'name kategorie aktiv isActive preis gramm gewichtInGramm seife aroma verpackung giessform giesswerkstoff');
     
     // Wenn keine Berechnung existiert, erstelle eine neue
     if (!berechnung) {
-      const portfolio = await Portfolio.findById(portfolioId);
+      const portfolio = await Portfolio.findById(portfolioId)
+        .select('name kategorie seife rohseifenKonfiguration gewichtInGramm aroma verpackung giesswerkstoff giessform gramm giesswerkstoffKonfiguration giesszusatzstoffe zusatzinhaltsstoffe');
       if (!portfolio) {
         return res.status(404).json({ message: 'Portfolio-Produkt nicht gefunden' });
       }
@@ -76,12 +79,32 @@ router.get('/portfolio/:portfolioId', auth, async (req, res) => {
       }
       
       console.log(`✅ ${portfolio.kategorie === 'werkstuck' ? 'Werkstück' : 'Seifen'}-Warenberechnung erstellt`);
-      berechnung = await Warenberechnung.findById(berechnung._id).populate('portfolioProdukt');
+      berechnung = await Warenberechnung.findById(berechnung._id)
+        .populate('portfolioProdukt', 'name kategorie aktiv isActive preis gramm gewichtInGramm seife aroma verpackung giessform giesswerkstoff');
     }
     
     res.json(berechnung);
   } catch (error) {
-    console.error('Fehler beim Laden der Warenberechnung:', error);
+    console.error('❌ Error caught:', {
+      message: error.message,
+      hasValidationErrors: !!error.validationErrors,
+      validationErrorsLength: error.validationErrors?.length || 0,
+      status: error.status,
+      errorStack: error.stack?.split('\n').slice(0, 3).join('\n')
+    });
+    
+    // Validierungsfehler als normale Antwort liefern, damit Frontend keine roten Netzfehler loggt
+    if (error.validationErrors && Array.isArray(error.validationErrors)) {
+      console.log(`✅ Returning validationErrors: ${error.validationErrors.length} errors`);
+      return res.json({
+        message: error.message,
+        validationErrors: error.validationErrors,
+        incomplete: true,
+        calculation: null
+      });
+    }
+    
+    console.log(`❌ Returning 500 error: ${error.message}`);
     res.status(500).json({ message: error.message });
   }
 });

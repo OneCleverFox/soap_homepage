@@ -364,7 +364,6 @@ process.on('SIGINT', async () => {
   console.log('MongoDB Verbindung geschlossen.');
   process.exit(0);
 });
-connectToMongoDB();
 
 // Routes
 const { checkDatabaseConnection } = require('./middleware/dbConnection');
