@@ -38,6 +38,7 @@ const Navbar = () => {
   // Badge-Zähler für Handlungsbedarf
   const [pendingInquiries, setPendingInquiries] = useState(0);
   const [pendingOrders, setPendingOrders] = useState(0);
+  const [pendingWiderrufe, setPendingWiderrufe] = useState(0);
   
   const { user, logout } = useAuth();
   const { getCartItemsCount } = useCart();
@@ -47,6 +48,19 @@ const Navbar = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const cartItemsCount = getCartItemsCount();
+
+  // Offene Widerrufe laden (nur für Admins)
+  const loadPendingWiderrufe = async () => {
+    if (!user) return;
+    const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
+    if (!isAdmin) return;
+    try {
+      const response = await api.get('/widerruf/admin/list', { params: { status: 'received', limit: 1 } });
+      setPendingWiderrufe(response.data?.pagination?.total || 0);
+    } catch {
+      setPendingWiderrufe(0);
+    }
+  };
 
   // Handlungsbedarf für Anfragen laden
   const loadPendingInquiries = async () => {
@@ -244,6 +258,11 @@ const Navbar = () => {
     window.addEventListener('ordersViewed', handleOrdersViewed);
     window.addEventListener('inquiryViewed', handleInquiryAction);
     window.addEventListener('inquiryActioned', handleInquiryAction);
+
+    // Widerruf-Badge laden und Event-Listener registrieren
+    loadPendingWiderrufe();
+    const handleWiderrufViewed = () => setPendingWiderrufe(0);
+    window.addEventListener('widerrufViewed', handleWiderrufViewed);
     
     return () => {
       window.removeEventListener('inquiriesViewed', handleInquiriesViewed);
@@ -251,6 +270,7 @@ const Navbar = () => {
       window.removeEventListener('ordersViewed', handleOrdersViewed);
       window.removeEventListener('inquiryViewed', handleInquiryAction);
       window.removeEventListener('inquiryActioned', handleInquiryAction);
+      window.removeEventListener('widerrufViewed', handleWiderrufViewed);
     };
   }, [user]); // Nur von user abhängig - Funktionen werden bewusst nicht als Dependency hinzugefügt
 
@@ -312,6 +332,7 @@ const Navbar = () => {
     { label: 'Rohstoffe', path: '/admin/rohstoffe', icon: '📦' },
     { label: 'Bestellverwaltung', path: '/admin/bestellungen', icon: '📋' },
     { label: 'Anfragen-Verwaltung', path: '/admin/anfragen', icon: '📨' },
+    { label: 'Widerrufe', path: '/admin/widerruf', icon: '↩️' },
     { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
@@ -542,7 +563,14 @@ const Navbar = () => {
                       ml: 1
                     }}
                   >
-                    ⚙️ Admin
+                    <Badge
+                      badgeContent={pendingWiderrufe}
+                      color="error"
+                      invisible={pendingWiderrufe === 0}
+                      sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', minWidth: '16px', height: '16px' } }}
+                    >
+                      ⚙️ Admin
+                    </Badge>
                   </Button>
                   <Menu
                     anchorEl={adminMenu}
@@ -574,6 +602,14 @@ const Navbar = () => {
                                   height: '18px'
                                 }
                               }}
+                            >
+                              {item.icon}
+                            </Badge>
+                          ) : item.path === '/admin/widerruf' && pendingWiderrufe > 0 ? (
+                            <Badge
+                              badgeContent={pendingWiderrufe}
+                              color="error"
+                              sx={{ '& .MuiBadge-badge': { fontSize: '0.7rem', minWidth: '18px', height: '18px' } }}
                             >
                               {item.icon}
                             </Badge>

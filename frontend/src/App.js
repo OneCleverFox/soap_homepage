@@ -42,6 +42,7 @@ const ImpressumPage = lazy(() => import('./pages/ImpressumPage'));
 const DatenschutzPage = lazy(() => import('./pages/DatenschutzPage'));
 const AGBPage = lazy(() => import('./pages/AGBPage'));
 const WiderrufsrechtPage = lazy(() => import('./pages/WiderrufsrechtPage'));
+const WiderrufPage = lazy(() => import('./pages/WiderrufPage'));
 
 // Admin Pages - Lazy Loading für bessere Performance
 const AdminPortfolio = lazy(() => import('./admin/AdminPortfolio'));
@@ -49,6 +50,7 @@ const AdminDashboard = lazy(() => import('./admin/AdminDashboard'));
 const AdminRohstoffe = lazy(() => import('./admin/AdminRohstoffe'));
 const AdminOrdersManagement = lazy(() => import('./admin/AdminOrdersManagement'));
 const AdminInquiries = lazy(() => import('./admin/AdminInquiries'));
+const AdminWiderruf = lazy(() => import('./admin/AdminWiderruf'));
 const TokenDebugger = lazy(() => import('./TokenDebugger'));
 const AdminCheckout = lazy(() => import('./admin/AdminCheckout'));
 const AdminInventory = lazy(() => import('./admin/AdminInventory'));
@@ -162,6 +164,7 @@ function App() {
                       <Route path="/datenschutz" element={<DatenschutzPage />} />
                       <Route path="/agb" element={<AGBPage />} />
                       <Route path="/widerrufsrecht" element={<WiderrufsrechtPage />} />
+                      <Route path="/widerruf" element={<WiderrufPage />} />
                       
                       {/* Legacy Routes (German) */}
                     <Route path="/produkte" element={<Navigate to="/products" replace />} />
@@ -385,6 +388,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <AdminGallery />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/widerruf"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminWiderruf />
                 </ProtectedRoute>
               </>
             }

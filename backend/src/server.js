@@ -68,6 +68,7 @@ const companyInfoRoutes = require('./routes/companyInfo');
 const dashboardRoutes = require('./routes/dashboard');
 const debugRoutes = require('./routes/debug');
 const galleryRoutes = require('./routes/gallery');
+const widerrufRoutes = require('./routes/widerruf');
 
 const app = express();
 
@@ -393,6 +394,7 @@ app.use('/api/invoices', checkDatabaseConnection, invoicesRoutes);
 app.use('/api/images', require('./routes/images'));
 app.use('/api/company-info', checkDatabaseConnection, companyInfoRoutes);
 app.use('/api/gallery', checkDatabaseConnection, galleryRoutes);
+app.use('/api/widerruf', checkDatabaseConnection, widerrufRoutes);
 
 // Health Check Route
 app.get('/api/health', (req, res) => {
