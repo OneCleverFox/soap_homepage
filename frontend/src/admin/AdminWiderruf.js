@@ -56,6 +56,11 @@ const STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, cfg]) => ({
   label: cfg.label
 }));
 
+const EMPTY_MANUAL_FORM = {
+  customerName: '', customerEmail: '', customerAddress: '',
+  orderNumber: '', contractRef: '', statementText: '', adminNote: ''
+};
+
 // ── Statusänderungs-Dialog ───────────────────────────────────────────────────
 function StatusDialog({ open, widerruf, onClose, onSave }) {
   const [status, setStatus] = useState('');
@@ -128,17 +133,12 @@ function StatusDialog({ open, widerruf, onClose, onSave }) {
 
 // ── Manueller Widerruf-Dialog (postalische Eingabe) ──────────────────────────
 function ManualDialog({ open, onClose, onSave }) {
-  const empty = {
-    customerName: '', customerEmail: '', customerAddress: '',
-    orderNumber: '', contractRef: '', statementText: '', adminNote: ''
-  };
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState(EMPTY_MANUAL_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (open) { setForm(empty); setError(''); }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open) { setForm(EMPTY_MANUAL_FORM); setError(''); }
   }, [open]);
 
   const handleChange = (field) => (e) => setForm((p) => ({ ...p, [field]: e.target.value }));
