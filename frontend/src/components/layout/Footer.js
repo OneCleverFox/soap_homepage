@@ -10,6 +10,7 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
+import InstagramIcon from '@mui/icons-material/Instagram';
 import { useCompanyInfo } from '../../hooks/useCompanyInfo';
 
 const Footer = () => {
@@ -37,13 +38,14 @@ const Footer = () => {
       { label: 'Impressum', path: '/impressum' },
       { label: 'Datenschutz', path: '/datenschutz' },
       { label: 'AGB', path: '/agb' },
-      { label: 'Widerrufsrecht', path: '/widerrufsrecht' }
+      { label: 'Widerrufsrecht', path: '/widerrufsrecht' },
+      { label: 'Vertrag widerrufen', path: '/widerruf' }
     ]
   };
 
   const socialLinks = [
     //{ icon: 'f', url: 'https://facebook.com/gluecksmomente', label: 'Facebook' },
-    { icon: '📷', url: 'https://www.instagram.com/gluecksmomente_manufaktur/', label: 'Instagram' }
+    { icon: InstagramIcon, url: 'https://www.instagram.com/gluecksmomente_manufaktur/', label: 'Instagram' }
     //{ icon: '🐦', url: 'https://twitter.com/gluecksmomente', label: 'Twitter' }
   ];
 
@@ -184,26 +186,29 @@ const Footer = () => {
               Folgen Sie uns
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {socialLinks.map((social) => (
-                <IconButton
-                  key={social.label}
-                  component="a"
-                  href={social.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{
-                    color: 'white',
-                    opacity: 0.9,
-                    '&:hover': {
-                      opacity: 1,
-                      transform: 'translateY(-2px)'
-                    }
-                  }}
-                  aria-label={social.label}
-                >
-                  {social.icon}
-                </IconButton>
-              ))}
+              {socialLinks.map((social) => {
+                const IconComponent = social.icon;
+                return (
+                  <IconButton
+                    key={social.label}
+                    component="a"
+                    href={social.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    sx={{
+                      color: 'white',
+                      opacity: 0.9,
+                      '&:hover': {
+                        opacity: 1,
+                        transform: 'translateY(-2px)'
+                      }
+                    }}
+                    aria-label={social.label}
+                  >
+                    {typeof social.icon === 'string' ? social.icon : <IconComponent />}
+                  </IconButton>
+                );
+              })}
             </Box>
           </Grid>
         </Grid>
