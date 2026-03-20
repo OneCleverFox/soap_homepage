@@ -3,18 +3,8 @@
   "name": "Glücksmomente - Handgemachte Seifen",
   "icons": [
     {
-      "src": "favicon.svg",
+      "src": "LOGO.png",
       "sizes": "any",
-      "type": "image/svg+xml"
-    },
-    {
-      "src": "favicon.ico",
-      "sizes": "32x32 16x16",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "apple-touch-icon.png",
-      "sizes": "180x180",
       "type": "image/png"
     }
   ],

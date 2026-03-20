@@ -51,7 +51,8 @@ import {
   Analytics as AnalyticsIcon,
   Info as InfoIcon,
   Schedule as ScheduleIcon,
-  Star as StarIcon
+  Star as StarIcon,
+  AssignmentReturn as WiderrufIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -104,6 +105,7 @@ const AdminDashboard = () => {
   const [verkaufLoading, setVerkaufLoading] = useState(true);
   const [rohstoffLoading, setRohstoffLoading] = useState(true);
   const [lagerLoading, setLagerLoading] = useState(true);
+  const [widerrufCount, setWiderrufCount] = useState(null);
   
   // Legacy states für Kompatibilität
   const [produktionsFilter, setProduktionsFilter] = useState('alle');
@@ -124,6 +126,14 @@ const AdminDashboard = () => {
     try {
       setError(null);
       
+      // 📡 Offene Widerrufe zählen (parallel, nur Count)
+      axios.get(`${API_BASE}/widerruf/admin/list`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { status: 'received', limit: 1 }
+      }).then(r => {
+        setWiderrufCount(r.data?.pagination?.total || 0);
+      }).catch(() => setWiderrufCount(0));
+
       // 📡 API-CALL: Haupt-Dashboard-Daten laden (ein Request für alles außer Produktion)
       const apiStart = performance.now();
       const response = await axios.get(`${API_BASE}/dashboard/overview`, {
@@ -365,6 +375,14 @@ const AdminDashboard = () => {
       icon: <ShippingIcon />,
       color: getCardColor('Zu versenden', kpiData.verkauf?.bestellungen?.zuVersenden?.length || 0),
       action: () => navigate('/admin/bestellungen?status=verpackt')
+    },
+    {
+      title: 'Offene Widerrufe',
+      value: widerrufCount ?? '…',
+      icon: <WiderrufIcon />,
+      color: (widerrufCount ?? 0) > 0 ? '#c62828' : '#388e3c',
+      subtitle: (widerrufCount ?? 0) > 0 ? 'Bearbeitung erforderlich' : 'Nichts offen',
+      action: () => navigate('/admin/widerruf')
     }
   ] : [];
 
