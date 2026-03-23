@@ -47,7 +47,7 @@ const AGBPage = () => {
           </Typography>
           <Typography variant="body1" paragraph>
             (1) Gegenstand des Vertrages ist der Verkauf von handgefertigten Produkten, insbesondere Seifen, 
-            Kosmetik- und Pflegeprodukte, Dekorationsartikel, Gipsabdrücke und Bilder.
+            Kosmetik- und Pflegeprodukte, Dekorationsartikel, Schmuck, Gipsabdrücke und Bilder.
           </Typography>
           <Typography variant="body1" paragraph>
             (2) Bereits mit dem Einstellen des jeweiligen Produkts auf unserer Internetseite unterbreiten 

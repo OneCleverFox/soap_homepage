@@ -39,7 +39,8 @@ const Footer = () => {
       { label: 'Datenschutz', path: '/datenschutz' },
       { label: 'AGB', path: '/agb' },
       { label: 'Widerrufsrecht', path: '/widerrufsrecht' },
-      { label: 'Vertrag widerrufen', path: '/widerruf' }
+      { label: 'Vertrag widerrufen', path: '/widerruf' },
+      { label: 'REACH-Information', path: '/reach' }
     ]
   };
 
