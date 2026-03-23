@@ -79,13 +79,40 @@ const AdminPortfolio = () => {
   const [giessformOptions, setGiessformOptions] = useState([]);
   const [giesswerkstoffOptions, setGiesswerkstoffOptions] = useState([]);
 
-  // Dialog für neue Items
-  const [showCreateAroma, setShowCreateAroma] = useState(false);
-  const [showCreateSeife, setShowCreateSeife] = useState(false);
-  const [newAromaName, setNewAromaName] = useState('');
-  const [newAromaDescription, setNewAromaDescription] = useState('');
-  const [newSeifeName, setNewSeifeName] = useState('');
-  const [newSeifeDescription, setSeifeDescription] = useState('');
+  // State für required documents reminder
+  const [requiredDocumentsDialog, setRequiredDocumentsDialog] = useState({ open: false, category: null, docTypes: [] });
+
+  const REQUIRED_DOCUMENTS = {
+    seife: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'reach_info_art33', label: 'REACH – Informationsdokument (Art. 33)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true }
+    ],
+    werkstuck: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true }
+    ],
+    schmuck: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true },
+      { key: 'webshop_compliance_schmuck', label: 'Webshop-Compliance-Checkliste (Schmuck)', required: false }
+    ],
+    kosmetik: [
+      { key: 'pif_kosmetik', label: 'PIF – Nachweis der Produktinformationen (Kosmetik)', required: true },
+      { key: 'cpsr_kosmetik', label: 'CPSR – Kosmetik-Sicherheitsbericht', required: true },
+      { key: 'cpnp_kosmetik', label: 'CPNP-Anmeldung & Verwaltung', required: true },
+      { key: 'gmp_kosmetik_check', label: 'GMP-Plausibilitaetspruefung', required: true },
+      { key: 'kosmetik_etiketten_check', label: 'Kosmetik Etikett-Compliance Check', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister', required: true }
+    ]
+  };
 
   // Bild-Upload States
   const [uploadingImages, setUploadingImages] = useState({});
@@ -508,6 +535,17 @@ const AdminPortfolio = () => {
         // Bei neuem Item: Cache invalidieren wenn es aktiv erstellt wird
         if (willBeActive) {
           invalidateProductsCache(`Neues Portfolio Item "${submitData.name}" erstellt`);
+        }
+        
+        // Zeige erforderliche Dokumente für neue Produkte
+        const requiredDocs = REQUIRED_DOCUMENTS[formData.kategorie] || [];
+        const mandatoryDocs = requiredDocs.filter(doc => doc.required);
+        if (mandatoryDocs.length > 0) {
+          setRequiredDocumentsDialog({
+            open: true,
+            category: formData.kategorie,
+            docTypes: requiredDocs
+          });
         }
       }
       
@@ -1965,6 +2003,68 @@ const AdminPortfolio = () => {
             disabled={!newSeifeName.trim()}
           >
             Rohseife erstellen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog für erforderliche Dokumente */}
+      <Dialog
+        open={requiredDocumentsDialog.open}
+        onClose={() => setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          ✅ Produkt erfolgreich erstellt!
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Bitte erstellen Sie für dieses Produkt folgende erforderliche Dokumente:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {requiredDocumentsDialog.docTypes.map((doc) => (
+              <Box
+                key={doc.key}
+                sx={{
+                  p: 1.5,
+                  border: '1px solid #ddd',
+                  borderRadius: 1,
+                  backgroundColor: doc.required ? '#ffebee' : '#fff3e0'
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Typography sx={{ fontSize: '1.2em', lineHeight: 1, mt: 0.5 }}>
+                    {doc.required ? '🔴' : '🟡'}
+                  </Typography>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {doc.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {doc.required ? 'Pflichtdokument' : 'Optionales Dokument'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] })}
+          >
+            Später erstellen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] });
+              // Diese ökrffnete die Admin-Dokumente Seite
+              window.open('/admin-dokumente/blanko', '_blank');
+            }}
+          >
+            Jetzt zu Dokumenten
           </Button>
         </DialogActions>
       </Dialog>

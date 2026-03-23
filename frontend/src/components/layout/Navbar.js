@@ -338,6 +338,7 @@ const Navbar = () => {
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
     { label: 'Rechnung erstellen', path: '/admin/create-invoice', icon: '📄' },
     { label: 'Rechnungen verwalten', path: '/admin/invoice-list', icon: '🧾' },
+    { label: 'Admin-Dokumente', path: '/admin-dokumente/blanko', icon: '🗂️' },
     { label: 'Rechnungskonfiguration', path: '/admin/rechnungen', icon: '⚙️' },
     { label: 'E-Mail-Verwaltung', path: '/admin/email-tests', icon: '📧' },
     { label: 'System-Einstellungen', path: '/admin/einstellungen', icon: '🔧' }
