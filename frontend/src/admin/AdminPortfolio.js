@@ -79,6 +79,14 @@ const AdminPortfolio = () => {
   const [giessformOptions, setGiessformOptions] = useState([]);
   const [giesswerkstoffOptions, setGiesswerkstoffOptions] = useState([]);
 
+  // State fuer das Anlegen neuer Duftoele und Rohseifen
+  const [showCreateAroma, setShowCreateAroma] = useState(false);
+  const [newAromaName, setNewAromaName] = useState('');
+  const [newAromaDescription, setNewAromaDescription] = useState('');
+  const [showCreateSeife, setShowCreateSeife] = useState(false);
+  const [newSeifeName, setNewSeifeName] = useState('');
+  const [newSeifeDescription, setNewSeifeDescription] = useState('');
+
   // State für required documents reminder
   const [requiredDocumentsDialog, setRequiredDocumentsDialog] = useState({ open: false, category: null, docTypes: [] });
 
@@ -634,7 +642,7 @@ const AdminPortfolio = () => {
       
       setShowCreateSeife(false);
       setNewSeifeName('');
-      setSeifeDescription('');
+      setNewSeifeDescription('');
       loadOptions();
       
       setFormData(prev => ({
@@ -1984,7 +1992,7 @@ const AdminPortfolio = () => {
                 fullWidth
                 label="Beschreibung"
                 value={newSeifeDescription}
-                onChange={(e) => setSeifeDescription(e.target.value)}
+                onChange={(e) => setNewSeifeDescription(e.target.value)}
                 multiline
                 rows={2}
                 placeholder="Kurze Beschreibung der Seifenbasis"
