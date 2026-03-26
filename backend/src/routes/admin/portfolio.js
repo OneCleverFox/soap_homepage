@@ -3,6 +3,7 @@ const Portfolio = require('../../models/Portfolio');
 const { optimizeMainImage } = require('../../middleware/imageOptimization');
 const { authenticateToken } = require('../../middleware/auth');
 const ZusatzinhaltsstoffeService = require('../../services/zusatzinhaltsstoffeService');
+const { generateArticleNumber } = require('../../services/articleNumberService');
 const { cacheManager } = require('../../utils/cacheManager');
 const multer = require('multer');
 const path = require('path');
@@ -70,6 +71,7 @@ router.get('/', async (req, res) => {
       // Felder projizieren - bilder.galerie nur mit Metadaten, ohne data-Feld
       { $project: {
         name: 1,
+        article_number: 1,
         seife: 1,
         gramm: 1,
         aroma: 1,
@@ -206,9 +208,13 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const resolvedCategory = kategorie || 'seife';
+    const articleNumber = await generateArticleNumber({ category: resolvedCategory });
+
     // Neues Produkt erstellen
     const newProduct = new Portfolio({
-      kategorie: kategorie || 'seife',
+      kategorie: resolvedCategory,
+      article_number: articleNumber,
       name,
       seife: seife || '',
       gramm: parseInt(gramm),
@@ -442,6 +448,10 @@ router.put('/:id', async (req, res) => {
         schwundProzent: updateData.giesswerkstoffKonfiguration.schwundProzent || 5
       };
       console.log('🏺 PORTFOLIO UPDATE - Setze Gießwerkstoff-Konfiguration:', product.giesswerkstoffKonfiguration);
+    }
+
+    if (!product.article_number) {
+      product.article_number = await generateArticleNumber({ category: product.kategorie || 'seife' });
     }
 
     const updatedProduct = await product.save();
