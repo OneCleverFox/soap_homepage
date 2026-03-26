@@ -782,7 +782,7 @@ const InvoiceList = () => {
         productData: {
           name: product.name,
           description: product.beschreibung?.kurz || product.beschreibung?.lang || product.beschreibung || '',
-          sku: product.sku || ''
+          sku: product.sku || product.article_number || ''
         },
         quantity: 1,
         unitPrice: product.preis || 0

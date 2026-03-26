@@ -235,7 +235,7 @@ const CreateInvoice = () => {
         productId: product._id,
         name: product.name,
         description: description,
-        sku: product.sku || '',
+        sku: product.sku || product.article_number || '',
         category: product.kategorie || '',
         quantity: 1,
         unitPrice: product.preis || 0

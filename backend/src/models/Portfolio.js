@@ -7,6 +7,11 @@ const portfolioSchema = new mongoose.Schema({
     unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
+  article_number: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
   seife: {
     type: String,
     validate: {
@@ -412,6 +417,7 @@ portfolioSchema.index({ reihenfolge: 1, createdAt: -1 });
 portfolioSchema.index({ seife: 1 });
 portfolioSchema.index({ aroma: 1 });
 portfolioSchema.index({ kategorie: 1 });  // Bereits als inline index definiert, hier zur Dokumentation
+portfolioSchema.index({ article_number: 1 }, { unique: true, sparse: true });
 
 // Pre-save Hook für Datenvalidierung
 portfolioSchema.pre('save', function(next) {
