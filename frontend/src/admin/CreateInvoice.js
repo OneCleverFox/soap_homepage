@@ -39,6 +39,7 @@ import {
   Delete as DeleteIcon,
   Receipt as ReceiptIcon,
   Search as SearchIcon,
+  CardGiftcard as GiftIcon,
   Person as PersonIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
@@ -234,7 +235,7 @@ const CreateInvoice = () => {
         productId: product._id,
         name: product.name,
         description: description,
-        sku: product.sku || '',
+        sku: product.sku || product.article_number || '',
         category: product.kategorie || '',
         quantity: 1,
         unitPrice: product.preis || 0
@@ -277,6 +278,19 @@ const CreateInvoice = () => {
       category: '',
       quantity: 1,
       unitPrice: 0
+    };
+    setInvoiceItems(prev => [...prev, newItem]);
+  };
+
+  const addGiftService = () => {
+    const newItem = {
+      productId: null,
+      name: 'Geschenkeservice',
+      description: 'Besondere Geschenkverpackung mit dekorativen Materialien, bereit zum Verschenken.',
+      sku: 'SERVICE-GIFT',
+      category: 'dienstleistung',
+      quantity: 1,
+      unitPrice: 5
     };
     setInvoiceItems(prev => [...prev, newItem]);
   };
@@ -629,6 +643,16 @@ const CreateInvoice = () => {
                 sx={{ fontSize: '0.9rem' }}
               >
                 Eigenes Produkt
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<GiftIcon />}
+                onClick={addGiftService}
+                size="medium"
+                fullWidth={isMobile}
+                sx={{ fontSize: '0.9rem' }}
+              >
+                Geschenkeservice
               </Button>
             </Box>
           </Box>

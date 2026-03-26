@@ -28,11 +28,14 @@ import {
   Remove as RemoveIcon,
   Inventory2 as InventoryIcon,
   Warning as WarningIcon,
-  Build
+  Build,
+  Security as SecurityIcon,
+  Store as StoreIcon
 } from '@mui/icons-material';
 import { portfolioAPI } from '../services/api';
 import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useCompany } from '../contexts/CompanyContext';
 import toast from 'react-hot-toast';
 import LazyImage from '../components/LazyImage';
 
@@ -45,6 +48,7 @@ const ProductDetailPage = () => {
   const { addToCart } = useCart();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const company = useCompany();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [textDataLoaded, setTextDataLoaded] = useState(false); // 🚀 Text-First Loading
@@ -572,6 +576,135 @@ const ProductDetailPage = () => {
               <Typography sx={{ whiteSpace: 'pre-line' }}>{product.beschreibung.besonderheiten}</Typography>
             </Paper>
           )}
+
+          {/* ── Schmuck-spezifische Informationen ─────────────────────────── */}
+          {product.kategorie === 'schmuck' && product.schmuckDetails && (
+            <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <StoreIcon color="primary" />
+                <Typography variant="h5" fontWeight="bold">Schmuck-Details</Typography>
+              </Box>
+              <Grid container spacing={2}>
+                {product.schmuckDetails.material && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Material</Typography>
+                    <Typography fontWeight="medium">{product.schmuckDetails.material}</Typography>
+                  </Grid>
+                )}
+                {product.schmuckDetails.oberflaeche && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Oberfläche / Veredelung</Typography>
+                    <Typography fontWeight="medium">{product.schmuckDetails.oberflaeche}</Typography>
+                  </Grid>
+                )}
+                {product.schmuckDetails.ringgroesse && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Ringgröße</Typography>
+                    <Typography fontWeight="medium">{product.schmuckDetails.ringgroesse}</Typography>
+                  </Grid>
+                )}
+                {product.schmuckDetails.kettenlaenge > 0 && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Kettenlänge</Typography>
+                    <Typography fontWeight="medium">{product.schmuckDetails.kettenlaenge} cm</Typography>
+                  </Grid>
+                )}
+                {product.schmuckDetails.steinbesatz && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">Steinbesatz</Typography>
+                    <Typography fontWeight="medium">{product.schmuckDetails.steinbesatz}</Typography>
+                  </Grid>
+                )}
+                {product.schmuckDetails.nickelhaltig && (
+                  <Grid item xs={12}>
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      Dieses Produkt kann Nickel enthalten. Bei bekannter Nickelallergie
+                      vor dem Tragen Ihren Arzt befragen.
+                    </Alert>
+                  </Grid>
+                )}
+              </Grid>
+            </Paper>
+          )}
+
+          {/* ── GPSR-Pflichtangaben (EU) 2023/988 ─────────────────────────── */}
+          <Paper
+            elevation={1}
+            sx={{ p: 3, mb: 3, borderLeft: 4, borderColor: 'primary.light', bgcolor: 'grey.50' }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <SecurityIcon color="primary" fontSize="small" />
+              <Typography variant="h6" fontWeight="bold">
+                Produktsicherheitsinformationen
+              </Typography>
+            </Box>
+
+            {/* Hersteller / Inverkehrbringer */}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                <strong>Hersteller / Inverkehrbringer</strong>
+              </Typography>
+              {product.gpsr?.herstellerAbweichend && product.gpsr?.herstellerName ? (
+                <Typography variant="body2">
+                  {product.gpsr.herstellerName}<br />
+                  {product.gpsr.herstellerAnschrift && <>{product.gpsr.herstellerAnschrift}<br /></>}
+                  {product.gpsr.herstellerEmail && (
+                    <a href={`mailto:${product.gpsr.herstellerEmail}`} style={{ color: 'inherit' }}>
+                      {product.gpsr.herstellerEmail}
+                    </a>
+                  )}
+                </Typography>
+              ) : (
+                <Typography variant="body2">
+                  {company.name || 'Glücksmomente Manufaktur'}<br />
+                  {company.address?.street && company.address?.houseNumber
+                    ? `${company.address.street} ${company.address.houseNumber}, `
+                    : ''}
+                  {company.address?.postalCode && company.address?.city
+                    ? `${company.address.postalCode} ${company.address.city}`
+                    : '68642 Bürstadt'}<br />
+                  <a
+                    href={`mailto:${company.email || 'info@gluecksmomente-manufaktur.de'}`}
+                    style={{ color: 'inherit' }}
+                  >
+                    {company.email || 'info@gluecksmomente-manufaktur.de'}
+                  </a>
+                </Typography>
+              )}
+            </Box>
+
+            {/* Bestimmungsgemäße Verwendung */}
+            {product.gpsr?.verwendungszweck && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <strong>Bestimmungsgemäße Verwendung</strong>
+                </Typography>
+                <Typography variant="body2">{product.gpsr.verwendungszweck}</Typography>
+              </Box>
+            )}
+
+            {/* Zielgruppe */}
+            {product.gpsr?.zielgruppe && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <strong>Zielgruppe</strong>
+                </Typography>
+                <Typography variant="body2">{product.gpsr.zielgruppe}</Typography>
+              </Box>
+            )}
+
+            {/* Sicherheits- und Warnhinweise */}
+            {product.gpsr?.warnhinweise && (
+              <Box>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <strong>Sicherheits- und Warnhinweise</strong>
+                </Typography>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                  {product.gpsr.warnhinweise}
+                </Typography>
+              </Box>
+            )}
+          </Paper>
         </Grid>
       </Grid>
     </Container>

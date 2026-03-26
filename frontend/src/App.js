@@ -43,6 +43,7 @@ const DatenschutzPage = lazy(() => import('./pages/DatenschutzPage'));
 const AGBPage = lazy(() => import('./pages/AGBPage'));
 const WiderrufsrechtPage = lazy(() => import('./pages/WiderrufsrechtPage'));
 const WiderrufPage = lazy(() => import('./pages/WiderrufPage'));
+const ReachPage = lazy(() => import('./pages/ReachPage'));
 
 // Admin Pages - Lazy Loading für bessere Performance
 const AdminPortfolio = lazy(() => import('./admin/AdminPortfolio'));
@@ -65,6 +66,9 @@ const AdminInvoiceDesigner = lazy(() => import('./admin/AdminInvoiceDesigner'));
 const CreateInvoice = lazy(() => import('./admin/CreateInvoice'));
 const InvoiceList = lazy(() => import('./admin/InvoiceList'));
 const AdminGallery = lazy(() => import('./admin/AdminGallery'));
+const AdminDocumentsPage = lazy(() => import('./admin/AdminDocumentsPage'));
+const AdminDocumentEditor = lazy(() => import('./admin/AdminDocumentEditor'));
+const AdminDocumentView = lazy(() => import('./admin/AdminDocumentView'));
 
 // Hook um zu prüfen ob Footer angezeigt werden soll
 const useShowFooter = () => {
@@ -165,6 +169,7 @@ function App() {
                       <Route path="/agb" element={<AGBPage />} />
                       <Route path="/widerrufsrecht" element={<WiderrufsrechtPage />} />
                       <Route path="/widerruf" element={<WiderrufPage />} />
+                      <Route path="/reach" element={<ReachPage />} />
                       
                       {/* Legacy Routes (German) */}
                     <Route path="/produkte" element={<Navigate to="/products" replace />} />
@@ -377,6 +382,65 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <InvoiceList />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin-dokumente"
+            element={<Navigate to="/admin-dokumente/blanko" replace />}
+          />
+          <Route
+            path="/admin-dokumente/blanko"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDocumentsPage />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin-dokumente/ausgefuellt"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDocumentsPage />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin-dokumente/neu/:document_type"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDocumentEditor isNew={true} />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin-dokumente/bearbeiten/:id"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDocumentEditor />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin-dokumente/ansehen/:id"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminDocumentView />
                 </ProtectedRoute>
               </>
             }

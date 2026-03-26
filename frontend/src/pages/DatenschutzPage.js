@@ -331,6 +331,17 @@ const DatenschutzPage = () => {
                 Sie haben zudem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde 
                 über die Verarbeitung Ihrer personenbezogenen Daten durch uns zu beschweren.
               </Typography>
+              <Typography variant="body2" paragraph>
+                <strong>Zuständige Aufsichtsbehörde:</strong><br />
+                Der Landesbeauftragte für den Datenschutz und die Informationsfreiheit
+                Rheinland-Pfalz<br />
+                Postfach 30 40, 55020 Mainz<br />
+                Telefon: +49 (0) 6131 208-2449<br />
+                E-Mail:{' '}
+                <a href="mailto:poststelle@datenschutz.rlp.de" style={{ color: 'inherit' }}>
+                  poststelle@datenschutz.rlp.de
+                </a>
+              </Typography>
             </AccordionDetails>
           </Accordion>
 

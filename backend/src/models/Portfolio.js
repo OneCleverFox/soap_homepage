@@ -7,13 +7,17 @@ const portfolioSchema = new mongoose.Schema({
     unique: true, // Dies erstellt automatisch einen Index - entferne duplicaten schema.index()
     trim: true
   },
+  article_number: {
+    type: String,
+    trim: true,
+    uppercase: true
+  },
   seife: {
     type: String,
     validate: {
       validator: function(v) {
-        // Wenn es ein Werkstück ist, ist ein leerer String ok
-        if (this.kategorie === 'werkstuck') return true;
-        // Wenn es eine Seife ist, muss ein Wert vorhanden sein
+        // Werkstücke und Schmuck benötigen keine Seife
+        if (this.kategorie === 'werkstuck' || this.kategorie === 'schmuck') return true;
         return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
       },
       message: 'Seife ist für Seifen-Kategorie erforderlich'
@@ -56,7 +60,7 @@ const portfolioSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(v) {
-        if (this.kategorie === 'werkstuck') return true;
+        if (this.kategorie === 'werkstuck' || this.kategorie === 'schmuck') return true;
         return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
       },
       message: 'Aroma ist für Seifen-Kategorie erforderlich'
@@ -68,7 +72,7 @@ const portfolioSchema = new mongoose.Schema({
   kategorie: {
     type: String,
     required: true,
-    enum: ['seife', 'werkstuck'],
+    enum: ['seife', 'werkstuck', 'schmuck'],
     default: 'seife'
     // Index wird unten per portfolioSchema.index() definiert
   },
@@ -76,7 +80,7 @@ const portfolioSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(v) {
-        if (this.kategorie === 'werkstuck') return true;
+        if (this.kategorie === 'werkstuck' || this.kategorie === 'schmuck') return true;
         return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
       },
       message: 'Seifenform ist für Seifen-Kategorie erforderlich'
@@ -124,7 +128,7 @@ const portfolioSchema = new mongoose.Schema({
     type: String,
     validate: {
       validator: function(v) {
-        if (this.kategorie === 'werkstuck') return true;
+        if (this.kategorie === 'werkstuck' || this.kategorie === 'schmuck') return true;
         return this.kategorie === 'seife' ? !!v && v.trim().length > 0 : true;
       },
       message: 'Verpackung ist für Seifen-Kategorie erforderlich'
@@ -307,6 +311,83 @@ const portfolioSchema = new mongoose.Schema({
       trim: true
     }
   },
+  // ── Schmuck-spezifische Details ─────────────────────────────────────────────
+  schmuckDetails: {
+    schmuckTyp: {
+      type: String,
+      enum: ['ring', 'kette', 'armband', 'ohrring', 'anhaenger', 'brosche', 'sonstiges', ''],
+      default: ''
+    },
+    material: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    oberflaeche: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    ringgroesse: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    kettenlaenge: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    nickelhaltig: {
+      type: Boolean,
+      default: false
+    },
+    steinbesatz: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  },
+
+  // ── GPSR – Produktsicherheitspflichtangaben (EU) 2023/988 ────────────────────
+  gpsr: {
+    verwendungszweck: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    warnhinweise: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    zielgruppe: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    // Hersteller / Inverkehrbringer (falls abweichend von Firmendaten)
+    herstellerAbweichend: {
+      type: Boolean,
+      default: false
+    },
+    herstellerName: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    herstellerAnschrift: {
+      type: String,
+      default: '',
+      trim: true
+    },
+    herstellerEmail: {
+      type: String,
+      default: '',
+      trim: true
+    }
+  },
+
   // Zusätzliche Metadaten
   aktiv: {
     type: Boolean,
@@ -336,6 +417,7 @@ portfolioSchema.index({ reihenfolge: 1, createdAt: -1 });
 portfolioSchema.index({ seife: 1 });
 portfolioSchema.index({ aroma: 1 });
 portfolioSchema.index({ kategorie: 1 });  // Bereits als inline index definiert, hier zur Dokumentation
+portfolioSchema.index({ article_number: 1 }, { unique: true, sparse: true });
 
 // Pre-save Hook für Datenvalidierung
 portfolioSchema.pre('save', function(next) {

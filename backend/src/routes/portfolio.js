@@ -341,7 +341,7 @@ router.get('/', async (req, res) => {
     
     // ⚡ OPTIMIERUNG: Minimale Felder für Admin-Dropdowns (Warenberechnung)
     const selectFields = shouldIncludeAll 
-      ? 'name kategorie aktiv isActive preis gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge'
+      ? 'name kategorie aktiv isActive preis gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge article_number'
       : '-bilder.hauptbildData.data -bilder.galerie.data -bilder.galerie.contentType';
     
     // ⚡ LÖSUNG: Lade Daten OHNE Sortierung - verhindert MongoDB Memory Limit Fehler

@@ -3,11 +3,26 @@ const Portfolio = require('../../models/Portfolio');
 const { optimizeMainImage } = require('../../middleware/imageOptimization');
 const { authenticateToken } = require('../../middleware/auth');
 const ZusatzinhaltsstoffeService = require('../../services/zusatzinhaltsstoffeService');
+const { generateArticleNumber } = require('../../services/articleNumberService');
+const { cacheManager } = require('../../utils/cacheManager');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
 const router = express.Router();
+
+// Public-Portfolio-Cache invalidieren, damit /api/portfolio/with-prices sofort neue Daten liefert
+function invalidatePublicPortfolioCache(reason = 'admin update') {
+  const existing = global.portfolioCache || {};
+  global.portfolioCache = {
+    ...existing,
+    data: null,
+    timestamp: 0,
+    version: Date.now()
+  };
+  cacheManager.invalidateProductCache();
+  console.log(`🗑️ Public portfolio cache invalidated (${reason})`);
+}
 
 // Multer-Konfiguration für Portfolio-Uploads
 const storage = multer.diskStorage({
@@ -56,6 +71,7 @@ router.get('/', async (req, res) => {
       // Felder projizieren - bilder.galerie nur mit Metadaten, ohne data-Feld
       { $project: {
         name: 1,
+        article_number: 1,
         seife: 1,
         gramm: 1,
         aroma: 1,
@@ -73,6 +89,8 @@ router.get('/', async (req, res) => {
         abmessungen: 1,
         giesswerkstoffKonfiguration: 1,
         giesszusatzstoffe: 1,
+        schmuckDetails: 1,
+        gpsr: 1,
         kategorie: 1,
         giessform: 1,
         giesswerkstoff: 1,
@@ -174,7 +192,9 @@ router.post('/', async (req, res) => {
       beschreibung,
       zusatzinhaltsstoffe,
       rohseifenKonfiguration,
-      abmessungen
+      abmessungen,
+      schmuckDetails,
+      gpsr
     } = req.body;
 
     console.log('🔍 Portfolio Create Request:', { kategorie, name, giessform, giesswerkstoff });
@@ -188,9 +208,13 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const resolvedCategory = kategorie || 'seife';
+    const articleNumber = await generateArticleNumber({ category: resolvedCategory });
+
     // Neues Produkt erstellen
     const newProduct = new Portfolio({
-      kategorie: kategorie || 'seife',
+      kategorie: resolvedCategory,
+      article_number: articleNumber,
       name,
       seife: seife || '',
       gramm: parseInt(gramm),
@@ -221,6 +245,24 @@ router.post('/', async (req, res) => {
           seife2Prozent: 0
         }
       },
+      schmuckDetails: schmuckDetails || {
+        schmuckTyp: '',
+        material: '',
+        oberflaeche: '',
+        ringgroesse: '',
+        kettenlaenge: 0,
+        nickelhaltig: false,
+        steinbesatz: ''
+      },
+      gpsr: gpsr || {
+        verwendungszweck: '',
+        warnhinweise: '',
+        zielgruppe: '',
+        herstellerAbweichend: false,
+        herstellerName: '',
+        herstellerAnschrift: '',
+        herstellerEmail: ''
+      },
       bilder: {
         hauptbild: '',
         galerie: [],
@@ -239,6 +281,8 @@ router.post('/', async (req, res) => {
         console.warn('⚠️ Warenberechnung-Update fehlgeschlagen:', error.message);
       }
     }
+
+    invalidatePublicPortfolioCache('admin create');
 
     res.status(201).json({
       success: true,
@@ -349,6 +393,32 @@ router.put('/:id', async (req, res) => {
       };
     }
 
+    // Schmuck-Details separat handhaben
+    if (updateData.schmuckDetails) {
+      product.schmuckDetails = {
+        schmuckTyp: updateData.schmuckDetails.schmuckTyp || '',
+        material: updateData.schmuckDetails.material || '',
+        oberflaeche: updateData.schmuckDetails.oberflaeche || '',
+        ringgroesse: updateData.schmuckDetails.ringgroesse || '',
+        kettenlaenge: parseFloat(updateData.schmuckDetails.kettenlaenge) || 0,
+        nickelhaltig: !!updateData.schmuckDetails.nickelhaltig,
+        steinbesatz: updateData.schmuckDetails.steinbesatz || ''
+      };
+    }
+
+    // GPSR-Felder separat handhaben
+    if (updateData.gpsr) {
+      product.gpsr = {
+        verwendungszweck: updateData.gpsr.verwendungszweck || '',
+        warnhinweise: updateData.gpsr.warnhinweise || '',
+        zielgruppe: updateData.gpsr.zielgruppe || '',
+        herstellerAbweichend: !!updateData.gpsr.herstellerAbweichend,
+        herstellerName: updateData.gpsr.herstellerName || '',
+        herstellerAnschrift: updateData.gpsr.herstellerAnschrift || '',
+        herstellerEmail: updateData.gpsr.herstellerEmail || ''
+      };
+    }
+
     // Rohseifen-Konfiguration separat handhaben
     if (updateData.rohseifenKonfiguration) {
       console.log('🔧 PORTFOLIO UPDATE - Erhalte Rohseifen-Konfiguration:', updateData.rohseifenKonfiguration);
@@ -380,6 +450,10 @@ router.put('/:id', async (req, res) => {
       console.log('🏺 PORTFOLIO UPDATE - Setze Gießwerkstoff-Konfiguration:', product.giesswerkstoffKonfiguration);
     }
 
+    if (!product.article_number) {
+      product.article_number = await generateArticleNumber({ category: product.kategorie || 'seife' });
+    }
+
     const updatedProduct = await product.save();
 
     // Warenberechnung mit Zusatzinhaltsstoffen aktualisieren
@@ -391,6 +465,8 @@ router.put('/:id', async (req, res) => {
         console.warn('⚠️ Warenberechnung-Update fehlgeschlagen:', error.message);
       }
     }
+
+    invalidatePublicPortfolioCache('admin update');
 
     res.json({
       success: true,
@@ -454,6 +530,8 @@ router.delete('/:id', async (req, res) => {
     }
 
     await Portfolio.findByIdAndDelete(id);
+
+    invalidatePublicPortfolioCache('admin delete');
 
     res.json({
       success: true,

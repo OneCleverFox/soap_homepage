@@ -79,13 +79,48 @@ const AdminPortfolio = () => {
   const [giessformOptions, setGiessformOptions] = useState([]);
   const [giesswerkstoffOptions, setGiesswerkstoffOptions] = useState([]);
 
-  // Dialog für neue Items
+  // State fuer das Anlegen neuer Duftoele und Rohseifen
   const [showCreateAroma, setShowCreateAroma] = useState(false);
-  const [showCreateSeife, setShowCreateSeife] = useState(false);
   const [newAromaName, setNewAromaName] = useState('');
   const [newAromaDescription, setNewAromaDescription] = useState('');
+  const [showCreateSeife, setShowCreateSeife] = useState(false);
   const [newSeifeName, setNewSeifeName] = useState('');
-  const [newSeifeDescription, setSeifeDescription] = useState('');
+  const [newSeifeDescription, setNewSeifeDescription] = useState('');
+
+  // State für required documents reminder
+  const [requiredDocumentsDialog, setRequiredDocumentsDialog] = useState({ open: false, category: null, docTypes: [] });
+
+  const REQUIRED_DOCUMENTS = {
+    seife: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'reach_info_art33', label: 'REACH – Informationsdokument (Art. 33)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true }
+    ],
+    werkstuck: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true }
+    ],
+    schmuck: [
+      { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
+      { key: 'gpsr_risikoanalyse_art9', label: 'GPSR – Interne Risikoanalyse (Art. 9)', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck (REACH/GPSR)', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister (Chargen / Komponenten)', required: true },
+      { key: 'webshop_compliance_schmuck', label: 'Webshop-Compliance-Checkliste (Schmuck)', required: false }
+    ],
+    kosmetik: [
+      { key: 'pif_kosmetik', label: 'PIF – Nachweis der Produktinformationen (Kosmetik)', required: true },
+      { key: 'cpsr_kosmetik', label: 'CPSR – Kosmetik-Sicherheitsbericht', required: true },
+      { key: 'cpnp_kosmetik', label: 'CPNP-Anmeldung & Verwaltung', required: true },
+      { key: 'gmp_kosmetik_check', label: 'GMP-Plausibilitaetspruefung', required: true },
+      { key: 'kosmetik_etiketten_check', label: 'Kosmetik Etikett-Compliance Check', required: true },
+      { key: 'lieferanten_dokumentencheck', label: 'Lieferanten-Dokumentencheck', required: true },
+      { key: 'rueckverfolgbarkeitsregister', label: 'Rueckverfolgbarkeitsregister', required: true }
+    ]
+  };
 
   // Bild-Upload States
   const [uploadingImages, setUploadingImages] = useState({});
@@ -94,7 +129,8 @@ const AdminPortfolio = () => {
   const categories = [
     { id: 'alle', label: 'Alle Produkte', icon: Category },
     { id: 'seife', label: 'Seifen', icon: LocalShipping },
-    { id: 'werkstuck', label: 'Werkstücke', icon: ShoppingCart }
+    { id: 'werkstuck', label: 'Werkstücke', icon: ShoppingCart },
+    { id: 'schmuck', label: 'Schmuck', icon: Category }
   ];
 
   // Initialwerte für Formular
@@ -125,6 +161,24 @@ const AdminPortfolio = () => {
       lang: '',
       inhaltsstoffe: '',
       anwendung: ''
+    },
+    schmuckDetails: {
+      schmuckTyp: '',
+      material: '',
+      oberflaeche: '',
+      ringgroesse: '',
+      kettenlaenge: '',
+      nickelhaltig: false,
+      steinbesatz: ''
+    },
+    gpsr: {
+      verwendungszweck: '',
+      warnhinweise: '',
+      zielgruppe: '',
+      herstellerAbweichend: false,
+      herstellerName: '',
+      herstellerAnschrift: '',
+      herstellerEmail: ''
     }
   };
 
@@ -302,6 +356,40 @@ const AdminPortfolio = () => {
         }));
       }
     } else {
+      // Wenn Kategorie gewechselt wird: GPSR-Defaults vorbelegen
+      if (name === 'kategorie') {
+        const gpsrDefaults = {
+          seife: {
+            verwendungszweck: 'Kosmetisches Reinigungsprodukt zur äußerlichen Anwendung auf der Haut.',
+            zielgruppe: 'Geeignet für Erwachsene und Jugendliche ab 14 Jahren.',
+            warnhinweise:
+              'Nur zur äußerlichen Anwendung.\nBei Kontakt mit den Augen sofort gründlich mit Wasser spülen.\nAußerhalb der Reichweite von Kindern aufbewahren.\nBei anhaltenden Hautreizungen Gebrauch einstellen und ärztlichen Rat einholen.',
+          },
+          werkstuck: {
+            verwendungszweck: 'Dekorationsartikel für Erwachsene.',
+            zielgruppe: 'Nicht geeignet für Kinder unter 14 Jahren.',
+            warnhinweise:
+              'Kein Spielzeug. Nicht geeignet für Kinder unter 14 Jahren.\nKleinteile – Erstickungsgefahr!\nNur zur dekorativen Verwendung bestimmt.',
+          },
+          schmuck: {
+            verwendungszweck: 'Modeschmuck für Erwachsene, dekoratives Tragen am Körper.',
+            zielgruppe: 'Nicht geeignet für Kinder unter 14 Jahren.',
+            warnhinweise:
+              'Kein Spielzeug. Nicht geeignet für Kinder unter 14 Jahren.\nKleinteile – Erstickungsgefahr!\nBei Hautreaktionen oder allergischen Reaktionen sofort ablegen und ärztlichen Rat einholen.\nNicht beim Schlafen, Duschen, Baden oder Sport tragen.',
+          },
+        };
+        const defaults = gpsrDefaults[processedValue];
+        setFormData(prev => ({
+          ...prev,
+          kategorie: processedValue,
+          gpsr: {
+            ...prev.gpsr,
+            ...(defaults || {}),
+          },
+        }));
+        return;
+      }
+
       setFormData(prev => ({
         ...prev,
         [name]: processedValue
@@ -367,6 +455,24 @@ const AdminPortfolio = () => {
         lang: (item.beschreibung && item.beschreibung.lang) || '',
         inhaltsstoffe: (item.beschreibung && item.beschreibung.inhaltsstoffe) || '',
         anwendung: (item.beschreibung && item.beschreibung.anwendung) || ''
+      },
+      schmuckDetails: {
+        schmuckTyp: item.schmuckDetails?.schmuckTyp || '',
+        material: item.schmuckDetails?.material || '',
+        oberflaeche: item.schmuckDetails?.oberflaeche || '',
+        ringgroesse: item.schmuckDetails?.ringgroesse || '',
+        kettenlaenge: item.schmuckDetails?.kettenlaenge || '',
+        nickelhaltig: item.schmuckDetails?.nickelhaltig || false,
+        steinbesatz: item.schmuckDetails?.steinbesatz || ''
+      },
+      gpsr: {
+        verwendungszweck: item.gpsr?.verwendungszweck || '',
+        warnhinweise: item.gpsr?.warnhinweise || '',
+        zielgruppe: item.gpsr?.zielgruppe || '',
+        herstellerAbweichend: item.gpsr?.herstellerAbweichend || false,
+        herstellerName: item.gpsr?.herstellerName || '',
+        herstellerAnschrift: item.gpsr?.herstellerAnschrift || '',
+        herstellerEmail: item.gpsr?.herstellerEmail || ''
       }
     };
     
@@ -395,8 +501,8 @@ const AdminPortfolio = () => {
         delete submitData.reihenfolge;
       }
       
-      if (formData.kategorie === 'werkstuck') {
-        // Für Werkstücke: Setze Seifenfelder auf leere Strings
+      if (formData.kategorie === 'werkstuck' || formData.kategorie === 'schmuck') {
+        // Für Werkstücke und Schmuck: Setze Seifenfelder auf leere Strings
         submitData.seife = '';
         submitData.aroma = '';
         submitData.seifenform = '';
@@ -437,6 +543,17 @@ const AdminPortfolio = () => {
         // Bei neuem Item: Cache invalidieren wenn es aktiv erstellt wird
         if (willBeActive) {
           invalidateProductsCache(`Neues Portfolio Item "${submitData.name}" erstellt`);
+        }
+        
+        // Zeige erforderliche Dokumente für neue Produkte
+        const requiredDocs = REQUIRED_DOCUMENTS[formData.kategorie] || [];
+        const mandatoryDocs = requiredDocs.filter(doc => doc.required);
+        if (mandatoryDocs.length > 0) {
+          setRequiredDocumentsDialog({
+            open: true,
+            category: formData.kategorie,
+            docTypes: requiredDocs
+          });
         }
       }
       
@@ -525,7 +642,7 @@ const AdminPortfolio = () => {
       
       setShowCreateSeife(false);
       setNewSeifeName('');
-      setSeifeDescription('');
+      setNewSeifeDescription('');
       loadOptions();
       
       setFormData(prev => ({
@@ -1043,6 +1160,7 @@ const AdminPortfolio = () => {
                 >
                   <MenuItem value="seife">Seife</MenuItem>
                   <MenuItem value="werkstuck">Werkstück (Gips/Deko)</MenuItem>
+                  <MenuItem value="schmuck">Schmuck</MenuItem>
                 </Select>
                 <FormHelperText>
                   Wählen Sie zuerst die Produktkategorie. Je nach Auswahl werden unterschiedliche Felder angezeigt.
@@ -1549,9 +1667,244 @@ const AdminPortfolio = () => {
                     onChange={handleInputChange}
                     multiline
                     rows={4}
-                    helperText={formData.kategorie === 'seife' ? 'Anwendungshinweise für die Seife' : 'Pflegehinweise für das Werkstück'}
+                    helperText={formData.kategorie === 'seife' ? 'Anwendungshinweise für die Seife' : 'Pflegehinweise für das Produkt'}
                   />
                 </Grid>
+
+                {/* ── Schmuck-spezifische Felder ─────────────────────────────── */}
+                {formData.kategorie === 'schmuck' && (
+                  <>
+                    <Grid item xs={12}>
+                      <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold' }}>
+                        Schmuck-Details
+                      </Typography>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Schmuck-Typ</InputLabel>
+                        <Select
+                          name="schmuckDetails.schmuckTyp"
+                          value={formData.schmuckDetails?.schmuckTyp || ''}
+                          onChange={handleInputChange}
+                          label="Schmuck-Typ"
+                        >
+                          <MenuItem value="">– Bitte wählen –</MenuItem>
+                          <MenuItem value="ring">Ring</MenuItem>
+                          <MenuItem value="kette">Kette</MenuItem>
+                          <MenuItem value="armband">Armband</MenuItem>
+                          <MenuItem value="ohrring">Ohrringe</MenuItem>
+                          <MenuItem value="anhaenger">Anhänger</MenuItem>
+                          <MenuItem value="brosche">Brosche</MenuItem>
+                          <MenuItem value="sonstiges">Sonstiges</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Material"
+                        name="schmuckDetails.material"
+                        value={formData.schmuckDetails?.material || ''}
+                        onChange={handleInputChange}
+                        helperText="z. B. 925 Sterling Silber, Edelstahl vergoldet"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Oberfläche / Veredelung"
+                        name="schmuckDetails.oberflaeche"
+                        value={formData.schmuckDetails?.oberflaeche || ''}
+                        onChange={handleInputChange}
+                        helperText="z. B. rhodiniert, vergoldet, poliert"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Steinbesatz"
+                        name="schmuckDetails.steinbesatz"
+                        value={formData.schmuckDetails?.steinbesatz || ''}
+                        onChange={handleInputChange}
+                        helperText="z. B. Zirkonia, Swarovski, ohne"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        label="Ringgröße"
+                        name="schmuckDetails.ringgroesse"
+                        value={formData.schmuckDetails?.ringgroesse || ''}
+                        onChange={handleInputChange}
+                        helperText="z. B. 52, 54–58, XS/M/L"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        label="Kettenlänge (cm)"
+                        name="schmuckDetails.kettenlaenge"
+                        type="number"
+                        value={formData.schmuckDetails?.kettenlaenge || ''}
+                        onChange={handleInputChange}
+                        inputProps={{ min: 0, step: 0.5 }}
+                        helperText="Länge in cm"
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={4}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={formData.schmuckDetails?.nickelhaltig || false}
+                            onChange={(e) => setFormData(prev => ({
+                              ...prev,
+                              schmuckDetails: {
+                                ...prev.schmuckDetails,
+                                nickelhaltig: e.target.checked
+                              }
+                            }))}
+                          />
+                        }
+                        label="Kann Nickel enthalten"
+                        sx={{ mt: 1 }}
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                {/* ── GPSR-Pflichtangaben ─────────────────────────────────────── */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1, fontWeight: 'bold', color: 'warning.dark' }}>
+                    Produktsicherheit (GPSR – EU 2023/988)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Pflichtangaben für den Online-Verkauf. Werden auf der Produktseite angezeigt.
+                  </Typography>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Bestimmungsgemäße Verwendung"
+                    name="gpsr.verwendungszweck"
+                    value={formData.gpsr?.verwendungszweck || ''}
+                    onChange={handleInputChange}
+                    helperText={
+                      formData.kategorie === 'seife'
+                        ? 'z. B. Kosmetisches Reinigungsprodukt zur äußerlichen Anwendung auf der Haut'
+                        : formData.kategorie === 'schmuck'
+                        ? 'z. B. Modeschmuck für Erwachsene, dekoratives Tragen am Körper'
+                        : 'z. B. Dekorationsartikel für Erwachsene'
+                    }
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Zielgruppe</InputLabel>
+                    <Select
+                      name="gpsr.zielgruppe"
+                      value={formData.gpsr?.zielgruppe || ''}
+                      onChange={handleInputChange}
+                      label="Zielgruppe"
+                    >
+                      <MenuItem value="Nicht geeignet für Kinder unter 14 Jahren.">
+                        Nicht geeignet für Kinder unter 14 Jahren
+                      </MenuItem>
+                      <MenuItem value="Nicht geeignet für Kinder unter 3 Jahren. Kleinteile – Erstickungsgefahr.">
+                        Nicht geeignet für Kinder unter 3 Jahren (Kleinteile)
+                      </MenuItem>
+                      <MenuItem value="Geeignet für Erwachsene und Jugendliche ab 14 Jahren.">
+                        Ab 14 Jahren (Jugendliche + Erwachsene)
+                      </MenuItem>
+                      <MenuItem value="Geeignet für Erwachsene ab 18 Jahren.">
+                        Nur Erwachsene ab 18 Jahren
+                      </MenuItem>
+                      <MenuItem value="Geeignet für alle Altersgruppen.">
+                        Alle Altersgruppen
+                      </MenuItem>
+                      <MenuItem value="">
+                        – Keine Angabe –
+                      </MenuItem>
+                    </Select>
+                    <FormHelperText>Standard für Schmuck: „Nicht geeignet für Kinder unter 14 Jahren"</FormHelperText>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Sicherheits- und Warnhinweise"
+                    name="gpsr.warnhinweise"
+                    value={formData.gpsr?.warnhinweise || ''}
+                    onChange={handleInputChange}
+                    multiline
+                    rows={4}
+                    helperText={
+                      formData.kategorie === 'schmuck'
+                        ? 'z. B. Kein Spielzeug. Kleinteile – Erstickungsgefahr. Nicht für Kinder unter 14 Jahren. Bei Hautreaktionen sofort ablegen.'
+                        : 'z. B. Nur zur äußerlichen Anwendung. Bei Kontakt mit Augen sofort mit Wasser spülen. Außerhalb der Reichweite von Kindern aufbewahren.'
+                    }
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.gpsr?.herstellerAbweichend || false}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          gpsr: {
+                            ...prev.gpsr,
+                            herstellerAbweichend: e.target.checked
+                          }
+                        }))}
+                      />
+                    }
+                    label="Abweichender Hersteller / Inverkehrbringer (sonst werden Firmendaten verwendet)"
+                  />
+                </Grid>
+
+                {formData.gpsr?.herstellerAbweichend && (
+                  <>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        label="Hersteller Name"
+                        name="gpsr.herstellerName"
+                        value={formData.gpsr?.herstellerName || ''}
+                        onChange={handleInputChange}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        label="Hersteller Anschrift"
+                        name="gpsr.herstellerAnschrift"
+                        value={formData.gpsr?.herstellerAnschrift || ''}
+                        onChange={handleInputChange}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={4}>
+                      <TextField
+                        fullWidth
+                        label="Hersteller E-Mail"
+                        name="gpsr.herstellerEmail"
+                        type="email"
+                        value={formData.gpsr?.herstellerEmail || ''}
+                        onChange={handleInputChange}
+                      />
+                    </Grid>
+                  </>
+                )}
               </>
             )}
           </Grid>
@@ -1639,7 +1992,7 @@ const AdminPortfolio = () => {
                 fullWidth
                 label="Beschreibung"
                 value={newSeifeDescription}
-                onChange={(e) => setSeifeDescription(e.target.value)}
+                onChange={(e) => setNewSeifeDescription(e.target.value)}
                 multiline
                 rows={2}
                 placeholder="Kurze Beschreibung der Seifenbasis"
@@ -1658,6 +2011,68 @@ const AdminPortfolio = () => {
             disabled={!newSeifeName.trim()}
           >
             Rohseife erstellen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog für erforderliche Dokumente */}
+      <Dialog
+        open={requiredDocumentsDialog.open}
+        onClose={() => setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] })}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          ✅ Produkt erfolgreich erstellt!
+        </DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Bitte erstellen Sie für dieses Produkt folgende erforderliche Dokumente:
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {requiredDocumentsDialog.docTypes.map((doc) => (
+              <Box
+                key={doc.key}
+                sx={{
+                  p: 1.5,
+                  border: '1px solid #ddd',
+                  borderRadius: 1,
+                  backgroundColor: doc.required ? '#ffebee' : '#fff3e0'
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Typography sx={{ fontSize: '1.2em', lineHeight: 1, mt: 0.5 }}>
+                    {doc.required ? '🔴' : '🟡'}
+                  </Typography>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {doc.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {doc.required ? 'Pflichtdokument' : 'Optionales Dokument'}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="outlined"
+            onClick={() => setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] })}
+          >
+            Später erstellen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setRequiredDocumentsDialog({ open: false, category: null, docTypes: [] });
+              // Diese ökrffnete die Admin-Dokumente Seite
+              window.open('/admin-dokumente/blanko', '_blank');
+            }}
+          >
+            Jetzt zu Dokumenten
           </Button>
         </DialogActions>
       </Dialog>
