@@ -57,7 +57,7 @@ const ImpressumPage = () => {
         <Grid container spacing={4}>
           <Grid item xs={12} md={6}>
             <Typography variant="h5" gutterBottom>
-              Angaben gemäß § 5 TMG
+              Angaben gemäß § 5 DDG
             </Typography>
             
             <Box sx={{ mt: 2 }}>
@@ -98,7 +98,7 @@ const ImpressumPage = () => {
             </Typography>
             
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-              Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV
+              Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV
             </Typography>
             <Typography variant="body1" paragraph>
               {ceo || 'Ralf Jacob'}<br />
@@ -111,9 +111,9 @@ const ImpressumPage = () => {
               Haftung für Inhalte
             </Typography>
             <Typography variant="body2" paragraph>
-              Als Diensteanbieter sind wir gemäß § 7 Abs.1 TMG für eigene Inhalte auf 
-              diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 TMG 
-              sind wir als Diensteanbieter jedoch nicht unter der Verpflichtung, übermittelte 
+              Als Diensteanbieter sind wir gemäß § 7 Abs. 1 DDG für eigene Inhalte auf 
+              diesen Seiten nach den allgemeinen Gesetzen verantwortlich. Nach §§ 8 bis 10 DDG 
+              sind wir als Diensteanbieter jedoch nicht verpflichtet, übermittelte 
               oder gespeicherte fremde Informationen zu überwachen oder nach Umständen zu 
               forschen, die auf eine rechtswidrige Tätigkeit hinweisen.
             </Typography>

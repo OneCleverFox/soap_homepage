@@ -79,6 +79,7 @@ const ProductsPage = React.memo(() => {
     alle: 0,
     seife: 0,
     werkstuck: 0,
+    schmuck: 0,
   });
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -108,6 +109,12 @@ const ProductsPage = React.memo(() => {
       label: "Gussstücke & Dekorationen",
       icon: BuildIcon,
       beschreibung: "Kunstvolle Gips-Abgüsse und Dekorationen",
+    },
+    {
+      key: "schmuck",
+      label: "Schmuck",
+      icon: FilterIcon,
+      beschreibung: "Handgefertigter Modeschmuck",
     },
   ];
 
@@ -336,6 +343,8 @@ const ProductsPage = React.memo(() => {
               (p) => (p.kategorie || "seife") === "seife",
             ).length,
             werkstuck: productsData.filter((p) => p.kategorie === "werkstuck")
+              .length,
+            schmuck: productsData.filter((p) => p.kategorie === "schmuck")
               .length,
           };
           setCategoryCounts(counts);
@@ -1008,6 +1017,24 @@ const ProductsPage = React.memo(() => {
                               top: 16,
                               right: 16,
                               bgcolor: "rgba(255,255,255,0.95)",
+                              fontWeight: "bold",
+                              backdropFilter: "blur(10px)",
+                            }}
+                          />
+                        );
+                      }
+
+                      // Schmuck-spezifische Anzeige
+                      if (product.kategorie === "schmuck") {
+                        return (
+                          <Chip
+                            label={product.schmuckDetails?.material || "Schmuck"}
+                            size="small"
+                            sx={{
+                              position: "absolute",
+                              top: 16,
+                              right: 16,
+                              bgcolor: "rgba(255,215,0,0.9)",
                               fontWeight: "bold",
                               backdropFilter: "blur(10px)",
                             }}

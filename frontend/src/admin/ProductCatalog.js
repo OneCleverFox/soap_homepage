@@ -19,11 +19,12 @@ import {
   ArchiveOutlined as InactiveIcon
 } from '@mui/icons-material';
 
-// Kategorien sortieren (Seife zuerst, dann Werkstück)
-const CATEGORY_ORDER = ['seife', 'werkstuck'];
+// Kategorien sortieren (Seife zuerst, dann Werkstück, dann Schmuck)
+const CATEGORY_ORDER = ['seife', 'werkstuck', 'schmuck'];
 const CATEGORY_LABELS = {
   seife: '🧼 Seife',
   werkstuck: '🎨 Werkstück',
+  schmuck: '💍 Schmuck',
   inactive: '🗄️ Inaktive Produkte'
 };
 
@@ -38,6 +39,7 @@ const ProductCatalog = ({
   const [expandedCategories, setExpandedCategories] = useState({
     seife: true,
     werkstuck: true,
+    schmuck: true,
     inactive: false
   });
 
@@ -45,7 +47,8 @@ const ProductCatalog = ({
   const groupedProducts = useMemo(() => {
     const groups = {
       seife: { active: [], inactive: [] },
-      werkstuck: { active: [], inactive: [] }
+      werkstuck: { active: [], inactive: [] },
+      schmuck: { active: [], inactive: [] }
     };
 
     products.forEach(product => {
