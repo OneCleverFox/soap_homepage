@@ -70,6 +70,7 @@ const AdminPortfolio = () => {
   const [selectedCategory, setSelectedCategory] = useState('alle');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState('alle'); // 'alle', 'aktiv', 'inaktiv'
+  const [saleFilter, setSaleFilter] = useState('alle'); // 'alle', 'sale'
 
   // Options für Dropdowns
   const [seifenOptions, setSeifenOptions] = useState([]);
@@ -139,6 +140,12 @@ const AdminPortfolio = () => {
     name: '',
     gramm: '',
     preis: '',
+    sale: {
+      isOnSale: false,
+      discountPercent: 0,
+      startsAt: '',
+      endsAt: ''
+    },
     seife: '',
     aroma: '',
     seifenform: '',
@@ -184,6 +191,32 @@ const AdminPortfolio = () => {
 
   const [formData, setFormData] = useState(initialFormData);
 
+  const getSaleScheduleStatus = (item) => {
+    const isOnSale = !!item?.sale?.isOnSale;
+    const discountPercent = Number(item?.sale?.discountPercent || 0);
+
+    if (!isOnSale || discountPercent <= 0) {
+      return null;
+    }
+
+    const now = new Date();
+    const startsAt = item?.sale?.startsAt ? new Date(item.sale.startsAt) : null;
+    const endsAt = item?.sale?.endsAt ? new Date(item.sale.endsAt) : null;
+
+    const startsValid = startsAt && !Number.isNaN(startsAt.getTime());
+    const endsValid = endsAt && !Number.isNaN(endsAt.getTime());
+
+    if (startsValid && now < startsAt) {
+      return { label: 'Geplant', color: 'info' };
+    }
+
+    if (endsValid && now > endsAt) {
+      return { label: 'Abgelaufen', color: 'default' };
+    }
+
+    return { label: 'Aktiv', color: 'success' };
+  };
+
   // 🛡️ Guard gegen doppeltes Laden in React Strict Mode
   const hasLoadedRef = useRef(false);
 
@@ -220,9 +253,13 @@ const AdminPortfolio = () => {
     } else if (statusFilter === 'inaktiv') {
       filtered = filtered.filter(item => item.aktiv !== true);
     }
+
+    if (saleFilter === 'sale') {
+      filtered = filtered.filter(item => !!item.sale?.isOnSale);
+    }
     
     setFilteredItems(filtered);
-  }, [portfolioItems, selectedCategory, statusFilter]);
+  }, [portfolioItems, selectedCategory, statusFilter, saleFilter]);
 
   const loadPortfolioItems = async (silent = false) => {
     try {
@@ -432,6 +469,12 @@ const AdminPortfolio = () => {
       name: item.name || '',
       gramm: item.gramm || '',
       preis: item.preis || '',
+      sale: {
+        isOnSale: !!item.sale?.isOnSale,
+        discountPercent: item.sale?.discountPercent || 0,
+        startsAt: item.sale?.startsAt ? new Date(item.sale.startsAt).toISOString().slice(0, 16) : '',
+        endsAt: item.sale?.endsAt ? new Date(item.sale.endsAt).toISOString().slice(0, 16) : ''
+      },
       seife: item.seife || '',
       aroma: item.aroma || '',
       seifenform: item.seifenform || '',
@@ -500,6 +543,14 @@ const AdminPortfolio = () => {
       if (!submitData.reihenfolge || submitData.reihenfolge === '' || submitData.reihenfolge === 'NaN') {
         delete submitData.reihenfolge;
       }
+
+      const normalizedDiscount = Math.max(0, Math.min(100, Number(submitData.sale?.discountPercent) || 0));
+      submitData.sale = {
+        isOnSale: !!submitData.sale?.isOnSale,
+        discountPercent: !!submitData.sale?.isOnSale ? normalizedDiscount : 0,
+        startsAt: !!submitData.sale?.isOnSale && submitData.sale?.startsAt ? submitData.sale.startsAt : null,
+        endsAt: !!submitData.sale?.isOnSale && submitData.sale?.endsAt ? submitData.sale.endsAt : null
+      };
       
       if (formData.kategorie === 'werkstuck' || formData.kategorie === 'schmuck') {
         // Für Werkstücke und Schmuck: Setze Seifenfelder auf leere Strings
@@ -730,6 +781,30 @@ const AdminPortfolio = () => {
           </ToggleButton>
           <ToggleButton value="inaktiv">
             🚫<br/>Inaktiv
+          </ToggleButton>
+        </ToggleButtonGroup>
+
+        <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mt: 2, mb: 1.5 }}>
+          Sale:
+        </Typography>
+        <ToggleButtonGroup
+          value={saleFilter}
+          exclusive
+          onChange={(event, newValue) => newValue && setSaleFilter(newValue)}
+          size="small"
+          fullWidth
+          sx={{
+            '& .MuiToggleButton-root': {
+              py: 0.75,
+              fontSize: '0.875rem'
+            }
+          }}
+        >
+          <ToggleButton value="alle">
+            Alle
+          </ToggleButton>
+          <ToggleButton value="sale">
+            Sale
           </ToggleButton>
         </ToggleButtonGroup>
       </ListItem>
@@ -968,11 +1043,33 @@ const AdminPortfolio = () => {
                         size="small"
                         color={item.kategorie === 'seife' ? 'primary' : 'secondary'}
                       />
-                      <Chip 
-                        label={item.aktiv ? 'Aktiv' : 'Inaktiv'} 
-                        size="small"
-                        color={item.aktiv ? 'success' : 'default'}
-                      />
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        {item.sale?.isOnSale && Number(item.sale?.discountPercent) > 0 && (
+                          <Chip
+                            label={`Sale ${Number(item.sale.discountPercent).toFixed(0)}%`}
+                            size="small"
+                            color="warning"
+                          />
+                        )}
+                        {(() => {
+                          const saleStatus = getSaleScheduleStatus(item);
+                          if (!saleStatus) return null;
+
+                          return (
+                            <Chip
+                              label={saleStatus.label}
+                              size="small"
+                              color={saleStatus.color}
+                              variant="outlined"
+                            />
+                          );
+                        })()}
+                        <Chip 
+                          label={item.aktiv ? 'Aktiv' : 'Inaktiv'} 
+                          size="small"
+                          color={item.aktiv ? 'success' : 'default'}
+                        />
+                      </Box>
                     </Box>
                     
                     {/* Product Name */}
@@ -1003,12 +1100,26 @@ const AdminPortfolio = () => {
                     </Typography>
                     
                     {/* Price */}
-                    <Typography variant="h6" color="primary" sx={{ 
-                      fontWeight: 'bold',
-                      fontSize: { xs: '1.1rem', sm: '1.25rem' }
-                    }}>
-                      €{item.preis}
-                    </Typography>
+                    {item.sale?.isOnSale && Number(item.sale?.discountPercent) > 0 ? (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+                          €{Number(item.preis || 0).toFixed(2)}
+                        </Typography>
+                        <Typography variant="h6" color="warning.main" sx={{ 
+                          fontWeight: 'bold',
+                          fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                        }}>
+                          €{(Number(item.preis || 0) * (1 - (Number(item.sale?.discountPercent || 0) / 100))).toFixed(2)}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="h6" color="primary" sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '1.1rem', sm: '1.25rem' }
+                      }}>
+                        €{Number(item.preis || 0).toFixed(2)}
+                      </Typography>
+                    )}
                     
                     {/* Gallery Images Upload */}
                     <Box sx={{ mt: 1 }}>
@@ -1223,6 +1334,61 @@ const AdminPortfolio = () => {
                         ? "Wird automatisch in der Warenberechnung ermittelt"
                         : "Verkaufspreis"
                     }
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={3}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={!!formData.sale?.isOnSale}
+                        onChange={handleInputChange}
+                        name="sale.isOnSale"
+                      />
+                    }
+                    label="Sale aktiv"
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Rabatt (%)"
+                    name="sale.discountPercent"
+                    type="number"
+                    value={formData.sale?.discountPercent ?? 0}
+                    onChange={handleInputChange}
+                    disabled={!formData.sale?.isOnSale}
+                    inputProps={{ min: 0, max: 100, step: 1 }}
+                    helperText={formData.sale?.isOnSale ? '0 bis 100 Prozent' : 'Sale ist deaktiviert'}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Sale von"
+                    name="sale.startsAt"
+                    type="datetime-local"
+                    value={formData.sale?.startsAt || ''}
+                    onChange={handleInputChange}
+                    disabled={!formData.sale?.isOnSale}
+                    InputLabelProps={{ shrink: true }}
+                    helperText={formData.sale?.isOnSale ? 'Optional: Startzeitpunkt' : 'Sale ist deaktiviert'}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Sale bis"
+                    name="sale.endsAt"
+                    type="datetime-local"
+                    value={formData.sale?.endsAt || ''}
+                    onChange={handleInputChange}
+                    disabled={!formData.sale?.isOnSale}
+                    InputLabelProps={{ shrink: true }}
+                    helperText={formData.sale?.isOnSale ? 'Optional: Endzeitpunkt' : 'Sale ist deaktiviert'}
                   />
                 </Grid>
               </>

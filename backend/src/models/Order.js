@@ -19,6 +19,24 @@ const orderItemSchema = new mongoose.Schema({
     },
     beschreibung: mongoose.Schema.Types.Mixed, // Unterstützt sowohl String als auch Object
     kategorie: String,
+    sale: {
+      isOnSale: {
+        type: Boolean,
+        default: false
+      },
+      discountPercent: {
+        type: Number,
+        default: 0
+      },
+      basispreis: {
+        type: Number,
+        default: 0
+      },
+      rabattbetrag: {
+        type: Number,
+        default: 0
+      }
+    },
     bild: String,
     // Spezifische Felder je nach Produkttyp
     gewicht: Number, // für Seifen
