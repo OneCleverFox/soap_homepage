@@ -51,6 +51,19 @@ import ProductCatalog from './ProductCatalog';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const getEffectiveProductPrice = (product) => {
+  const base = Number(product?.preis || 0);
+  const isOnSale = Boolean(product?.sale?.isOnSale);
+  const discountPercent = Number(product?.sale?.discountPercent || 0);
+
+  if (!isOnSale || discountPercent <= 0) {
+    return base;
+  }
+
+  const discounted = base * (1 - discountPercent / 100);
+  return Math.max(0, Math.round((discounted + Number.EPSILON) * 100) / 100);
+};
+
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   marginBottom: theme.spacing(2)
@@ -785,7 +798,7 @@ const InvoiceList = () => {
           sku: product.sku || product.article_number || ''
         },
         quantity: 1,
-        unitPrice: product.preis || 0
+        unitPrice: getEffectiveProductPrice(product)
       };
       setEditInvoice(prev => ({
         ...prev,

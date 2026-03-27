@@ -57,6 +57,10 @@ const ProductDetailPage = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [quantity, setQuantity] = useState(1);
 
+  const isProductOnSale = Boolean(product?.sale?.isOnSale) && Number(product?.sale?.discountPercent || 0) > 0;
+  const basePrice = Number(product?.basispreis || product?.preis || 0);
+  const effectivePrice = Number(product?.preis || 0);
+
   useEffect(() => {
     fetchProduct();
   }, [id]);
@@ -129,7 +133,14 @@ const ProductDetailPage = () => {
     const cartProduct = {
       id: product._id,
       name: product.name,
-      price: product.preis || 0,
+      price: effectivePrice,
+      sale: {
+        isOnSale: isProductOnSale,
+        discountPercent: Number(product?.sale?.discountPercent || 0),
+        basispreis: basePrice,
+        startsAt: product?.sale?.startsAt || null,
+        endsAt: product?.sale?.endsAt || null
+      },
       image: product.bilder?.hauptbild, // Speichere relative URL, nicht absolute
       gramm: product.gramm,
       seife: product.seife
@@ -447,9 +458,32 @@ const ProductDetailPage = () => {
           {/* Preis und Warenkorb-Bereich */}
           {product.preis && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h4" color="primary.main" fontWeight="bold">
-                €{product.preis.toFixed(2)}
-              </Typography>
+              {isProductOnSale ? (
+                <>
+                  <Chip
+                    label={`SALE -${Number(product.sale?.discountPercent || 0).toFixed(0)}%`}
+                    color="warning"
+                    sx={{ mb: 1, fontWeight: 'bold' }}
+                  />
+                  <Typography variant="body1" color="text.secondary" sx={{ textDecoration: 'line-through' }}>
+                    €{basePrice.toFixed(2)}
+                  </Typography>
+                  <Typography variant="h4" color="warning.main" fontWeight="bold">
+                    €{effectivePrice.toFixed(2)}
+                  </Typography>
+                  {(product.sale?.startsAt || product.sale?.endsAt) && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {product.sale?.startsAt ? `Von ${new Date(product.sale.startsAt).toLocaleString('de-DE')}` : ''}
+                      {product.sale?.startsAt && product.sale?.endsAt ? ' bis ' : ''}
+                      {product.sale?.endsAt ? `${new Date(product.sale.endsAt).toLocaleString('de-DE')}` : ''}
+                    </Typography>
+                  )}
+                </>
+              ) : (
+                <Typography variant="h4" color="primary.main" fontWeight="bold">
+                  €{effectivePrice.toFixed(2)}
+                </Typography>
+              )}
               <Typography variant="body2" color="text.secondary">
                 inkl. MwSt.
               </Typography>
