@@ -39,6 +39,7 @@ import {
   Build as BuildIcon,
   FilterList as FilterIcon,
   Clear as ClearIcon,
+  LocalOffer as SaleIcon,
 } from "@mui/icons-material";
 import { portfolioAPI } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
@@ -80,6 +81,7 @@ const ProductsPage = React.memo(() => {
     seife: 0,
     werkstuck: 0,
     schmuck: 0,
+    sale: 0,
   });
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -115,6 +117,12 @@ const ProductsPage = React.memo(() => {
       label: "Schmuck",
       icon: FilterIcon,
       beschreibung: "Handgefertigter Modeschmuck",
+    },
+    {
+      key: "sale",
+      label: "Angebote & Sale",
+      icon: SaleIcon,
+      beschreibung: "Produkte mit Rabatt",
     },
   ];
 
@@ -346,6 +354,9 @@ const ProductsPage = React.memo(() => {
               .length,
             schmuck: productsData.filter((p) => p.kategorie === "schmuck")
               .length,
+            sale: productsData.filter(
+              (p) => Boolean(p?.sale?.isOnSale) && Number(p?.sale?.discountPercent || 0) > 0,
+            ).length,
           };
           setCategoryCounts(counts);
 
@@ -423,7 +434,11 @@ const ProductsPage = React.memo(() => {
     if (products.length === 0) return;
 
     let filtered = products;
-    if (selectedKategorie !== "alle") {
+    if (selectedKategorie === "sale") {
+      filtered = products.filter(
+        (product) => Boolean(product?.sale?.isOnSale) && Number(product?.sale?.discountPercent || 0) > 0,
+      );
+    } else if (selectedKategorie !== "alle") {
       filtered = products.filter(
         (product) => (product.kategorie || "seife") === selectedKategorie,
       );
