@@ -584,10 +584,8 @@ const AdminPortfolio = () => {
       if (editingItem) {
         await portfolioAdminService.update(editingItem._id, submitData);
         
-        // Cache nur invalidieren wenn aktiv-Status sich ändert
-        if (wasActive !== willBeActive) {
-          invalidateProductsCache(`Portfolio Item "${submitData.name}" ${willBeActive ? 'aktiviert' : 'deaktiviert'}`);
-        }
+        // Cache bei jedem Update invalidieren (Sale-Status, Preis, etc. können sich geändert haben)
+        invalidateProductsCache(`Portfolio Item "${submitData.name}" aktualisiert`);
       } else {
         await portfolioAdminService.create(submitData);
         
