@@ -12,6 +12,7 @@ const Giessform = require('../models/Giessform');
 const { auth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const { cacheManager } = require('../utils/cacheManager');
+const { calculateEffectivePrice } = require('../utils/pricing');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 // Dashboard cache invalidation
@@ -341,7 +342,7 @@ router.get('/', async (req, res) => {
     
     // ⚡ OPTIMIERUNG: Minimale Felder für Admin-Dropdowns (Warenberechnung)
     const selectFields = shouldIncludeAll 
-      ? 'name kategorie aktiv isActive preis gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge article_number'
+      ? 'name kategorie aktiv isActive preis sale gramm seife seifenform verpackung giessform giesswerkstoff createdAt reihenfolge article_number'
       : '-bilder.hauptbildData.data -bilder.galerie.data -bilder.galerie.contentType';
     
     // ⚡ LÖSUNG: Lade Daten OHNE Sortierung - verhindert MongoDB Memory Limit Fehler
@@ -741,7 +742,8 @@ router.get('/with-prices', async (req, res) => {
         // Preis-Logik: Verwende gespeicherten Preis, falls vorhanden, sonst berechne automatisch
         const gespeicherterPreis = item.preis || 0;
         const automatischerPreis = Math.ceil(priceData.gesamtpreis * 1.5); // 50% Marge
-        const verkaufspreis = gespeicherterPreis > 0 ? gespeicherterPreis : automatischerPreis;
+        const basispreis = gespeicherterPreis > 0 ? gespeicherterPreis : automatischerPreis;
+        const pricing = calculateEffectivePrice({ preis: basispreis, sale: item.sale });
         
         // Namen für Frontend-Anzeige hinzufügen
         let additionalNames = {};
@@ -764,8 +766,16 @@ router.get('/with-prices', async (req, res) => {
           ...additionalNames,
           berechneterPreis: priceData.gesamtpreis,
           preisDetails: priceData.details,
-          verkaufspreis: verkaufspreis,
-          preis: verkaufspreis, // Alias für Frontend-Kompatibilität
+          verkaufspreis: pricing.effectivePrice,
+          preis: pricing.effectivePrice, // Alias für Frontend-Kompatibilität
+          basispreis: pricing.basePrice,
+          sale: {
+            isOnSale: pricing.isOnSale,
+            discountPercent: pricing.discountPercent,
+            discountAmount: pricing.discountAmount,
+            startsAt: pricing.startsAt,
+            endsAt: pricing.endsAt
+          },
           bestand: {
             verfuegbar: istVerfuegbar,
             menge: verfuegbareMenge,
@@ -795,14 +805,23 @@ router.get('/with-prices', async (req, res) => {
         
         // Preis-Logik auch bei Fehlern: Verwende gespeicherten Preis, falls vorhanden
         const gespeicherterPreis = item.preis || 0;
-        const verkaufspreis = gespeicherterPreis > 0 ? gespeicherterPreis : 0;
+        const basispreis = gespeicherterPreis > 0 ? gespeicherterPreis : 0;
+        const pricing = calculateEffectivePrice({ preis: basispreis, sale: item.sale });
         
         return {
           ...item,
           berechneterPreis: 0,
           preisDetails: { error: 'Preisberechnung nicht möglich' },
-          verkaufspreis: verkaufspreis,
-          preis: verkaufspreis, // Alias für Frontend-Kompatibilität
+          verkaufspreis: pricing.effectivePrice,
+          preis: pricing.effectivePrice, // Alias für Frontend-Kompatibilität
+          basispreis: pricing.basePrice,
+          sale: {
+            isOnSale: pricing.isOnSale,
+            discountPercent: pricing.discountPercent,
+            discountAmount: pricing.discountAmount,
+            startsAt: pricing.startsAt,
+            endsAt: pricing.endsAt
+          },
           bestand: {
             verfuegbar: istVerfuegbar,
             menge: verfuegbareMenge,
@@ -948,8 +967,20 @@ router.get('/:id', async (req, res) => {
     console.log('📦 Finaler Bestand:', bestand);
 
     // Portfolio-Item mit Bestandsinformationen und Werkstück-Namen zurückgeben
+    const pricing = calculateEffectivePrice(portfolioItem);
+
     const responseData = {
       ...portfolioItem.toObject(),
+      preis: pricing.effectivePrice,
+      basispreis: pricing.basePrice,
+      verkaufspreis: pricing.effectivePrice,
+      sale: {
+        isOnSale: pricing.isOnSale,
+        discountPercent: pricing.discountPercent,
+        discountAmount: pricing.discountAmount,
+        startsAt: pricing.startsAt,
+        endsAt: pricing.endsAt
+      },
       bestand,
       // Werkstück-spezifische Namen hinzufügen
       giesswerkstoffName,

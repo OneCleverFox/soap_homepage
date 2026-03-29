@@ -4,6 +4,7 @@ const Cart = require('../models/Cart');
 const Portfolio = require('../models/Portfolio');
 const { authenticateToken } = require('../middleware/auth');
 const mongoose = require('mongoose');
+const { calculateEffectivePrice } = require('../utils/pricing');
 
 // Helper: Prüft ob User ein Kunde ist (kein Admin)
 const isKunde = (user) => {
@@ -62,10 +63,18 @@ router.get('/', authenticateToken, async (req, res) => {
         });
         
         if (product && product.bilder && product.bilder.hauptbild) {
+          const pricing = calculateEffectivePrice(product);
           // Aktualisiere mit Portfolio-Daten und Verfügbarkeitsstatus
           const enrichedItem = {
             ...item.toObject(),
             bild: product.bilder.hauptbild,
+            preis: pricing.effectivePrice,
+            sale: {
+              isOnSale: pricing.isOnSale,
+              discountPercent: pricing.discountPercent,
+              discountAmount: pricing.discountAmount,
+              basispreis: pricing.basePrice
+            },
             aktiv: product.aktiv, // Produktstatus direkt hinzufügen
             bestand: bestandInfo ? {
               menge: bestandInfo.menge || 0,
@@ -88,8 +97,16 @@ router.get('/', authenticateToken, async (req, res) => {
         }
         
         // Fallback: behalte vorhandene Daten aber füge Bestandsinfo hinzu
+        const fallbackPricing = product ? calculateEffectivePrice(product) : null;
         const fallbackItem = {
           ...item.toObject(),
+          preis: fallbackPricing ? fallbackPricing.effectivePrice : item.preis,
+          sale: fallbackPricing ? {
+            isOnSale: fallbackPricing.isOnSale,
+            discountPercent: fallbackPricing.discountPercent,
+            discountAmount: fallbackPricing.discountAmount,
+            basispreis: fallbackPricing.basePrice
+          } : item.sale,
           aktiv: product?.aktiv || false, // Produktstatus direkt hinzufügen
           bestand: bestandInfo ? {
             menge: bestandInfo.menge || 0,
@@ -261,7 +278,7 @@ router.post('/add', authenticateToken, async (req, res) => {
       const cartItem = {
         produktId,
         name,
-        preis,
+        preis: calculateEffectivePrice(product).effectivePrice,
         menge,
         bild: bild || '',
         gramm,
@@ -293,7 +310,8 @@ router.post('/add', authenticateToken, async (req, res) => {
           // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
           return {
             ...item.toObject(),
-            bild: product.bilder.hauptbild
+                bild: product.bilder.hauptbild,
+                preis: calculateEffectivePrice(product).effectivePrice
           };
         }
         
@@ -446,7 +464,8 @@ router.put('/update', authenticateToken, async (req, res) => {
           // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
           return {
             ...item.toObject(),
-            bild: product.bilder.hauptbild
+                bild: product.bilder.hauptbild,
+                preis: calculateEffectivePrice(product).effectivePrice
           };
         }
         

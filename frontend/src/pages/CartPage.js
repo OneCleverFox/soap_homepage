@@ -335,9 +335,16 @@ const CartPage = () => {
                         gap: 2,
                         width: isMobile ? '100%' : 'auto'
                       }}>
-                        <Typography variant={isMobile ? "body1" : "h6"} fontWeight="bold">
-                          €{(item.price * item.quantity).toFixed(2)}
-                        </Typography>
+                        <Box sx={{ textAlign: 'right' }}>
+                          {item.sale?.isOnSale && Number(item.sale?.discountPercent || 0) > 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ textDecoration: 'line-through', display: 'block' }}>
+                              €{(Number(item.sale?.basispreis || item.price || 0) * item.quantity).toFixed(2)}
+                            </Typography>
+                          )}
+                          <Typography variant={isMobile ? "body1" : "h6"} fontWeight="bold">
+                            €{((item.price || 0) * item.quantity).toFixed(2)}
+                          </Typography>
+                        </Box>
                         <IconButton
                           color="error"
                           onClick={() => removeFromCart(item.id)}

@@ -93,6 +93,7 @@ export const CartProvider = ({ children }) => {
           name: item.name,
           price: item.preis, // Einheitlicher Preisname
           preis: item.preis, // Backup für Kompatibilität
+          sale: item.sale || { isOnSale: false, discountPercent: 0, discountAmount: 0, basispreis: item.preis || 0 },
           quantity: correctedQuantity, // Korrigierte Menge verwenden
           image: item.bild,
           gramm: item.gramm,
@@ -279,6 +280,7 @@ export const CartProvider = ({ children }) => {
         produktId: product.id,
         name: product.name,
         preis: product.price,
+        sale: product.sale || { isOnSale: false, discountPercent: 0 },
         menge: quantity,
         bild: product.image || '',
         gramm: product.gramm,
@@ -302,6 +304,7 @@ export const CartProvider = ({ children }) => {
             id: product.id,
             name: product.name,
             price: product.price,
+            sale: product.sale || { isOnSale: false, discountPercent: 0 },
             quantity: quantity,
             image: product.image || '',
             gramm: product.gramm,

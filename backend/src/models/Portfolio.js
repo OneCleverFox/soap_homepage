@@ -226,6 +226,27 @@ const portfolioSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  // Reversible sale flag with percentage discount applied on top of base price.
+  sale: {
+    isOnSale: {
+      type: Boolean,
+      default: false
+    },
+    discountPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100
+    },
+    startsAt: {
+      type: Date,
+      default: null
+    },
+    endsAt: {
+      type: Date,
+      default: null
+    }
+  },
   // Produktbeschreibung & Details
   beschreibung: {
     kurz: {
