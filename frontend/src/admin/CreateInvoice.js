@@ -61,6 +61,46 @@ const getEffectiveProductPrice = (product) => {
   return Math.max(0, Math.round((discounted + Number.EPSILON) * 100) / 100);
 };
 
+const extractProductDescription = (product) => {
+  const candidates = [product?.beschreibung, product?.description, product?.produktbeschreibung];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    if (typeof candidate === 'string') {
+      const cleaned = candidate.trim();
+      if (cleaned) {
+        return cleaned;
+      }
+      continue;
+    }
+
+    if (typeof candidate === 'object') {
+      const fromObject = [candidate.kurz, candidate.lang, candidate.short, candidate.long]
+        .find((value) => typeof value === 'string' && value.trim());
+      if (fromObject) {
+        return fromObject.trim();
+      }
+    }
+  }
+
+  return '';
+};
+
+const normalizePriceInput = (rawValue) => {
+  const normalized = String(rawValue ?? '').replace(',', '.').trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+};
+
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   marginBottom: theme.spacing(2),
@@ -111,6 +151,7 @@ const CreateInvoice = () => {
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [unitPriceDrafts, setUnitPriceDrafts] = useState({});
 
   // Lade initiale Daten
   useEffect(() => {
@@ -216,24 +257,7 @@ const CreateInvoice = () => {
       item.productId === product._id
     );
 
-    // Beschreibung sicher als String extrahieren
-    let description = '';
-    if (product.beschreibung) {
-      if (typeof product.beschreibung === 'string') {
-        description = product.beschreibung;
-      } else if (typeof product.beschreibung === 'object') {
-        // Wenn beschreibung ein Objekt ist, verwende den 'kurz' Text oder kombiniere die Felder
-        description = product.beschreibung.kurz || 
-                     product.beschreibung.lang || 
-                     `${product.beschreibung.kurz || ''} ${product.beschreibung.lang || ''}`.trim() ||
-                     'Handgefertigte Seife';
-      }
-    }
-    
-    // Beschreibung auf ca. 120 Zeichen begrenzen für professionelle Optik
-    if (description.length > 120) {
-      description = description.substring(0, 117) + '...';
-    }
+    const description = extractProductDescription(product);
 
     if (existingItem) {
       setInvoiceItems(items => 
@@ -248,7 +272,7 @@ const CreateInvoice = () => {
         productId: product._id,
         name: product.name,
         description: description,
-        sku: product.sku || product.article_number || '',
+        sku: product.sku || product.artikelNummer || product.artikelnummer || product.article_number || '',
         category: product.kategorie || '',
         quantity: 1,
         unitPrice: getEffectiveProductPrice(product)
@@ -273,13 +297,52 @@ const CreateInvoice = () => {
   const updateItemPrice = (index, price) => {
     setInvoiceItems(items =>
       items.map((item, i) =>
-        i === index ? { ...item, unitPrice: parseFloat(price) || 0 } : item
+        i === index ? { ...item, unitPrice: normalizePriceInput(price) ?? 0 } : item
       )
     );
   };
 
+  const updateItemField = (index, field, value) => {
+    setInvoiceItems(items =>
+      items.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const getUnitPriceInputValue = (index, fallback) => {
+    if (Object.prototype.hasOwnProperty.call(unitPriceDrafts, index)) {
+      return unitPriceDrafts[index];
+    }
+    return fallback ?? '';
+  };
+
+  const handleUnitPriceFocus = (index) => {
+    setUnitPriceDrafts(prev => ({ ...prev, [index]: '' }));
+  };
+
+  const handleUnitPriceChange = (index, value) => {
+    setUnitPriceDrafts(prev => ({ ...prev, [index]: value }));
+  };
+
+  const handleUnitPriceBlur = (index) => {
+    const draftValue = unitPriceDrafts[index];
+    const parsed = normalizePriceInput(draftValue);
+
+    if (parsed !== null) {
+      updateItemPrice(index, parsed);
+    }
+
+    setUnitPriceDrafts(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  };
+
   const removeItem = (index) => {
     setInvoiceItems(items => items.filter((_, i) => i !== index));
+    setUnitPriceDrafts({});
   };
 
   const addCustomProduct = () => {
@@ -309,11 +372,7 @@ const CreateInvoice = () => {
   };
 
   const updateCustomProduct = (index, field, value) => {
-    setInvoiceItems(items =>
-      items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item
-      )
-    );
+    updateItemField(index, field, value);
   };
 
   // Berechnungen
@@ -444,6 +503,7 @@ const CreateInvoice = () => {
       phone: ''
     });
     setInvoiceItems([]);
+    setUnitPriceDrafts({});
     setShippingCost(0);
     setNotes({ internal: '', customer: '' });
     setSendEmail(true); // E-Mail-Toggle zurücksetzen
@@ -678,7 +738,7 @@ const CreateInvoice = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Artikel</TableCell>
-                    <TableCell>Beschreibung</TableCell>
+                    <TableCell width={420}>Beschreibung</TableCell>
                     <TableCell width={100}>Menge</TableCell>
                     <TableCell width={120}>Einzelpreis</TableCell>
                     <TableCell width={120}>Gesamtpreis</TableCell>
@@ -706,18 +766,16 @@ const CreateInvoice = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        {item.productId ? (
-                          <Typography variant="body2">{item.description}</Typography>
-                        ) : (
-                          <TextField
-                            size="small"
-                            multiline
-                            rows={2}
-                            value={item.description}
-                            onChange={(e) => updateCustomProduct(index, 'description', e.target.value)}
-                            placeholder="Beschreibung"
-                          />
-                        )}
+                        <TextField
+                          fullWidth
+                          size="small"
+                          multiline
+                          minRows={2}
+                          maxRows={6}
+                          value={item.description || ''}
+                          onChange={(e) => updateItemField(index, 'description', e.target.value)}
+                          placeholder="Beschreibung"
+                        />
                       </TableCell>
                       <TableCell>
                         <TextField
@@ -732,8 +790,10 @@ const CreateInvoice = () => {
                         <TextField
                           size="small"
                           type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItemPrice(index, e.target.value)}
+                          value={getUnitPriceInputValue(index, item.unitPrice)}
+                          onFocus={() => handleUnitPriceFocus(index)}
+                          onChange={(e) => handleUnitPriceChange(index, e.target.value)}
+                          onBlur={() => handleUnitPriceBlur(index)}
                           inputProps={{ step: 0.01, min: 0 }}
                           InputProps={{ endAdornment: '€' }}
                         />
@@ -820,22 +880,17 @@ const CreateInvoice = () => {
                         </IconButton>
                       </Box>
                       
-                      {item.productId ? (
-                        <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary' }}>
-                          {item.description}
-                        </Typography>
-                      ) : (
-                        <TextField
-                          fullWidth
-                          size="small"
-                          multiline
-                          rows={2}
-                          value={item.description}
-                          onChange={(e) => updateCustomProduct(index, 'description', e.target.value)}
-                          placeholder="Beschreibung"
-                          sx={{ mt: 1 }}
-                        />
-                      )}
+                      <TextField
+                        fullWidth
+                        size="small"
+                        multiline
+                        minRows={2}
+                        maxRows={6}
+                        value={item.description || ''}
+                        onChange={(e) => updateItemField(index, 'description', e.target.value)}
+                        placeholder="Beschreibung"
+                        sx={{ mt: 1 }}
+                      />
                     </Box>
                     
                     <Grid container spacing={2}>
@@ -860,8 +915,10 @@ const CreateInvoice = () => {
                           fullWidth
                           size="small"
                           type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItemPrice(index, e.target.value)}
+                          value={getUnitPriceInputValue(index, item.unitPrice)}
+                          onFocus={() => handleUnitPriceFocus(index)}
+                          onChange={(e) => handleUnitPriceChange(index, e.target.value)}
+                          onBlur={() => handleUnitPriceBlur(index)}
                           inputProps={{ step: 0.01, min: 0 }}
                           InputProps={{ endAdornment: '€' }}
                         />

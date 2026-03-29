@@ -600,16 +600,21 @@ class InvoiceService {
       delete updateData.invoiceNumber;
       delete updateData.sequenceNumber;
 
-      // 🔧 Fix: Berechne fehlende total Felder in items
+      // Immer aus Menge und Einzelpreis neu berechnen, damit 0,00-Positionen korrekt sind.
       if (updateData.items && Array.isArray(updateData.items)) {
         updateData.items = updateData.items.map(item => {
-          if (!item.total && item.quantity && item.unitPrice) {
-            item.total = item.quantity * item.unitPrice;
-          }
-          return item;
+          const quantity = Number(item.quantity) || 0;
+          const unitPrice = Number(item.unitPrice) || 0;
+
+          return {
+            ...item,
+            quantity,
+            unitPrice,
+            total: quantity * unitPrice
+          };
         });
 
-        // 🔧 Berechne amounts neu wenn items geändert wurden
+        // Berechne amounts neu wenn items geändert wurden
         const subtotal = updateData.items.reduce((sum, item) => sum + (item.total || 0), 0);
         const shippingCost = updateData.amounts?.shippingCost || 0;
         const vatRate = updateData.amounts?.vatRate || 0;
