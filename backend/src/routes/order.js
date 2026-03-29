@@ -9,6 +9,7 @@ const orderInvoiceService = require('../services/orderInvoiceService');
 const { validateCheckoutStatus, validatePayPalStatus } = require('../middleware/checkoutValidation');
 const { createInquiryFromOrder } = require('../utils/inquiryHelper');
 const { validateShippingData, generateTrackingUrl } = require('../utils/trackingValidation');
+const { calculateEffectivePrice } = require('../utils/pricing');
 
 // Hilfsfunktion zur Generierung einer Produktbeschreibung aus Portfolio-Daten
 function generateProductDescription(portfolioData) {
@@ -413,6 +414,7 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
       }
       
       // Validierter Artikel für Order-Schema
+      const pricing = calculateEffectivePrice(dbArtikel);
       validierteArtikel.push({
         produktType: artikelItem.produktType || 'portfolio',
         produktId: dbArtikel._id,
@@ -426,13 +428,19 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
           zusatz: dbArtikel.zusatz,
           optional: dbArtikel.optional,
           kategorie: dbArtikel.kategorie || '',
+          sale: {
+            isOnSale: pricing.isOnSale,
+            discountPercent: pricing.discountPercent,
+            basispreis: pricing.basePrice,
+            rabattbetrag: pricing.discountAmount
+          },
           bild: dbArtikel.bild || '',
           gewicht: dbArtikel.gewicht,
           inhaltsstoffe: dbArtikel.inhaltsstoffe || []
         },
         menge: artikelItem.menge,
-        einzelpreis: dbArtikel.preis,
-        gesamtpreis: dbArtikel.preis * artikelItem.menge
+        einzelpreis: pricing.effectivePrice,
+        gesamtpreis: pricing.effectivePrice * artikelItem.menge
       });
     }
 

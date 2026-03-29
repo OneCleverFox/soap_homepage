@@ -80,6 +80,7 @@ router.get('/', async (req, res) => {
         optional: 1,
         verpackung: 1,
         preis: 1,
+        sale: 1,
         beschreibung: 1,
         weblink: 1,
         aktiv: 1,
@@ -189,6 +190,7 @@ router.post('/', async (req, res) => {
       aktiv,
       reihenfolge,
       preis,
+      sale,
       beschreibung,
       zusatzinhaltsstoffe,
       rohseifenKonfiguration,
@@ -226,6 +228,12 @@ router.post('/', async (req, res) => {
       giessform: giessform || null,
       giesswerkstoff: giesswerkstoff || null,
       preis: parseFloat(preis) || 0,
+      sale: {
+        isOnSale: !!sale?.isOnSale,
+        discountPercent: Math.max(0, Math.min(100, Number(sale?.discountPercent) || 0)),
+        startsAt: sale?.startsAt ? new Date(sale.startsAt) : null,
+        endsAt: sale?.endsAt ? new Date(sale.endsAt) : null
+      },
       aktiv: aktiv !== undefined ? aktiv : false,
       reihenfolge: parseInt(reihenfolge) || 0,
       abmessungen: abmessungen || { laenge: 0, breite: 0, hoehe: 0, einheit: 'cm' },
@@ -370,6 +378,15 @@ router.put('/:id', async (req, res) => {
         }
       }
     });
+
+    if (updateData.sale !== undefined) {
+      product.sale = {
+        isOnSale: !!updateData.sale?.isOnSale,
+        discountPercent: Math.max(0, Math.min(100, Number(updateData.sale?.discountPercent) || 0)),
+        startsAt: updateData.sale?.startsAt ? new Date(updateData.sale.startsAt) : null,
+        endsAt: updateData.sale?.endsAt ? new Date(updateData.sale.endsAt) : null
+      };
+    }
 
     // Abmessungen separat handhaben
     if (updateData.abmessungen) {

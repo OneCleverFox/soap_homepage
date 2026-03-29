@@ -491,6 +491,7 @@ const ProductsPage = React.memo(() => {
           id: product._id,
           name: product.name,
           price: getProductPrice(product),
+          sale: product.sale || { isOnSale: false, discountPercent: 0 },
           image: product.bilder?.hauptbild,
           gramm: product.gramm,
           seife: product.seife,
@@ -522,6 +523,14 @@ const ProductsPage = React.memo(() => {
   // Helper-Funktion um den Preis eines Produkts zu ermitteln
   const getProductPrice = (product) => {
     return product.preis || product.verkaufspreis || 0;
+  };
+
+  const getBasePrice = (product) => {
+    return product.basispreis || product.preis || product.verkaufspreis || 0;
+  };
+
+  const isProductOnSale = (product) => {
+    return Boolean(product?.sale?.isOnSale) && Number(product?.sale?.discountPercent || 0) > 0;
   };
 
   // Stock-Update-Handler für reaktive Updates
@@ -1096,6 +1105,22 @@ const ProductsPage = React.memo(() => {
                         />
                       );
                     })()}
+
+                    {isProductOnSale(product) && (
+                      <Chip
+                        label={`-${Number(product.sale.discountPercent).toFixed(0)}% SALE`}
+                        size="small"
+                        color="warning"
+                        sx={{
+                          position: "absolute",
+                          top: 16,
+                          left: 16,
+                          fontWeight: "bold",
+                          bgcolor: "warning.main",
+                          color: "common.white",
+                        }}
+                      />
+                    )}
                   </Box>
 
                   <CardContent sx={{ flexGrow: 1, p: 3 }}>
@@ -1266,14 +1291,33 @@ const ProductsPage = React.memo(() => {
                       }}
                     >
                       {getProductPrice(product) > 0 ? (
-                        <Typography
-                          variant="h5"
-                          color="primary"
-                          fontWeight="bold"
-                          sx={{ textAlign: "center" }}
-                        >
-                          {getProductPrice(product).toFixed(2)} €
-                        </Typography>
+                        isProductOnSale(product) ? (
+                          <Box sx={{ textAlign: "center" }}>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ textDecoration: "line-through" }}
+                            >
+                              {getBasePrice(product).toFixed(2)} €
+                            </Typography>
+                            <Typography
+                              variant="h5"
+                              color="warning.main"
+                              fontWeight="bold"
+                            >
+                              {getProductPrice(product).toFixed(2)} €
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Typography
+                            variant="h5"
+                            color="primary"
+                            fontWeight="bold"
+                            sx={{ textAlign: "center" }}
+                          >
+                            {getProductPrice(product).toFixed(2)} €
+                          </Typography>
+                        )
                       ) : (
                         <Typography
                           variant="body2"

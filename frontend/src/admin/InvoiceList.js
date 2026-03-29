@@ -51,6 +51,59 @@ import ProductCatalog from './ProductCatalog';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
+const getEffectiveProductPrice = (product) => {
+  const base = Number(product?.preis || 0);
+  const isOnSale = Boolean(product?.sale?.isOnSale);
+  const discountPercent = Number(product?.sale?.discountPercent || 0);
+
+  if (!isOnSale || discountPercent <= 0) {
+    return base;
+  }
+
+  const discounted = base * (1 - discountPercent / 100);
+  return Math.max(0, Math.round((discounted + Number.EPSILON) * 100) / 100);
+};
+
+const extractProductDescription = (product) => {
+  const candidates = [product?.beschreibung, product?.description, product?.produktbeschreibung];
+
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    if (typeof candidate === 'string') {
+      const cleaned = candidate.trim();
+      if (cleaned) {
+        return cleaned;
+      }
+      continue;
+    }
+
+    if (typeof candidate === 'object') {
+      const fromObject = [candidate.kurz, candidate.lang, candidate.short, candidate.long]
+        .find((value) => typeof value === 'string' && value.trim());
+      if (fromObject) {
+        return fromObject.trim();
+      }
+    }
+  }
+
+  return '';
+};
+
+const normalizePriceInput = (rawValue) => {
+  const normalized = String(rawValue ?? '').replace(',', '.').trim();
+  if (!normalized) {
+    return null;
+  }
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+  return parsed;
+};
+
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   marginBottom: theme.spacing(2)
@@ -100,6 +153,8 @@ const InvoiceList = () => {
   const [productSearchDialogOpen, setProductSearchDialogOpen] = useState(false);
   const [products, setProducts] = useState([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
+  const [unitPriceDrafts, setUnitPriceDrafts] = useState({});
+  const [newItemUnitPriceDraft, setNewItemUnitPriceDraft] = useState(null);
 
   // Stats State
   const [stats, setStats] = useState({
@@ -699,6 +754,8 @@ const InvoiceList = () => {
       quantity: 1,
       unitPrice: 0
     });
+    setNewItemUnitPriceDraft(null);
+    setUnitPriceDrafts({});
     showSnackbar('Artikel hinzugefügt', 'success');
   };
 
@@ -707,6 +764,7 @@ const InvoiceList = () => {
       ...prev,
       items: prev.items.filter((_, i) => i !== index)
     }));
+    setUnitPriceDrafts({});
   };
 
   const updateItemInEditInvoice = (index, field, value) => {
@@ -722,12 +780,65 @@ const InvoiceList = () => {
         obj = obj[keys[i]];
       }
 
-      obj[keys[keys.length - 1]] = field.includes('quantity') || field.includes('Price') 
-        ? parseFloat(value) 
+      obj[keys[keys.length - 1]] = field.includes('quantity') || field.includes('Price')
+        ? parseFloat(value)
         : value;
+
+      if (field.includes('quantity') || field.includes('Price')) {
+        const quantity = Number(updated.items[index].quantity) || 0;
+        const unitPrice = Number(updated.items[index].unitPrice) || 0;
+        updated.items[index].total = quantity * unitPrice;
+      }
 
       return updated;
     });
+  };
+
+  const getUnitPriceInputValue = (key, fallbackValue) => {
+    if (Object.prototype.hasOwnProperty.call(unitPriceDrafts, key)) {
+      return unitPriceDrafts[key];
+    }
+    return fallbackValue ?? '';
+  };
+
+  const handleUnitPriceFocus = (key) => {
+    setUnitPriceDrafts(prev => ({ ...prev, [key]: '' }));
+  };
+
+  const handleUnitPriceChange = (key, value) => {
+    setUnitPriceDrafts(prev => ({ ...prev, [key]: value }));
+  };
+
+  const clearUnitPriceDraft = (key) => {
+    setUnitPriceDrafts(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const handleUnitPriceBlur = (key, onValidValue) => {
+    const parsed = normalizePriceInput(unitPriceDrafts[key]);
+    if (parsed !== null) {
+      onValidValue(parsed);
+    }
+    clearUnitPriceDraft(key);
+  };
+
+  const handleNewItemUnitPriceFocus = () => {
+    setNewItemUnitPriceDraft('');
+  };
+
+  const handleNewItemUnitPriceChange = (value) => {
+    setNewItemUnitPriceDraft(value);
+  };
+
+  const handleNewItemUnitPriceBlur = () => {
+    const parsed = normalizePriceInput(newItemUnitPriceDraft);
+    if (parsed !== null) {
+      setNewItem(prev => ({ ...prev, unitPrice: parsed }));
+    }
+    setNewItemUnitPriceDraft(null);
   };
 
   const handleEditFieldChange = (path, value) => {
@@ -756,6 +867,8 @@ const InvoiceList = () => {
       quantity: 1,
       unitPrice: 0
     });
+    setNewItemUnitPriceDraft(null);
+    setUnitPriceDrafts({});
     setEditingItemIndex(null);
   };
 
@@ -781,17 +894,19 @@ const InvoiceList = () => {
         productId: product._id,
         productData: {
           name: product.name,
-          description: product.beschreibung?.kurz || product.beschreibung?.lang || product.beschreibung || '',
-          sku: product.sku || product.article_number || ''
+          description: extractProductDescription(product),
+          sku: product.sku || product.artikelNummer || product.artikelnummer || product.article_number || ''
         },
         quantity: 1,
-        unitPrice: product.preis || 0
+        unitPrice: getEffectiveProductPrice(product)
       };
       setEditInvoice(prev => ({
         ...prev,
         items: [...prev.items, newProductItem]
       }));
     }
+
+    setUnitPriceDrafts({});
 
     showSnackbar(`${product.name} hinzugefügt`, 'success');
   };
@@ -1585,7 +1700,8 @@ const InvoiceList = () => {
                                   onChange={(e) => updateItemInEditInvoice(index, 'productData.description', e.target.value)}
                                   variant="outlined"
                                   multiline
-                                  rows={2}
+                                  minRows={2}
+                                  maxRows={6}
                                 />
                               </Box>
                             </TableCell>
@@ -1605,8 +1721,10 @@ const InvoiceList = () => {
                                 size="small"
                                 type="number"
                                 inputProps={{ step: '0.01', min: '0' }}
-                                value={item.unitPrice || 0}
-                                onChange={(e) => updateItemInEditInvoice(index, 'unitPrice', e.target.value)}
+                                value={getUnitPriceInputValue(`item-${index}`, item.unitPrice || 0)}
+                                onFocus={() => handleUnitPriceFocus(`item-${index}`)}
+                                onChange={(e) => handleUnitPriceChange(`item-${index}`, e.target.value)}
+                                onBlur={() => handleUnitPriceBlur(`item-${index}`, (parsed) => updateItemInEditInvoice(index, 'unitPrice', parsed))}
                                 variant="outlined"
                                 sx={{ width: '100px' }}
                                 InputProps={{ endAdornment: '€' }}
@@ -1730,11 +1848,10 @@ const InvoiceList = () => {
                         label="Einzelpreis (€) *"
                         placeholder="0.00"
                         inputProps={{ step: '0.01', min: '0' }}
-                        value={newItem.unitPrice}
-                        onChange={(e) => setNewItem(prev => ({
-                          ...prev,
-                          unitPrice: parseFloat(e.target.value) || 0
-                        }))}
+                        value={newItemUnitPriceDraft !== null ? newItemUnitPriceDraft : newItem.unitPrice}
+                        onFocus={handleNewItemUnitPriceFocus}
+                        onChange={(e) => handleNewItemUnitPriceChange(e.target.value)}
+                        onBlur={handleNewItemUnitPriceBlur}
                         variant="outlined"
                       />
                     </Grid>
