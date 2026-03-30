@@ -299,7 +299,10 @@ const MobileCheckoutPage = () => {
           shop: 'active',
           checkout: true,
           checkoutMode: 'full',
-          paypal: { available: true, mode: 'sandbox' }
+          paypal: { available: true, mode: 'sandbox' },
+          shippingEnabled: true,
+          shippingCost: 5.99,
+          freeShippingThreshold: 30
         });
       }
     } catch (error) {
@@ -309,7 +312,10 @@ const MobileCheckoutPage = () => {
         shop: 'active',
         checkout: true,
         checkoutMode: 'full',
-        paypal: { available: true, mode: 'sandbox' }
+        paypal: { available: true, mode: 'sandbox' },
+        shippingEnabled: true,
+        shippingCost: 5.99,
+        freeShippingThreshold: 30
       });
     }
   }, []);
@@ -345,13 +351,16 @@ const MobileCheckoutPage = () => {
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
       
       // Preise berechnen
-      const subtotal = items.reduce((sum, item) => sum + (item.preis || item.price || 0) * item.quantity, 0);
-      const versandkosten = subtotal >= 30 ? 0 : 5.99;
+      const subtotal = availableItems.reduce((sum, item) => sum + (item.preis || item.price || 0) * item.quantity, 0);
+      const shippingEnabled = shopSettings?.shippingEnabled !== false;
+      const shippingCost = Number(shopSettings?.shippingCost ?? 5.99);
+      const freeShippingThreshold = Number(shopSettings?.freeShippingThreshold ?? 30);
+      const versandkosten = shippingEnabled && subtotal < freeShippingThreshold ? shippingCost : 0;
       const total = subtotal + versandkosten;
       const mwst = total - (total / 1.19);
       
       const orderPayload = {
-        artikel: items.map(item => ({
+        artikel: availableItems.map(item => ({
           produktType: 'portfolio',
           produktId: item.id,
           produktSnapshot: {
@@ -858,7 +867,10 @@ const MobileCheckoutPage = () => {
       case 3:
         // Schritt 4: Bezahlung
         const subtotal = availableItems.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
-        const versandkosten = subtotal >= 30 ? 0 : 5.99; // Versandkostenfrei ab 30€
+        const shippingEnabled = shopSettings?.shippingEnabled !== false;
+        const shippingCost = Number(shopSettings?.shippingCost ?? 5.99);
+        const freeShippingThreshold = Number(shopSettings?.freeShippingThreshold ?? 30);
+        const versandkosten = shippingEnabled && subtotal < freeShippingThreshold ? shippingCost : 0;
         const total = subtotal + versandkosten;
         const mwst = total - (total / 1.19); // MwSt aus Gesamtbetrag herausrechnen
         
@@ -884,7 +896,7 @@ const MobileCheckoutPage = () => {
               </Box>
               
               {/* Versandkostenfrei-Anzeige */}
-              {subtotal < 30 && (
+              {shippingEnabled && subtotal < freeShippingThreshold && (
                 <Box sx={{ 
                   p: 2, 
                   mb: 2, 
@@ -894,7 +906,7 @@ const MobileCheckoutPage = () => {
                   borderColor: 'info.main'
                 }}>
                   <Typography variant="body2" color="info.dark" sx={{ textAlign: 'center' }}>
-                    💸 Versandkostenfrei ab 30€! Noch €{(30 - subtotal).toFixed(2)} bis zum kostenlosen Versand.
+                    💸 Versandkostenfrei ab €{freeShippingThreshold.toFixed(2)}! Noch €{(freeShippingThreshold - subtotal).toFixed(2)} bis zum kostenlosen Versand.
                   </Typography>
                 </Box>
               )}

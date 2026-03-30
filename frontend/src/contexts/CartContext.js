@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import { cartAPI } from '../services/api';
 import { useAuth } from './AuthContext';
 import stockEventService from '../services/stockEventService';
@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import cookieManager from '../utils/cookieManager';
 
 const CartContext = createContext();
+let globalLastCartLoadAt = 0;
 
 export const useCart = () => {
   const context = useContext(CartContext);
@@ -20,6 +21,7 @@ export const CartProvider = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastLoadTime, setLastLoadTime] = useState(0);
+  const isLoadingRef = useRef(false);
   const { user } = useAuth();
 
   // Load cart from backend when user logs in (with caching)
@@ -33,6 +35,11 @@ export const CartProvider = ({ children }) => {
     // Cache-Logik: Nur neu laden wenn mehr als 30 Sekunden vergangen sind
     const now = Date.now();
     const cacheTimeout = 30000; // 30 Sekunden
+    const globalDedupTimeout = 2000; // verhindert doppelte StrictMode-Mount-Calls
+
+    if (!force && (now - globalLastCartLoadAt) < globalDedupTimeout) {
+      return;
+    }
     
     if (!force && lastLoadTime && (now - lastLoadTime) < cacheTimeout) {
       console.log('📦 Warenkorb-Cache noch gültig, überspringe Anfrage');
@@ -40,6 +47,12 @@ export const CartProvider = ({ children }) => {
     }
 
     try {
+      if (isLoadingRef.current) {
+        return;
+      }
+
+      isLoadingRef.current = true;
+      globalLastCartLoadAt = now;
       setLoading(true);
       
       // Verwende Admin-Cart-API für Admin-User
@@ -47,21 +60,11 @@ export const CartProvider = ({ children }) => {
         ? await cartAPI.getAdminCart()
         : await cartAPI.getCart();
         
-      console.log('📦 Raw Cart Data:', response.data);
+      
       
       setLastLoadTime(now); // Cache-Zeit aktualisieren
       
       const cartItems = (response.data.data?.items || []).map(item => {
-        console.log('📦 Cart Item:', {
-          name: item.name,
-          bildUrl: item.bildUrl || item.bild,
-          produktId: item.produktId,
-          bestand: item.bestand,
-          aktiv: item.aktiv,
-          menge: item.menge,
-          quantity: item.quantity,
-          fullItem: item
-        });
         
         // Normalisiere Quantity-Feld (Admin-Cart verwendet 'menge', normale Cart 'quantity')
         const itemQuantity = item.menge || item.quantity || 0;
@@ -109,7 +112,7 @@ export const CartProvider = ({ children }) => {
         return cartItem;
       });
       
-      console.log('📦 Mapped Cart Items:', cartItems);
+      
       
       // Prüfe auf nicht verfügbare Artikel und zeige Warnung
       const unavailableItems = cartItems.filter(item => !item.isAvailable);
@@ -160,6 +163,7 @@ export const CartProvider = ({ children }) => {
         // Bei Netzwerkfehlern etc. die vorhandenen Items behalten
       }
     } finally {
+      isLoadingRef.current = false;
       setLoading(false);
     }
   }, [lastLoadTime, user?.role]);
@@ -169,8 +173,6 @@ export const CartProvider = ({ children }) => {
     let isMounted = true;
     
     const token = cookieManager.getItem('token', 'necessary');
-    console.log('🔑 Token beim Mount:', token ? 'VORHANDEN' : 'NICHT VORHANDEN');
-    
     // 🚀 PERFORMANCE: Cart nicht auf Admin-Seiten laden
     const isAdminPage = window.location.pathname.startsWith('/admin');
     if (isAdminPage) {
@@ -179,11 +181,7 @@ export const CartProvider = ({ children }) => {
     }
     
     if (token && isMounted) {
-      console.log('📦 Lade Warenkorb beim Mount...');
       loadCart();
-    } else {
-      console.log('⚠️ Kein Token - Warenkorb wird nicht geladen');
-      console.log('💡 Hinweis: Warenkorb wird geladen sobald Benutzer sich anmeldet');
     }
 
     // Registriere Stock Event Listener für reaktive Updates
@@ -321,7 +319,7 @@ export const CartProvider = ({ children }) => {
       console.error('Fehler beim Hinzufügen zum Warenkorb:', error);
       toast.error('Fehler beim Hinzufügen zum Warenkorb');
       // Bei Fehler: Warenkorb neu laden
-      loadCart();
+      loadCart(true);
     }
   };
 
@@ -356,7 +354,7 @@ export const CartProvider = ({ children }) => {
       console.error('Fehler beim Entfernen aus Warenkorb:', error);
       toast.error('Fehler beim Entfernen aus Warenkorb');
       // Bei Fehler: Warenkorb neu laden
-      loadCart();
+      loadCart(true);
     }
   };
 
@@ -366,7 +364,9 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    if (quantity <= 0) {
+    let requestedQuantity = Number(quantity);
+
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
       removeFromCart(productId);
       return;
     }
@@ -377,9 +377,9 @@ export const CartProvider = ({ children }) => {
       const item = items.find(item => item.id === productId || item.produktId === productId);
       const backendProduktId = item?.produktId || productId;
 
-      // Bestandsprüfung
-      const maxAvailable = item?.bestand?.menge || 0;
-      const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
+      // Bestandsprüfung nur für Verfügbarkeit, Obergrenze entscheidet Backend
+      const knownStock = Number(item?.bestand?.menge || 0);
+      const isAvailable = (item?.aktiv !== false) && knownStock > 0;
       
       if (!isAvailable) {
         toast('⚠️ Artikel ist nicht mehr verfügbar', {
@@ -392,9 +392,42 @@ export const CartProvider = ({ children }) => {
         });
         return;
       }
+
+      if (requestedQuantity > knownStock) {
+        requestedQuantity = knownStock;
+      }
       
-      if (quantity > maxAvailable) {
-        toast(`⚠️ Nur ${maxAvailable} Stück verfügbar`, {
+      console.log('🔄 Updating quantity:', {
+        frontendId: productId,
+        backendProduktId: backendProduktId,
+        quantity: requestedQuantity,
+        knownStock: item?.bestand?.menge,
+        foundItem: !!item
+      });
+
+      // Optimistische UI-Update - sofort lokales State aktualisieren
+      setItems(prevItems => prevItems.map(item => 
+        (item.id === productId || item.produktId === productId)
+          ? { ...item, quantity: requestedQuantity }
+          : item
+      ));
+      
+      // Backend-Update mit korrekter produktId
+      await cartAPI.updateQuantity(backendProduktId, requestedQuantity);
+      
+    } catch (error) {
+      console.error('Fehler beim Aktualisieren des Warenkorbs:', error);
+      const errorType = error?.response?.data?.errorType;
+      const availableQuantity = Number(error?.response?.data?.availableQuantity);
+
+      if (errorType === 'INSUFFICIENT_STOCK' && Number.isFinite(availableQuantity) && availableQuantity >= 0) {
+        setItems(prevItems => prevItems.map(item =>
+          (item.id === productId || item.produktId === productId)
+            ? { ...item, quantity: availableQuantity }
+            : item
+        ));
+
+        toast(`⚠️ Nur ${availableQuantity} Stück verfügbar`, {
           icon: '⚠️',
           style: {
             background: '#fff3cd',
@@ -402,32 +435,11 @@ export const CartProvider = ({ children }) => {
             color: '#856404',
           },
         });
-        quantity = maxAvailable; // Auf verfügbare Menge begrenzen
+      } else {
+        toast.error('Fehler beim Aktualisieren des Warenkorbs');
       }
-
-      console.log('🔄 Updating quantity:', {
-        frontendId: productId,
-        backendProduktId: backendProduktId,
-        quantity: quantity,
-        maxAvailable: maxAvailable,
-        foundItem: !!item
-      });
-
-      // Optimistische UI-Update - sofort lokales State aktualisieren
-      setItems(prevItems => prevItems.map(item => 
-        (item.id === productId || item.produktId === productId)
-          ? { ...item, quantity: quantity }
-          : item
-      ));
-      
-      // Backend-Update mit korrekter produktId
-      await cartAPI.updateQuantity(backendProduktId, quantity);
-      
-    } catch (error) {
-      console.error('Fehler beim Aktualisieren des Warenkorbs:', error);
-      toast.error('Fehler beim Aktualisieren des Warenkorbs');
       // Bei Fehler: Warenkorb neu laden
-      loadCart();
+      loadCart(true);
     }
   };
 
@@ -449,23 +461,13 @@ export const CartProvider = ({ children }) => {
       console.error('Fehler beim Leeren des Warenkorbs:', error);
       toast.error('Fehler beim Leeren des Warenkorbs');
       // Bei Fehler: Warenkorb neu laden
-      loadCart();
+      loadCart(true);
     }
   };
 
   const getCartTotal = () => {
     return items.reduce((total, item) => {
-      // Debugging für Preisprobleme
       const itemPrice = item.price || item.preis || 0;
-      console.log('💰 Preisberechnung:', {
-        name: item.name,
-        price: item.price,
-        preis: item.preis,
-        finalPrice: itemPrice,
-        quantity: item.quantity,
-        subtotal: itemPrice * item.quantity
-      });
-      
       return total + (itemPrice * item.quantity);
     }, 0);
   };

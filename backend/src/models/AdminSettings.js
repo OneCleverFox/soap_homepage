@@ -49,6 +49,20 @@ const adminSettingsSchema = new mongoose.Schema({
     maintenanceMessage: {
       type: String,
       default: 'Checkout vorübergehend deaktiviert. Bitte kontaktieren Sie uns für Anfragen.'
+    },
+    shippingEnabled: {
+      type: Boolean,
+      default: true
+    },
+    shippingCost: {
+      type: Number,
+      default: 5.99,
+      min: 0
+    },
+    freeShippingThreshold: {
+      type: Number,
+      default: 30,
+      min: 0
     }
   },
   
@@ -140,6 +154,34 @@ adminSettingsSchema.statics.getInstance = async function() {
   } else {
     // Bestehende Settings mit aktuellen ENV-Variablen aktualisieren
     let needsUpdate = false;
+
+    // Checkout-Defaults für bestehende Dokumente nachziehen
+    if (!settings.checkout) {
+      settings.checkout = {
+        enabled: true,
+        mode: 'full',
+        maintenanceMessage: 'Checkout vorübergehend deaktiviert. Bitte kontaktieren Sie uns für Anfragen.',
+        shippingEnabled: true,
+        shippingCost: 5.99,
+        freeShippingThreshold: 30
+      };
+      needsUpdate = true;
+    } else {
+      if (typeof settings.checkout.shippingEnabled !== 'boolean') {
+        settings.checkout.shippingEnabled = true;
+        needsUpdate = true;
+      }
+
+      if (!Number.isFinite(Number(settings.checkout.shippingCost))) {
+        settings.checkout.shippingCost = 5.99;
+        needsUpdate = true;
+      }
+
+      if (!Number.isFinite(Number(settings.checkout.freeShippingThreshold))) {
+        settings.checkout.freeShippingThreshold = 30;
+        needsUpdate = true;
+      }
+    }
     
     // Sandbox-Konfiguration aktualisieren
     if (process.env.PAYPAL_SANDBOX_CLIENT_ID && settings.paypal.sandbox.clientId !== process.env.PAYPAL_SANDBOX_CLIENT_ID) {
@@ -162,6 +204,7 @@ adminSettingsSchema.statics.getInstance = async function() {
     }
     
     if (needsUpdate) {
+      settings.markModified('checkout');
       await settings.save();
       console.log('✅ AdminSettings mit aktuellen Environment-Variablen aktualisiert');
     }
