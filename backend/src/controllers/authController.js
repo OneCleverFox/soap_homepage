@@ -757,6 +757,20 @@ const registerUser = async (req, res) => {
           field: 'email'
         });
       }
+
+      if (userSaveError.name === 'ValidationError') {
+        const validationErrors = Object.keys(userSaveError.errors).map(field => ({
+          field,
+          message: userSaveError.errors[field].message
+        }));
+
+        return res.status(400).json({
+          success: false,
+          message: 'Validierungsfehler bei der Benutzererstellung',
+          error: 'USER_VALIDATION_FAILED',
+          validationErrors
+        });
+      }
       
       return res.status(500).json({
         success: false,
