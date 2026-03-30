@@ -47,7 +47,6 @@ import {
   CheckCircleOutlined,
   ArrowBackOutlined,
   WcOutlined,
-  CheckOutlined,
   CloseOutlined,
   SecurityOutlined
 } from '@mui/icons-material';
@@ -124,6 +123,18 @@ const RegisterPage = () => {
     'Lieferung & Präferenzen'
   ];
 
+  const requirementLabels = {
+    length: 'Mindestens 8 Zeichen',
+    uppercase: 'Großbuchstabe (A-Z)',
+    lowercase: 'Kleinbuchstabe (a-z)',
+    number: 'Zahl (0-9)',
+    special: 'Sonderzeichen (@$!%*?&#+-_=)',
+    noRepetition: 'Keine 3+ gleichen Zeichen hintereinander',
+    noUserInfo: 'Keine persönlichen Daten im Passwort',
+    noCommonPasswords: 'Kein häufig verwendetes Passwort',
+    strength: 'Stärke mindestens Mittel (3/4)'
+  };
+
   const handleChange = (e) => {
     const { name, value, checked, type } = e.target;
     
@@ -164,6 +175,16 @@ const RegisterPage = () => {
       if (name === 'email' && value) {
         checkEmailUniqueness(value);
       }
+      
+      // Passwort-Validierung bei Passwort-Eingabe
+      if (name === 'password') {
+        validatePassword(value);
+      }
+
+      // Passwort neu bewerten, wenn benutzerbezogene Felder geändert werden
+      if ((name === 'firstName' || name === 'lastName' || name === 'email') && formData.password) {
+        validatePassword(formData.password, { [name]: value });
+      }
     }
     
     setError('');
@@ -172,11 +193,11 @@ const RegisterPage = () => {
     }
   };
 
-  const validatePassword = (password) => {
+  const validatePassword = (password, userInfoOverrides = {}) => {
     const validation = PasswordValidator.validatePassword(password, {
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email
+      firstName: userInfoOverrides.firstName ?? formData.firstName,
+      lastName: userInfoOverrides.lastName ?? formData.lastName,
+      email: userInfoOverrides.email ?? formData.email
     });
     
     setPasswordValidation(validation);
@@ -389,6 +410,10 @@ const RegisterPage = () => {
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
+
+  const unmetRequirements = Object.entries(requirementLabels)
+    .filter(([key]) => !passwordValidation.requirements[key])
+    .map(([key, label]) => ({ key, label }));
 
   if (success) {
     return (
@@ -625,100 +650,31 @@ const RegisterPage = () => {
                         sx={{ mb: 2, height: 6, borderRadius: 3 }}
                       />
                       
-                      {/* Anforderungen-Checkliste */}
-                      <Typography variant="body2" fontWeight="bold" gutterBottom>
-                        Sicherheitsanforderungen:
-                      </Typography>
-                      <List dense sx={{ py: 0 }}>
-                        <ListItem sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.length ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Mindestens 8 Zeichen" />
-                        </ListItem>
-                        <ListItem sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.uppercase ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Großbuchstabe (A-Z)" />
-                        </ListItem>
-                        <ListItem sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.lowercase ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Kleinbuchstabe (a-z)" />
-                        </ListItem>
-                        <ListItem sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.number ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Zahl (0-9)" />
-                        </ListItem>
-                        <ListItem sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.special ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Sonderzeichen (@$!%*?&)" />
-                        </ListItem>
-                        
-                        <ListItem dense sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.noRepetition ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Keine 3+ gleichen Zeichen hintereinander" />
-                        </ListItem>
-
-                        <ListItem dense sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.noUserInfo ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Keine persönlichen Daten im Passwort" />
-                        </ListItem>
-
-                        <ListItem dense sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.noCommonPasswords ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Kein häufig verwendetes Passwort" />
-                        </ListItem>
-
-                        <ListItem dense sx={{ py: 0.5 }}>
-                          <ListItemIcon sx={{ minWidth: 36 }}>
-                            {passwordValidation.requirements.strength ? 
-                              <CheckOutlined color="success" fontSize="small" /> : 
-                              <CloseOutlined color="error" fontSize="small" />
-                            }
-                          </ListItemIcon>
-                          <ListItemText primary="Stärke mindestens Mittel (3/4)" />
-                        </ListItem>
-                      </List>
+                      {/* Anforderungen-Checkliste: nur offene Punkte */}
+                      {unmetRequirements.length > 0 ? (
+                        <>
+                          <Typography variant="body2" fontWeight="bold" gutterBottom color="error.main">
+                            Bitte noch ergänzen:
+                          </Typography>
+                          <List dense sx={{ py: 0 }}>
+                            {unmetRequirements.map((requirement) => (
+                              <ListItem key={requirement.key} sx={{ py: 0.5 }}>
+                                <ListItemIcon sx={{ minWidth: 36 }}>
+                                  <CloseOutlined color="error" fontSize="small" />
+                                </ListItemIcon>
+                                <ListItemText primary={requirement.label} />
+                              </ListItem>
+                            ))}
+                          </List>
+                        </>
+                      ) : (
+                        <Alert severity="success" sx={{ mt: 1 }}>
+                          Alle Sicherheitsanforderungen sind erfüllt.
+                        </Alert>
+                      )}
                       
                       {/* Feedback anzeigen */}
-                      {passwordValidation.feedback.length > 0 && (
+                      {!passwordValidation.isValid && passwordValidation.feedback.length > 0 && (
                         <Box sx={{ mt: 1 }}>
                           <Typography variant="body2" color="error.main" fontWeight="bold">
                             Verbesserungsvorschläge:
