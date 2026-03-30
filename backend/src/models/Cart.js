@@ -1,5 +1,21 @@
 const mongoose = require('mongoose');
 
+const normalizeCartImage = (imageData) => {
+  if (!imageData) {
+    return '';
+  }
+
+  if (typeof imageData === 'string') {
+    return imageData;
+  }
+
+  if (typeof imageData === 'object' && typeof imageData.url === 'string') {
+    return imageData.url;
+  }
+
+  return '';
+};
+
 const cartItemSchema = new mongoose.Schema({
   produktId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -23,7 +39,8 @@ const cartItemSchema = new mongoose.Schema({
   },
   bild: {
     type: String,
-    default: ''
+    default: '',
+    set: normalizeCartImage
   },
   gramm: {
     type: Number,
@@ -37,7 +54,7 @@ const cartItemSchema = new mongoose.Schema({
   // Werkstück-spezifische Felder
   kategorie: {
     type: String,
-    enum: ['seife', 'werkstuck'],
+    enum: ['seife', 'werkstuck', 'schmuck'],
     default: 'seife'
   },
   giesswerkstoff: {

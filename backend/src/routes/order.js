@@ -3,6 +3,8 @@ const router = express.Router();
 const Order = require('../models/Order');
 const Kunde = require('../models/Kunde');
 const Portfolio = require('../models/Portfolio');
+const Bestand = require('../models/Bestand');
+const AdminSettings = require('../models/AdminSettings');
 const PayPalService = require('../services/PayPalService');
 const emailService = require('../services/emailService');
 const orderInvoiceService = require('../services/orderInvoiceService');
@@ -399,6 +401,41 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
         });
       }
 
+      const requestedQuantity = Number(artikelItem.menge);
+      if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Ungültige Menge für Artikel ${dbArtikel.name}`
+        });
+      }
+
+      const stockRecords = await Bestand.find({
+        artikelId: dbArtikel._id,
+        $or: [{ typ: 'produkt' }, { artikelModell: 'Portfolio' }]
+      })
+        .sort({ typ: -1, createdAt: -1 })
+        .limit(1)
+        .lean();
+
+      const bestandInfo = stockRecords[0] || null;
+
+      if (!bestandInfo || Number(bestandInfo.menge || 0) <= 0) {
+        return res.status(400).json({
+          success: false,
+          errorType: 'NOT_AVAILABLE',
+          message: `${dbArtikel.name} ist nicht verfügbar`
+        });
+      }
+
+      if (requestedQuantity > Number(bestandInfo.menge || 0)) {
+        return res.status(400).json({
+          success: false,
+          errorType: 'INSUFFICIENT_STOCK',
+          message: `Nur ${bestandInfo.menge} Stück von ${dbArtikel.name} verfügbar`,
+          availableQuantity: Number(bestandInfo.menge || 0)
+        });
+      }
+
       // Beschreibung intelligent extrahieren aus Portfolio-Objekt
       let beschreibung = generateProductDescription({
         aroma: dbArtikel.aroma,
@@ -438,11 +475,32 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
           gewicht: dbArtikel.gewicht,
           inhaltsstoffe: dbArtikel.inhaltsstoffe || []
         },
-        menge: artikelItem.menge,
+        menge: requestedQuantity,
         einzelpreis: pricing.effectivePrice,
-        gesamtpreis: pricing.effectivePrice * artikelItem.menge
+        gesamtpreis: pricing.effectivePrice * requestedQuantity
       });
     }
+
+    const settings = await AdminSettings.getInstance();
+    const shippingEnabled = settings.checkout?.shippingEnabled !== false;
+    const shippingCost = Number(settings.checkout?.shippingCost ?? 5.99);
+    const freeShippingThreshold = Number(settings.checkout?.freeShippingThreshold ?? 30);
+
+    const zwischensumme = validierteArtikel.reduce((sum, item) => sum + item.gesamtpreis, 0);
+    const versandkosten = shippingEnabled && zwischensumme < freeShippingThreshold ? shippingCost : 0;
+    const mwstSatz = Number(preise?.mwst?.satz ?? 19);
+    const gesamtsumme = zwischensumme + versandkosten;
+    const mwstBetrag = gesamtsumme - (gesamtsumme / (1 + (mwstSatz / 100)));
+
+    const berechnetePreise = {
+      zwischensumme,
+      versandkosten,
+      mwst: {
+        satz: mwstSatz,
+        betrag: mwstBetrag
+      },
+      gesamtsumme
+    };
 
     // Bestellnummer generieren (eindeutig mit Zeitstempel + Random)
     const timestamp = Date.now();
@@ -487,13 +545,13 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
         land: lieferadresse.land || 'Deutschland'
       },
       preise: {
-        zwischensumme: preise.zwischensumme,
-        versandkosten: preise.versandkosten,
+        zwischensumme: berechnetePreise.zwischensumme,
+        versandkosten: berechnetePreise.versandkosten,
         mwst: {
-          satz: preise.mwst.satz,
-          betrag: preise.mwst.betrag
+          satz: berechnetePreise.mwst.satz,
+          betrag: berechnetePreise.mwst.betrag
         },
-        gesamtsumme: preise.gesamtsumme
+        gesamtsumme: berechnetePreise.gesamtsumme
       },
       zahlung: {
         methode: zahlung.methode,
@@ -509,7 +567,7 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
     if (req.isInquiryMode) {
       const inquiryResult = await createInquiryFromOrder(
         req, validierteArtikel, besteller, rechnungsadresse, 
-        lieferadresse, preise, notizen, quelle, bestellnummer
+        lieferadresse, berechnetePreise, notizen, quelle, bestellnummer
       );
       return res.json(inquiryResult);
     }
@@ -550,11 +608,11 @@ router.post('/create', validateCheckoutStatus, async (req, res) => {
     const paypalOrderData = {
       bestellnummer: bestellnummer,
       artikel: paypalArtikel,
-      versandkosten: preise.versandkosten,
+      versandkosten: berechnetePreise.versandkosten,
       gesamt: {
-        netto: preise.zwischensumme,
-        mwst: preise.mwst.betrag,
-        brutto: preise.gesamtsumme
+        netto: berechnetePreise.zwischensumme,
+        mwst: berechnetePreise.mwst.betrag,
+        brutto: berechnetePreise.gesamtsumme
       },
       lieferadresse: lieferadresseData,
       bestellnummer: bestellnummer // Wichtig für PayPal-Referenz
