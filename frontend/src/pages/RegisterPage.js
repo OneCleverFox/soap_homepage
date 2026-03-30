@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Container,
@@ -160,11 +160,6 @@ const RegisterPage = () => {
       if (name === 'email' && value) {
         checkEmailUniqueness(value);
       }
-      
-      // Passwort-Validierung bei Passwort-Eingabe
-      if (name === 'password' && value) {
-        validatePassword(value);
-      }
     }
     
     setError('');
@@ -181,6 +176,34 @@ const RegisterPage = () => {
     });
     
     setPasswordValidation(validation);
+  };
+
+  // Passwort in Echtzeit validieren (auch wenn sich Name/E-Mail nachträglich ändern)
+  useEffect(() => {
+    validatePassword(formData.password || '');
+  }, [formData.password, formData.firstName, formData.lastName, formData.email]);
+
+  const canProceedStep = (step) => {
+    switch (step) {
+      case 0:
+        return !!formData.email &&
+          !!formData.password &&
+          !!formData.confirmPassword &&
+          !emailError &&
+          formData.password === formData.confirmPassword &&
+          formData.password.length >= 8 &&
+          passwordValidation.isValid;
+      case 1:
+        return !!formData.firstName && !!formData.lastName;
+      case 2:
+        return !!formData.address.street &&
+          !!formData.address.houseNumber &&
+          !!formData.address.zipCode &&
+          !!formData.address.city;
+      case 3:
+      default:
+        return true;
+    }
   };
 
   const checkEmailUniqueness = async (email) => {
@@ -566,20 +589,24 @@ const RegisterPage = () => {
                         </InputAdornment>
                       ),
                     }}
-                    helperText="Sichere Passwörter nach aktuellen Standards"
+                    helperText={
+                      formData.password && !passwordValidation.isValid
+                        ? (passwordValidation.feedback[0] || 'Passwort entspricht nicht den Anforderungen')
+                        : 'Sichere Passwörter nach aktuellen Standards'
+                    }
                   />
                   
                   {/* Passwort-Stärke-Anzeige */}
                   {formData.password && (
                     <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                       <Box display="flex" alignItems="center" gap={1} mb={1}>
-                        <SecurityOutlined color={passwordValidation.strengthColor} />
+                        <SecurityOutlined color={passwordValidation.isValid ? 'success' : passwordValidation.strengthColor} />
                         <Typography variant="body2" fontWeight="bold">
                           Passwort-Stärke: 
                         </Typography>
                         <Chip 
                           label={passwordValidation.strengthText}
-                          color={passwordValidation.strengthColor}
+                          color={passwordValidation.isValid ? 'success' : passwordValidation.strengthColor}
                           size="small"
                         />
                         <Typography variant="body2" color="text.secondary">
@@ -590,7 +617,7 @@ const RegisterPage = () => {
                       <LinearProgress 
                         variant="determinate" 
                         value={(passwordValidation.score / 4) * 100}
-                        color={passwordValidation.strengthColor}
+                        color={passwordValidation.isValid ? 'success' : passwordValidation.strengthColor}
                         sx={{ mb: 2, height: 6, borderRadius: 3 }}
                       />
                       
@@ -653,6 +680,36 @@ const RegisterPage = () => {
                             }
                           </ListItemIcon>
                           <ListItemText primary="Keine 3+ gleichen Zeichen hintereinander" />
+                        </ListItem>
+
+                        <ListItem dense sx={{ py: 0.5 }}>
+                          <ListItemIcon sx={{ minWidth: 36 }}>
+                            {passwordValidation.requirements.noUserInfo ? 
+                              <CheckOutlined color="success" fontSize="small" /> : 
+                              <CloseOutlined color="error" fontSize="small" />
+                            }
+                          </ListItemIcon>
+                          <ListItemText primary="Keine persönlichen Daten im Passwort" />
+                        </ListItem>
+
+                        <ListItem dense sx={{ py: 0.5 }}>
+                          <ListItemIcon sx={{ minWidth: 36 }}>
+                            {passwordValidation.requirements.noCommonPasswords ? 
+                              <CheckOutlined color="success" fontSize="small" /> : 
+                              <CloseOutlined color="error" fontSize="small" />
+                            }
+                          </ListItemIcon>
+                          <ListItemText primary="Kein häufig verwendetes Passwort" />
+                        </ListItem>
+
+                        <ListItem dense sx={{ py: 0.5 }}>
+                          <ListItemIcon sx={{ minWidth: 36 }}>
+                            {passwordValidation.requirements.strength ? 
+                              <CheckOutlined color="success" fontSize="small" /> : 
+                              <CloseOutlined color="error" fontSize="small" />
+                            }
+                          </ListItemIcon>
+                          <ListItemText primary="Stärke mindestens Mittel (3/4)" />
                         </ListItem>
                       </List>
                       
@@ -1101,7 +1158,7 @@ const RegisterPage = () => {
                 <Button
                   onClick={handleNext}
                   variant="contained"
-                  disabled={loading}
+                  disabled={loading || !canProceedStep(activeStep)}
                 >
                   Weiter
                 </Button>
