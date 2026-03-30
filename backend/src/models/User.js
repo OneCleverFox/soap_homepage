@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const PasswordValidator = require('../utils/passwordValidator');
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -23,10 +24,21 @@ const userSchema = new mongoose.Schema({
     minlength: [8, 'Passwort muss mindestens 8 Zeichen lang sein'],
     validate: {
       validator: function(password) {
-        // Passwort-Sicherheitsvalidierung nach BSI/NIST Standards
-        return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/.test(password);
+        // Einheitliche Validierung mit derselben Logik wie im Controller
+        if (!password || password.startsWith('$2a$') || password.startsWith('$2b$') || password.startsWith('$2y$')) {
+          return true;
+        }
+
+        const validation = PasswordValidator.validatePassword(password, {
+          firstName: this.firstName,
+          lastName: this.lastName,
+          username: this.username,
+          email: this.email
+        });
+
+        return validation.isValid;
       },
-      message: 'Passwort muss mindestens 8 Zeichen enthalten: Großbuchstabe, Kleinbuchstabe, Zahl und Sonderzeichen (@$!%*?&#)'
+      message: 'Passwort entspricht nicht den Sicherheitsanforderungen'
     },
     alias: 'passwort'
   },
