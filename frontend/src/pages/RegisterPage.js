@@ -30,8 +30,10 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  useMediaQuery
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import {
   PersonOutlined,
   EmailOutlined,
@@ -54,6 +56,8 @@ import PasswordValidator from '../utils/passwordValidator';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [activeStep, setActiveStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
@@ -1068,7 +1072,7 @@ const RegisterPage = () => {
                   />
                 </FormGroup>
                 
-                <FormControl sx={{ mt: 2, minWidth: 200 }}>
+                <FormControl sx={{ mt: 2, minWidth: isMobile ? '100%' : 200 }}>
                   <InputLabel>E-Mail-Häufigkeit</InputLabel>
                   <Select
                     name="kommunikation.emailFrequenz"
@@ -1094,17 +1098,17 @@ const RegisterPage = () => {
   };
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={6} sx={{ p: 4, borderRadius: 3 }}>
-        <Box display="flex" flexDirection="column" alignItems="center" mb={4}>
+    <Container maxWidth="md" sx={{ mt: isMobile ? 2 : 4, mb: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+      <Paper elevation={6} sx={{ p: isMobile ? 2 : 4, borderRadius: isMobile ? 2 : 3 }}>
+        <Box display="flex" flexDirection="column" alignItems="center" mb={isMobile ? 2.5 : 4}>
           <PersonAddOutlined 
             sx={{ 
-              fontSize: 48, 
+              fontSize: isMobile ? 40 : 48, 
               color: 'primary.main', 
               mb: 2 
             }} 
           />
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant={isMobile ? 'h5' : 'h4'} component="h1" gutterBottom>
             Registrierung
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center">
@@ -1112,7 +1116,11 @@ const RegisterPage = () => {
           </Typography>
         </Box>
 
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        <Stepper
+          activeStep={activeStep}
+          orientation={isMobile ? 'vertical' : 'horizontal'}
+          sx={{ mb: isMobile ? 2.5 : 4 }}
+        >
           {steps.map((label) => (
             <Step key={label}>
               <StepLabel>{label}</StepLabel>
@@ -1133,16 +1141,25 @@ const RegisterPage = () => {
         <Box component="form" onSubmit={handleSubmit}>
           {renderStepContent(activeStep)}
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              mt: 4,
+              gap: 1.5,
+              flexDirection: isMobile ? 'column-reverse' : 'row'
+            }}
+          >
             <Button
               onClick={handleBack}
               disabled={activeStep === 0 || loading}
               startIcon={<ArrowBackOutlined />}
+              fullWidth={isMobile}
             >
               Zurück
             </Button>
 
-            <Box>
+            <Box sx={{ width: isMobile ? '100%' : 'auto' }}>
               {activeStep === steps.length - 1 ? (
                 <Button
                   type="submit"
@@ -1151,6 +1168,7 @@ const RegisterPage = () => {
                   disabled={loading}
                   startIcon={loading ? <CircularProgress size={20} /> : <PersonAddOutlined />}
                   sx={{ px: 4 }}
+                  fullWidth={isMobile}
                 >
                   {loading ? 'Registriere...' : 'Registrieren'}
                 </Button>
@@ -1159,6 +1177,7 @@ const RegisterPage = () => {
                   onClick={handleNext}
                   variant="contained"
                   disabled={loading || !canProceedStep(activeStep)}
+                  fullWidth={isMobile}
                 >
                   Weiter
                 </Button>
