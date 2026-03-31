@@ -288,31 +288,50 @@ export const CartProvider = ({ children }) => {
       // Optimistische UI-Update - sofort zum lokalen State hinzufügen/aktualisieren
       setItems(prevItems => {
         const existingItemIndex = prevItems.findIndex(item => item.id === product.id);
+        const knownStock = Number(product?.bestand?.menge || product?.stock?.quantity || 0);
+        const productIsActive = product?.aktiv !== false;
+        const optimisticIsAvailable = productIsActive && (knownStock <= 0 ? true : knownStock > 0);
         
         if (existingItemIndex >= 0) {
           // Item bereits vorhanden - Menge erhöhen
           return prevItems.map((item, index) => 
             index === existingItemIndex 
-              ? { ...item, quantity: item.quantity + quantity }
+              ? {
+                  ...item,
+                  quantity: item.quantity + quantity,
+                  produktId: item.produktId || product.id,
+                  aktiv: item.aktiv !== undefined ? item.aktiv : productIsActive,
+                  bestand: item.bestand || (knownStock > 0 ? { menge: knownStock, einheit: 'Stück' } : undefined),
+                  isAvailable: item.isAvailable !== undefined ? item.isAvailable : optimisticIsAvailable,
+                  hasEnoughStock: item.hasEnoughStock !== undefined
+                    ? item.hasEnoughStock
+                    : (knownStock > 0 ? (item.quantity + quantity) <= knownStock : true)
+                }
               : item
           );
         } else {
           // Neues Item hinzufügen
           return [...prevItems, {
             id: product.id,
+            produktId: product.id,
             name: product.name,
             price: product.price,
             sale: product.sale || { isOnSale: false, discountPercent: 0 },
             quantity: quantity,
             image: product.image || '',
             gramm: product.gramm,
-            seife: product.seife
+            seife: product.seife,
+            aktiv: productIsActive,
+            bestand: knownStock > 0 ? { menge: knownStock, einheit: 'Stück' } : undefined,
+            isAvailable: optimisticIsAvailable,
+            hasEnoughStock: knownStock > 0 ? quantity <= knownStock : true
           }];
         }
       });
 
       // Backend-Update
       await cartAPI.addToCart(cartItem);
+      await loadCart(true);
       
       toast.success('Artikel hinzugefügt');
     } catch (error) {

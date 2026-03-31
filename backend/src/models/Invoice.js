@@ -84,14 +84,40 @@ const invoiceSchema = new mongoose.Schema({
   
   // Zahlungsinformationen
   payment: {
-    method: { 
-      type: String, 
-      enum: ['bar', 'paypal', 'bank_transfer', 'pending'], 
-      default: 'pending' 
+    method: {
+      type: String,
+      enum: ['bar', 'paypal', 'bank_transfer', 'pending'],
+      default: 'pending'
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'paid', 'failed', 'refunded'],
+      default: 'pending'
     },
     paidDate: { type: Date },
     paidAmount: { type: Number, default: 0 },
     paymentReference: { type: String }
+  },
+
+  // Verknuepfung zur urspruenglichen Bestellung
+  order: {
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order'
+    },
+    bestellnummer: {
+      type: String,
+      trim: true
+    }
+  },
+  originalOrder: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Order'
+  },
+  source: {
+    type: String,
+    trim: true,
+    default: 'manual'
   },
   
   // Template das verwendet wurde
