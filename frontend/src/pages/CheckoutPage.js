@@ -119,7 +119,10 @@ const CheckoutPage = () => {
           shop: 'active',
           checkout: true,
           checkoutMode: 'full',
-          paypal: { available: true, mode: 'sandbox' }
+          paypal: { available: true, mode: 'sandbox' },
+          shippingEnabled: true,
+          shippingCost: 5.99,
+          freeShippingThreshold: 30
         });
       }
     } catch (error) {
@@ -129,7 +132,10 @@ const CheckoutPage = () => {
         shop: 'active',
         checkout: true,
         checkoutMode: 'full',
-        paypal: { available: true, mode: 'sandbox' }
+        paypal: { available: true, mode: 'sandbox' },
+        shippingEnabled: true,
+        shippingCost: 5.99,
+        freeShippingThreshold: 30
       });
     }
   }, []);
@@ -409,7 +415,10 @@ const CheckoutPage = () => {
   const handleCreateOrder = async () => {
       // Bestellung erstellen (KORREKTE Steuerberechnung) - nur verfügbare Artikel
       const gesamtsumme = availableItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-      const versandkosten = gesamtsumme >= 30 ? 0 : 5.99;
+      const shippingEnabled = shopSettings?.shippingEnabled !== false;
+      const shippingCost = Number(shopSettings?.shippingCost ?? 5.99);
+      const freeShippingThreshold = Number(shopSettings?.freeShippingThreshold ?? 30);
+      const versandkosten = shippingEnabled && gesamtsumme < freeShippingThreshold ? shippingCost : 0;
       
       // In Deutschland sind Preise INKLUSIVE MwSt.
       // Endpreis = Artikelsumme (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
@@ -540,7 +549,10 @@ const CheckoutPage = () => {
   }
 
   const subtotal = availableTotal;
-  const versandkosten = subtotal >= 30 ? 0 : 5.99;
+  const shippingEnabled = shopSettings?.shippingEnabled !== false;
+  const shippingCost = Number(shopSettings?.shippingCost ?? 5.99);
+  const freeShippingThreshold = Number(shopSettings?.freeShippingThreshold ?? 30);
+  const versandkosten = shippingEnabled && subtotal < freeShippingThreshold ? shippingCost : 0;
   
   // KORREKTE Steuerberechnung: In Deutschland sind Preise INKLUSIVE MwSt.
   // Gesamtsumme = Subtotal (inkl. MwSt.) + Versandkosten (inkl. MwSt.)
@@ -934,10 +946,10 @@ const CheckoutPage = () => {
               </Box>
             </Box>
 
-            {subtotal < 30 && (
+            {shippingEnabled && subtotal < freeShippingThreshold && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 <Typography variant="body2">
-                  Versandkostenfrei ab 30€! Noch {formatPrice(30 - subtotal)} bis zum kostenlosen Versand.
+                  Versandkostenfrei ab {formatPrice(freeShippingThreshold)}! Noch {formatPrice(freeShippingThreshold - subtotal)} bis zum kostenlosen Versand.
                 </Typography>
               </Alert>
             )}

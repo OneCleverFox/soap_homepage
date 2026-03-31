@@ -36,6 +36,15 @@ router.get('/settings', auth, requireAdmin, async (req, res) => {
     };
     
     // Admin-Settings für Anzeige zusammenstellen
+    const checkoutSettings = {
+      enabled: settings.checkout?.enabled ?? true,
+      mode: settings.checkout?.mode || 'full',
+      maintenanceMessage: settings.checkout?.maintenanceMessage || 'Checkout vorübergehend deaktiviert. Bitte kontaktieren Sie uns für Anfragen.',
+      shippingEnabled: settings.checkout?.shippingEnabled !== false,
+      shippingCost: Number(settings.checkout?.shippingCost ?? 5.99),
+      freeShippingThreshold: Number(settings.checkout?.freeShippingThreshold ?? 30)
+    };
+
     const adminSettings = {
       paypal: {
         mode: settings.paypal.mode,
@@ -58,7 +67,7 @@ router.get('/settings', auth, requireAdmin, async (req, res) => {
           }
         }
       },
-      checkout: settings.checkout,
+      checkout: checkoutSettings,
       shop: settings.shop,
       lastUpdated: settings.lastUpdated,
       updatedBy: settings.updatedBy
@@ -120,11 +129,48 @@ router.put('/settings', auth, requireAdmin, async (req, res) => {
         break;
         
       case 'checkout':
-        if (typeof updates.enabled === 'boolean') settings.checkout.enabled = updates.enabled;
-        if (updates.mode && ['full', 'inquiry', 'disabled'].includes(updates.mode)) {
-          settings.checkout.mode = updates.mode;
+        if (!settings.checkout) {
+          settings.checkout = {};
         }
-        if (updates.maintenanceMessage !== undefined) settings.checkout.maintenanceMessage = updates.maintenanceMessage;
+
+        const nextCheckout = {
+          enabled: settings.checkout.enabled ?? true,
+          mode: settings.checkout.mode || 'full',
+          maintenanceMessage: settings.checkout.maintenanceMessage || 'Checkout vorübergehend deaktiviert. Bitte kontaktieren Sie uns für Anfragen.',
+          shippingEnabled: settings.checkout.shippingEnabled !== false,
+          shippingCost: Number(settings.checkout.shippingCost ?? 5.99),
+          freeShippingThreshold: Number(settings.checkout.freeShippingThreshold ?? 30)
+        };
+
+        if (typeof updates.enabled === 'boolean') nextCheckout.enabled = updates.enabled;
+        if (updates.mode && ['full', 'inquiry', 'disabled'].includes(updates.mode)) {
+          nextCheckout.mode = updates.mode;
+        }
+        if (updates.maintenanceMessage !== undefined) nextCheckout.maintenanceMessage = updates.maintenanceMessage;
+        if (typeof updates.shippingEnabled === 'boolean') nextCheckout.shippingEnabled = updates.shippingEnabled;
+        if (updates.shippingCost !== undefined) {
+          const shippingCost = Number(updates.shippingCost);
+          if (!Number.isFinite(shippingCost) || shippingCost < 0) {
+            return res.status(400).json({
+              success: false,
+              message: 'Ungültige Versandkosten'
+            });
+          }
+          nextCheckout.shippingCost = shippingCost;
+        }
+        if (updates.freeShippingThreshold !== undefined) {
+          const freeShippingThreshold = Number(updates.freeShippingThreshold);
+          if (!Number.isFinite(freeShippingThreshold) || freeShippingThreshold < 0) {
+            return res.status(400).json({
+              success: false,
+              message: 'Ungültiger Mindestbestellwert für kostenlosen Versand'
+            });
+          }
+          nextCheckout.freeShippingThreshold = freeShippingThreshold;
+        }
+
+        settings.checkout = nextCheckout;
+        settings.markModified('checkout');
         break;
         
       case 'shop':
@@ -266,6 +312,9 @@ router.get('/shop-status', async (req, res) => {
         shop: settings.shop.status,
         checkout: settings.checkout.enabled,
         checkoutMode: settings.checkout.mode,
+        shippingEnabled: settings.checkout.shippingEnabled !== false,
+        shippingCost: Number(settings.checkout.shippingCost ?? 5.99),
+        freeShippingThreshold: Number(settings.checkout.freeShippingThreshold ?? 30),
         message: settings.shop.statusMessage || settings.checkout.maintenanceMessage,
         paypal: {
           available: settings.paypal.mode !== 'disabled',

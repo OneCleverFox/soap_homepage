@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import _toast from 'react-hot-toast';
 import {
@@ -37,19 +37,58 @@ const CartPage = () => {
   const { items, removeFromCart, updateQuantity, clearCart, getCartTotal, getCartItemsCount, loading } = useCart();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
-  console.log('🛒 CartPage Render:', {
-    userExists: !!user,
-    itemsCount: items.length,
-    items: items,
-    loading: loading
+  const [shippingConfig, setShippingConfig] = useState({
+    enabled: true,
+    cost: 5.99,
+    freeThreshold: 30
   });
 
-  const SHIPPING_COST = 5.99; // Versandkosten innerhalb Deutschlands (Versandtasche)
+  useEffect(() => {
+    const loadShippingConfig = async () => {
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${apiUrl}/admin-settings/shop-status`);
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        setShippingConfig({
+          enabled: data?.status?.shippingEnabled !== false,
+          cost: Number(data?.status?.shippingCost ?? 5.99),
+          freeThreshold: Number(data?.status?.freeShippingThreshold ?? 30)
+        });
+      } catch (_error) {
+        // Fallback bleibt auf Default-Werten
+      }
+    };
+
+    loadShippingConfig();
+  }, []);
+
+  const getShippingCost = (subtotal) => {
+    if (!shippingConfig.enabled) {
+      return 0;
+    }
+
+    if (subtotal >= shippingConfig.freeThreshold) {
+      return 0;
+    }
+
+    return shippingConfig.cost;
+  };
 
   // Helper-Funktion um Bild-URLs zu korrigieren
-  const getImageUrl = (url) => {
-    if (!url) {
+  const getImageUrl = (imageData) => {
+    if (!imageData) {
+      return null;
+    }
+
+    const url = typeof imageData === 'object' && imageData !== null
+      ? imageData.url
+      : imageData;
+
+    if (typeof url !== 'string' || !url) {
       return null;
     }
     
@@ -67,37 +106,37 @@ const CartPage = () => {
     
     // Wenn URL mit /api/uploads beginnt, direkt verwenden
     if (url.startsWith('/api/uploads')) {
-      const finalUrl = `${API_BASE_URL.replace('/api', '')}${url}`;
-      console.log('🖼️ Image URL constructed:', finalUrl);
-      return finalUrl;
+      return `${API_BASE_URL.replace('/api', '')}${url}`;
     }
     
     // Wenn URL mit /uploads beginnt, /api davor hinzufügen
     if (url.startsWith('/uploads')) {
-      const finalUrl = `${API_BASE_URL.replace('/api', '')}/api${url}`;
-      console.log('🖼️ Image URL constructed (added /api):', finalUrl);
-      return finalUrl;
+      return `${API_BASE_URL.replace('/api', '')}/api${url}`;
     }
     
     // Fallback: URL so verwenden wie sie ist
-    const finalUrl = `${API_BASE_URL.replace('/api', '')}${url}`;
-    console.log('🖼️ Fallback image URL:', finalUrl);
-    return finalUrl;
+    return `${API_BASE_URL.replace('/api', '')}${url}`;
   };
 
   const handleQuantityChange = (productId, newQuantity) => {
     // Finde das entsprechende Item um verfügbare Menge zu prüfen
-    const item = items.find(item => item.id === productId);
-    const maxAvailable = item?.bestand?.menge || 0;
+    const item = items.find(item => item.id === productId || item.produktId === productId);
+    const maxAvailable = Number(item?.bestand?.menge || 0);
     // Verbesserte Verfügbarkeitsprüfung: aktiv ist verfügbar wenn true oder undefined
-    const isAvailable = (item?.aktiv !== false) && (item?.bestand?.menge || 0) > 0;
-    
-    // Prüfe Grenzen: mindestens 1, maximal verfügbare Menge
-    if (newQuantity >= 1 && newQuantity <= maxAvailable && isAvailable) {
-      updateQuantity(productId, newQuantity);
-    } else if (newQuantity > maxAvailable && isAvailable) {
-      // Wenn Benutzer mehr als verfügbar eingeben will, setze auf Maximum
+    const isAvailable = (item?.aktiv !== false) && maxAvailable > 0;
+
+    if (!isAvailable) {
+      return;
+    }
+
+    if (newQuantity > maxAvailable) {
+      // Kein Backend-Request über verfügbarem Bestand
       updateQuantity(productId, maxAvailable);
+      return;
+    }
+
+    if (newQuantity >= 1) {
+      updateQuantity(productId, newQuantity);
     }
   };
 
@@ -112,17 +151,42 @@ const CartPage = () => {
     }
   };
 
+  const isItemAvailable = (item) => {
+    if (typeof item?.isAvailable === 'boolean') {
+      return item.isAvailable;
+    }
+
+    if (item?.bestand) {
+      return (item?.aktiv !== false) && Number(item.bestand?.menge || 0) > 0;
+    }
+
+    // Fallback fuer optimistische lokale Items ohne Bestandsdaten
+    return item?.aktiv !== false;
+  };
+
+  const hasEnoughStockForItem = (item) => {
+    if (typeof item?.hasEnoughStock === 'boolean') {
+      return item.hasEnoughStock;
+    }
+
+    if (item?.bestand) {
+      return Number(item.quantity || 0) <= Number(item.bestand?.menge || 0);
+    }
+
+    return true;
+  };
+
   // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
   const getAvailableTotal = () => {
     return items
-      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .filter(item => isItemAvailable(item) && hasEnoughStockForItem(item))
       .reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
   };
 
   // Berechne verfügbare Artikel-Anzahl
   const getAvailableItemsCount = () => {
     return items
-      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .filter(item => isItemAvailable(item) && hasEnoughStockForItem(item))
       .reduce((sum, item) => sum + item.quantity, 0);
   };
 
@@ -191,7 +255,11 @@ const CartPage = () => {
         {/* Warenkorb-Artikel */}
         <Grid item xs={12} md={8}>
           <Paper elevation={2} sx={{ p: isMobile ? 1.5 : 2 }}>
-            {items.map((item, index) => (
+            {items.map((item, index) => {
+              const available = isItemAvailable(item);
+              const enoughStock = hasEnoughStockForItem(item);
+
+              return (
               <Box key={item.id}>
                 <Card 
                   elevation={0} 
@@ -200,9 +268,9 @@ const CartPage = () => {
                     mb: 2,
                     flexDirection: isMobile ? 'column' : 'row',
                     // Visuell hervorheben wenn nicht verfügbar
-                    opacity: item.isAvailable ? 1 : 0.6,
-                    border: item.isAvailable ? 'none' : '2px dashed #f44336',
-                    backgroundColor: item.isAvailable ? 'transparent' : '#ffebee'
+                    opacity: available ? 1 : 0.6,
+                    border: available ? 'none' : '2px dashed #f44336',
+                    backgroundColor: available ? 'transparent' : '#ffebee'
                   }}
                 >
                   {item.image && (
@@ -240,14 +308,14 @@ const CartPage = () => {
                       {/* Verfügbarkeitsstatus */}
                       {item.bestand && (
                         <Box sx={{ mt: 0.5 }}>
-                          {!item.isAvailable ? (
+                          {!available ? (
                             <Chip 
                               label="Nicht verfügbar" 
                               color="error" 
                               size="small" 
                               sx={{ fontSize: '0.75rem' }}
                             />
-                          ) : !item.hasEnoughStock ? (
+                          ) : !enoughStock ? (
                             <Chip 
                               label={`Nur ${item.bestand?.menge || 0} verfügbar`} 
                               color="warning" 
@@ -266,6 +334,12 @@ const CartPage = () => {
                                 (max. {item.bestand?.menge || 0} {item.bestand?.einheit || 'Stück'})
                               </Typography>
                             </Box>
+                          )}
+
+                          {available && item.quantity >= (item.bestand?.menge || 0) && (
+                            <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+                              Es sind nur {item.bestand?.menge || 0} Stück vorrätig.
+                            </Typography>
                           )}
                         </Box>
                       )}
@@ -309,7 +383,7 @@ const CartPage = () => {
                           }}
                           inputProps={{
                             min: 1,
-                            max: item.bestand?.menge || 99,
+                            max: item.bestand?.menge || 1,
                             style: { textAlign: 'center', width: isMobile ? 60 : 50 }
                           }}
                           variant="standard"
@@ -321,7 +395,7 @@ const CartPage = () => {
                             e.preventDefault();
                             handleQuantityChange(item.id, item.quantity + 1);
                           }}
-                          disabled={(item.bestand?.menge || 0) <= item.quantity}
+                          disabled={!available || item.quantity >= (item.bestand?.menge || 0)}
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
                         </IconButton>
@@ -359,7 +433,8 @@ const CartPage = () => {
                 </Card>
                 {index < items.length - 1 && <Divider sx={{ my: isMobile ? 1.5 : 2 }} />}
               </Box>
-            ))}
+              );
+            })}
 
             {/* Warenkorb leeren */}
             <Box sx={{ mt: isMobile ? 2 : 3, display: 'flex', justifyContent: 'flex-end' }}>
@@ -408,7 +483,7 @@ const CartPage = () => {
                 Versand (DHL):
               </Typography>
               <Typography variant={isMobile ? "caption" : "body2"} color="text.secondary">
-                €{SHIPPING_COST.toFixed(2)}
+                €{getShippingCost(getAvailableTotal()).toFixed(2)}
               </Typography>
             </Box>
             
@@ -419,7 +494,7 @@ const CartPage = () => {
                 Gesamt:
               </Typography>
               <Typography variant={isMobile ? "body1" : "h6"} fontWeight="bold" color="primary">
-                €{(getAvailableTotal() + SHIPPING_COST).toFixed(2)}
+                €{(getAvailableTotal() + getShippingCost(getAvailableTotal())).toFixed(2)}
               </Typography>
             </Box>
             

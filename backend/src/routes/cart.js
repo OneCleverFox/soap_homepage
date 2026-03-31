@@ -2,9 +2,124 @@ const express = require('express');
 const router = express.Router();
 const Cart = require('../models/Cart');
 const Portfolio = require('../models/Portfolio');
+const Bestand = require('../models/Bestand');
 const { authenticateToken } = require('../middleware/auth');
 const mongoose = require('mongoose');
 const { calculateEffectivePrice } = require('../utils/pricing');
+
+const normalizeCartImage = (imageData) => {
+  if (!imageData) {
+    return '';
+  }
+
+  if (typeof imageData === 'string') {
+    return imageData;
+  }
+
+  if (typeof imageData === 'object' && typeof imageData.url === 'string') {
+    return imageData.url;
+  }
+
+  return '';
+};
+
+const sanitizeCartItemsBeforeSave = (cart) => {
+  if (!cart || !Array.isArray(cart.artikel)) {
+    return;
+  }
+
+  cart.artikel.forEach((item) => {
+    item.bild = normalizeCartImage(item?.bild);
+
+    const normalizedMenge = Number(item?.menge);
+    item.menge = Number.isFinite(normalizedMenge) && normalizedMenge > 0 ? normalizedMenge : 1;
+
+    const normalizedPreis = Number(item?.preis);
+    item.preis = Number.isFinite(normalizedPreis) && normalizedPreis >= 0 ? normalizedPreis : 0;
+
+    const normalizedGramm = Number(item?.gramm);
+    item.gramm = Number.isFinite(normalizedGramm) && normalizedGramm > 0 ? normalizedGramm : 1;
+  });
+};
+
+const normalizeCartCategory = (category) => {
+  const normalized = typeof category === 'string' ? category.toLowerCase() : '';
+  if (normalized === 'werkstuck') {
+    return 'werkstuck';
+  }
+  if (normalized === 'schmuck') {
+    return 'schmuck';
+  }
+  return 'seife';
+};
+
+const buildPortfolioImageUrl = (produktId) => {
+  if (!produktId) {
+    return '';
+  }
+  return `/api/portfolio/${produktId.toString()}/image/main`;
+};
+
+const toObjectId = (id) => {
+  if (!id) {
+    return null;
+  }
+
+  return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
+};
+
+const getStockForProduct = async (produktId) => {
+  const objectId = toObjectId(produktId);
+
+  const query = objectId
+    ? {
+        $or: [
+          { artikelId: objectId, typ: 'produkt' },
+          { artikelId: objectId, artikelModell: 'Portfolio' }
+        ]
+      }
+    : {
+        $or: [
+          { artikelId: produktId, typ: 'produkt' },
+          { artikelId: produktId, artikelModell: 'Portfolio' }
+        ]
+      };
+
+  const stockRecords = await Bestand.find(query)
+    .sort({ typ: -1, createdAt: -1 })
+    .lean();
+
+  return stockRecords[0] || null;
+};
+
+const getStockMapForProducts = async (produktIds) => {
+  const validIds = produktIds
+    .map((id) => toObjectId(id))
+    .filter(Boolean);
+
+  if (validIds.length === 0) {
+    return new Map();
+  }
+
+  const stockRecords = await Bestand.find({
+    artikelId: { $in: validIds },
+    $or: [{ typ: 'produkt' }, { artikelModell: 'Portfolio' }]
+  })
+    .sort({ typ: -1, createdAt: -1 })
+    .lean();
+
+  const stockMap = new Map();
+
+  stockRecords.forEach((record) => {
+    const key = record.artikelId?.toString();
+    if (!key || stockMap.has(key)) {
+      return;
+    }
+    stockMap.set(key, record);
+  });
+
+  return stockMap;
+};
 
 // Helper: Prüft ob User ein Kunde ist (kein Admin)
 const isKunde = (user) => {
@@ -25,49 +140,39 @@ router.get('/', authenticateToken, async (req, res) => {
         kundeId,
         artikel: []
       });
+      sanitizeCartItemsBeforeSave(cart);
       await cart.save();
     }
 
     // Aktualisiere Bild-URLs und Verfügbarkeitsinformationen aus Portfolio für alle Artikel
-    const Bestand = require('../models/Bestand');
-    
     // Optimierung: Batch-Abfragen statt einzelne Abfragen pro Artikel
     const produktIds = cart.artikel.map(item => item.produktId);
     
-    // Alle Produkte in einem Batch laden
-    const products = await Portfolio.find({ 
-      _id: { $in: produktIds } 
-    }).lean(); // lean() für bessere Performance
-    
-    // Alle Bestandsinformationen in einem Batch laden
-    const bestandInfos = await Bestand.find({ 
-      artikelId: { $in: produktIds },
-      typ: 'produkt'
-    }).lean();
+    // Produkte und Bestandsinformationen parallel laden.
+    const [products, bestandMap] = await Promise.all([
+      Portfolio.find({
+        _id: { $in: produktIds }
+      })
+        .select('_id aktiv preis sale')
+        .lean(),
+      getStockMapForProducts(produktIds)
+    ]);
     
     // Maps für schnellen Zugriff erstellen
     const productMap = new Map(products.map(p => [p._id.toString(), p]));
-    const bestandMap = new Map(bestandInfos.map(b => [b.artikelId.toString(), b]));
+    
     
     const enrichedItems = cart.artikel.map((item) => {
       try {
         const product = productMap.get(item.produktId.toString());
         const bestandInfo = bestandMap.get(item.produktId.toString());
-        
-        console.log('🔍 Customer Cart - Checking bestand for:', {
-          produktId: item.produktId,
-          productName: product?.name,
-          bestandFound: !!bestandInfo,
-          bestandMenge: bestandInfo?.menge,
-          productActive: product?.aktiv
-        });
-        
-        if (product && product.bilder && product.bilder.hauptbild) {
+
+        if (product) {
           const pricing = calculateEffectivePrice(product);
           // Aktualisiere mit Portfolio-Daten und Verfügbarkeitsstatus
           const enrichedItem = {
             ...item.toObject(),
-            bild: product.bilder.hauptbild,
+            bild: buildPortfolioImageUrl(item.produktId),
             preis: pricing.effectivePrice,
             sale: {
               isOnSale: pricing.isOnSale,
@@ -84,15 +189,7 @@ router.get('/', authenticateToken, async (req, res) => {
               einheit: 'Stück'
             }
           };
-          
-          console.log('✅ Enriched item:', {
-            produktId: item.produktId,
-            name: product?.name,
-            aktiv: enrichedItem.aktiv,
-            aktivFromProduct: product.aktiv,
-            hasBestand: !!bestandInfo
-          });
-          
+
           return enrichedItem;
         }
         
@@ -117,14 +214,6 @@ router.get('/', authenticateToken, async (req, res) => {
             einheit: 'Stück'
           }
         };
-        
-        console.log('🔄 Fallback item:', {
-          produktId: item.produktId,
-          name: product?.name,
-          aktiv: fallbackItem.aktiv,
-          aktivFromProduct: product?.aktiv,
-          hasBestand: !!bestandInfo
-        });
         
         return fallbackItem;
       } catch (err) {
@@ -217,11 +306,7 @@ router.post('/add', authenticateToken, async (req, res) => {
     }
 
     // Bestandsprüfung vor dem Hinzufügen
-    const Bestand = require('../models/Bestand');
-    const bestandInfo = await Bestand.findOne({ 
-      artikelId: produktId,
-      typ: 'produkt'
-    });
+    const bestandInfo = await getStockForProduct(produktId);
     
     console.log('📦 Stock check for add:', {
       produktId,
@@ -280,13 +365,25 @@ router.post('/add', authenticateToken, async (req, res) => {
         name,
         preis: calculateEffectivePrice(product).effectivePrice,
         menge,
-        bild: bild || '',
-        gramm,
-        kategorie: product.kategorie || 'seife'
+        bild: product?.bilder?.hauptbild ? buildPortfolioImageUrl(produktId) : normalizeCartImage(bild || product?.bilder?.hauptbild),
+        gramm: (() => {
+          const requestGramm = Number(gramm);
+          if (Number.isFinite(requestGramm) && requestGramm > 0) {
+            return requestGramm;
+          }
+
+          const productGramm = Number(product?.gramm);
+          if (Number.isFinite(productGramm) && productGramm > 0) {
+            return productGramm;
+          }
+
+          return 1;
+        })(),
+        kategorie: normalizeCartCategory(product.kategorie)
       };
 
       // Kategorie-spezifische Felder hinzufügen
-      if (product.kategorie === 'werkstuck') {
+      if (normalizeCartCategory(product.kategorie) === 'werkstuck') {
         cartItem.giesswerkstoff = product.giesswerkstoff || '';
         cartItem.giesswerkstoffName = product.giesswerkstoffName || 'Standard';
         cartItem.giessform = product.giessform || '';
@@ -298,6 +395,7 @@ router.post('/add', authenticateToken, async (req, res) => {
       cart.artikel.push(cartItem);
     }
 
+    sanitizeCartItemsBeforeSave(cart);
     await cart.save();
 
     // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
@@ -310,7 +408,7 @@ router.post('/add', authenticateToken, async (req, res) => {
           // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
           return {
             ...item.toObject(),
-                bild: product.bilder.hauptbild,
+                bild: buildPortfolioImageUrl(item.produktId),
                 preis: calculateEffectivePrice(product).effectivePrice
           };
         }
@@ -348,15 +446,7 @@ router.put('/update', authenticateToken, async (req, res) => {
   try {
     const { produktId, menge } = req.body;
 
-    console.log('📦 Cart update request:', {
-      produktId,
-      menge,
-      body: req.body,
-      userId: req.user.id || req.user.userId
-    });
-
     if (!produktId || menge === undefined || menge === null) {
-      console.log('❌ Missing produktId or menge');
       return res.status(400).json({
         success: false,
         message: 'Produkt-ID und Menge erforderlich'
@@ -364,7 +454,6 @@ router.put('/update', authenticateToken, async (req, res) => {
     }
 
     if (typeof menge !== 'number' || menge < 0) {
-      console.log('❌ Invalid menge value:', menge);
       return res.status(400).json({
         success: false,
         message: 'Menge muss eine positive Zahl sein'
@@ -375,7 +464,6 @@ router.put('/update', authenticateToken, async (req, res) => {
     const cart = await Cart.findOne({ kundeId });
 
     if (!cart) {
-      console.log('❌ Cart not found for user:', kundeId);
       return res.status(404).json({
         success: false,
         message: 'Warenkorb nicht gefunden'
@@ -386,14 +474,7 @@ router.put('/update', authenticateToken, async (req, res) => {
       item => item.produktId.toString() === produktId.toString()
     );
 
-    console.log('🔍 Item search result:', {
-      itemIndex,
-      cartItemCount: cart.artikel.length,
-      searchingFor: produktId
-    });
-
     if (itemIndex === -1) {
-      console.log('❌ Item not found in cart');
       return res.status(404).json({
         success: false,
         message: 'Artikel nicht im Warenkorb'
@@ -401,9 +482,11 @@ router.put('/update', authenticateToken, async (req, res) => {
     }
 
     if (menge <= 0) {
-      // Artikel entfernen
-      console.log('🗑️ Removing item from cart');
-      cart.artikel.splice(itemIndex, 1);
+      // Artikel atomar entfernen, um Versionskonflikte bei parallelen Updates zu vermeiden.
+      await Cart.updateOne(
+        { kundeId },
+        { $pull: { artikel: { produktId } } }
+      );
     } else {
       // Produktstatus prüfen
       const product = await Portfolio.findById(produktId);
@@ -416,18 +499,7 @@ router.put('/update', authenticateToken, async (req, res) => {
       }
       
       // Bestandsprüfung vor Update
-      const Bestand = require('../models/Bestand');
-      const bestandInfo = await Bestand.findOne({ 
-        artikelId: produktId,
-        typ: 'produkt'
-      });
-      
-      console.log('📦 Stock check for update:', {
-        produktId,
-        requestedQuantity: menge,
-        availableStock: bestandInfo?.menge || 0,
-        hasStock: (bestandInfo?.menge || 0) > 0
-      });
+      const bestandInfo = await getStockForProduct(produktId);
       
       if (!bestandInfo || (bestandInfo.menge || 0) <= 0) {
         return res.status(400).json({
@@ -445,38 +517,57 @@ router.put('/update', authenticateToken, async (req, res) => {
           availableQuantity: bestandInfo.menge
         });
       }
-      
-      // Menge aktualisieren
-      console.log('🔄 Updating quantity:', { old: cart.artikel[itemIndex].menge, new: menge });
-      cart.artikel[itemIndex].menge = menge;
+
+      // Menge atomar setzen, um VersionError bei konkurrierenden Requests zu verhindern.
+      await Cart.updateOne(
+        { kundeId, 'artikel.produktId': produktId },
+        { $set: { 'artikel.$.menge': menge } }
+      );
     }
 
-    await cart.save();
-    console.log('✅ Cart updated successfully');
+    const updatedCart = await Cart.findOne({ kundeId });
+    if (!updatedCart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Warenkorb nicht gefunden'
+      });
+    }
 
-    // Aktualisiere Bild-URLs aus Portfolio für alle Artikel
-    const enrichedItems = await Promise.all(cart.artikel.map(async (item) => {
-      try {
-        // Hole aktuelles Produkt aus Portfolio
-        const product = await Portfolio.findById(item.produktId);
-        
-        if (product && product.bilder && product.bilder.hauptbild) {
-          // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
-          return {
-            ...item.toObject(),
-                bild: product.bilder.hauptbild,
-                preis: calculateEffectivePrice(product).effectivePrice
-          };
+    const produktIds = updatedCart.artikel.map(item => item.produktId);
+    const [products, bestandMap] = await Promise.all([
+      Portfolio.find({ _id: { $in: produktIds } })
+        .select('_id aktiv preis sale')
+        .lean(),
+      getStockMapForProducts(produktIds)
+    ]);
+
+    const productMap = new Map(products.map(p => [p._id.toString(), p]));
+
+    const enrichedItems = updatedCart.artikel.map((item) => {
+      const product = productMap.get(item.produktId.toString());
+      const bestandInfo = bestandMap.get(item.produktId.toString());
+      const pricing = product ? calculateEffectivePrice(product) : null;
+
+      return {
+        ...item.toObject(),
+        bild: buildPortfolioImageUrl(item.produktId),
+        preis: pricing ? pricing.effectivePrice : item.preis,
+        sale: pricing ? {
+          isOnSale: pricing.isOnSale,
+          discountPercent: pricing.discountPercent,
+          discountAmount: pricing.discountAmount,
+          basispreis: pricing.basePrice
+        } : item.sale,
+        aktiv: product?.aktiv ?? false,
+        bestand: bestandInfo ? {
+          menge: bestandInfo.menge || 0,
+          einheit: bestandInfo.einheit || 'Stück'
+        } : {
+          menge: 0,
+          einheit: 'Stück'
         }
-        
-        // Fallback: behalte vorhandene Bild-URL
-        return item.toObject();
-      } catch (err) {
-        console.error('Fehler beim Laden des Produkts:', item.produktId, err);
-        // Bei Fehler: behalte Artikel wie er ist
-        return item.toObject();
-      }
-    }));
+      };
+    });
 
     res.json({
       success: true,
@@ -516,6 +607,7 @@ router.delete('/remove/:produktId', authenticateToken, async (req, res) => {
       item => item.produktId.toString() !== produktId
     );
 
+    sanitizeCartItemsBeforeSave(cart);
     await cart.save();
 
     // Aktualisiere Bild-URLs aus Portfolio für alle verbleibenden Artikel
@@ -528,7 +620,7 @@ router.delete('/remove/:produktId', authenticateToken, async (req, res) => {
           // Aktualisiere Bild-URL mit aktueller URL aus Portfolio
           return {
             ...item.toObject(),
-            bild: product.bilder.hauptbild
+            bild: buildPortfolioImageUrl(item.produktId)
           };
         }
         
