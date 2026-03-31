@@ -38,7 +38,9 @@ import {
   Cancel,
   ShoppingCart,
   Close,
-  Warning
+  Warning,
+  Inventory2,
+  LocalShipping
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
@@ -147,6 +149,11 @@ const CustomerInquiries = () => {
       case 'accepted': return <CheckCircle color="success" />;
       case 'rejected': return <Cancel color="error" />;
       case 'converted_to_order': return <ShoppingCart color="primary" />;
+      case 'payment_pending': return <AccessTime color="info" />;
+      case 'paid': return <CheckCircle color="success" />;
+      case 'verpackt': return <Inventory2 color="info" />;
+      case 'verschickt': return <LocalShipping color="secondary" />;
+      case 'zugestellt': return <CheckCircle color="success" />;
       default: return <Assignment />;
     }
   };
@@ -159,6 +166,9 @@ const CustomerInquiries = () => {
       case 'converted_to_order': return 'Als Bestellung umgewandelt';
       case 'payment_pending': return 'Zahlung ausstehend';
       case 'paid': return 'Bezahlt';
+      case 'verpackt': return 'Verpackt';
+      case 'verschickt': return 'Verschickt';
+      case 'zugestellt': return 'Zugestellt';
       default: return 'Unbekannt';
     }
   };
@@ -171,6 +181,9 @@ const CustomerInquiries = () => {
       case 'converted_to_order': return 'primary';
       case 'payment_pending': return 'info';
       case 'paid': return 'success';
+      case 'verpackt': return 'info';
+      case 'verschickt': return 'secondary';
+      case 'zugestellt': return 'success';
       default: return 'default';
     }
   };
@@ -565,7 +578,67 @@ const CustomerInquiries = () => {
                         )}
                         {selectedInquiry.status === 'paid' && (
                           <Alert severity="success" variant="outlined">
-                            Vielen Dank! Ihre Zahlung ist eingegangen und wir bearbeiten Ihre Bestellung umgehend.
+                            Vielen Dank! Ihre Zahlung ist eingegangen. Wir beginnen jetzt mit dem Verpacken Ihrer Bestellung.
+                          </Alert>
+                        )}
+                        {selectedInquiry.status === 'verpackt' && (
+                          <Alert severity="info" variant="outlined">
+                            Ihre Bestellung ist jetzt verpackt und wird als nächstes für den Versand vorbereitet.
+                          </Alert>
+                        )}
+                        {selectedInquiry.status === 'verschickt' && (
+                          <Alert severity="success" variant="outlined">
+                            <Box>
+                              <Typography>
+                                Ihre Bestellung wurde versendet und ist auf dem Weg zu Ihnen.
+                              </Typography>
+                              {selectedInquiry.shipping?.sendungsnummer && (
+                                <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Sendungsnummer ({selectedInquiry.shipping.anbieter?.toUpperCase() || 'DHL'})
+                                  </Typography>
+                                  <Typography variant="body1" sx={{ fontWeight: 'bold', fontFamily: 'monospace', mb: 1 }}>
+                                    {selectedInquiry.shipping.sendungsnummer}
+                                  </Typography>
+                                  {selectedInquiry.shipping.trackingUrl && (
+                                    <Button
+                                      href={selectedInquiry.shipping.trackingUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      variant="contained"
+                                      size="small"
+                                      sx={{ textTransform: 'none' }}
+                                    >
+                                      Sendung verfolgen
+                                    </Button>
+                                  )}
+                                </Box>
+                              )}
+                            </Box>
+                          </Alert>
+                        )}
+                        {selectedInquiry.status === 'zugestellt' && (
+                          <Alert severity="success" variant="outlined">
+                            <Box>
+                              <Typography>
+                                Ihre Bestellung wurde zugestellt. Vielen Dank für Ihre Anfrage!
+                              </Typography>
+                              {selectedInquiry.shipping?.sendungsnummer && (
+                                <Box sx={{ mt: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Sendungsnummer ({selectedInquiry.shipping.anbieter?.toUpperCase() || 'DHL'})
+                                  </Typography>
+                                  <Typography variant="body1" sx={{ fontWeight: 'bold', fontFamily: 'monospace', mb: 1 }}>
+                                    {selectedInquiry.shipping.sendungsnummer}
+                                  </Typography>
+                                  {selectedInquiry.shipping.zugestelltAm && (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Zugestellt am: {new Date(selectedInquiry.shipping.zugestelltAm).toLocaleDateString('de-DE')}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              )}
+                            </Box>
                           </Alert>
                         )}
                       </Grid>
