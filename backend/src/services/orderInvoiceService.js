@@ -66,6 +66,24 @@ class OrderInvoiceService {
       console.log('📦 OrderInvoiceService - Artikel in Bestellung:', order.artikel ? order.artikel.length : 0);
 
       // AKTUELLES Standard-Template aus Datenbank laden
+      // Duplikatprüfung: Falls Rechnung bereits existiert, nicht nochmal erstellen
+      const Invoice = require('../models/Invoice');
+      const escapeRegex = (v = '') => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const lookups = [{ 'order.orderId': order._id }, { originalOrder: order._id }];
+      if (order.bestellnummer) {
+        lookups.push({ 'notes.internal': { $regex: escapeRegex(order.bestellnummer), $options: 'i' } });
+      }
+      const existingInvoice = await Invoice.findOne({ $or: lookups });
+      if (existingInvoice) {
+        console.log('ℹ️ Rechnung bereits vorhanden, keine Doppelerstellung:', existingInvoice.invoiceNumber);
+        return {
+          success: true,
+          invoiceNumber: existingInvoice.invoiceNumber,
+          dbInvoiceNumber: existingInvoice.invoiceNumber,
+          alreadyExists: true
+        };
+      }
+
       const InvoiceTemplate = require('../models/InvoiceTemplate');
       const template = await InvoiceTemplate.findOne({ isDefault: true });
       if (!template) {
@@ -257,6 +275,10 @@ class OrderInvoiceService {
             
             console.log(`🔄 Versuch ${attempts}/${maxAttempts} - DB-Invoice: ${dbInvoiceNumber}, Sequenz: ${sequenceNumber}`);
             
+            const orderIsPaid =
+              String(order?.status || '').toLowerCase() === 'bezahlt' ||
+              String(order?.zahlung?.status || '').toLowerCase() === 'bezahlt';
+
             const savedInvoice = new Invoice({
               invoiceNumber: dbInvoiceNumber, // Verwende die DB-generierte Nummer für Eindeutigkeit
               sequenceNumber: sequenceNumber,
@@ -300,13 +322,17 @@ class OrderInvoiceService {
                 dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 Tage Zahlungsziel
               },
               payment: {
-                method: bestellungData.zahlungsmethode === 'ueberweisung' ? 'bank_transfer' : 'pending'
+                method: bestellungData.zahlungsmethode === 'ueberweisung' ? 'bank_transfer' : 'pending',
+                status: orderIsPaid ? 'paid' : 'pending',
+                paidDate: orderIsPaid ? (order?.zahlung?.bezahltAm || new Date()) : undefined,
+                paidAmount: orderIsPaid ? Number(bestellungData.gesamtsumme || 0) : 0,
+                paymentReference: orderIsPaid ? `Automatisch aus Bestellung ${order.bestellnummer} uebernommen` : undefined
               },
               template: template._id,
               tax: {
                 isSmallBusiness: template.companyInfo?.isSmallBusiness || false
               },
-              status: 'sent', // ✅ Rechnung ist versendet/offen - wartet auf Zahlung
+              status: orderIsPaid ? 'paid' : 'sent',
               notes: {
                 internal: `Automatisch generiert für Bestellung ${order.bestellnummer}`,
                 customer: bestellungData.notes?.customer || order.notizen?.oeffentlich || order.notizen?.kunde || ''

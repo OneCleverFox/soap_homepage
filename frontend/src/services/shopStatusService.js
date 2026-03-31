@@ -19,7 +19,10 @@ export const getShopStatus = async () => {
           checkout: {
             mode: settings.checkout?.mode || 'full',
             enabled: settings.checkout?.mode !== 'disabled',
-            maintenanceMessage: settings.checkout?.maintenanceMessage || ''
+            maintenanceMessage: settings.checkout?.maintenanceMessage || '',
+            shippingEnabled: settings.checkout?.shippingEnabled !== false,
+            shippingCost: Number(settings.checkout?.shippingCost ?? 5.99),
+            freeShippingThreshold: Number(settings.checkout?.freeShippingThreshold ?? 30)
           },
           paypal: {
             mode: settings.paypal?.mode || 'sandbox',
@@ -41,7 +44,14 @@ export const getShopStatus = async () => {
       success: true,
       data: {
         shop: { status: 'open', statusMessage: '', vacationMode: null },
-        checkout: { mode: 'full', enabled: true, maintenanceMessage: '' },
+        checkout: {
+          mode: 'full',
+          enabled: true,
+          maintenanceMessage: '',
+          shippingEnabled: true,
+          shippingCost: 5.99,
+          freeShippingThreshold: 30
+        },
         paypal: { mode: 'sandbox', enabled: true }
       }
     };

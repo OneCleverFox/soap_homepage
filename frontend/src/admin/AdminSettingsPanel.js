@@ -97,10 +97,13 @@ const AdminSettingsPanel = () => {
           environment: settings.paypal?.environment || { nodeEnv: 'development', isDevelopment: true }
         });
         
-        setCheckoutConfig(settings.checkout || {
-          enabled: true,
-          mode: 'full',
-          maintenanceMessage: ''
+        setCheckoutConfig({
+          enabled: settings.checkout?.enabled ?? true,
+          mode: settings.checkout?.mode || 'full',
+          maintenanceMessage: settings.checkout?.maintenanceMessage || '',
+          shippingEnabled: settings.checkout?.shippingEnabled !== false,
+          shippingCost: Number(settings.checkout?.shippingCost ?? 5.99),
+          freeShippingThreshold: Number(settings.checkout?.freeShippingThreshold ?? 30)
         });
         
         setShopConfig(settings.shop || {
@@ -789,8 +792,24 @@ const CheckoutConfigTab = ({ config, saving, onSave }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [localConfig, setLocalConfig] = useState(config);
 
+  useEffect(() => {
+    setLocalConfig({
+      enabled: config?.enabled ?? true,
+      mode: config?.mode || 'full',
+      maintenanceMessage: config?.maintenanceMessage || '',
+      shippingEnabled: config?.shippingEnabled !== false,
+      shippingCost: Number(config?.shippingCost ?? 5.99),
+      freeShippingThreshold: Number(config?.freeShippingThreshold ?? 30)
+    });
+  }, [config]);
+
   const handleSave = () => {
-    onSave('checkout', localConfig);
+    onSave('checkout', {
+      ...localConfig,
+      shippingEnabled: localConfig.shippingEnabled !== false,
+      shippingCost: Number(localConfig.shippingCost || 0),
+      freeShippingThreshold: Number(localConfig.freeShippingThreshold || 0)
+    });
   };
 
   return (
@@ -868,6 +887,59 @@ const CheckoutConfigTab = ({ config, saving, onSave }) => {
         </Card>
         
         <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Card sx={{ bgcolor: theme.palette.background.default }}>
+              <CardContent>
+                <Typography variant="subtitle1" gutterBottom>
+                  Versandkonfiguration
+                </Typography>
+
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={localConfig.shippingEnabled !== false}
+                      onChange={(e) => setLocalConfig({ ...localConfig, shippingEnabled: e.target.checked })}
+                      color="primary"
+                    />
+                  }
+                  label="Versandkosten aktiv"
+                  sx={{ mb: 2 }}
+                />
+
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Versandkosten"
+                      value={localConfig.shippingCost ?? ''}
+                      onChange={(e) => setLocalConfig({ ...localConfig, shippingCost: e.target.value })}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">EUR</InputAdornment>
+                      }}
+                      helperText="Wird berechnet, wenn kostenloser Versand nicht greift"
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Mindestbestellwert für kostenlosen Versand"
+                      value={localConfig.freeShippingThreshold ?? ''}
+                      onChange={(e) => setLocalConfig({ ...localConfig, freeShippingThreshold: e.target.value })}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">EUR</InputAdornment>
+                      }}
+                      helperText="Ab diesem Warenwert werden Versandkosten auf 0 gesetzt"
+                    />
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+          </Grid>
+
           <Grid item xs={12}>
             <TextField
               fullWidth

@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -54,13 +54,45 @@ const MobileCartPage = () => {
   const [deleteDialog, setDeleteDialog] = useState({ open: false, productId: null });
   const [clearDialog, setClearDialog] = useState(false);
   const [showSwipeHint, setShowSwipeHint] = useState(true);
+  const [shippingConfig, setShippingConfig] = useState({
+    enabled: true,
+    cost: 5.99,
+    freeThreshold: 30
+  });
 
-  const SHIPPING_COST = 5.99;
-  const FREE_SHIPPING_THRESHOLD = 30;
+  useEffect(() => {
+    const loadShippingConfig = async () => {
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+        const response = await fetch(`${apiUrl}/admin-settings/shop-status`);
+        if (!response.ok) {
+          return;
+        }
+
+        const data = await response.json();
+        setShippingConfig({
+          enabled: data?.status?.shippingEnabled !== false,
+          cost: Number(data?.status?.shippingCost ?? 5.99),
+          freeThreshold: Number(data?.status?.freeShippingThreshold ?? 30)
+        });
+      } catch (_error) {
+        // Fallback bleibt auf Default-Werten
+      }
+    };
+
+    loadShippingConfig();
+  }, []);
 
   // Helper-Funktion um Bild-URLs zu korrigieren
-  const getImageUrl = (url) => {
-    if (!url) return null;
+  const getImageUrl = (imageData) => {
+    if (!imageData) return null;
+
+    const url = typeof imageData === 'object' && imageData !== null
+      ? imageData.url
+      : imageData;
+
+    if (typeof url !== 'string' || !url) return null;
+
     if (url.startsWith('data:image/')) return url;
     if (url.startsWith('http')) return url;
     
@@ -81,14 +113,15 @@ const MobileCartPage = () => {
     // Finde das Item um Bestandslimit zu prüfen
     const item = items.find(item => (item.id === productId || item.produktId === productId));
     const maxStock = item?.bestand?.menge || 0;
+    const isAvailable = (item?.aktiv !== false) && maxStock > 0;
+
+    if (!isAvailable) {
+      return;
+    }
     
-    // Prüfe Limits: min 1, max verfügbarer Bestand
-    const minQuantity = 1;
-    const maxQuantity = Math.max(maxStock, 1); // Mindestens 1, damit auch bei 0 Bestand die Buttons funktionieren
-    
-    if (newQuantity >= minQuantity && newQuantity <= maxQuantity) {
+    if (newQuantity >= 1 && newQuantity <= maxStock) {
       updateQuantity(productId, newQuantity);
-    } else if (newQuantity > maxQuantity && maxStock > 0) {
+    } else if (newQuantity > maxStock) {
       // Setze auf Maximum ohne Toast
       updateQuantity(productId, maxStock);
     }
@@ -114,8 +147,17 @@ const MobileCartPage = () => {
   };
 
   const getShippingInfo = () => {
-    const total = getCartTotal();
-    const remaining = FREE_SHIPPING_THRESHOLD - total;
+    const total = getAvailableTotal();
+
+    if (!shippingConfig.enabled) {
+      return {
+        isFree: true,
+        message: 'Versandkosten sind deaktiviert.',
+        cost: 0
+      };
+    }
+
+    const remaining = shippingConfig.freeThreshold - total;
     
     if (remaining <= 0) {
       return {
@@ -127,7 +169,7 @@ const MobileCartPage = () => {
       return {
         isFree: false,
         message: `Noch €${remaining.toFixed(2)} bis zum kostenlosen Versand`,
-        cost: SHIPPING_COST
+        cost: shippingConfig.cost
       };
     }
   };
@@ -374,6 +416,16 @@ const MobileCartPage = () => {
                     max. {item.bestand.menge}
                   </Typography>
                 )}
+
+                {item.isAvailable && item.quantity >= (item.bestand?.menge || 0) && (
+                  <Typography
+                    variant="caption"
+                    color="warning.main"
+                    sx={{ fontSize: '0.7rem', textAlign: 'center', display: 'block' }}
+                  >
+                    Nur {item.bestand?.menge || 0} Stück vorrätig
+                  </Typography>
+                )}
                 
                 <Typography variant="caption" fontWeight="bold">
                   €{((item.preis || item.price) * item.quantity).toFixed(2)}
@@ -424,7 +476,7 @@ const MobileCartPage = () => {
               <Box sx={{ 
                 height: '100%', 
                 bgcolor: 'success.main',
-                width: `${Math.min((getCartTotal() / FREE_SHIPPING_THRESHOLD) * 100, 100)}%`,
+                width: `${Math.min((getAvailableTotal() / Math.max(shippingConfig.freeThreshold, 1)) * 100, 100)}%`,
                 transition: 'width 0.3s ease'
               }} />
             </Box>
