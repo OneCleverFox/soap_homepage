@@ -1,4 +1,5 @@
 const Invoice = require('../models/Invoice');
+const Order = require('../models/Order');
 const Kunde = require('../models/Kunde');
 const Product = require('../models/Product');
 const InvoiceTemplate = require('../models/InvoiceTemplate');
@@ -60,28 +61,129 @@ class InvoiceService {
 
       const invoices = await Invoice.find(filter)
         .populate('template', 'name')
-        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber')
+        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber order notes.internal')
         .sort({ 'dates.invoiceDate': -1 })
         .limit(limit)
         .skip(skip);
 
+      // Auto-Sync: Rechnungen auf bezahlt setzen, wenn verknuepfte Bestellung bezahlt ist.
+      const orderIdCandidates = new Set();
+      const bestellnummerCandidates = new Set();
+
+      invoices.forEach((invoice) => {
+        const orderId = invoice?.order?.orderId;
+        const bestellnummer = invoice?.order?.bestellnummer;
+
+        if (orderId) {
+          orderIdCandidates.add(String(orderId));
+        }
+
+        if (bestellnummer) {
+          bestellnummerCandidates.add(String(bestellnummer));
+        }
+
+        const internalNote = invoice?.notes?.internal || '';
+        const noteMatch = internalNote.match(/Bestellung\s+([A-Z]+-\d+)/i);
+        if (noteMatch?.[1]) {
+          bestellnummerCandidates.add(noteMatch[1].toUpperCase());
+        }
+      });
+
+      const orderFilter = { $or: [] };
+      if (orderIdCandidates.size > 0) {
+        orderFilter.$or.push({ _id: { $in: Array.from(orderIdCandidates) } });
+      }
+      if (bestellnummerCandidates.size > 0) {
+        orderFilter.$or.push({ bestellnummer: { $in: Array.from(bestellnummerCandidates) } });
+      }
+
+      let paidOrdersMapById = new Map();
+      let paidOrdersMapByBestellnummer = new Map();
+
+      if (orderFilter.$or.length > 0) {
+        const linkedOrders = await Order.find(orderFilter)
+          .select('_id bestellnummer status zahlung.status zahlung.bezahltAm')
+          .lean();
+
+        linkedOrders.forEach((order) => {
+          const orderStatus = String(order?.status || '').toLowerCase();
+          const paymentStatus = String(order?.zahlung?.status || '').toLowerCase();
+          const isPaid =
+            orderStatus === 'bezahlt' ||
+            paymentStatus === 'bezahlt' ||
+            paymentStatus === 'paid' ||
+            paymentStatus === 'completed';
+
+          if (!isPaid) {
+            return;
+          }
+
+          paidOrdersMapById.set(String(order._id), order);
+          if (order.bestellnummer) {
+            paidOrdersMapByBestellnummer.set(String(order.bestellnummer).toUpperCase(), order);
+          }
+        });
+      }
+
+      const invoiceIdsToAutoMarkPaid = [];
+
       // Customer-Daten für die Response aufbereiten und überfällige Tage berechnen
-      const invoicesWithCustomer = invoices.map(invoice => {
-        const isOverdue = invoice.status === 'sent' && invoice.dates.dueDate < new Date();
-        const overdueDays = isOverdue ? 
-          Math.ceil((Date.now() - invoice.dates.dueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+      const invoicesWithCustomer = invoices.map((invoice) => {
+        let invoiceObj = invoice.toObject();
+
+        const internalNote = invoiceObj?.notes?.internal || '';
+        const noteMatch = internalNote.match(/Bestellung\s+([A-Z]+-\d+)/i);
+        const candidateBestellnummer = (invoiceObj?.order?.bestellnummer || noteMatch?.[1] || '').toUpperCase();
+        const linkedOrder =
+          paidOrdersMapById.get(String(invoiceObj?.order?.orderId || '')) ||
+          paidOrdersMapByBestellnummer.get(candidateBestellnummer);
+
+        const alreadyPaid =
+          String(invoiceObj?.status || '').toLowerCase() === 'paid' ||
+          String(invoiceObj?.payment?.status || '').toLowerCase() === 'paid' ||
+          Boolean(invoiceObj?.payment?.paidDate);
+
+        if (linkedOrder && !alreadyPaid) {
+          invoiceIdsToAutoMarkPaid.push(invoiceObj._id);
+          invoiceObj.status = 'paid';
+          invoiceObj.payment = {
+            ...(invoiceObj.payment || {}),
+            status: 'paid',
+            paidDate: linkedOrder?.zahlung?.bezahltAm || new Date(),
+            paidAmount: Number(invoiceObj?.amounts?.total || 0),
+            paymentReference: invoiceObj?.payment?.paymentReference || `Automatisch aus Bestellung ${linkedOrder.bestellnummer || candidateBestellnummer} synchronisiert`
+          };
+        }
+
+        const isOverdue = invoiceObj.status === 'sent' && invoiceObj.dates.dueDate < new Date();
+        const overdueDays = isOverdue ?
+          Math.ceil((Date.now() - invoiceObj.dates.dueDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
         return {
-          ...invoice.toObject(),
-          customerName: invoice.customer?.customerData ? 
-            `${invoice.customer.customerData.firstName || ''} ${invoice.customer.customerData.lastName || ''}`.trim() || 
-            invoice.customer.customerData.company || 'Unbekannt'
+          ...invoiceObj,
+          customerName: invoiceObj.customer?.customerData ?
+            `${invoiceObj.customer.customerData.firstName || ''} ${invoiceObj.customer.customerData.lastName || ''}`.trim() ||
+            invoiceObj.customer.customerData.company || 'Unbekannt'
             : 'Unbekannt',
-          customerEmail: invoice.customer?.customerData?.email || '',
+          customerEmail: invoiceObj.customer?.customerData?.email || '',
           isOverdue,
           overdueDays
         };
       });
+
+      if (invoiceIdsToAutoMarkPaid.length > 0) {
+        await Invoice.updateMany(
+          { _id: { $in: invoiceIdsToAutoMarkPaid } },
+          {
+            $set: {
+              status: 'paid',
+              'payment.status': 'paid',
+              'payment.paidDate': new Date()
+            }
+          }
+        );
+        console.log(`✅ Auto-Sync: ${invoiceIdsToAutoMarkPaid.length} Rechnungen auf bezahlt gesetzt`);
+      }
 
       const total = await Invoice.countDocuments(filter);
 

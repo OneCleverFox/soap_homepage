@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Inquiry = require('../models/Inquiry');
 const Order = require('../models/Order');
+const AdminSettings = require('../models/AdminSettings');
 const { auth, authenticateToken } = require('../middleware/auth');
 const PayPalService = require('../services/PayPalService');
 const { cacheManager } = require('../utils/cacheManager');
@@ -17,6 +18,36 @@ function invalidatePortfolioCache() {
   console.log('🗑️ Portfolio cache invalidated due to inventory change');
 }
 
+async function calculateShippingFromSettings(subtotal) {
+  const normalizedSubtotal = Number(subtotal || 0);
+
+  try {
+    const settings = await AdminSettings.getInstance();
+    const shippingEnabled = settings.checkout?.shippingEnabled !== false;
+    const shippingCost = Number(settings.checkout?.shippingCost ?? 5.99);
+    const freeShippingThreshold = Number(settings.checkout?.freeShippingThreshold ?? 30);
+
+    const resolvedShippingCost = Number.isFinite(shippingCost) ? shippingCost : 5.99;
+    const resolvedThreshold = Number.isFinite(freeShippingThreshold) ? freeShippingThreshold : 30;
+    const versandkosten = shippingEnabled && normalizedSubtotal < resolvedThreshold ? resolvedShippingCost : 0;
+
+    return {
+      versandkosten,
+      shippingEnabled,
+      shippingCost: resolvedShippingCost,
+      freeShippingThreshold: resolvedThreshold
+    };
+  } catch (error) {
+    console.warn('⚠️ Konnte AdminSettings fuer Versandkosten nicht laden, verwende Fallback:', error.message);
+    return {
+      versandkosten: normalizedSubtotal < 30 ? 5.99 : 0,
+      shippingEnabled: true,
+      shippingCost: 5.99,
+      freeShippingThreshold: 30
+    };
+  }
+}
+
 // Middleware: Admin-Berechtigung prüfen
 const requireAdmin = (req, res, next) => {
   if (!req.user || !req.user.permissions?.includes('admin')) {
@@ -27,6 +58,61 @@ const requireAdmin = (req, res, next) => {
   }
   next();
 };
+
+function syncInquiryWithLinkedOrder(inquiry, linkedOrder) {
+  if (!linkedOrder) {
+    return inquiry;
+  }
+
+  const orderStatus = String(linkedOrder.status || '').toLowerCase();
+  const paymentStatus = String(linkedOrder.zahlung?.status || '').toLowerCase();
+
+  const isPaid =
+    orderStatus === 'bezahlt' ||
+    orderStatus === 'verpackt' ||
+    orderStatus === 'verschickt' ||
+    orderStatus === 'zugestellt' ||
+    paymentStatus === 'bezahlt' ||
+    paymentStatus === 'paid' ||
+    paymentStatus === 'completed';
+
+  let mappedStatus = inquiry.status;
+  if (orderStatus === 'verpackt') {
+    mappedStatus = 'verpackt';
+  } else if (orderStatus === 'verschickt' || orderStatus === 'versendet') {
+    mappedStatus = 'verschickt';
+  } else if (orderStatus === 'zugestellt' || orderStatus === 'delivered') {
+    mappedStatus = 'zugestellt';
+  } else if (isPaid) {
+    mappedStatus = 'paid';
+  }
+
+  const syncedInquiry = {
+    ...inquiry,
+    status: mappedStatus,
+    orderStatus,
+    payment: {
+      ...(inquiry.payment || {}),
+      status: isPaid ? 'completed' : (inquiry.payment?.status || 'not_required'),
+      paidAt: isPaid
+        ? (inquiry.payment?.paidAt || linkedOrder.zahlung?.bezahltAm || inquiry.updatedAt || new Date())
+        : inquiry.payment?.paidAt
+    }
+  };
+
+  // ✅ Versanddaten für Kunde sichtbar machen wenn versendet
+  if (mappedStatus === 'verschickt' || mappedStatus === 'zugestellt') {
+    syncedInquiry.shipping = {
+      sendungsnummer: linkedOrder.versand?.sendungsnummer || '',
+      trackingUrl: linkedOrder.versand?.trackingUrl || '',
+      anbieter: linkedOrder.versand?.anbieter || 'dhl',
+      versendetAm: linkedOrder.versand?.versendetAm,
+      zugestelltAm: linkedOrder.versand?.zugestelltAm
+    };
+  }
+
+  return syncedInquiry;
+}
 
 // 📊 GET: Admin-Statistiken
 router.get('/admin/stats', auth, async (req, res) => {
@@ -517,6 +603,18 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
     // ✅ CACHE-INVALIDIERUNG: Portfolio-Cache nach Bestandsänderungen invalidieren
     invalidatePortfolioCache();
     console.log('🔄 Portfolio-Cache invalidiert nach Bestandsreduzierung');
+
+    const shippingConfig = await calculateShippingFromSettings(inquiry.total);
+    const versandkosten = shippingConfig.versandkosten;
+    const gesamtsumme = Number(inquiry.total || 0) + versandkosten;
+
+    console.log('🚚 Versandkonfiguration für Inquiry-Konvertierung:', {
+      shippingEnabled: shippingConfig.shippingEnabled,
+      shippingCost: shippingConfig.shippingCost,
+      freeShippingThreshold: shippingConfig.freeShippingThreshold,
+      inquiryTotal: inquiry.total,
+      calculatedShipping: versandkosten
+    });
     
     if (convertToOrder) {
       // Direkt in Bestellung umwandeln (Bestand bereits reduziert)
@@ -539,10 +637,6 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
           gesamtpreis: (item.quantity || item.menge) * (item.price || item.einzelpreis)
         });
       }
-
-      // Versandkosten berechnen
-      const versandkosten = inquiry.total >= 30 ? 0 : 5.99;
-      const gesamtsumme = inquiry.total + versandkosten;
 
       // Bestellung erstellen
       const bestellnummer = `ORDER-${Date.now()}`;
@@ -578,7 +672,7 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
           produktType: artikel.produktType || 'portfolio'
         })),
         preise: {
-          zwischensumme: inquiry.total,
+          zwischensumme: Number(inquiry.total || 0),
           versandkosten: versandkosten, // ✅ Korrekte Versandkostenberechnung
           mwst: {
             satz: 19,
@@ -671,13 +765,13 @@ router.put('/admin/:inquiryId/accept', auth, requireAdmin, async (req, res) => {
           kundennummer: inquiry.customer?.id || inquiry.kundennummer || null
         },
         artikel: konvertierteArtikel,
-        bestellsumme: inquiry.total,
-        versandkosten: inquiry.versandkosten || 5.99,
-        gesamtsumme: inquiry.total + (inquiry.versandkosten || 5.99),
+        bestellsumme: Number(inquiry.total || 0),
+        versandkosten: versandkosten,
+        gesamtsumme: gesamtsumme,
         preise: {
-          zwischensumme: inquiry.total,
-          versandkosten: inquiry.versandkosten || 5.99,
-          gesamtsumme: inquiry.total + (inquiry.versandkosten || 5.99),
+          zwischensumme: Number(inquiry.total || 0),
+          versandkosten: versandkosten,
+          gesamtsumme: gesamtsumme,
           mwst: {
             satz: 0,
             betrag: 0
@@ -877,11 +971,32 @@ router.get('/customer/my-inquiries', authenticateToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Zahlungsstatus aus verknuepften Bestellungen ableiten (fuer Legacy-Daten und manuelle Admin-Updates)
+    const convertedOrderIds = inquiries
+      .map((inquiry) => inquiry.convertedOrderId)
+      .filter(Boolean);
+
+    let orderMap = new Map();
+    if (convertedOrderIds.length > 0) {
+      const linkedOrders = await Order.find({
+        _id: { $in: convertedOrderIds }
+      })
+        .select('_id status zahlung versand')
+        .lean();
+
+      orderMap = new Map(linkedOrders.map((order) => [String(order._id), order]));
+    }
+
+    const syncedInquiries = inquiries.map((inquiry) => {
+      const linkedOrder = inquiry.convertedOrderId ? orderMap.get(String(inquiry.convertedOrderId)) : null;
+      return syncInquiryWithLinkedOrder(inquiry, linkedOrder);
+    });
+
     console.log(`✅ ${inquiries.length} Anfragen für Kunde ${customerId} gefunden`);
 
     res.json({
       success: true,
-      inquiries: inquiries.map(inquiry => ({
+      inquiries: syncedInquiries.map(inquiry => ({
         ...inquiry,
         // Zusätzliche computed properties für Frontend
         statusLabel: getStatusLabel(inquiry.status),
@@ -927,15 +1042,23 @@ router.get('/customer/:inquiryId', authenticateToken, async (req, res) => {
       });
     }
 
+    let syncedInquiry = inquiry;
+    if (inquiry.convertedOrderId) {
+      const linkedOrder = await Order.findById(inquiry.convertedOrderId)
+        .select('_id status zahlung versand')
+        .lean();
+      syncedInquiry = syncInquiryWithLinkedOrder(inquiry, linkedOrder);
+    }
+
     console.log(`✅ Anfrage ${inquiryId} für Kunde ${customerId} gefunden`);
 
     res.json({
       success: true,
       inquiry: {
-        ...inquiry,
-        statusLabel: getStatusLabel(inquiry.status),
-        statusColor: getStatusColor(inquiry.status),
-        canCancel: inquiry.status === 'pending'
+        ...syncedInquiry,
+        statusLabel: getStatusLabel(syncedInquiry.status),
+        statusColor: getStatusColor(syncedInquiry.status),
+        canCancel: syncedInquiry.status === 'pending'
       }
     });
 
@@ -957,6 +1080,9 @@ function getStatusLabel(status) {
     case 'converted_to_order': return 'Zu Bestellung umgewandelt';
     case 'payment_pending': return 'Zahlung ausstehend';
     case 'paid': return 'Bezahlt';
+    case 'verpackt': return 'Verpackt';
+    case 'verschickt': return 'Verschickt';
+    case 'zugestellt': return 'Zugestellt';
     default: return status;
   }
 }
@@ -969,6 +1095,9 @@ function getStatusColor(status) {
     case 'converted_to_order': return 'primary';
     case 'payment_pending': return 'info';
     case 'paid': return 'success';
+    case 'verpackt': return 'info';
+    case 'verschickt': return 'secondary';
+    case 'zugestellt': return 'success';
     default: return 'default';
   }
 }
@@ -1089,7 +1218,7 @@ router.post('/:inquiryId/capture-payment', authenticateToken, async (req, res) =
       if (inquiry.convertedOrderId) {
         const Order = require('../models/Order');
         await Order.updateOne(
-          { orderId: inquiry.convertedOrderId },
+          { _id: inquiry.convertedOrderId },
           { 
             'zahlung.status': 'bezahlt',
             'zahlung.bezahltAm': new Date(),

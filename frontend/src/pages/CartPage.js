@@ -151,17 +151,42 @@ const CartPage = () => {
     }
   };
 
+  const isItemAvailable = (item) => {
+    if (typeof item?.isAvailable === 'boolean') {
+      return item.isAvailable;
+    }
+
+    if (item?.bestand) {
+      return (item?.aktiv !== false) && Number(item.bestand?.menge || 0) > 0;
+    }
+
+    // Fallback fuer optimistische lokale Items ohne Bestandsdaten
+    return item?.aktiv !== false;
+  };
+
+  const hasEnoughStockForItem = (item) => {
+    if (typeof item?.hasEnoughStock === 'boolean') {
+      return item.hasEnoughStock;
+    }
+
+    if (item?.bestand) {
+      return Number(item.quantity || 0) <= Number(item.bestand?.menge || 0);
+    }
+
+    return true;
+  };
+
   // Berechne verfügbare Gesamtsumme (nur verfügbare Artikel)
   const getAvailableTotal = () => {
     return items
-      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .filter(item => isItemAvailable(item) && hasEnoughStockForItem(item))
       .reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
   };
 
   // Berechne verfügbare Artikel-Anzahl
   const getAvailableItemsCount = () => {
     return items
-      .filter(item => item.isAvailable === true && item.hasEnoughStock === true)
+      .filter(item => isItemAvailable(item) && hasEnoughStockForItem(item))
       .reduce((sum, item) => sum + item.quantity, 0);
   };
 
@@ -230,7 +255,11 @@ const CartPage = () => {
         {/* Warenkorb-Artikel */}
         <Grid item xs={12} md={8}>
           <Paper elevation={2} sx={{ p: isMobile ? 1.5 : 2 }}>
-            {items.map((item, index) => (
+            {items.map((item, index) => {
+              const available = isItemAvailable(item);
+              const enoughStock = hasEnoughStockForItem(item);
+
+              return (
               <Box key={item.id}>
                 <Card 
                   elevation={0} 
@@ -239,9 +268,9 @@ const CartPage = () => {
                     mb: 2,
                     flexDirection: isMobile ? 'column' : 'row',
                     // Visuell hervorheben wenn nicht verfügbar
-                    opacity: item.isAvailable ? 1 : 0.6,
-                    border: item.isAvailable ? 'none' : '2px dashed #f44336',
-                    backgroundColor: item.isAvailable ? 'transparent' : '#ffebee'
+                    opacity: available ? 1 : 0.6,
+                    border: available ? 'none' : '2px dashed #f44336',
+                    backgroundColor: available ? 'transparent' : '#ffebee'
                   }}
                 >
                   {item.image && (
@@ -279,14 +308,14 @@ const CartPage = () => {
                       {/* Verfügbarkeitsstatus */}
                       {item.bestand && (
                         <Box sx={{ mt: 0.5 }}>
-                          {!item.isAvailable ? (
+                          {!available ? (
                             <Chip 
                               label="Nicht verfügbar" 
                               color="error" 
                               size="small" 
                               sx={{ fontSize: '0.75rem' }}
                             />
-                          ) : !item.hasEnoughStock ? (
+                          ) : !enoughStock ? (
                             <Chip 
                               label={`Nur ${item.bestand?.menge || 0} verfügbar`} 
                               color="warning" 
@@ -307,7 +336,7 @@ const CartPage = () => {
                             </Box>
                           )}
 
-                          {item.isAvailable && item.quantity >= (item.bestand?.menge || 0) && (
+                          {available && item.quantity >= (item.bestand?.menge || 0) && (
                             <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
                               Es sind nur {item.bestand?.menge || 0} Stück vorrätig.
                             </Typography>
@@ -366,7 +395,7 @@ const CartPage = () => {
                             e.preventDefault();
                             handleQuantityChange(item.id, item.quantity + 1);
                           }}
-                          disabled={item.isAvailable === false || item.quantity >= (item.bestand?.menge || 0)}
+                          disabled={!available || item.quantity >= (item.bestand?.menge || 0)}
                         >
                           <AddIcon fontSize={isMobile ? "medium" : "small"} />
                         </IconButton>
@@ -404,7 +433,8 @@ const CartPage = () => {
                 </Card>
                 {index < items.length - 1 && <Divider sx={{ my: isMobile ? 1.5 : 2 }} />}
               </Box>
-            ))}
+              );
+            })}
 
             {/* Warenkorb leeren */}
             <Box sx={{ mt: isMobile ? 2 : 3, display: 'flex', justifyContent: 'flex-end' }}>

@@ -12,6 +12,9 @@ const { validateCheckoutStatus, validatePayPalStatus } = require('../middleware/
 const { createInquiryFromOrder } = require('../utils/inquiryHelper');
 const { validateShippingData, generateTrackingUrl } = require('../utils/trackingValidation');
 const { calculateEffectivePrice } = require('../utils/pricing');
+const Inquiry = require('../models/Inquiry');
+
+const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Hilfsfunktion zur Generierung einer Produktbeschreibung aus Portfolio-Daten
 function generateProductDescription(portfolioData) {
@@ -1315,34 +1318,64 @@ router.put('/:orderId/status', async (req, res) => {
       // Rechnung auf "paid" setzen falls vorhanden
       try {
         const Invoice = require('../models/Invoice');
-        const invoice = await Invoice.findOne({ 
-          $or: [
-            { 'order.orderId': order._id },
-            { invoiceNumber: order.invoiceNumber }
-          ]
-        });
-        
+
+        const invoiceLookups = [
+          { 'order.orderId': order._id },
+          { 'order.bestellnummer': order.bestellnummer }
+        ];
+
+        if (order.invoiceNumber) {
+          invoiceLookups.push({ invoiceNumber: order.invoiceNumber });
+        }
+
+        if (order.bestellnummer) {
+          invoiceLookups.push({
+            'notes.internal': { $regex: escapeRegex(order.bestellnummer), $options: 'i' }
+          });
+        }
+
+        const invoice = await Invoice.findOne({ $or: invoiceLookups });
+
         if (invoice) {
           console.log('💰 Rechnung als bezahlt markieren:', invoice.invoiceNumber);
           invoice.status = 'paid';
+          invoice.payment = invoice.payment || {};
+          invoice.payment.status = 'paid';
           invoice.payment.paidDate = new Date();
-          invoice.payment.paidAmount = invoice.amounts.total;
+          invoice.payment.paidAmount = Number(invoice.amounts?.total || 0);
+          invoice.payment.paymentReference = invoice.payment.paymentReference || `Automatisch aus Bestellung ${order.bestellnummer} uebernommen`;
           await invoice.save();
           console.log('✅ Rechnung erfolgreich als bezahlt markiert');
         } else {
           // Falls noch keine Rechnung existiert, erstelle sie jetzt
           console.log('🧾 Keine Rechnung vorhanden - erstelle neue Rechnung...');
           const invoiceResult = await orderInvoiceService.generateInvoiceForOrder(order._id);
-          
+
           if (invoiceResult.success) {
-            console.log('✅ Rechnung automatisch erstellt:', invoiceResult.invoiceNumber);
-            // Sofort als bezahlt markieren
-            const newInvoice = await Invoice.findOne({ invoiceNumber: invoiceResult.invoiceNumber });
+            if (invoiceResult.alreadyExists) {
+              console.log('ℹ️ Rechnung war bereits vorhanden:', invoiceResult.invoiceNumber);
+            } else {
+              console.log('✅ Rechnung neu erstellt:', invoiceResult.invoiceNumber);
+            }
+            // Rechnung über order._id suchen (DB-Nummer ≠ PDF-Nummer "RE-...")
+            const newInvoice = await Invoice.findOne({
+              $or: [
+                { 'order.orderId': order._id },
+                { originalOrder: order._id },
+                { 'notes.internal': { $regex: escapeRegex(order.bestellnummer), $options: 'i' } }
+              ]
+            });
             if (newInvoice) {
               newInvoice.status = 'paid';
+              newInvoice.payment = newInvoice.payment || {};
+              newInvoice.payment.status = 'paid';
               newInvoice.payment.paidDate = new Date();
-              newInvoice.payment.paidAmount = newInvoice.amounts.total;
+              newInvoice.payment.paidAmount = Number(newInvoice.amounts?.total || 0);
+              newInvoice.payment.paymentReference = newInvoice.payment.paymentReference || `Automatisch aus Bestellung ${order.bestellnummer} uebernommen`;
               await newInvoice.save();
+              console.log('✅ Rechnung als bezahlt markiert (neu erstellt):', newInvoice.invoiceNumber);
+            } else {
+              console.warn('⚠️ Neu erstellte Rechnung konnte nicht gefunden werden für:', order.bestellnummer);
             }
           } else {
             console.error('❌ Fehler bei automatischer Rechnungserstellung:', invoiceResult.error);
@@ -1356,24 +1389,39 @@ router.put('/:orderId/status', async (req, res) => {
     // 📋 Anfrage-Status aktualisieren wenn Bestellung aus Anfrage entstanden ist
     if (status === 'bezahlt' && (order.sourceInquiryId || order.anfrageId)) {
       try {
-        const Inquiry = require('../models/Inquiry');
         const inquiryId = order.sourceInquiryId || order.anfrageId;
         console.log('🔍 Suche Anfrage mit ID:', inquiryId);
-        const inquiry = await Inquiry.findById(inquiryId);
+
+        // Robust auflösen: sourceInquiryId kann ObjectId oder fachliche inquiryId (z. B. INQ-...) sein.
+        let inquiry = null;
+        const lookupValue = String(inquiryId);
+
+        if (lookupValue) {
+          inquiry = await Inquiry.findOne({
+            $or: [
+              { _id: lookupValue },
+              { inquiryId: lookupValue },
+              { convertedOrderId: order._id }
+            ]
+          });
+        }
+
+        if (!inquiry) {
+          inquiry = await Inquiry.findOne({ convertedOrderId: order._id });
+        }
+
         if (inquiry) {
           console.log('📋 Gefundene Anfrage:', inquiry.inquiryId, 'Status:', inquiry.status);
-          // Aktualisiere Status wenn noch nicht konvertiert oder payment_pending
-          if (inquiry.status !== 'converted_to_order') {
-            const oldStatus = inquiry.status;
-            inquiry.status = 'converted_to_order';
-            inquiry.convertedOrderId = order._id;
-            await inquiry.save();
-            console.log(`✅ Anfrage-Status aktualisiert: "${oldStatus}" → "converted_to_order" (${inquiry.inquiryId})`);
-          } else {
-            console.log('ℹ️ Anfrage bereits als "converted_to_order" markiert');
-          }
+          const oldStatus = inquiry.status;
+          inquiry.status = 'paid';
+          inquiry.convertedOrderId = inquiry.convertedOrderId || order._id;
+          inquiry.payment = inquiry.payment || {};
+          inquiry.payment.status = 'completed';
+          inquiry.payment.paidAt = inquiry.payment.paidAt || new Date();
+          await inquiry.save();
+          console.log(`✅ Anfrage-Status aktualisiert: "${oldStatus}" → "paid" (${inquiry.inquiryId})`);
         } else {
-          console.log('⚠️ Anfrage mit ID nicht gefunden:', inquiryId);
+          console.log('⚠️ Verknüpfte Anfrage nicht gefunden für Bestellung:', order.bestellnummer);
         }
       } catch (inquiryError) {
         console.error('❌ Fehler beim Aktualisieren des Anfrage-Status:', inquiryError);
