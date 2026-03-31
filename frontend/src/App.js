@@ -31,8 +31,7 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ResponsiveCartPage = lazy(() => import('./components/responsive/ResponsiveCartPage'));
 const ResponsiveCheckoutPage = lazy(() => import('./components/responsive/ResponsiveCheckoutPage'));
 const ResponsiveProfilePage = lazy(() => import('./components/responsive/ResponsiveProfilePage'));
-const CustomerInquiries = lazy(() => import('./pages/CustomerInquiries'));
-const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
+const CustomerDashboard = lazy(() => import('./pages/CustomerDashboard'));
 const InquiryPaymentSuccess = lazy(() => import('./pages/InquiryPaymentSuccess'));
 const InquiryPaymentCancel = lazy(() => import('./pages/InquiryPaymentCancel'));
 const OrderPaymentSuccess = lazy(() => import('./pages/OrderPaymentSuccess'));
@@ -78,7 +77,8 @@ const useShowFooter = () => {
     '/checkout', 
     '/admin/portfolio',
     '/inquiries',
-    '/my-orders'
+    '/my-orders',
+    '/my-orders-and-inquiries'
   ];
   
   return !routesWithoutFooter.some(route => location.pathname.startsWith(route));
@@ -124,8 +124,9 @@ function App() {
                       <Route path="/checkout" element={<ResponsiveCheckoutPage />} />
                       <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
                       <Route path="/checkout/cancel" element={<CheckoutCancelPage />} />
-                      <Route path="/inquiries" element={<CustomerInquiries />} />
-                      <Route path="/my-orders" element={<MyOrdersPage />} />
+                      <Route path="/my-orders-and-inquiries" element={<CustomerDashboard />} />
+                      <Route path="/inquiries" element={<CustomerDashboard />} />
+                      <Route path="/my-orders" element={<CustomerDashboard />} />
                       <Route path="/inquiry-success" element={<InquirySuccessPage />} />
                       <Route path="/inquiry-payment-success" element={<InquiryPaymentSuccess />} />
                       <Route path="/inquiry-payment-cancel" element={<InquiryPaymentCancel />} />
@@ -141,7 +142,7 @@ function App() {
                       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
                       <Route path="/verify-email/:token" element={<EmailVerificationPage />} />
                       <Route path="/profile" element={<ResponsiveProfilePage />} />
-                      <Route path="/meine-anfragen" element={<CustomerInquiries />} />
+                      <Route path="/meine-anfragen" element={<CustomerDashboard />} />
                       
                       {/* Admin Portfolio Route with normal Navbar */}
                       <Route 

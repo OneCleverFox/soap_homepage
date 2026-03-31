@@ -88,38 +88,31 @@ const Navbar = () => {
             console.log(`👑 Admin: ${newInquiries.length} neue Anfragen`);
           }
         } else {
-          // Kunde: Zähle Antworten auf eigene Anfragen
-          const lastViewedKey = `inquiries_last_viewed_${user.id || user.userId}`;
-          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
-          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
-          
-          // Ungesehene Benachrichtigungen zählen - erweiterte Status-Liste
-          const unseenNotifications = inquiries.filter(inquiry => {
-            const status = inquiry.status?.toLowerCase();
-            const updatedAt = new Date(inquiry.updatedAt || inquiry.createdAt);
-            
-            // Zähle alle Status-Änderungen als wichtige Benachrichtigungen
-            const isImportantStatus = [
-              'accepted',          // Anfrage angenommen
-              'abgelehnt', 
-              'rejected',          // Anfrage abgelehnt
-              'converted_to_order', // Als Bestellung umgewandelt
-              'payment_pending',    // Zahlung ausstehend
-              'paid',              // Bezahlt
-              'shipped',           // Versandt
-              'delivered'          // Geliefert
-            ].includes(status);
-            
-            // Nur Status-Änderungen nach dem letzten Besuch zählen
-            return isImportantStatus && updatedAt > lastViewedDate;
-          });
-        
-          setPendingInquiries(unseenNotifications.length);
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`📋 Ungesehene Anfragen-Updates: ${unseenNotifications.length}`);
-            console.log(`📅 Letzter Besuch: ${lastViewedDate.toLocaleString()}`);
-            console.log('🔍 Updates:', unseenNotifications.map(i => `${i.inquiryId}: ${i.status}`));
+          // Kunde: separaten Endpunkt nutzen und per-item Seen-Tracking
+          try {
+            const customerResp = await api.get('/inquiries/customer/my-inquiries');
+            if (customerResp.data?.success) {
+              const customerInquiries = customerResp.data.inquiries || [];
+              const seenKey = `seen_inquiries_${user.id || user.userId}`;
+              let seenInquiries = {};
+              try { seenInquiries = JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch {}
+              const importantStatuses = [
+                'accepted', 'abgelehnt', 'rejected',
+                'converted_to_order', 'payment_pending',
+                'paid', 'shipped', 'delivered',
+                'verschickt', 'zugestellt'
+              ];
+              const unseen = customerInquiries.filter(inquiry => {
+                const currentStatus = (inquiry.status || '').toLowerCase();
+                return importantStatuses.includes(currentStatus) && seenInquiries[inquiry._id] !== currentStatus;
+              });
+              setPendingInquiries(unseen.length);
+              if (process.env.NODE_ENV === 'development') {
+                console.log(`📋 Ungesehene Anfragen-Updates: ${unseen.length}`);
+              }
+            }
+          } catch {
+            setPendingInquiries(0);
           }
         }
       }
@@ -138,50 +131,37 @@ const Navbar = () => {
     
     try {
       const result = await ordersAPI.getCustomerOrders({ limit: 100 });
-      if (result.success) {
+      if (result.data?.success) {
+        const bestellungen = result.data?.data?.bestellungen || result.data?.bestellungen || [];
         const isAdmin = user.rolle === 'admin' || user.role === 'admin' || user.permissions?.includes('admin');
         
         if (isAdmin) {
           // Admin: Nur wirklich neue Bestellungen zählen, die noch nicht bearbeitet wurden
-          const needsAttention = result.data.bestellungen.filter(order => {
+          const needsAttention = bestellungen.filter(order => {
             const orderStatus = order.status?.toLowerCase();
-            
-            // Nur neue, noch nicht bearbeitete Bestellungen zählen
             return orderStatus === 'neu' || orderStatus === 'pending';
           });
           setPendingOrders(needsAttention.length);
         } else {
-          // Kunde: Bestellungs-Updates seit letztem Besuch
-          const lastViewedKey = `orders_last_viewed_${user.id || user.userId}`;
-          const lastViewed = cookieManager.getItem(lastViewedKey, 'optional');
-          const lastViewedDate = lastViewed ? new Date(lastViewed) : new Date(0);
-          
-          const updatedOrders = result.data.bestellungen.filter(order => {
-            const updatedAt = new Date(order.updatedAt || order.createdAt);
-            const orderStatus = order.status?.toLowerCase();
-            const paymentStatus = order.zahlung?.status?.toLowerCase();
-            
-            // Status-Änderungen die für Kunden wichtig sind
-            const hasImportantUpdate = [
-              'bestätigt', 'confirmed',       // Bestellung bestätigt
-              'in_bearbeitung', 'processing', // In Bearbeitung
-              'versandt', 'shipped',          // Versandt
-              'geliefert', 'delivered',       // Geliefert
-              'storniert', 'cancelled'        // Storniert
-            ].includes(orderStatus) ||
-            [
-              'bezahlt', 'paid', 'completed', // Zahlung eingegangen
-              'failed', 'fehlgeschlagen'      // Zahlung fehlgeschlagen
-            ].includes(paymentStatus);
-            
-            return hasImportantUpdate && updatedAt > lastViewedDate;
+          // Kunde: per-item Seen-Tracking via localStorage
+          const seenOrdersKey = `seen_orders_${user.id || user.userId}`;
+          let seenOrders = {};
+          try { seenOrders = JSON.parse(localStorage.getItem(seenOrdersKey) || '{}'); } catch {}
+          const importantStatuses = [
+            'bestaetigt', 'bestätigt', 'confirmed',
+            'in_bearbeitung', 'processing',
+            'verschickt', 'versandt', 'shipped',
+            'zugestellt', 'geliefert', 'delivered',
+            'storniert', 'cancelled',
+            'bezahlt', 'paid'
+          ];
+          const updatedOrders = bestellungen.filter(order => {
+            const currentStatus = (order.status || '').toLowerCase();
+            return importantStatuses.includes(currentStatus) && seenOrders[order._id] !== currentStatus;
           });
-          
           setPendingOrders(updatedOrders.length);
-          
           if (process.env.NODE_ENV === 'development') {
             console.log(`📦 Ungesehene Bestellungs-Updates: ${updatedOrders.length}`);
-            console.log('🔍 Updates:', updatedOrders.map(o => `${o.bestellnummer}: ${o.status} | Zahlung: ${o.zahlung?.status}`));
           }
         }
       }
@@ -253,11 +233,18 @@ const Navbar = () => {
       }
     };
     
+    // Einzelnen Eintrag angesehen → Badges sofort neu laden
+    const handleItemViewed = () => {
+      loadPendingInquiries();
+      loadPendingOrders();
+    };
+
     window.addEventListener('inquiriesViewed', handleInquiriesViewed);
     window.addEventListener('adminInquiriesViewed', handleAdminInquiriesViewed);
     window.addEventListener('ordersViewed', handleOrdersViewed);
     window.addEventListener('inquiryViewed', handleInquiryAction);
     window.addEventListener('inquiryActioned', handleInquiryAction);
+    window.addEventListener('itemViewed', handleItemViewed);
 
     // Widerruf-Badge laden und Event-Listener registrieren
     loadPendingWiderrufe();
@@ -270,6 +257,7 @@ const Navbar = () => {
       window.removeEventListener('ordersViewed', handleOrdersViewed);
       window.removeEventListener('inquiryViewed', handleInquiryAction);
       window.removeEventListener('inquiryActioned', handleInquiryAction);
+      window.removeEventListener('itemViewed', handleItemViewed);
       window.removeEventListener('widerrufViewed', handleWiderrufViewed);
     };
   }, [user]); // Nur von user abhängig - Funktionen werden bewusst nicht als Dependency hinzugefügt
@@ -684,30 +672,6 @@ const Navbar = () => {
                     </ListItemIcon>
                     Mein Profil
                   </MenuItem>
-                  
-                  <MenuItem component={Link} to="/inquiries" onClick={handleCloseAccountMenu}>
-                    <ListItemIcon>
-                      📋
-                    </ListItemIcon>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      Meine Anfragen
-                      {pendingInquiries > 0 && (
-                        <Badge 
-                          badgeContent={pendingInquiries} 
-                          color="warning"
-                          sx={{
-                            '& .MuiBadge-badge': {
-                              fontSize: '0.6rem',
-                              minWidth: '16px',
-                              height: '16px'
-                            }
-                          }}
-                        >
-                          <Box sx={{ width: 8 }} />
-                        </Badge>
-                      )}
-                    </Box>
-                  </MenuItem>
 
                   <MenuItem component={Link} to="/my-orders" onClick={handleCloseAccountMenu}>
                     <ListItemIcon>
@@ -715,9 +679,9 @@ const Navbar = () => {
                     </ListItemIcon>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       Meine Bestellungen
-                      {pendingOrders > 0 && (
+                      {(pendingOrders + pendingInquiries) > 0 && (
                         <Badge 
-                          badgeContent={pendingOrders} 
+                          badgeContent={pendingOrders + pendingInquiries} 
                           color="warning"
                           sx={{
                             '& .MuiBadge-badge': {
