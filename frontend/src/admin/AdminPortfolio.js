@@ -47,7 +47,8 @@ import {
   ShoppingCart,
   Category,
   CameraAlt as CameraIcon,
-  FilterList as FilterIcon
+  FilterList as FilterIcon,
+  FileDownload as FileDownloadIcon
 } from '@mui/icons-material';
 import portfolioAdminService from '../services/portfolioAdminService';
 import { getImageUrl, getPlaceholderImage } from '../utils/imageUtils';
@@ -949,16 +950,46 @@ const AdminPortfolio = () => {
                 ({filteredItems.length} Artikel)
               </Typography>
             </Box>
-            <Button
-              variant="contained"
-              startIcon={isMobile ? null : <AddIcon />}
-              onClick={handleNew}
-              size={isMobile ? 'small' : 'medium'}
-              fullWidth={isMobile}
-              sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
-            >
-              {isMobile ? '+ Neues Produkt' : 'Neues Produkt'}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'column', sm: 'row' }, width: { xs: '100%', sm: 'auto' } }}>
+              <Button
+                variant="outlined"
+                startIcon={<FileDownloadIcon />}
+                size={isMobile ? 'small' : 'medium'}
+                fullWidth={isMobile}
+                onClick={() => {
+                  const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                  const token = localStorage.getItem('token');
+                  fetch(`${apiBase}/admin/portfolio/export/sumup-csv?all=1&images=0`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                  })
+                    .then(res => {
+                      if (!res.ok) throw new Error('Export fehlgeschlagen');
+                      return res.blob();
+                    })
+                    .then(blob => {
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `sumup_produkte_${new Date().toISOString().slice(0, 10)}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    })
+                    .catch(() => alert('Fehler beim CSV-Export'));
+                }}
+              >
+                SumUp CSV
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={isMobile ? null : <AddIcon />}
+                onClick={handleNew}
+                size={isMobile ? 'small' : 'medium'}
+                fullWidth={isMobile}
+                sx={{ minWidth: { xs: '100%', sm: 'auto' } }}
+              >
+                {isMobile ? '+ Neues Produkt' : 'Neues Produkt'}
+              </Button>
+            </Box>
           </Box>
 
           {error && (

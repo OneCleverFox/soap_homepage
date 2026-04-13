@@ -737,6 +737,87 @@ router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/portfolio/export/sumup-csv
+// @desc    Alle Portfolio-Produkte als SumUp-Import-CSV exportieren
+// @access  Private (Admin only)
+router.get('/export/sumup-csv', authenticateToken, async (req, res) => {
+  try {
+    const includeInactive = req.query.all === '1';
+    const includeImages = req.query.images === '1';
+    const query = includeInactive ? {} : { aktiv: true };
+
+    const products = await Portfolio.find(query)
+      .select('name preis kategorie article_number beschreibung gramm seife aroma aktiv bilder.hauptbildData.contentType bilder.galerie.contentType')
+      .sort({ kategorie: 1, name: 1 })
+      .lean();
+
+    const imageBaseUrl = `${req.protocol}://${req.get('host')}`;
+
+    const sanitize = (v) => {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(/\r?\n|\r/g, ' ').trim();
+    };
+
+    const csvEscape = (v) => `"${sanitize(v).replace(/"/g, '""')}"`;
+
+    const formatPrice = (v) => {
+      const n = Number(v || 0);
+      return Number.isFinite(n) && n >= 0 ? n.toFixed(2) : '0.00';
+    };
+
+    const categoryLabel = (cat) => {
+      const map = { seife: 'Seife', werkstuck: 'Werkstueck', schmuck: 'Schmuck' };
+      return map[cat] || 'Allgemein';
+    };
+
+    const buildDescription = (p) => {
+      const short = sanitize(p.beschreibung?.kurz);
+      const details = [];
+      if (p.gramm) details.push(`${p.gramm}g`);
+      if (p.seife) details.push(p.seife);
+      if (p.aroma) details.push(p.aroma);
+      const base = short || sanitize(p.beschreibung?.lang);
+      if (!base && details.length === 0) return '';
+      if (!base) return details.join(' | ');
+      if (details.length === 0) return base;
+      return `${base} | ${details.join(' | ')}`;
+    };
+
+    const headers = includeImages
+      ? ['Name', 'Price', 'Tax', 'SKU', 'Barcode', 'Category', 'Description', 'Image']
+      : ['Name', 'Price', 'Tax', 'SKU', 'Barcode', 'Category', 'Description'];
+    const lines = [headers.map(csvEscape).join(',')];
+
+    for (const p of products) {
+      const sku = sanitize(p.article_number) || String(p._id);
+      const hasImage = !!p.bilder?.hauptbildData?.contentType;
+      const imageUrl = includeImages
+        ? (hasImage ? `${imageBaseUrl}/api/portfolio/${p._id}/hauptbild.jpg` : (p.bilder?.galerie?.[0]?.contentType ? `${imageBaseUrl}/api/portfolio/${p._id}/galerie/0.jpg` : ''))
+        : '';
+      lines.push([
+        p.name,
+        formatPrice(p.preis),
+        '0',
+        sku,
+        '',
+        categoryLabel(p.kategorie),
+        buildDescription(p),
+        ...(includeImages ? [imageUrl] : [])
+      ].map(csvEscape).join(','));
+    }
+
+    const csv = lines.join('\r\n') + '\r\n';
+    const filename = `sumup_produkte_${new Date().toISOString().slice(0, 10)}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\uFEFF' + csv); // BOM für Excel/Kompatibilität
+  } catch (error) {
+    console.error('SumUp CSV Export Error:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim CSV-Export' });
+  }
+});
+
 // @route   GET /api/admin/portfolio/stats  
 // @desc    Portfolio-Statistiken abrufen (optimiert)
 // @access  Private (Admin only)

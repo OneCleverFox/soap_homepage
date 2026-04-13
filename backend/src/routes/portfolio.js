@@ -458,6 +458,37 @@ router.get('/:id/hauptbild', async (req, res) => {
   }
 });
 
+// 🖼️ IMAGE SERVING: Hauptbild mit Dateiendung fuer externe CSV-Importer (z.B. SumUp)
+router.get('/:id/hauptbild.jpg', async (req, res) => {
+  try {
+    const portfolioItem = await Portfolio.findById(req.params.id)
+      .select('bilder.hauptbildData')
+      .lean();
+
+    if (!portfolioItem?.bilder?.hauptbildData?.data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Hauptbild nicht gefunden'
+      });
+    }
+
+    const imageData = portfolioItem.bilder.hauptbildData;
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    const mimeType = imageData.contentType || 'image/jpeg';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Hauptbild JPG Load Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Hauptbildes'
+    });
+  }
+});
+
 // 🖼️ IMAGE SERVING: Galerie-Bild on-demand laden
 router.get('/:id/galerie/:index', async (req, res) => {
   try {
@@ -493,6 +524,40 @@ router.get('/:id/galerie/:index', async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: 'Fehler beim Laden des Galerie-Bildes' 
+    });
+  }
+});
+
+// 🖼️ IMAGE SERVING: Galerie-Bild mit Dateiendung fuer externe CSV-Importer (z.B. SumUp)
+router.get('/:id/galerie/:index.jpg', async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const imageIndex = parseInt(index, 10);
+
+    const portfolioItem = await Portfolio.findById(id)
+      .select('bilder.galerie')
+      .lean();
+
+    if (!portfolioItem?.bilder?.galerie || !portfolioItem.bilder.galerie[imageIndex]) {
+      return res.status(404).json({
+        success: false,
+        message: 'Galerie-Bild nicht gefunden'
+      });
+    }
+
+    const imageData = portfolioItem.bilder.galerie[imageIndex];
+    const base64Data = imageData.data.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+    const mimeType = imageData.contentType || 'image/jpeg';
+
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(imageBuffer);
+  } catch (error) {
+    console.error('Galerie JPG Load Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Galerie-Bildes'
     });
   }
 });
