@@ -16,6 +16,7 @@
     "test": "echo \"No tests specified - Backend running\" && exit 0",
     "postinstall": "npm rebuild sharp || echo 'Sharp rebuild skipped - will use prebuilt binaries'",
     "setup:optimizations": "node scripts/setupOptimizations.js",
+    "export:sumup-csv": "node scripts/exportSumUpCsv.js",
     "create-portfolio-indexes": "node src/scripts/createPortfolioIndexes.js",
     "deduct-invoice-stock": "node src/scripts/retroactiveInvoiceStockDeduction.js",
     "logs:view": "tail -f logs/combined.log",
