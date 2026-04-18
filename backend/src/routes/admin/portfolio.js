@@ -742,6 +742,16 @@ router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
 // @access  Private (Admin only)
 router.get('/export/sumup-csv', authenticateToken, async (req, res) => {
   try {
+    const additionalItems = [
+      { name: 'Kleine Tuete', price: 0.30, category: 'Verpackung', sku: 'VPK-KLEIN' },
+      { name: 'Mittlere Tuete', price: 0.70, category: 'Verpackung', sku: 'VPK-MITTEL' },
+      { name: 'Grosse Tuete', price: 1.00, category: 'Verpackung', sku: 'VPK-GROSS' },
+      { name: 'Geschenkeservice klein', price: 3.00, category: 'Service', sku: 'SRV-GS-KLEIN' },
+      { name: 'Geschenkeservice gross', price: 5.00, category: 'Service', sku: 'SRV-GS-GROSS' },
+      { name: 'Nicht verkaufen - Kategorie Form & Figur', price: 0.00, category: 'Form & Figur', sku: 'CAT-FORM-FIGUR' },
+      { name: 'Nicht verkaufen - Kategorie % Sale', price: 0.00, category: '% Sale', sku: 'CAT-SALE' }
+    ];
+
     const includeInactive = req.query.all === '1';
     const includeImages = req.query.images === '1';
     const query = includeInactive ? {} : { aktiv: true };
@@ -803,6 +813,19 @@ router.get('/export/sumup-csv', authenticateToken, async (req, res) => {
         categoryLabel(p.kategorie),
         buildDescription(p),
         ...(includeImages ? [imageUrl] : [])
+      ].map(csvEscape).join(','));
+    }
+
+    for (const item of additionalItems) {
+      lines.push([
+        item.name,
+        formatPrice(item.price),
+        '0',
+        item.sku,
+        '',
+        item.category,
+        '',
+        ...(includeImages ? [''] : [])
       ].map(csvEscape).join(','));
     }
 
