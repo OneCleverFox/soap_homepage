@@ -17,9 +17,9 @@ RUN npm ci --omit=dev
 COPY backend/src ./src
 COPY backend/scripts ./scripts
 COPY backend/assets ./assets
-COPY backend/uploads ./uploads
 
-RUN mkdir -p logs
+RUN mkdir -p uploads/products && \
+  mkdir -p logs
 
 RUN chown -R node:node /app
 USER node
