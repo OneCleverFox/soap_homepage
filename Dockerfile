@@ -19,7 +19,6 @@ RUN npm ci --only=production
 
 # Copy backend source code
 COPY backend/src ./src
-COPY backend/.env.vault ./
 
 # Create necessary directories
 RUN mkdir -p uploads/products && \

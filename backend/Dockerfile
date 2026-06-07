@@ -18,7 +18,6 @@ COPY backend/src ./src
 COPY backend/scripts ./scripts
 COPY backend/assets ./assets
 COPY backend/uploads ./uploads
-COPY backend/.env.vault ./
 
 RUN mkdir -p logs
 
