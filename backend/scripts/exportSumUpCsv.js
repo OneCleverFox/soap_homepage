@@ -111,18 +111,6 @@ function buildDescription(product) {
   return `${combinedDesc} | ${details.join(' | ')}`;
 }
 
-function getAdditionalItems() {
-  return [
-    { name: 'Kleine Tuete', price: 0.30, category: 'Verpackung', sku: 'VPK-KLEIN' },
-    { name: 'Mittlere Tuete', price: 0.70, category: 'Verpackung', sku: 'VPK-MITTEL' },
-    { name: 'Grosse Tuete', price: 1.00, category: 'Verpackung', sku: 'VPK-GROSS' },
-    { name: 'Geschenkeservice klein', price: 3.00, category: 'Service', sku: 'SRV-GS-KLEIN' },
-    { name: 'Geschenkeservice gross', price: 5.00, category: 'Service', sku: 'SRV-GS-GROSS' },
-    { name: 'Nicht verkaufen - Kategorie Form & Figur', price: 0.00, category: 'Form & Figur', sku: 'CAT-FORM-FIGUR' },
-    { name: 'Nicht verkaufen - Kategorie % Sale', price: 0.00, category: '% Sale', sku: 'CAT-SALE' }
-  ];
-}
-
 async function run() {
   const config = parseArgs();
   const uri = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
@@ -168,22 +156,6 @@ async function run() {
         categoryLabel(product.kategorie),
         buildDescription(product),
         imageUrl
-      ];
-
-      lines.push(row.map(csvEscape).join(','));
-    }
-
-    const additionalItems = getAdditionalItems();
-    for (const item of additionalItems) {
-      const row = [
-        item.name,
-        formatPrice(item.price),
-        String(config.vatPercent),
-        item.sku,
-        '',
-        item.category,
-        '',
-        ''
       ];
 
       lines.push(row.map(csvEscape).join(','));

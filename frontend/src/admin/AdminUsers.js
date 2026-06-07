@@ -145,7 +145,7 @@ function AdminUsers() {
       
       const response = await kundenAPI.getKunden(params);
       setUsers(response.data.data || response.data.users || []);
-      setTotalCount(response.data.total || response.data.pagination?.total || 0);
+      setTotalCount(response.data.gesamt || response.data.total || response.data.pagination?.total || 0);
     } catch (error) {
       showSnackbar('Fehler beim Laden der Benutzer', 'error');
       console.error('Error loading users:', error);
@@ -157,7 +157,8 @@ function AdminUsers() {
   const loadStats = useCallback(async () => {
     try {
       const response = await kundenAPI.getStats();
-      setStats(response.data);
+      // API liefert i.d.R. { success: true, data: { ...stats } }
+      setStats(response.data?.data || response.data || {});
     } catch (error) {
       console.error('Error loading stats:', error);
     }
