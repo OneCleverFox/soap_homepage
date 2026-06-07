@@ -10,13 +10,13 @@ RUN apk add --no-cache \
     g++
 
 # Install production dependencies for backend only
-COPY backend/package*.json ./
+COPY package*.json ./
 RUN npm ci --omit=dev
 
 # Copy backend application source
-COPY backend/src ./src
-COPY backend/scripts ./scripts
-COPY backend/assets ./assets
+COPY src ./src
+COPY scripts ./scripts
+COPY assets ./assets
 
 RUN mkdir -p uploads/products && \
   mkdir -p logs
