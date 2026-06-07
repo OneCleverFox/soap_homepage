@@ -92,6 +92,12 @@ const AdminPortfolio = () => {
   // State für required documents reminder
   const [requiredDocumentsDialog, setRequiredDocumentsDialog] = useState({ open: false, category: null, docTypes: [] });
 
+  // State für Gießformen PDF Export
+  const [giessformenExportDialog, setGiessformenExportDialog] = useState(false);
+  const [availableGiessformen, setAvailableGiessformen] = useState([]);
+  const [selectedGiessformIds, setSelectedGiessformIds] = useState([]);
+  const [loadingGiessformen, setLoadingGiessformen] = useState(false);
+
   const REQUIRED_DOCUMENTS = {
     seife: [
       { key: 'gpsr_konformitaetsblatt', label: 'GPSR – Produktsicherheits- & Konformitaetsblatt', required: true },
@@ -432,6 +438,80 @@ const AdminPortfolio = () => {
         ...prev,
         [name]: processedValue
       }));
+    }
+  };
+
+  // Funktionen für Gießformen PDF Export
+  const handleOpenGiessformenDialog = async () => {
+    setGiessformenExportDialog(true);
+    setLoadingGiessformen(true);
+    try {
+      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${apiBase}/admin/portfolio/export/giessformen-list`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Fehler beim Laden der Gießformen');
+      const data = await response.json();
+      setAvailableGiessformen(data.data || []);
+      setSelectedGiessformIds([]); // Zurücksetzen der Auswahl
+    } catch (error) {
+      console.error('Fehler beim Laden der Gießformen:', error);
+      alert('Fehler beim Laden der Gießformen');
+    } finally {
+      setLoadingGiessformen(false);
+    }
+  };
+
+  const handleCloseGiessformenDialog = () => {
+    setGiessformenExportDialog(false);
+    setSelectedGiessformIds([]);
+  };
+
+  const handleSelectGiessform = (id) => {
+    setSelectedGiessformIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllGiessformen = () => {
+    if (selectedGiessformIds.length === availableGiessformen.length) {
+      setSelectedGiessformIds([]);
+    } else {
+      setSelectedGiessformIds(availableGiessformen.map(form => form.id));
+    }
+  };
+
+  const handleExportGiessformenPdf = async () => {
+    try {
+      const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`${apiBase}/admin/portfolio/export/giessformen-pdf`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          selectedIds: selectedGiessformIds.length > 0 ? selectedGiessformIds : []
+        })
+      });
+
+      if (!response.ok) throw new Error('PDF Export fehlgeschlagen');
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `giessformen_karteikartenausgabe_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      handleCloseGiessformenDialog();
+    } catch (error) {
+      console.error('Fehler beim PDF-Export:', error);
+      alert('Fehler beim PDF-Export');
     }
   };
 
@@ -978,6 +1058,15 @@ const AdminPortfolio = () => {
                 }}
               >
                 SumUp CSV
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<FileDownloadIcon />}
+                size={isMobile ? 'small' : 'medium'}
+                fullWidth={isMobile}
+                onClick={handleOpenGiessformenDialog}
+              >
+                Gießformen PDF
               </Button>
               <Button
                 variant="contained"
@@ -2268,6 +2357,81 @@ const AdminPortfolio = () => {
             }}
           >
             Jetzt zu Dokumenten
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Gießformen Auswahl Dialog */}
+      <Dialog 
+        open={giessformenExportDialog} 
+        onClose={handleCloseGiessformenDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Gießformen für PDF-Export wählen</DialogTitle>
+        <DialogContent sx={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          {loadingGiessformen ? (
+            <Typography sx={{ p: 2 }}>Lade Gießformen...</Typography>
+          ) : availableGiessformen.length === 0 ? (
+            <Typography sx={{ p: 2 }}>Keine Gießformen gefunden</Typography>
+          ) : (
+            <>
+              <Box sx={{ p: 1, borderBottom: '1px solid #ddd', mb: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={selectedGiessformIds.length === availableGiessformen.length}
+                      indeterminate={selectedGiessformIds.length > 0 && selectedGiessformIds.length < availableGiessformen.length}
+                      onChange={handleSelectAllGiessformen}
+                    />
+                  }
+                  label={
+                    selectedGiessformIds.length === availableGiessformen.length
+                      ? 'Alle abwählen'
+                      : 'Alle auswählen'
+                  }
+                />
+              </Box>
+              <List sx={{ p: 0 }}>
+                {availableGiessformen.map((form) => (
+                  <ListItem
+                    key={form.id}
+                    disablePadding
+                    sx={{
+                      '&:hover': { bgcolor: '#f5f5f5' },
+                      borderBottom: '1px solid #eee'
+                    }}
+                  >
+                    <ListItemButton
+                      onClick={() => handleSelectGiessform(form.id)}
+                      sx={{ py: 1 }}
+                    >
+                      <Checkbox
+                        edge="start"
+                        checked={selectedGiessformIds.includes(form.id)}
+                        tabIndex={-1}
+                        disableRipple
+                      />
+                      <ListItemText
+                        primary={`${form.inventarnummer || 'N/A'}`}
+                        secondary={form.name}
+                        primaryTypographyProps={{ fontWeight: 'bold' }}
+                      />
+                    </ListItemButton>
+                  </ListItem>
+                ))}
+              </List>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseGiessformenDialog}>Abbrechen</Button>
+          <Button 
+            variant="contained"
+            onClick={handleExportGiessformenPdf}
+            disabled={selectedGiessformIds.length === 0}
+          >
+            PDF exportieren ({selectedGiessformIds.length} ausgewählt)
           </Button>
         </DialogActions>
       </Dialog>

@@ -30,7 +30,12 @@ import {
   CardContent,
   Stack,
   ToggleButton,
-  ToggleButtonGroup
+  ToggleButtonGroup,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+  CircularProgress,
+  ListSubheader
 } from '@mui/material';
 import api from '../services/api';
 
@@ -56,6 +61,15 @@ const AdminWarenberechnung = () => {
   const [validationErrors, setValidationErrors] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editValues, setEditValues] = useState({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [priceDropConfirmOpen, setPriceDropConfirmOpen] = useState(false);
+  const [pendingRoundedPrice, setPendingRoundedPrice] = useState(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportCategories, setExportCategories] = useState(['seife', 'werkstuck', 'schmuck']);
+  const [exportLayout, setExportLayout] = useState('a5');
+  const [exportType, setExportType] = useState('both');
+  const [productSearch, setProductSearch] = useState('');
   
   // Filter States
   const [categoryFilter, setCategoryFilter] = useState('alle'); // 'alle', 'seife', 'werkstuck'
@@ -194,6 +208,48 @@ const AdminWarenberechnung = () => {
       : '';
   }, [selectedProduct?._id, portfolioProducts]);
 
+  const normalizedProductSearch = useMemo(
+    () => productSearch.trim().toLowerCase(),
+    [productSearch]
+  );
+
+  const searchByName = useCallback((products) => {
+    if (!normalizedProductSearch) return products;
+    return products.filter((product) =>
+      (product?.name || '').toLowerCase().includes(normalizedProductSearch)
+    );
+  }, [normalizedProductSearch]);
+
+  const searchedPortfolioProducts = useMemo(
+    () => searchByName(portfolioProducts),
+    [portfolioProducts, searchByName]
+  );
+
+  const searchedFilteredProducts = useMemo(
+    () => searchByName(filteredProducts),
+    [filteredProducts, searchByName]
+  );
+
+  const renderProductSearchHeader = () => (
+    <ListSubheader sx={{ backgroundColor: '#fff' }}>
+      <TextField
+        size="small"
+        fullWidth
+        autoFocus
+        placeholder="Produktname suchen..."
+        value={productSearch}
+        onChange={(event) => setProductSearch(event.target.value)}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      />
+    </ListSubheader>
+  );
+
+  const productSelectMenuProps = {
+    autoFocus: false,
+    disableAutoFocusItem: true
+  };
+
   // Auswahl konsistent mit aktivem Filter halten
   useEffect(() => {
     // Wenn das aktuelle Produkt herausgefiltert wurde, wähle das erste verfügbare
@@ -264,6 +320,8 @@ const AdminWarenberechnung = () => {
 
   const handleEditClose = () => {
     setEditDialogOpen(false);
+    setPriceDropConfirmOpen(false);
+    setPendingRoundedPrice(null);
   };
 
   const handleEditChange = (field, value) => {
@@ -273,18 +331,194 @@ const AdminWarenberechnung = () => {
     }));
   };
 
-  const handleEditSave = async () => {
-    try {
-      const response = await api.put(`/warenberechnung/${calculation._id}`, editValues);
-      setCalculation(response.data);
-      if (selectedProduct?._id) {
-        calculationCacheRef.current.set(selectedProduct._id, response.data);
+  const parseNumber = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const roundPreviewPrice = (price, option) => {
+    switch (option) {
+      case 'keine':
+        return Math.round(price * 100) / 100;
+      case '0.10':
+        return Math.ceil(price * 10) / 10;
+      case '0.50':
+        return Math.ceil(price * 2) / 2;
+      case '1.00':
+        return Math.ceil(price);
+      case '0.99':
+        return Math.ceil(price) - 0.01;
+      default:
+        return Math.ceil(price * 2) / 2;
+    }
+  };
+
+  const liveEditPreview = useMemo(() => {
+    if (!calculation || !editDialogOpen) {
+      return null;
+    }
+
+    const merged = {
+      ...calculation,
+      ...editValues
+    };
+
+    const isWerkstuck = (merged.kategorie || selectedProduct?.kategorie) === 'werkstuck';
+    const energieKosten = parseNumber(merged.energieKosten);
+    const zusatzKosten = parseNumber(merged.zusatzKosten);
+    const pauschaleFaktor = parseNumber(merged.pauschaleFaktor, 3);
+    const gewinnProzent = parseNumber(merged.gewinnProzent);
+    const rabattProzent = parseNumber(merged.rabattProzent);
+    const rundungsOption = merged.rundungsOption || '0.50';
+
+    const zwischensummeEK = isWerkstuck
+      ? parseNumber(merged.giesswerkstoffKosten) +
+        parseNumber(merged.giesszusatzstoffeKostenGesamt) +
+        parseNumber(merged.giessformKosten) +
+        energieKosten
+      : parseNumber(merged.rohseifeKosten) +
+        parseNumber(merged.rohseife2Kosten) +
+        parseNumber(merged.duftoelKosten) +
+        parseNumber(merged.verpackungKosten) +
+        energieKosten +
+        parseNumber(merged.zusatzinhaltsstoffeKostenGesamt);
+
+    const pauschale = zwischensummeEK * pauschaleFaktor;
+    const gewinnBetrag = (pauschale * gewinnProzent) / 100;
+    const zwischensummeVorRabatt = pauschale + gewinnBetrag;
+    const rabattBetrag = (zwischensummeVorRabatt * rabattProzent) / 100;
+    const vkPreis = zwischensummeVorRabatt - rabattBetrag + zusatzKosten;
+    const vkPreisGerundet = roundPreviewPrice(vkPreis, rundungsOption);
+
+    return {
+      zwischensummeEK,
+      pauschale,
+      gewinnBetrag,
+      zwischensummeVorRabatt,
+      rabattBetrag,
+      vkPreis,
+      vkPreisGerundet,
+      delta: vkPreisGerundet - parseNumber(calculation.vkPreisGerundet)
+    };
+  }, [calculation, editDialogOpen, editValues, selectedProduct?.kategorie]);
+
+  const editCategory = useMemo(
+    () => calculation?.kategorie || selectedProduct?.kategorie || 'seife',
+    [calculation?.kategorie, selectedProduct?.kategorie]
+  );
+
+  const renderFixedCostSummary = () => {
+    if (!calculation) return null;
+
+    if (editCategory === 'werkstuck') {
+      return (
+        <Typography variant={isMobile ? 'caption' : 'body2'}>
+          Gießwerkstoff: {calculation?.giesswerkstoffKosten?.toFixed(2) || '0.00'} €<br/>
+          Gießzusatzstoffe: {calculation?.giesszusatzstoffeKostenGesamt?.toFixed(2) || '0.00'} €<br/>
+          Gießform: {calculation?.giessformKosten?.toFixed(2) || '0.00'} €
+        </Typography>
+      );
+    }
+
+    if (editCategory === 'schmuck') {
+      const hasGiessCosts =
+        (Number(calculation?.giesswerkstoffKosten) || 0) > 0 ||
+        (Number(calculation?.giesszusatzstoffeKostenGesamt) || 0) > 0 ||
+        (Number(calculation?.giessformKosten) || 0) > 0;
+
+      if (hasGiessCosts) {
+        return (
+          <Typography variant={isMobile ? 'caption' : 'body2'}>
+            Materialkosten: {calculation?.giesswerkstoffKosten?.toFixed(2) || '0.00'} €<br/>
+            Zusatzkosten Material: {calculation?.giesszusatzstoffeKostenGesamt?.toFixed(2) || '0.00'} €<br/>
+            Form-/Herstellungskosten: {calculation?.giessformKosten?.toFixed(2) || '0.00'} €
+          </Typography>
+        );
       }
+
+      return (
+        <Typography variant={isMobile ? 'caption' : 'body2'}>
+          Rohseife: {calculation?.rohseifeKosten?.toFixed(2) || '0.00'} € ({calculation?.gewichtInGramm || 0}g)<br/>
+          Duftöl: {calculation?.duftoelKosten?.toFixed(2) || '0.00'} €<br/>
+          Verpackung: {calculation?.verpackungKosten?.toFixed(2) || '0.00'} €
+        </Typography>
+      );
+    }
+
+    return (
+      <Typography variant={isMobile ? 'caption' : 'body2'}>
+        {calculation?.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
+          <>
+            {calculation.rohseifeName}: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife1Gramm || 0}g)<br/>
+            {calculation?.rohseifenKonfiguration?.rohseife2Name}: {calculation?.rohseife2Kosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife2Gramm || 0}g)<br/>
+          </>
+        ) : (
+          <>Rohseife: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.gewichtInGramm}g)<br/></>
+        )}
+        Duftöl: {calculation?.duftoelKosten?.toFixed(2)} €<br/>
+        Verpackung: {calculation?.verpackungKosten?.toFixed(2)} €
+      </Typography>
+    );
+  };
+
+  const persistEditAndApplyPrice = async () => {
+    if (!calculation?._id) return;
+
+    try {
+      setSavingEdit(true);
+
+      const response = await api.put(`/warenberechnung/${calculation._id}`, editValues);
+      const updatedCalculation = response.data;
+
+      setCalculation(updatedCalculation);
+      if (selectedProduct?._id) {
+        calculationCacheRef.current.set(selectedProduct._id, updatedCalculation);
+
+        const newRoundedPrice = Number(updatedCalculation?.vkPreisGerundet) || 0;
+        const updatedProduct = {
+          ...selectedProduct,
+          preis: newRoundedPrice
+        };
+
+        await api.put(`/admin/portfolio/${selectedProduct._id}`, updatedProduct);
+
+        setSelectedProduct(updatedProduct);
+        setPortfolioProducts((prev) =>
+          prev.map((product) =>
+            product._id === updatedProduct._id
+              ? { ...product, preis: newRoundedPrice }
+              : product
+          )
+        );
+      }
+
+      setValidationErrors(null);
+      setError(null);
+      setPriceDropConfirmOpen(false);
+      setPendingRoundedPrice(null);
       setEditDialogOpen(false);
     } catch (err) {
       console.error('Fehler beim Speichern:', err);
       setError(`Fehler beim Speichern: ${err.message}`);
+    } finally {
+      setSavingEdit(false);
     }
+  };
+
+  const handleEditSave = async () => {
+    const currentPortfolioPrice = parseNumber(selectedProduct?.preis, 0);
+    const nextRoundedPrice = parseNumber(
+      liveEditPreview?.vkPreisGerundet,
+      parseNumber(calculation?.vkPreisGerundet, 0)
+    );
+
+    if (nextRoundedPrice < currentPortfolioPrice) {
+      setPendingRoundedPrice(nextRoundedPrice);
+      setPriceDropConfirmOpen(true);
+      return;
+    }
+
+    await persistEditAndApplyPrice();
   };
 
   const handleNeuberechnen = async () => {
@@ -359,6 +593,215 @@ const AdminWarenberechnung = () => {
     }
   };
 
+  const handleExportCategoryToggle = (category) => {
+    setExportCategories((prev) => {
+      if (prev.includes(category)) {
+        return prev.filter((item) => item !== category);
+      }
+      return [...prev, category];
+    });
+  };
+
+  const handleExportExcel = async () => {
+    if (exportCategories.length === 0) {
+      setError('Bitte wählen Sie mindestens eine Kategorie für den Excel-Export aus.');
+      return;
+    }
+
+    try {
+      setExportLoading(true);
+      setError(null);
+
+      const triggerBlobDownload = (response, fallbackFileName) => {
+        const contentDisposition = response.headers?.['content-disposition'] || '';
+        const fileNameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+        const fileName = fileNameMatch?.[1] || fallbackFileName;
+
+        const blob = new Blob([
+          response.data
+        ], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      };
+
+      if (exportType === 'preisliste' || exportType === 'both') {
+        const response = await api.post(
+          '/admin/portfolio/export-price-list',
+          {
+            categories: exportCategories,
+            layout: exportLayout
+          },
+          {
+            responseType: 'blob',
+            timeout: 60000
+          }
+        );
+
+        triggerBlobDownload(response, 'preisliste.xlsx');
+      }
+
+      if (exportType === 'margenreport' || exportType === 'both') {
+        const marginResponse = await api.post(
+          '/admin/portfolio/export-margin-report',
+          {
+            categories: exportCategories
+          },
+          {
+            responseType: 'blob',
+            timeout: 60000
+          }
+        );
+
+        triggerBlobDownload(marginResponse, 'margenreport-ek-vk.xlsx');
+      }
+
+      setExportDialogOpen(false);
+    } catch (err) {
+      console.error('Fehler beim Excel-Export:', err);
+      const message = err.response?.data?.message || err.message || 'Unbekannter Fehler beim Export.';
+      setError(`Excel-Export fehlgeschlagen: ${message}`);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const renderPageHeader = () => (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'stretch' : 'flex-start',
+        gap: isMobile ? 1 : 2,
+        mb: isMobile ? 2 : 3
+      }}
+    >
+      <Box>
+        <Typography variant={isMobile ? 'h5' : 'h4'} gutterBottom>
+          📊 Warenberechnung
+        </Typography>
+        <Typography
+          variant={isMobile ? 'caption' : 'body1'}
+          color="text.secondary"
+          sx={{ display: 'block' }}
+        >
+          Detaillierte Kostenberechnung für Portfolio-Produkte
+        </Typography>
+      </Box>
+
+      <Button
+        variant="contained"
+        color="success"
+        onClick={() => setExportDialogOpen(true)}
+        size={isMobile ? 'medium' : 'large'}
+        sx={{ minWidth: isMobile ? '100%' : 220 }}
+      >
+        📥 Excel-Preisliste
+      </Button>
+    </Box>
+  );
+
+  const renderExportDialog = () => (
+    <Dialog
+      open={exportDialogOpen}
+      onClose={() => !exportLoading && setExportDialogOpen(false)}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>Excel-Preisliste exportieren</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Wählen Sie die gewünschten Kategorien. Die Preisliste wird im druckfertigen DIN-A5-Layout erzeugt und nach Kategorien zusammenhängend sortiert.
+        </Typography>
+
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+          Aktiv und inaktiv werden gemeinsam ausgegeben.
+        </Typography>
+
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Kategorien</Typography>
+        <FormGroup sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={exportCategories.includes('seife')}
+                onChange={() => handleExportCategoryToggle('seife')}
+              />
+            )}
+            label="Seifen"
+          />
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={exportCategories.includes('werkstuck')}
+                onChange={() => handleExportCategoryToggle('werkstuck')}
+              />
+            )}
+            label="Werkstücke"
+          />
+          <FormControlLabel
+            control={(
+              <Checkbox
+                checked={exportCategories.includes('schmuck')}
+                onChange={() => handleExportCategoryToggle('schmuck')}
+              />
+            )}
+            label="Schmuck"
+          />
+        </FormGroup>
+
+        <FormControl fullWidth>
+          <InputLabel id="export-layout-label">Layout</InputLabel>
+          <Select
+            labelId="export-layout-label"
+            value={exportLayout}
+            label="Layout"
+            onChange={(event) => setExportLayout(event.target.value)}
+          >
+            <MenuItem value="a5">Druckbare Preisliste DIN A5</MenuItem>
+            <MenuItem value="angebot">Angebot mit Logo/Kopfbereich</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <InputLabel id="export-type-label">Exporttyp</InputLabel>
+          <Select
+            labelId="export-type-label"
+            value={exportType}
+            label="Exporttyp"
+            onChange={(event) => setExportType(event.target.value)}
+          >
+            <MenuItem value="preisliste">Nur Preisliste</MenuItem>
+            <MenuItem value="margenreport">Nur Margenreport (EK vs. VK)</MenuItem>
+            <MenuItem value="both">Preisliste + Margenreport</MenuItem>
+          </Select>
+        </FormControl>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setExportDialogOpen(false)} disabled={exportLoading}>
+          Abbrechen
+        </Button>
+        <Button
+          onClick={handleExportExcel}
+          variant="contained"
+          color="success"
+          disabled={exportLoading}
+          startIcon={exportLoading ? <CircularProgress size={16} color="inherit" /> : null}
+        >
+          {exportLoading ? 'Export läuft...' : 'Excel erzeugen'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   if (loading) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4 }}>
@@ -370,9 +813,7 @@ const AdminWarenberechnung = () => {
   if (error) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
-        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
-          📊 Warenberechnung
-        </Typography>
+        {renderPageHeader()}
 
         {/* Show detailed validation errors if available */}
         {validationErrors && validationErrors.length > 0 ? (
@@ -473,8 +914,11 @@ const AdminWarenberechnung = () => {
                 value={selectedIdInPortfolioOptions}
                 onChange={handleProductChange}
                 label="Produkt auswählen"
+                onOpen={() => setProductSearch('')}
+                MenuProps={productSelectMenuProps}
               >
-                {portfolioProducts.map((product) => (
+                {renderProductSearchHeader()}
+                {searchedPortfolioProducts.map((product) => (
                   <MenuItem 
                     key={product._id} 
                     value={product._id}
@@ -497,10 +941,15 @@ const AdminWarenberechnung = () => {
                     {!product.verpackung && ' ⚠️ Keine Verpackung'}
                   </MenuItem>
                 ))}
+                {searchedPortfolioProducts.length === 0 && (
+                  <MenuItem disabled>Keine Treffer gefunden</MenuItem>
+                )}
               </Select>
             </FormControl>
           </Paper>
         )}
+
+        {renderExportDialog()}
       </Container>
     );
   }
@@ -508,9 +957,7 @@ const AdminWarenberechnung = () => {
   if (filteredProducts.length === 0 && portfolioProducts.length > 0) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
-        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
-          📊 Warenberechnung
-        </Typography>
+        {renderPageHeader()}
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>Filter & Produktauswahl</Typography>
           <Stack direction={isMobile ? "column" : "row"} spacing={2} sx={{ mb: 3 }}>
@@ -552,6 +999,8 @@ const AdminWarenberechnung = () => {
             Ändern Sie die Filter-Einstellungen, um Produkte anzuzeigen.
           </Alert>
         </Paper>
+
+        {renderExportDialog()}
       </Container>
     );
   }
@@ -559,9 +1008,12 @@ const AdminWarenberechnung = () => {
   if (portfolioProducts.length === 0) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
+        {renderPageHeader()}
         <Alert severity="info">
           Keine Portfolio-Produkte gefunden. Bitte legen Sie zuerst Produkte in der Portfolio-Verwaltung an.
         </Alert>
+
+        {renderExportDialog()}
       </Container>
     );
   }
@@ -571,9 +1023,7 @@ const AdminWarenberechnung = () => {
   if ((!selectedProduct || !calculation) && filteredProducts.length > 0) {
     return (
       <Container sx={{ mt: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
-        <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
-          📊 Warenberechnung
-        </Typography>
+        {renderPageHeader()}
 
         {/* Zeige IMMER validationErrors wenn sie existieren */}
         {validationErrors && validationErrors.length > 0 && (
@@ -676,8 +1126,11 @@ const AdminWarenberechnung = () => {
               value={selectedIdInFilteredOptions}
               onChange={handleProductChange}
               label="Produkt auswählen"
+              onOpen={() => setProductSearch('')}
+              MenuProps={productSelectMenuProps}
             >
-              {filteredProducts.map((product) => (
+              {renderProductSearchHeader()}
+              {searchedFilteredProducts.map((product) => (
                 <MenuItem 
                   key={product._id} 
                   value={product._id}
@@ -698,21 +1151,21 @@ const AdminWarenberechnung = () => {
                   {!product.aktiv && ' (INAKTIV)'}
                 </MenuItem>
               ))}
+              {searchedFilteredProducts.length === 0 && (
+                <MenuItem disabled>Keine Treffer gefunden</MenuItem>
+              )}
             </Select>
           </FormControl>
         </Paper>
+
+        {renderExportDialog()}
       </Container>
     );
   }
 
   return (
     <Container maxWidth="lg" sx={{ mt: isMobile ? 2 : 4, mb: isMobile ? 2 : 4, px: isMobile ? 1 : 3 }}>
-      <Typography variant={isMobile ? "h5" : "h4"} gutterBottom>
-        📊 Warenberechnung
-      </Typography>
-      <Typography variant={isMobile ? "caption" : "body1"} color="text.secondary" sx={{ mb: isMobile ? 2 : 3, display: 'block' }}>
-        Detaillierte Kostenberechnung für Portfolio-Produkte
-      </Typography>
+      {renderPageHeader()}
 
       {/* Validierungsfehler anzeigen */}
       {validationErrors && validationErrors.length > 0 && (
@@ -856,8 +1309,11 @@ const AdminWarenberechnung = () => {
                 value={selectedIdInFilteredOptions}
                 onChange={handleProductChange}
                 label={`Produkt auswählen (${filteredProducts.length} von ${portfolioProducts.length})`}
+                onOpen={() => setProductSearch('')}
+                MenuProps={productSelectMenuProps}
               >
-                {filteredProducts.map((product) => (
+                {renderProductSearchHeader()}
+                {searchedFilteredProducts.map((product) => (
                   <MenuItem 
                     key={product._id} 
                     value={product._id}
@@ -884,6 +1340,9 @@ const AdminWarenberechnung = () => {
                     />
                   </MenuItem>
                 ))}
+                {searchedFilteredProducts.length === 0 && (
+                  <MenuItem disabled>Keine Treffer gefunden</MenuItem>
+                )}
               </Select>
             </FormControl>
           </Grid>
@@ -913,22 +1372,22 @@ const AdminWarenberechnung = () => {
                     />
                   )}
                 </Box>
-                <Stack 
-                  direction={isMobile ? "column" : "row"} 
-                  spacing={isMobile ? 1 : 2} 
+                <Stack
+                  direction={isMobile ? "column" : "row"}
+                  spacing={isMobile ? 1 : 2}
                   alignItems={isMobile ? 'stretch' : 'center'}
                 >
-                  <Chip 
-                    label={`VK: ${calculation?.vkPreis?.toFixed(2) || '0.00'} €`} 
-                    color="primary" 
-                    sx={{ 
-                      fontSize: isMobile ? '1rem' : '1.2rem', 
+                  <Chip
+                    label={`VK${liveEditPreview ? ' (Vorschau)' : ''}: ${(liveEditPreview?.vkPreis ?? calculation?.vkPreis ?? 0).toFixed(2)} €`}
+                    color="primary"
+                    sx={{
+                      fontSize: isMobile ? '1rem' : '1.2rem',
                       p: isMobile ? 1.5 : 2,
                       width: isMobile ? '100%' : 'auto'
                     }}
                   />
-                  <Button 
-                    variant="outlined" 
+                  <Button
+                    variant="outlined"
                     color="warning"
                     onClick={handleNeuberechnen}
                     size={isMobile ? "small" : "medium"}
@@ -1603,6 +2062,8 @@ const AdminWarenberechnung = () => {
       )}
 
       {/* Edit Dialog */}
+      {renderExportDialog()}
+
       <Dialog 
         open={editDialogOpen} 
         onClose={handleEditClose} 
@@ -1622,24 +2083,23 @@ const AdminWarenberechnung = () => {
           Kostenberechnung bearbeiten - {selectedProduct?.name}
         </DialogTitle>
         <DialogContent>
+          {liveEditPreview && (
+            <Alert severity="info" sx={{ mt: 1, mb: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                Live-Vorschau: {liveEditPreview.vkPreisGerundet.toFixed(2)} € (gerundet)
+              </Typography>
+              <Typography variant="caption" sx={{ display: 'block' }}>
+                Exakt: {liveEditPreview.vkPreis.toFixed(2)} € | Änderung zum aktuellen gerundeten Preis: {liveEditPreview.delta >= 0 ? '+' : ''}{liveEditPreview.delta.toFixed(2)} €
+              </Typography>
+            </Alert>
+          )}
           <Grid container spacing={isMobile ? 2 : 3} sx={{ mt: 1 }}>
             <Grid item xs={12}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Fixe Kosten (werden automatisch aus Rohstoffen berechnet)
+                Fixe Kosten (kategorieabhängig, automatisch berechnet)
               </Typography>
               <Box sx={{ pl: 2, pb: 2, backgroundColor: '#f5f5f5', borderRadius: 1, p: isMobile ? 1.5 : 2 }}>
-                <Typography variant={isMobile ? "caption" : "body2"}>
-                  {calculation?.rohseifenKonfiguration?.verwendeZweiRohseifen ? (
-                    <>
-                      {calculation.rohseifeName}: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife1Gramm || 0}g)<br/>
-                      {calculation?.rohseifenKonfiguration?.rohseife2Name}: {calculation?.rohseife2Kosten?.toFixed(2)} € ({calculation?.rohseifenKonfiguration?.gewichtVerteilung?.rohseife2Gramm || 0}g)<br/>
-                    </>
-                  ) : (
-                    <>Rohseife: {calculation?.rohseifeKosten?.toFixed(2)} € ({calculation?.gewichtInGramm}g)<br/></>
-                  )}
-                  Duftöl: {calculation?.duftoelKosten?.toFixed(2)} €<br/>
-                  Verpackung: {calculation?.verpackungKosten?.toFixed(2)} €
-                </Typography>
+                {renderFixedCostSummary()}
               </Box>
             </Grid>
 
@@ -1756,7 +2216,7 @@ const AdminWarenberechnung = () => {
           </Grid>
         </DialogContent>
         <DialogActions sx={{ p: isMobile ? 2 : 3 }}>
-          <Button onClick={handleEditClose} size={isMobile ? "medium" : "large"}>
+          <Button onClick={handleEditClose} size={isMobile ? "medium" : "large"} disabled={savingEdit}>
             Abbrechen
           </Button>
           <Button 
@@ -1764,8 +2224,48 @@ const AdminWarenberechnung = () => {
             variant="contained" 
             color="primary"
             size={isMobile ? "medium" : "large"}
+            disabled={savingEdit}
           >
-            Speichern
+            {savingEdit ? 'Speichern...' : 'Speichern'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={priceDropConfirmOpen}
+        onClose={() => !savingEdit && setPriceDropConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Achtung: Preis wurde gesenkt</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Der neue gerundete Preis ist niedriger als der bisherige Portfolio-Preis.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1, fontWeight: 700 }}>
+            Alt: {(selectedProduct?.preis || 0).toFixed(2)} € | Neu: {(pendingRoundedPrice || 0).toFixed(2)} €
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Möchtest du die Preissenkung wirklich speichern und direkt übernehmen?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setPriceDropConfirmOpen(false);
+              setPendingRoundedPrice(null);
+            }}
+            disabled={savingEdit}
+          >
+            Nein
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={persistEditAndApplyPrice}
+            disabled={savingEdit}
+          >
+            {savingEdit ? 'Speichern...' : 'Ja, speichern'}
           </Button>
         </DialogActions>
       </Dialog>

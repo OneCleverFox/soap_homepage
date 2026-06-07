@@ -250,7 +250,9 @@ const AdminRohstoffe = () => {
       try {
         // Grundlegende Felder (für alle Typen)
         const matchesBasic = 
+          safeString(item.name).toLowerCase().includes(search) ||
           safeString(item.bezeichnung).toLowerCase().includes(search) ||
+          safeString(item.inventarnummer).toLowerCase().includes(search) ||
           safeString(item.beschreibung).toLowerCase().includes(search) ||
           safeString(item.ekPreis).includes(search);
         
@@ -305,6 +307,19 @@ const AdminRohstoffe = () => {
             safeString(item.notizen).toLowerCase().includes(search);
           
           return matchesBasic || matchesVerpackungen;
+        }
+
+        // Gießformen-spezifische Felder
+        if (currentTab === 4) {
+          const matchesGiessformen =
+            safeString(item.name).toLowerCase().includes(search) ||
+            safeString(item.inventarnummer).toLowerCase().includes(search) ||
+            safeString(item.form).toLowerCase().includes(search) ||
+            safeString(item.material).toLowerCase().includes(search) ||
+            safeString(item.volumenMl).includes(search) ||
+            safeString(item.verwendungen).includes(search);
+
+          return matchesBasic || matchesGiessformen;
         }
         
         return matchesBasic;

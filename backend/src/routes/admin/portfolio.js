@@ -1,5 +1,7 @@
 const express = require('express');
 const Portfolio = require('../../models/Portfolio');
+const Giessform = require('../../models/Giessform');
+const Warenberechnung = require('../../models/Warenberechnung');
 const { optimizeMainImage } = require('../../middleware/imageOptimization');
 const { authenticateToken } = require('../../middleware/auth');
 const ZusatzinhaltsstoffeService = require('../../services/zusatzinhaltsstoffeService');
@@ -8,6 +10,8 @@ const { cacheManager } = require('../../utils/cacheManager');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 
 const router = express.Router();
 
@@ -166,6 +170,360 @@ router.get('/', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Portfolio-Daten'
+    });
+  }
+});
+
+// @route   POST /api/admin/portfolio/export-price-list
+// @desc    Excel-Preisliste mit Produktnamen und Preisen exportieren
+// @access  Private (Admin only)
+router.post('/export-price-list', async (req, res) => {
+  try {
+    const validCategories = new Set(['seife', 'werkstuck', 'schmuck']);
+    const categoryLabels = {
+      seife: 'Seifen',
+      werkstuck: 'Werkstücke',
+      schmuck: 'Schmuck'
+    };
+    const categoryOrder = ['seife', 'werkstuck', 'schmuck'];
+
+    const requestedCategories = Array.isArray(req.body?.categories)
+      ? req.body.categories
+      : [];
+    const layout = req.body?.layout === 'angebot' ? 'angebot' : 'a5';
+
+    const categories = requestedCategories
+      .map((category) => String(category).trim().toLowerCase())
+      .filter((category) => validCategories.has(category));
+
+    const effectiveCategories = categories.length > 0
+      ? categories
+      : [...categoryOrder];
+
+    const filter = {};
+    if (effectiveCategories.length < validCategories.size) {
+      filter.kategorie = { $in: effectiveCategories };
+    }
+
+    const products = await Portfolio.find(filter)
+      .select('name preis kategorie article_number')
+      .sort({ name: 1 })
+      .lean();
+
+    const groupedProducts = categoryOrder
+      .filter((category) => effectiveCategories.includes(category))
+      .map((category) => ({
+        key: category,
+        label: categoryLabels[category] || category,
+        items: products
+          .filter((product) => product.kategorie === category)
+          .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'de'))
+      }))
+      .filter((group) => group.items.length > 0);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Preisliste');
+
+    worksheet.pageSetup = {
+      paperSize: layout === 'angebot' ? 9 : 11,
+      orientation: 'portrait',
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      horizontalCentered: true,
+      margins: {
+        left: 0.3,
+        right: 0.3,
+        top: 0.4,
+        bottom: 0.4,
+        header: 0.2,
+        footer: 0.2
+      }
+    };
+
+    worksheet.columns = [
+      { key: 'article', width: 18 },
+      { key: 'name', width: 42 },
+      { key: 'price', width: 14 }
+    ];
+
+    if (layout === 'angebot') {
+      const logoPath = path.join(__dirname, '../../../../frontend/public/LOGO.png');
+      if (fs.existsSync(logoPath)) {
+        const logoImageId = workbook.addImage({
+          buffer: fs.readFileSync(logoPath),
+          extension: 'png'
+        });
+        worksheet.addImage(logoImageId, {
+          tl: { col: 2.1, row: 0.1 },
+          ext: { width: 140, height: 80 }
+        });
+      }
+    }
+
+    const titleText = layout === 'angebot'
+      ? 'ANGEBOT - PREISÜBERSICHT'
+      : 'Glücksmomente Manufaktur - Preisliste';
+
+    const titleRow = worksheet.addRow([titleText, '', '']);
+    worksheet.mergeCells(`A${titleRow.number}:C${titleRow.number}`);
+    titleRow.font = { name: 'Calibri', size: 16, bold: true };
+    titleRow.alignment = { horizontal: 'left', vertical: 'middle' };
+    titleRow.height = 26;
+
+    if (layout === 'angebot') {
+      const subTitleRow = worksheet.addRow(['Glücksmomente - Handgemachte Unikate und Seifen', '', '']);
+      worksheet.mergeCells(`A${subTitleRow.number}:C${subTitleRow.number}`);
+      subTitleRow.font = { name: 'Calibri', size: 11, color: { argb: 'FF1F4E78' } };
+      subTitleRow.alignment = { horizontal: 'left', vertical: 'middle' };
+    }
+
+    const dateRow = worksheet.addRow([`Stand: ${new Date().toLocaleDateString('de-DE')}`, '', '']);
+    worksheet.mergeCells(`A${dateRow.number}:C${dateRow.number}`);
+    dateRow.font = { name: 'Calibri', size: 10, color: { argb: 'FF555555' } };
+    dateRow.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    worksheet.addRow(['', '', '']);
+
+    const applyTableBorder = (row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          left: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          bottom: { style: 'thin', color: { argb: 'FFD9D9D9' } },
+          right: { style: 'thin', color: { argb: 'FFD9D9D9' } }
+        };
+      });
+    };
+
+    groupedProducts.forEach((group, index) => {
+      if (index > 0) {
+        const pageBreakRow = worksheet.addRow(['', '', '']);
+        pageBreakRow.addPageBreak();
+      }
+
+      const categoryRow = worksheet.addRow([group.label.toUpperCase(), '', '']);
+      worksheet.mergeCells(`A${categoryRow.number}:C${categoryRow.number}`);
+      categoryRow.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF1F4E78' } };
+      categoryRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFEAF2FB' }
+      };
+      categoryRow.alignment = { horizontal: 'left', vertical: 'middle' };
+      categoryRow.height = 22;
+
+      const headerRow = worksheet.addRow(['Artikelnummer', 'Produktname', 'Preis']);
+      headerRow.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1F4E78' }
+      };
+      headerRow.alignment = { horizontal: 'left', vertical: 'middle' };
+      applyTableBorder(headerRow);
+
+      group.items.forEach((product) => {
+        const row = worksheet.addRow([
+          product.article_number || '',
+          product.name || '',
+          Number(product.preis) || 0
+        ]);
+        row.font = { name: 'Calibri', size: 10 };
+        row.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+        row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        row.getCell(3).alignment = { horizontal: 'right', vertical: 'middle' };
+        row.getCell(3).numFmt = '#,##0.00 [$€-407]';
+        applyTableBorder(row);
+      });
+    });
+
+    const lastRow = worksheet.lastRow?.number || 1;
+    worksheet.pageSetup.printArea = `A1:C${lastRow}`;
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = layout === 'angebot'
+      ? `angebot-preisliste-${dateStamp}.xlsx`
+      : `preisliste-a5-${dateStamp}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Excel-Export Fehler (Admin Portfolio):', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen der Excel-Preisliste'
+    });
+  }
+});
+
+// @route   POST /api/admin/portfolio/export-margin-report
+// @desc    Excel-Margenreport (EK Material vs. VK) exportieren
+// @access  Private (Admin only)
+router.post('/export-margin-report', async (req, res) => {
+  try {
+    const validCategories = new Set(['seife', 'werkstuck', 'schmuck']);
+    const categoryLabels = {
+      seife: 'Seifen',
+      werkstuck: 'Werkstücke',
+      schmuck: 'Schmuck'
+    };
+    const categoryOrder = ['seife', 'werkstuck', 'schmuck'];
+
+    const requestedCategories = Array.isArray(req.body?.categories)
+      ? req.body.categories
+      : [];
+
+    const categories = requestedCategories
+      .map((category) => String(category).trim().toLowerCase())
+      .filter((category) => validCategories.has(category));
+
+    const effectiveCategories = categories.length > 0
+      ? categories
+      : [...categoryOrder];
+
+    const filter = {};
+    if (effectiveCategories.length < validCategories.size) {
+      filter.kategorie = { $in: effectiveCategories };
+    }
+
+    const products = await Portfolio.find(filter)
+      .select('_id name preis kategorie article_number')
+      .sort({ kategorie: 1, name: 1 })
+      .lean();
+
+    const productIds = products.map((product) => product._id);
+    const calculations = await Warenberechnung.find({
+      portfolioProdukt: { $in: productIds }
+    })
+      .select(
+        'portfolioProdukt kategorie rohseifeKosten rohseife2Kosten duftoelKosten verpackungKosten zusatzinhaltsstoffeKostenGesamt giesswerkstoffKosten giesszusatzstoffeKostenGesamt giessformKosten vkPreis vkPreisGerundet zwischensummeEK'
+      )
+      .lean();
+
+    const calculationByProductId = new Map(
+      calculations.map((calc) => [String(calc.portfolioProdukt), calc])
+    );
+
+    const getEkMaterial = (calculation, category) => {
+      if (!calculation) return 0;
+
+      if (category === 'werkstuck' || category === 'schmuck') {
+        return (
+          (Number(calculation.giesswerkstoffKosten) || 0) +
+          (Number(calculation.giesszusatzstoffeKostenGesamt) || 0) +
+          (Number(calculation.giessformKosten) || 0)
+        );
+      }
+
+      return (
+        (Number(calculation.rohseifeKosten) || 0) +
+        (Number(calculation.rohseife2Kosten) || 0) +
+        (Number(calculation.duftoelKosten) || 0) +
+        (Number(calculation.verpackungKosten) || 0) +
+        (Number(calculation.zusatzinhaltsstoffeKostenGesamt) || 0)
+      );
+    };
+
+    const rows = products.map((product) => {
+      const calc = calculationByProductId.get(String(product._id));
+      const ekMaterial = getEkMaterial(calc, product.kategorie);
+      const vkPreis = Number(product.preis) || Number(calc?.vkPreisGerundet) || Number(calc?.vkPreis) || 0;
+      const margeEuro = vkPreis - ekMaterial;
+      const margeProzent = ekMaterial > 0 ? (margeEuro / ekMaterial) * 100 : 0;
+
+      return {
+        articleNumber: product.article_number || '',
+        name: product.name || '',
+        category: product.kategorie || '',
+        ekMaterial,
+        vkPreis,
+        margeEuro,
+        margeProzent
+      };
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Margenreport');
+
+    worksheet.columns = [
+      { key: 'article', width: 16 },
+      { key: 'name', width: 42 },
+      { key: 'ek', width: 16 },
+      { key: 'vk', width: 16 },
+      { key: 'margeEuro', width: 14 },
+      { key: 'margePercent', width: 12 }
+    ];
+
+    const titleRow = worksheet.addRow(['Margenreport (EK Material vs. VK)', '', '', '', '', '']);
+    worksheet.mergeCells(`A${titleRow.number}:F${titleRow.number}`);
+    titleRow.font = { name: 'Calibri', size: 15, bold: true };
+
+    const dateRow = worksheet.addRow([`Stand: ${new Date().toLocaleDateString('de-DE')}`, '', '', '', '', '']);
+    worksheet.mergeCells(`A${dateRow.number}:F${dateRow.number}`);
+    dateRow.font = { name: 'Calibri', size: 10, color: { argb: 'FF666666' } };
+
+    worksheet.addRow(['', '', '', '', '', '']);
+
+    categoryOrder
+      .filter((category) => effectiveCategories.includes(category))
+      .forEach((category) => {
+        const categoryRows = rows.filter((row) => row.category === category);
+        if (categoryRows.length === 0) return;
+
+        const categoryTitleRow = worksheet.addRow([categoryLabels[category] || category, '', '', '', '', '']);
+        worksheet.mergeCells(`A${categoryTitleRow.number}:F${categoryTitleRow.number}`);
+        categoryTitleRow.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FF1F4E78' } };
+        categoryTitleRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFEAF2FB' }
+        };
+
+        const headerRow = worksheet.addRow(['Artikelnummer', 'Produktname', 'EK Material', 'VK Preis', 'Marge €', 'Marge %']);
+        headerRow.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF1F4E78' }
+        };
+
+        categoryRows.forEach((row) => {
+          const dataRow = worksheet.addRow([
+            row.articleNumber,
+            row.name,
+            row.ekMaterial,
+            row.vkPreis,
+            row.margeEuro,
+            row.margeProzent
+          ]);
+
+          dataRow.getCell(3).numFmt = '#,##0.00 [$€-407]';
+          dataRow.getCell(4).numFmt = '#,##0.00 [$€-407]';
+          dataRow.getCell(5).numFmt = '#,##0.00 [$€-407]';
+          dataRow.getCell(6).numFmt = '0.00" %"';
+        });
+
+        worksheet.addRow(['', '', '', '', '', '']);
+      });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fileBuffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = `margenreport-ek-vk-${dateStamp}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('Excel-Export Fehler (Margenreport):', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Margenreports'
     });
   }
 });
@@ -742,16 +1100,6 @@ router.delete('/:id/image/:imageType/:imageIndex?', async (req, res) => {
 // @access  Private (Admin only)
 router.get('/export/sumup-csv', authenticateToken, async (req, res) => {
   try {
-    const additionalItems = [
-      { name: 'Kleine Tuete', price: 0.30, category: 'Verpackung', sku: 'VPK-KLEIN' },
-      { name: 'Mittlere Tuete', price: 0.70, category: 'Verpackung', sku: 'VPK-MITTEL' },
-      { name: 'Grosse Tuete', price: 1.00, category: 'Verpackung', sku: 'VPK-GROSS' },
-      { name: 'Geschenkeservice klein', price: 3.00, category: 'Service', sku: 'SRV-GS-KLEIN' },
-      { name: 'Geschenkeservice gross', price: 5.00, category: 'Service', sku: 'SRV-GS-GROSS' },
-      { name: 'Nicht verkaufen - Kategorie Form & Figur', price: 0.00, category: 'Form & Figur', sku: 'CAT-FORM-FIGUR' },
-      { name: 'Nicht verkaufen - Kategorie % Sale', price: 0.00, category: '% Sale', sku: 'CAT-SALE' }
-    ];
-
     const includeInactive = req.query.all === '1';
     const includeImages = req.query.images === '1';
     const query = includeInactive ? {} : { aktiv: true };
@@ -813,19 +1161,6 @@ router.get('/export/sumup-csv', authenticateToken, async (req, res) => {
         categoryLabel(p.kategorie),
         buildDescription(p),
         ...(includeImages ? [imageUrl] : [])
-      ].map(csvEscape).join(','));
-    }
-
-    for (const item of additionalItems) {
-      lines.push([
-        item.name,
-        formatPrice(item.price),
-        '0',
-        item.sku,
-        '',
-        item.category,
-        '',
-        ...(includeImages ? [''] : [])
       ].map(csvEscape).join(','));
     }
 
@@ -1012,6 +1347,313 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden des Portfolio-Produkts'
+    });
+  }
+});
+
+// @route   GET /api/admin/portfolio/export/giessformen-list
+// @desc    Liste aller Gießformen für Auswahldialog laden
+// @access  Private (Admin only)
+router.get('/export/giessformen-list', authenticateToken, async (req, res) => {
+  try {
+    const giessformen = await Giessform.find({})
+      .select('_id inventarnummer name volumenMl')
+      .sort({ inventarnummer: 1 })
+      .lean();
+
+    res.json({
+      success: true,
+      data: giessformen.map(form => ({
+        id: form._id,
+        inventarnummer: form.inventarnummer,
+        name: form.name,
+        volumenMl: form.volumenMl
+      }))
+    });
+  } catch (error) {
+    console.error('Gießformen List Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Gießformen'
+    });
+  }
+});
+
+// @route   POST /api/admin/portfolio/export/giessformen-pdf
+// @desc    Ausgewählte Gußformen als PDF für Karteikartenformat exportieren
+// @access  Private (Admin only)
+router.post('/export/giessformen-pdf', authenticateToken, async (req, res) => {
+  try {
+    const { selectedIds = [] } = req.body;
+
+    console.log('📋 Gießformen PDF Export: Lade Gießformen...', { selectedIds });
+
+    // Wenn keine IDs, dann alle laden
+    const query = selectedIds.length > 0 ? { _id: { $in: selectedIds } } : {};
+
+    const giessformen = await Giessform.find(query)
+      .select('inventarnummer name volumenMl')
+      .sort({ inventarnummer: 1 })
+      .lean();
+
+    if (!giessformen || giessformen.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Keine Gießformen gefunden'
+      });
+    }
+
+    // PDF-Erzeugung mit DIN A4 Hochkant (210x297mm)
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 15
+    });
+
+    // Response Headers
+    const filename = `giessformen_karteikartenausgabe_${new Date().toISOString().slice(0, 10)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Stream direkt zum Response
+    doc.pipe(res);
+
+    // Seitengröße in Punkten (1 Punkt = 1/72 Zoll)
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const margin = 15;
+    const contentWidth = pageWidth - (2 * margin);
+    const contentHeight = pageHeight - (2 * margin);
+
+    // Kartengröße: 3 Spalten × 4 Reihen pro Seite (12 Karten pro Seite)
+    const cardWidth = (contentWidth - 10) / 3; // 10 für Abstände zwischen Spalten
+    const cardHeight = (contentHeight - 15) / 4; // 15 für Abstände zwischen Reihen
+
+    let cardIndex = 0;
+
+    // Für jede Gießform eine Kartei-Karte zeichnen
+    for (const form of giessformen) {
+      // Neue Seite, wenn nötig (12 Karten pro Seite bei 3x4 Layout)
+      if (cardIndex % 12 === 0 && cardIndex > 0) {
+        doc.addPage();
+      }
+
+      // Position auf der Seite berechnen (3 Spalten, 4 Reihen)
+      const indexOnPage = cardIndex % 12;
+      const col = indexOnPage % 3;
+      const row = Math.floor(indexOnPage / 3);
+
+      const x = margin + col * (cardWidth + 5);
+      const y = margin + row * (cardHeight + 5);
+
+      // Kartei-Hintergrund (leichte Umrandung)
+      doc.rect(x, y, cardWidth, cardHeight)
+        .stroke();
+
+      // Abstände für Text innerhalb der Karte (nahezu volle Breite nutzen)
+      const padding = 2;
+      const textWidth = cardWidth - 2 * padding;
+      let currentY = y + padding;
+
+      // Inventarnummer (größer, fett)
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(form.inventarnummer || 'N/A', x + padding, currentY, {
+        width: textWidth,
+        align: 'center'
+      });
+      currentY += 18;
+
+      // Name der Gießform
+      doc.fontSize(11).font('Helvetica');
+      doc.text(form.name || 'Unnamed', x + padding, currentY, {
+        width: textWidth,
+        align: 'center'
+      });
+      currentY += 14;
+
+      // Trennlinie
+      doc.moveTo(x + padding, currentY + 1)
+        .lineTo(x + cardWidth - padding, currentY + 1)
+        .stroke();
+      currentY += 6;
+
+      // Volumen-Informationen: Label links, Wert groß rechts (füllt Breite besser aus)
+      const volumen = form.volumenMl || 0;
+      const halbvolumen = (volumen / 2).toFixed(1);
+      const dreiviertelvolumen = (volumen / 2 * 3).toFixed(1);
+      const labelWidth = Math.floor(textWidth * 0.58);
+      const valueWidth = textWidth - labelWidth;
+      const valueX = x + padding + labelWidth;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Füllvolumen:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${volumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+      currentY += 17;
+
+      // Extra Abstand: zwei Zeilen zwischen Füllvolumen und den unteren Angaben
+      currentY += 12;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Wassermenge:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${halbvolumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+      currentY += 17;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Gießpulver:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${dreiviertelvolumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+
+      cardIndex++;
+    }
+
+    // PDF finalisieren
+    doc.end();
+
+    console.log(`✅ Gießformen PDF erstellt: ${giessformen.length} Formen`);
+
+  } catch (error) {
+    console.error('Gießformen PDF Export Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim PDF-Export der Gießformen'
+    });
+  }
+});
+
+// @route   GET /api/admin/portfolio/export/giessformen-pdf (deprecated - kept for compatibility)
+// @desc    Alle Gussformen als PDF für Karteikartenformat exportieren (alle)
+// @access  Private (Admin only)
+router.get('/export/giessformen-pdf', authenticateToken, async (req, res) => {
+  try {
+    console.log('📋 Gießformen PDF Export: Lade Gießformen...');
+
+    const giessformen = await Giessform.find({})
+      .select('inventarnummer name volumenMl')
+      .sort({ inventarnummer: 1 })
+      .lean();
+
+    if (!giessformen || giessformen.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Keine Gießformen gefunden'
+      });
+    }
+
+    // PDF-Erzeugung mit DIN A4 Hochkant (210x297mm)
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 15
+    });
+
+    // Response Headers
+    const filename = `giessformen_karteikartenausgabe_${new Date().toISOString().slice(0, 10)}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // Stream direkt zum Response
+    doc.pipe(res);
+
+    // Seitengröße in Punkten (1 Punkt = 1/72 Zoll)
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const margin = 15;
+    const contentWidth = pageWidth - (2 * margin);
+    const contentHeight = pageHeight - (2 * margin);
+
+    // Kartengröße: 3 Spalten × 4 Reihen pro Seite (12 Karten pro Seite)
+    const cardWidth = (contentWidth - 10) / 3; // 10 für Abstände zwischen Spalten
+    const cardHeight = (contentHeight - 15) / 4; // 15 für Abstände zwischen Reihen
+
+    let cardIndex = 0;
+
+    // Für jede Gießform eine Kartei-Karte zeichnen
+    for (const form of giessformen) {
+      // Neue Seite, wenn nötig (12 Karten pro Seite bei 3x4 Layout)
+      if (cardIndex % 12 === 0 && cardIndex > 0) {
+        doc.addPage();
+      }
+
+      // Position auf der Seite berechnen (3 Spalten, 4 Reihen)
+      const indexOnPage = cardIndex % 12;
+      const col = indexOnPage % 3;
+      const row = Math.floor(indexOnPage / 3);
+
+      const x = margin + col * (cardWidth + 5);
+      const y = margin + row * (cardHeight + 5);
+
+      // Kartei-Hintergrund (leichte Umrandung)
+      doc.rect(x, y, cardWidth, cardHeight)
+        .stroke();
+
+      // Abstände für Text innerhalb der Karte (nahezu volle Breite nutzen)
+      const padding = 2;
+      const textWidth = cardWidth - 2 * padding;
+      let currentY = y + padding;
+
+      // Inventarnummer (größer, fett)
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(form.inventarnummer || 'N/A', x + padding, currentY, {
+        width: textWidth,
+        align: 'center'
+      });
+      currentY += 18;
+
+      // Name der Gießform
+      doc.fontSize(11).font('Helvetica');
+      doc.text(form.name || 'Unnamed', x + padding, currentY, {
+        width: textWidth,
+        align: 'center'
+      });
+      currentY += 14;
+
+      // Trennlinie
+      doc.moveTo(x + padding, currentY + 1)
+        .lineTo(x + cardWidth - padding, currentY + 1)
+        .stroke();
+      currentY += 6;
+
+      // Volumen-Informationen: Label links, Wert groß rechts (füllt Breite besser aus)
+      const volumen = form.volumenMl || 0;
+      const halbvolumen = (volumen / 2).toFixed(1);
+      const dreiviertelvolumen = (volumen / 2 * 3).toFixed(1);
+      const labelWidth = Math.floor(textWidth * 0.58);
+      const valueWidth = textWidth - labelWidth;
+      const valueX = x + padding + labelWidth;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Füllvolumen:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${volumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+      currentY += 17;
+
+      // Extra Abstand: zwei Zeilen zwischen Füllvolumen und den unteren Angaben
+      currentY += 12;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Wassermenge:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${halbvolumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+      currentY += 17;
+
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text('Gießpulver:', x + padding, currentY, { width: labelWidth, lineBreak: false });
+      doc.fontSize(13).font('Helvetica-Bold');
+      doc.text(`${dreiviertelvolumen} ml`, valueX, currentY, { width: valueWidth, align: 'right' });
+
+      cardIndex++;
+    }
+
+    // PDF finalisieren
+    doc.end();
+
+    console.log(`✅ Gießformen PDF erstellt: ${giessformen.length} Formen`);
+
+  } catch (error) {
+    console.error('Gießformen PDF Export Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim PDF-Export der Gießformen'
     });
   }
 });

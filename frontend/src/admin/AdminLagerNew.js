@@ -1268,6 +1268,8 @@ const AdminLager = () => {
         // Grundlegende Felder (für alle Produkttypen)
         const matchesBasic = 
           safeString(item.bezeichnung || item.name).toLowerCase().includes(search) ||
+          safeString(item.inventarnummer).toLowerCase().includes(search) ||
+          safeString(item.article_number).toLowerCase().includes(search) ||
           safeString(item.beschreibung || item.description).toLowerCase().includes(search) ||
           safeString(item.seife).toLowerCase().includes(search) ||
           safeString(item.aroma).toLowerCase().includes(search) ||
@@ -1319,8 +1321,17 @@ const AdminLager = () => {
           safeString(item.weight).includes(search) ||
           safeString(item.sku).toLowerCase().includes(search) ||
           safeString(item.tags).toLowerCase().includes(search);
+
+        // Gießformen-spezifische Felder
+        const matchesGiessformen =
+          safeString(item.name).toLowerCase().includes(search) ||
+          safeString(item.inventarnummer).toLowerCase().includes(search) ||
+          safeString(item.form).toLowerCase().includes(search) ||
+          safeString(item.material).toLowerCase().includes(search) ||
+          safeString(item.volumenMl).includes(search) ||
+          safeString(item.verwendungen).includes(search);
         
-        return matchesBasic || matchesRohseife || matchesDuftoele || matchesVerpackungen || matchesFertigprodukte;
+        return matchesBasic || matchesRohseife || matchesDuftoele || matchesVerpackungen || matchesFertigprodukte || matchesGiessformen;
       } catch (error) {
         console.warn('Fehler beim Filtern eines Items:', error, item);
         return false;
