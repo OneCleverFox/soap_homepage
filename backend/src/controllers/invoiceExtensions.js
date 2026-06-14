@@ -1,7 +1,7 @@
 // ===== ZUSÄTZLICHE METHODEN FÜR BESTELLRECHNUNGEN =====
 
 // Hilfsfunktionen für Rechnungsgenerierung
-generateProductTableHTML(products, isFirstPage = true) {
+function generateProductTableHTML(products, isFirstPage = true) {
   if (!products || products.length === 0) return '';
   
   return `
@@ -39,7 +39,7 @@ generateProductTableHTML(products, isFirstPage = true) {
   `;
 }
 
-generateTotalsHTML(data) {
+function generateTotalsHTML(data) {
   const netTotal = data.order?.netTotal || 0;
   const shippingCost = data.order?.shipping?.cost || 0;
   const grandTotal = netTotal + shippingCost;
@@ -67,7 +67,7 @@ generateTotalsHTML(data) {
   `;
 }
 
-generateLegalNoticesHTML(data) {
+function generateLegalNoticesHTML(data) {
   return `
     <!-- ===== LEGAL NOTICES ===== -->
     <div class="legal-section">
@@ -91,7 +91,7 @@ generateLegalNoticesHTML(data) {
 }
 
 // HTML für mehrseitige Rechnung mit echten Bestelldaten generieren
-generateMultiPageInvoiceHTML(template, data) {
+function generateMultiPageInvoiceHTML(template, data) {
   const companyInfo = template.companyInfo || {};
   const products = data.order?.products || [];
   
@@ -257,7 +257,7 @@ generateMultiPageInvoiceHTML(template, data) {
 }
 
 // Rechnung aus echter Bestellung generieren
-async generateInvoiceFromOrder(req, res) {
+async function generateInvoiceFromOrder(req, res) {
   try {
     logger.info('📄 Generating invoice from order');
     const { orderId } = req.params;
@@ -375,7 +375,7 @@ async generateInvoiceFromOrder(req, res) {
 }
 
 // Gespeicherte Rechnung abrufen
-async getStoredInvoice(req, res) {
+async function getStoredInvoice(req, res) {
   try {
     const { orderId } = req.params;
     const { format = 'pdf' } = req.query;

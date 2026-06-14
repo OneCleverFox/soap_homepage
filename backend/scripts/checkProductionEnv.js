@@ -46,12 +46,12 @@ console.log('==================');
 
 if (missingVars.length > 0) {
   console.log('❌ Fehlende Environment Variables:');
-  missingVars.forEach(var => console.log(`   - ${var}`));
+  missingVars.forEach((name) => console.log(`   - ${name}`));
 }
 
 if (weakVars.length > 0) {
   console.log('⚠️ Schwache Environment Variables:');
-  weakVars.forEach(var => console.log(`   - ${var}`));
+  weakVars.forEach((name) => console.log(`   - ${name}`));
 }
 
 if (missingVars.length === 0 && weakVars.length === 0) {

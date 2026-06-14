@@ -162,7 +162,8 @@ const AdminGuV = () => {
 		summary: false,
 		save: false,
 		analyze: false,
-		delete: false
+		delete: false,
+		sequence: false
 	});
 	const [errors, setErrors] = useState({
 		list: '',
@@ -581,6 +582,38 @@ const AdminGuV = () => {
 		[guvRechnungen.length, loadGuvRechnungen, loadInvoiceStats, pagination.page]
 	);
 
+	const handleRegenerateSequence = useCallback(async () => {
+		const year = Number(filters.geschaeftsjahr);
+		const confirmText = Number.isFinite(year)
+			? `Laufende Nummern für ${year} neu berechnen?`
+			: 'Laufende Nummern neu berechnen?';
+
+		if (!window.confirm(confirmText)) {
+			return;
+		}
+
+		try {
+			setLoading((prev) => ({ ...prev, sequence: true }));
+			const response = await api.post('/guv-rechnung/generate-sequence', {
+				geschaeftsjahr: Number.isFinite(year) ? year : undefined
+			});
+
+			const updated = response?.data?.data?.totalUpdated;
+			const successMessage = Number.isFinite(updated)
+				? `Laufende Nummern neu berechnet (${updated} Einträge).`
+				: response?.data?.message || 'Laufende Nummern wurden neu berechnet.';
+
+			toast.success(successMessage);
+			await loadGuvRechnungen();
+			await loadInvoiceStats();
+		} catch (error) {
+			console.error('Fehler bei der Neuberechnung der laufenden Nummern:', error);
+			toast.error(error?.response?.data?.message || 'Neuberechnung der laufenden Nummern fehlgeschlagen.');
+		} finally {
+			setLoading((prev) => ({ ...prev, sequence: false }));
+		}
+	}, [filters.geschaeftsjahr, loadGuvRechnungen, loadInvoiceStats]);
+
 	const handleOpenReceiptViewer = useCallback((entry) => {
 		if (!entry) {
 			return;
@@ -718,6 +751,20 @@ const AdminGuV = () => {
 							sx={{ minHeight: 52 }}
 						>
 							Aktualisieren
+						</Button>
+					</Grid>
+					<Grid item xs={12} sm={6} lg={3}>
+						<Button
+							fullWidth
+							size="medium"
+							variant="outlined"
+							color="secondary"
+							startIcon={<RefreshIcon />}
+							onClick={handleRegenerateSequence}
+							disabled={loading.sequence}
+							sx={{ minHeight: 52 }}
+						>
+							{loading.sequence ? 'Berechne...' : 'Lfd. Nr. neu berechnen'}
 						</Button>
 					</Grid>
 					<Grid item xs={12} sm={6} md={3} lg={2}>
