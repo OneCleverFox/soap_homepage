@@ -58,6 +58,7 @@ const AdminUsers = lazy(() => import('./admin/AdminUsers'));
 const AdminWarenberechnung = lazy(() => import('./admin/AdminWarenberechnung'));
 const AdminLager = lazy(() => import('./admin/AdminLagerNew'));
 const AdminCart = lazy(() => import('./admin/AdminCart'));
+const AdminGuV = lazy(() => import('./admin/AdminGuV'));
 const AdminSettingsPanel = lazy(() => import('./admin/AdminSettingsPanel'));
 const AdminInvoiceConfiguration = lazy(() => import('./admin/AdminInvoiceConfiguration'));
 const AdminEmailConfiguration = lazy(() => import('./admin/AdminEmailConfiguration'));
@@ -295,6 +296,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <AdminWarenberechnung />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/guv-rechnung"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminGuV />
                 </ProtectedRoute>
               </>
             }

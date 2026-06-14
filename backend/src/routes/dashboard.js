@@ -797,7 +797,7 @@ async function getBestellungsStatistiken() {
             $group: {
               _id: '$status',
               anzahl: { $sum: 1 },
-              gesamtwert: { $sum: '$total' }
+              gesamtwert: { $sum: '$preise.gesamtsumme' }
             }
           }
         ],
@@ -811,7 +811,7 @@ async function getBestellungsStatistiken() {
           {
             $group: {
               _id: null,
-              gesamtumsatz: { $sum: '$total' },
+              gesamtumsatz: { $sum: '$preise.gesamtsumme' },
               anzahlBestellungen: { $sum: 1 }
             }
           }
@@ -896,13 +896,66 @@ async function getBestellungsStatistiken() {
       }
     }
   ]);
+
+  // Standalone-Rechnungen als zusätzliche Bestellungen berücksichtigen
+  const standaloneInvoiceStats = await Invoice.aggregate([
+    {
+      $match: {
+        $and: [
+          {
+            $or: [
+              { 'order.orderId': { $exists: false } },
+              { 'order.orderId': null }
+            ]
+          },
+          {
+            $or: [
+              { originalOrder: { $exists: false } },
+              { originalOrder: null }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      $facet: {
+        gesamt: [
+          { $count: 'total' }
+        ],
+        letzter30Tage: [
+          { $match: { 'dates.invoiceDate': { $gte: einMonatZurueck } } },
+          { $count: 'total' }
+        ],
+        umsatzLetzter30Tage: [
+          {
+            $match: {
+              'dates.invoiceDate': { $gte: einMonatZurueck },
+              ...getRevenueRelevantInvoicesFilter()
+            }
+          },
+          {
+            $group: {
+              _id: null,
+              gesamtumsatz: { $sum: '$amounts.total' },
+              anzahlBestellungen: { $sum: 1 }
+            }
+          }
+        ]
+      }
+    }
+  ]);
+
+  const standaloneGesamt = standaloneInvoiceStats[0]?.gesamt?.[0]?.total || 0;
+  const standaloneLetzter30Tage = standaloneInvoiceStats[0]?.letzter30Tage?.[0]?.total || 0;
+  const standaloneUmsatz30Tage = standaloneInvoiceStats[0]?.umsatzLetzter30Tage?.[0]?.gesamtumsatz || 0;
+  const standaloneMitUmsatz = standaloneInvoiceStats[0]?.umsatzLetzter30Tage?.[0]?.anzahlBestellungen || 0;
   
   return {
-    gesamtBestellungen: stats[0].gesamt[0]?.total || 0,
-    bestellungenLetzter30Tage: stats[0].letzter30Tage[0]?.total || 0,
+    gesamtBestellungen: (stats[0].gesamt[0]?.total || 0) + standaloneGesamt,
+    bestellungenLetzter30Tage: (stats[0].letzter30Tage[0]?.total || 0) + standaloneLetzter30Tage,
     nachStatus: stats[0].nachStatus,
-    umsatzLetzter30Tage: stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0,
-    bestellungenMitUmsatz: stats[0].umsatzLetzter30Tage[0]?.anzahlBestellungen || 0,
+    umsatzLetzter30Tage: (stats[0].umsatzLetzter30Tage[0]?.gesamtumsatz || 0) + standaloneUmsatz30Tage,
+    bestellungenMitUmsatz: (stats[0].umsatzLetzter30Tage[0]?.anzahlBestellungen || 0) + standaloneMitUmsatz,
     zuVerpacken: stats[0].zuVerpacken || [],
     zuVersenden: stats[0].zuVersenden || [],
     zuBestaetigen: stats[0].zuBestaetigen || []

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Kunde = require('../models/Kunde');
 const Order = require('../models/Order');
+const Invoice = require('../models/Invoice');
 const jwt = require('jsonwebtoken');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -554,9 +555,44 @@ router.get('/', async (req, res) => {
     const kundenMitStatistiken = await Promise.all(
       kunden.map(async (kunde) => {
         try {
+          const normalizedEmail = (kunde.email || '').trim();
+
           // Bestellstatistiken berechnen - sowohl über ObjectId als auch über E-Mail suchen
           const bestellungenByKundeId = await Order.find({ kunde: kunde._id });
-          const bestellungenByEmail = await Order.find({ 'besteller.email': kunde.email.toLowerCase() });
+          const bestellungenByEmail = await Order.find({ 'besteller.email': normalizedEmail.toLowerCase() });
+
+          // Standalone-Rechnungen berücksichtigen (Rechnungen ohne verknüpfte Bestellung)
+          const standaloneInvoiceBaseFilter = {
+            $and: [
+              {
+                $or: [
+                  { 'order.orderId': { $exists: false } },
+                  { 'order.orderId': null }
+                ]
+              },
+              {
+                $or: [
+                  { originalOrder: { $exists: false } },
+                  { originalOrder: null }
+                ]
+              }
+            ]
+          };
+
+          const rechnungenByKundeId = await Invoice.find({
+            ...standaloneInvoiceBaseFilter,
+            'customer.customerId': kunde._id
+          });
+
+          const rechnungenByEmail = await Invoice.find({
+            ...standaloneInvoiceBaseFilter,
+            'customer.customerData.email': { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}$`, 'i') },
+            $or: [
+              { 'customer.customerId': { $exists: false } },
+              { 'customer.customerId': null },
+              { 'customer.customerId': kunde._id }
+            ]
+          });
           
           // Kombiniere beide Ergebnisse und entferne Duplikate
           const alleBestellungenMap = new Map();
@@ -564,19 +600,36 @@ router.get('/', async (req, res) => {
             alleBestellungenMap.set(order._id.toString(), order);
           });
           const bestellungen = Array.from(alleBestellungenMap.values());
+
+          const alleRechnungenMap = new Map();
+          [...rechnungenByKundeId, ...rechnungenByEmail].forEach((invoice) => {
+            alleRechnungenMap.set(invoice._id.toString(), invoice);
+          });
+          const standaloneRechnungen = Array.from(alleRechnungenMap.values());
           
           console.log(`📊 Bestellungen für ${kunde.email}: ${bestellungen.length} gefunden (ID: ${bestellungenByKundeId.length}, Email: ${bestellungenByEmail.length})`);
+          console.log(`🧾 Standalone-Rechnungen für ${kunde.email}: ${standaloneRechnungen.length} gefunden (ID: ${rechnungenByKundeId.length}, Email: ${rechnungenByEmail.length})`);
           console.log(`👤 Kunde Login-Daten: anmeldeversuche=${kunde.anmeldeversuche}, anzahlAnmeldungen=${kunde.anzahlAnmeldungen}, letzteAnmeldung=${kunde.letzteAnmeldung}`);
           
-          const anzahlBestellungen = bestellungen.length;
-          const gesamtumsatz = bestellungen.reduce((sum, order) => {
+          const anzahlBestellungen = bestellungen.length + standaloneRechnungen.length;
+          const bestellUmsatz = bestellungen.reduce((sum, order) => {
             // Korrekte Feldnamen verwenden: preise.gesamtsumme
             const orderTotal = order.preise?.gesamtsumme || order.gesamtpreis || 0;
             return sum + orderTotal;
           }, 0);
-          const letzteBestellung = bestellungen.length > 0 
-            ? bestellungen.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+          const rechnungsUmsatz = standaloneRechnungen.reduce((sum, invoice) => {
+            return sum + Number(invoice.amounts?.total || 0);
+          }, 0);
+          const gesamtumsatz = bestellUmsatz + rechnungsUmsatz;
+
+          const letzteOrderDatum = bestellungen.length > 0
+            ? Math.max(...bestellungen.map((order) => new Date(order.createdAt).getTime()))
             : null;
+          const letzteInvoiceDatum = standaloneRechnungen.length > 0
+            ? Math.max(...standaloneRechnungen.map((invoice) => new Date(invoice.dates?.invoiceDate || invoice.createdAt).getTime()))
+            : null;
+          const letzteDatumMillis = Math.max(letzteOrderDatum || 0, letzteInvoiceDatum || 0);
+          const letzteBestellung = letzteDatumMillis > 0 ? new Date(letzteDatumMillis) : null;
           
           // Kunde-Objekt in Plain Object konvertieren und Statistiken hinzufügen
           const kundeObj = kunde.toObject();
@@ -596,8 +649,8 @@ router.get('/', async (req, res) => {
             anzahlBestellungen,
             gesamtumsatz: Math.round(gesamtumsatz * 100) / 100, // Auf 2 Dezimalstellen runden
             letzteBestellung: letzteBestellung ? {
-              datum: letzteBestellung.createdAt,
-              gesamtpreis: letzteBestellung.preise?.gesamtsumme || letzteBestellung.gesamtpreis || 0
+              datum: letzteBestellung,
+              gesamtpreis: null
             } : null
           };
           

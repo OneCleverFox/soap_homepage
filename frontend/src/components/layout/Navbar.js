@@ -324,6 +324,7 @@ const Navbar = () => {
     { label: 'Lager', path: '/admin/lager', icon: '🏪' },
     { label: 'Benutzer', path: '/admin/benutzer', icon: '👥' },
     { label: 'Warenberechnung', path: '/admin/warenberechnung', icon: '📈' },
+    { label: 'GuV-Rechnung', path: '/admin/guv-rechnung', icon: '📊' },
     { label: 'Rechnung erstellen', path: '/admin/create-invoice', icon: '📄' },
     { label: 'Rechnungen verwalten', path: '/admin/invoice-list', icon: '🧾' },
     { label: 'Admin-Dokumente', path: '/admin-dokumente/blanko', icon: '🗂️' },

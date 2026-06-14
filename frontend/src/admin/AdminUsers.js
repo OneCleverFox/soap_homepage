@@ -38,6 +38,8 @@ import {
   useTheme,
   Switch,
   FormControlLabel,
+  Checkbox,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -53,6 +55,7 @@ import {
   VisibilityOff as VisibilityOffIcon,
   VerifiedUser as VerifyIcon,
   Email as EmailIcon,
+  ReceiptLong as InvoiceIcon,
 } from '@mui/icons-material';
 import { kundenAPI } from '../services/api';
 import { API_URL } from '../services/api';
@@ -86,7 +89,22 @@ function AdminUsers() {
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
+  const [openInvoiceAssignDialog, setOpenInvoiceAssignDialog] = useState(false);
+  const [openOrderInsightsDialog, setOpenOrderInsightsDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [assignableInvoices, setAssignableInvoices] = useState([]);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState([]);
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [assigningInvoices, setAssigningInvoices] = useState(false);
+  const [invoiceSelectionInitialized, setInvoiceSelectionInitialized] = useState(false);
+  const [orderInsightsLoading, setOrderInsightsLoading] = useState(false);
+  const [orderInsightsData, setOrderInsightsData] = useState(null);
+  const [orderInsightsFilters, setOrderInsightsFilters] = useState({
+    year: new Date().getFullYear(),
+    type: 'all', // 'all', 'order', 'invoice'
+    status: 'all' // 'all' oder spezifischer Status
+  });
   
   // Expanded rows state
   const [expandedRows, setExpandedRows] = useState({});
@@ -314,11 +332,123 @@ function AdminUsers() {
     }
   };
 
+  const loadAssignableInvoices = useCallback(async (userId, searchValue = '', initializeSelection = false) => {
+    if (!userId) return;
+
+    try {
+      setInvoiceLoading(true);
+      const token = localStorage.getItem('token');
+      const queryParam = encodeURIComponent(searchValue || '');
+      const response = await fetch(`${API_URL}/admin/users/${userId}/assignable-invoices?query=${queryParam}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Fehler beim Laden der Rechnungen');
+      }
+
+      const result = await response.json();
+      const invoices = result.data || [];
+      setAssignableInvoices(invoices);
+
+      if (initializeSelection) {
+        const initiallySelected = invoices
+          .filter((invoice) => invoice.isAssignedToUser)
+          .map((invoice) => invoice._id);
+        setSelectedInvoiceIds(initiallySelected);
+        setInvoiceSelectionInitialized(true);
+      }
+    } catch (error) {
+      console.error('Error loading assignable invoices:', error);
+      showSnackbar(error.message || 'Fehler beim Laden der Rechnungen', 'error');
+    } finally {
+      setInvoiceLoading(false);
+    }
+  }, [showSnackbar]);
+
+  const openInvoiceAssignmentDialog = async () => {
+    if (!selectedUser?._id) {
+      showSnackbar('Bitte zuerst einen Benutzer auswaehlen', 'warning');
+      return;
+    }
+
+    setOpenInvoiceAssignDialog(true);
+    setSelectedInvoiceIds([]);
+    setInvoiceSearch('');
+    setInvoiceSelectionInitialized(false);
+  };
+
+  const handleToggleInvoiceSelection = (invoiceId) => {
+    setSelectedInvoiceIds((prev) => (
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId]
+    ));
+  };
+
+  const handleAssignInvoices = async () => {
+    if (!selectedUser?._id || selectedInvoiceIds.length === 0) {
+      return;
+    }
+
+    try {
+      setAssigningInvoices(true);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/admin/users/${selectedUser._id}/assign-invoices`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          invoiceIds: selectedInvoiceIds,
+          scopeInvoiceIds: assignableInvoices.map((invoice) => invoice._id)
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Fehler beim Zuweisen der Rechnungen');
+      }
+
+      showSnackbar(
+        `Zugewiesen: ${result.data?.assignedInvoices || 0}, entfernt: ${result.data?.unassignedInvoices || 0}`,
+        'success'
+      );
+
+      setOpenInvoiceAssignDialog(false);
+      setSelectedInvoiceIds([]);
+      setInvoiceSelectionInitialized(false);
+    } catch (error) {
+      console.error('Error assigning invoices:', error);
+      showSnackbar(error.message || 'Fehler beim Zuweisen der Rechnungen', 'error');
+    } finally {
+      setAssigningInvoices(false);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
     loadStats();
     loadVerificationSettings();
   }, [loadUsers, loadStats, loadVerificationSettings]);
+
+  useEffect(() => {
+    if (!openInvoiceAssignDialog || !selectedUser?._id) {
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      const initializeSelection = !invoiceSelectionInitialized && invoiceSearch.trim() === '';
+      loadAssignableInvoices(selectedUser._id, invoiceSearch, initializeSelection);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [openInvoiceAssignDialog, selectedUser, invoiceSearch, invoiceSelectionInitialized, loadAssignableInvoices]);
 
   const handleUpdateUser = async () => {
     try {
@@ -466,6 +596,105 @@ function AdminUsers() {
       console.error('Error deleting user:', error);
       showSnackbar('Fehler beim Löschen des Benutzers', 'error');
     }
+  };
+
+  const handleOpenOrderInsights = async (user) => {
+    try {
+      setOrderInsightsLoading(true);
+      setOrderInsightsData(null);
+      setSelectedUser(user);
+      setOpenOrderInsightsDialog(true);
+
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/admin/users/${user._id}/order-insights`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Fehler beim Laden der Bestell-Insights');
+      }
+
+      setOrderInsightsData(result.data);
+      // Filter auf aktuelles Jahr zurücksetzen
+      setOrderInsightsFilters({
+        year: new Date().getFullYear(),
+        type: 'all',
+        status: 'all'
+      });
+    } catch (error) {
+      console.error('Error loading order insights:', error);
+      showSnackbar(error.message || 'Fehler beim Laden der Bestell-Insights', 'error');
+    } finally {
+      setOrderInsightsLoading(false);
+    }
+  };
+
+  const getFilteredOrderInsights = () => {
+    if (!orderInsightsData) return null;
+
+    let filteredEntries = (orderInsightsData.entries || []).filter((entry) => {
+      const entryYear = new Date(entry.date).getFullYear();
+      const typeMatch = orderInsightsFilters.type === 'all' || entry.type === orderInsightsFilters.type;
+      const yearMatch = orderInsightsFilters.year === null || entryYear === orderInsightsFilters.year;
+      const statusMatch = orderInsightsFilters.status === 'all' || entry.status === orderInsightsFilters.status;
+
+      return typeMatch && yearMatch && statusMatch;
+    });
+
+    const productMap = new Map();
+    filteredEntries.forEach((entry) => {
+      (entry.items || []).forEach((item) => {
+        const key = String(item.name || 'Produkt').trim();
+        const existing = productMap.get(key) || { name: key, quantity: 0, revenue: 0, count: 0 };
+        existing.quantity += Number(item.quantity || 0);
+        existing.revenue += Number(item.total || 0);
+        existing.count += 1;
+        productMap.set(key, existing);
+      });
+    });
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => {
+        if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+        return b.revenue - a.revenue;
+      })
+      .slice(0, 5);
+
+    const totalSpent = filteredEntries.reduce((sum, entry) => sum + Number(entry.total || 0), 0);
+
+    return {
+      entries: filteredEntries,
+      metrics: {
+        totalEntries: filteredEntries.length,
+        totalOrders: filteredEntries.filter((e) => e.type === 'order').length,
+        totalInvoices: filteredEntries.filter((e) => e.type === 'invoice').length,
+        totalSpent: Math.round(totalSpent * 100) / 100,
+        averageOrderValue: filteredEntries.length > 0 ? Math.round((totalSpent / filteredEntries.length) * 100) / 100 : 0,
+        topProducts
+      }
+    };
+  };
+
+  const getAvailableYears = () => {
+    if (!orderInsightsData?.entries) return [];
+    const years = new Set();
+    orderInsightsData.entries.forEach((entry) => {
+      years.add(new Date(entry.date).getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  };
+
+  const getAvailableStatuses = () => {
+    if (!orderInsightsData?.entries) return [];
+    const statuses = new Set();
+    orderInsightsData.entries.forEach((entry) => {
+      if (entry.status) statuses.add(entry.status);
+    });
+    return Array.from(statuses).sort();
   };
 
   const openEditUserDialog = (user) => {
@@ -843,6 +1072,11 @@ function AdminUsers() {
 
                   {/* Action Buttons */}
                   <Box display="flex" gap={0.5} flexWrap="wrap" mt={1.5}>
+                    <Tooltip title="Bestellungen & Metriken anzeigen">
+                      <IconButton size="small" onClick={() => handleOpenOrderInsights(user)} sx={{ border: 1, borderColor: 'divider' }}>
+                        <VisibilityIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Bearbeiten">
                       <IconButton size="small" onClick={() => openEditUserDialog(user)} sx={{ border: 1, borderColor: 'divider' }}>
                         <EditIcon fontSize="small" />
@@ -1113,6 +1347,11 @@ function AdminUsers() {
                       </Box>
                     </TableCell>
                     <TableCell align="right">
+                      <Tooltip title="Bestellungen & Metriken anzeigen">
+                        <IconButton size="small" onClick={() => handleOpenOrderInsights(user)}>
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Bearbeiten">
                         <IconButton size="small" onClick={() => openEditUserDialog(user)}>
                           <EditIcon />
@@ -1456,7 +1695,18 @@ function AdminUsers() {
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Benutzer bearbeiten</DialogTitle>
+        <DialogTitle component="div" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" component="span">Benutzer bearbeiten</Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<InvoiceIcon />}
+            onClick={openInvoiceAssignmentDialog}
+            disabled={!selectedUser?._id}
+          >
+            Rechnungen zuweisen
+          </Button>
+        </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             {/* Persönliche Daten */}
@@ -1509,6 +1759,7 @@ function AdminUsers() {
                   label="Geschlecht"
                   onChange={(e) => setFormData({ ...formData, geschlecht: e.target.value })}
                 >
+                  <MenuItem value="keine Angabe">Keine Angabe</MenuItem>
                   <MenuItem value="">Nicht angegeben</MenuItem>
                   <MenuItem value="männlich">Männlich</MenuItem>
                   <MenuItem value="weiblich">Weiblich</MenuItem>
@@ -1668,6 +1919,325 @@ function AdminUsers() {
           <Button onClick={handleUpdateUser} variant="contained" size={isMobile ? "medium" : "large"}>
             Speichern
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openInvoiceAssignDialog}
+        onClose={() => setOpenInvoiceAssignDialog(false)}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle component="div">
+          Rechnungen zuweisen
+          {selectedUser && (
+            <Typography variant="body2" color="textSecondary" component="div">
+              {(selectedUser.vorname || selectedUser.firstName || '')} {(selectedUser.nachname || selectedUser.lastName || '')} ({selectedUser.email})
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            sx={{ mt: 1, mb: 2 }}
+            label="Rechnung suchen (Nummer, E-Mail oder Name)"
+            value={invoiceSearch}
+            onChange={(e) => setInvoiceSearch(e.target.value)}
+            size={isMobile ? 'small' : 'medium'}
+          />
+
+          {invoiceLoading ? (
+            <Box display="flex" justifyContent="center" py={4}>
+              <CircularProgress size={28} />
+            </Box>
+          ) : assignableInvoices.length === 0 ? (
+            <Alert severity="info">Keine passenden Rechnungen gefunden.</Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size={isMobile ? 'small' : 'medium'}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={assignableInvoices.length > 0 && selectedInvoiceIds.length === assignableInvoices.length}
+                        indeterminate={selectedInvoiceIds.length > 0 && selectedInvoiceIds.length < assignableInvoices.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedInvoiceIds(assignableInvoices.map((inv) => inv._id));
+                          } else {
+                            setSelectedInvoiceIds([]);
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>Rechnung</TableCell>
+                    <TableCell>Datum</TableCell>
+                    <TableCell>Betrag</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Kunde/E-Mail</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {assignableInvoices.map((invoice) => (
+                    <TableRow key={invoice._id} hover>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={selectedInvoiceIds.includes(invoice._id)}
+                          onChange={() => handleToggleInvoiceSelection(invoice._id)}
+                        />
+                      </TableCell>
+                      <TableCell>{invoice.invoiceNumber}</TableCell>
+                      <TableCell>
+                        {invoice.dates?.invoiceDate
+                          ? new Date(invoice.dates.invoiceDate).toLocaleDateString('de-DE')
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        {typeof invoice.amounts?.total === 'number'
+                          ? `${invoice.amounts.total.toFixed(2)} €`
+                          : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <Chip size="small" label={invoice.status || '-'} />
+                      </TableCell>
+                      <TableCell>{invoice.customer?.customerData?.email || '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenInvoiceAssignDialog(false)}>
+            Schliessen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAssignInvoices}
+            disabled={selectedInvoiceIds.length === 0 || assigningInvoices}
+          >
+            {assigningInvoices ? 'Weise zu...' : `${selectedInvoiceIds.length} zuweisen`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={openOrderInsightsDialog}
+        onClose={() => setOpenOrderInsightsDialog(false)}
+        maxWidth="lg"
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle component="div">
+          Bestellungen & Kundenmetriken
+          <Typography variant="body2" color="textSecondary" component="div">
+            {selectedUser ? `${selectedUser.vorname || selectedUser.firstName || ''} ${selectedUser.nachname || selectedUser.lastName || ''}`.trim() : ''}
+            {selectedUser?.email ? ` (${selectedUser.email})` : ''}
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          {orderInsightsLoading ? (
+            <Box display="flex" justifyContent="center" alignItems="center" py={6}>
+              <CircularProgress />
+            </Box>
+          ) : !orderInsightsData ? (
+            <Alert severity="info">Keine Daten verfügbar.</Alert>
+          ) : (
+            <>
+              {/* Filter Controls */}
+              <Box sx={{ mb: 2, p: 1.5, bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Filter</Typography>
+                <Grid container spacing={1}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Jahr</InputLabel>
+                      <Select
+                        value={orderInsightsFilters.year || ''}
+                        label="Jahr"
+                        onChange={(e) => setOrderInsightsFilters({ ...orderInsightsFilters, year: e.target.value || null })}
+                      >
+                        <MenuItem value={null}>Alle Jahre</MenuItem>
+                        {getAvailableYears().map((year) => (
+                          <MenuItem key={year} value={year}>
+                            {year}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Typ</InputLabel>
+                      <Select
+                        value={orderInsightsFilters.type}
+                        label="Typ"
+                        onChange={(e) => setOrderInsightsFilters({ ...orderInsightsFilters, type: e.target.value })}
+                      >
+                        <MenuItem value="all">Alle</MenuItem>
+                        <MenuItem value="order">Bestellungen</MenuItem>
+                        <MenuItem value="invoice">Rechnungen</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        value={orderInsightsFilters.status}
+                        label="Status"
+                        onChange={(e) => setOrderInsightsFilters({ ...orderInsightsFilters, status: e.target.value })}
+                      >
+                        <MenuItem value="all">Alle Status</MenuItem>
+                        {getAvailableStatuses().map((status) => (
+                          <MenuItem key={status} value={status}>
+                            {status}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      size="small"
+                      onClick={() => setOrderInsightsFilters({ year: new Date().getFullYear(), type: 'all', status: 'all' })}
+                    >
+                      Filter zurücksetzen
+                    </Button>
+                  </Grid>
+                </Grid>
+              </Box>
+
+              {(() => {
+                const filtered = getFilteredOrderInsights();
+                if (!filtered) return null;
+
+                return (
+                  <>
+                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                      <Grid item xs={6} md={3}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="caption" color="textSecondary">Gesamt Vorgänge</Typography>
+                            <Typography variant="h6">{filtered.metrics?.totalEntries || 0}</Typography>
+                            <Typography variant="caption" color="textSecondary" display="block" sx={{ fontSize: '0.7rem', mt: 0.5 }}>
+                              {filtered.metrics?.totalOrders || 0} Orders • {filtered.metrics?.totalInvoices || 0} Rechnungen
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="caption" color="textSecondary">Gesamt Kaufkraft</Typography>
+                            <Typography variant="h6">{(filtered.metrics?.totalSpent || 0).toFixed(2)} €</Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="caption" color="textSecondary">Durchschnitt</Typography>
+                            <Typography variant="h6">{(filtered.metrics?.averageOrderValue || 0).toFixed(2)} €</Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Card variant="outlined">
+                          <CardContent>
+                            <Typography variant="caption" color="textSecondary">Letzter Login</Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5, fontSize: '0.85rem' }}>
+                              {orderInsightsData.user?.lastLogin
+                                ? new Date(orderInsightsData.user.lastLogin).toLocaleString('de-DE')
+                                : 'Noch nie'}
+                            </Typography>
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    </Grid>
+
+                    <Card variant="outlined" sx={{ mb: 2 }}>
+                      <CardContent>
+                        <Typography variant="subtitle2" sx={{ mb: 1 }}>Häufigste Bestellungen/Produkte</Typography>
+                        {filtered.metrics?.topProducts?.length > 0 ? (
+                          <Box display="flex" gap={1} flexWrap="wrap">
+                            {filtered.metrics.topProducts.map((product) => (
+                              <Chip
+                                key={product.name}
+                                label={`${product.name}: ${product.quantity}x • ${Number(product.revenue || 0).toFixed(2)} €`}
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ))}
+                          </Box>
+                        ) : (
+                          <Typography variant="body2" color="textSecondary">Keine Produktdaten für diese Filter.</Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Typography variant="subtitle1" sx={{ mb: 1 }}>Vollständige Bestell-/Rechnungsinhalte ({filtered.metrics?.totalEntries})</Typography>
+                    {filtered.entries?.length > 0 ? (
+                      <Box sx={{ maxHeight: isMobile ? '60vh' : '50vh', overflowY: 'auto', pr: 0.5 }}>
+                        {filtered.entries.map((entry) => (
+                          <Paper key={`${entry.type}-${entry.id}`} variant="outlined" sx={{ p: 1.5, mb: 1.5 }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1}>
+                              <Box>
+                                <Typography variant="subtitle2">
+                                  {entry.type === 'order' ? 'Bestellung' : 'Rechnung'}: {entry.reference}
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary">
+                                  Datum: {entry.date ? new Date(entry.date).toLocaleString('de-DE') : '-'}
+                                </Typography>
+                              </Box>
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Chip size="small" label={entry.status || '-'} />
+                                <Typography variant="subtitle2" color="primary">
+                                  {Number(entry.total || 0).toFixed(2)} €
+                                </Typography>
+                              </Box>
+                            </Box>
+
+                            <Box sx={{ mt: 1 }}>
+                              {(entry.items || []).length > 0 ? (
+                                entry.items.map((item, idx) => (
+                                  <Box key={`${entry.id}-item-${idx}`} sx={{ py: 0.75, borderBottom: idx < entry.items.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                      {item.name}
+                                    </Typography>
+                                    <Typography variant="caption" color="textSecondary">
+                                      Menge: {item.quantity} • Einzelpreis: {Number(item.unitPrice || 0).toFixed(2)} € • Summe: {Number(item.total || 0).toFixed(2)} €
+                                    </Typography>
+                                    {(item.details?.kategorie || item.details?.duftrichtung || item.details?.sku) && (
+                                      <Typography variant="caption" color="textSecondary" display="block">
+                                        {item.details?.kategorie ? `Kategorie: ${item.details.kategorie}` : ''}
+                                        {item.details?.duftrichtung ? ` • Duft: ${item.details.duftrichtung}` : ''}
+                                        {item.details?.sku ? ` • SKU: ${item.details.sku}` : ''}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                ))
+                              ) : (
+                                <Typography variant="body2" color="textSecondary">Keine Positionsdaten vorhanden.</Typography>
+                              )}
+                            </Box>
+                          </Paper>
+                        ))}
+                      </Box>
+                    ) : (
+                      <Alert severity="info">Für diese Filter wurden keine Einträge gefunden.</Alert>
+                    )}
+                  </>
+                );
+              })()}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenOrderInsightsDialog(false)}>Schließen</Button>
         </DialogActions>
       </Dialog>
 

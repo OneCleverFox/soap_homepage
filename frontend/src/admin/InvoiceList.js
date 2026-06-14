@@ -161,7 +161,10 @@ const InvoiceList = () => {
     totalInvoices: 0,
     totalAmount: 0,
     pendingAmount: 0,
-    paidAmount: 0
+    paidAmount: 0,
+    materialCosts: 0,
+    nettoGewinnMaterial: 0,
+    nettoGewinnMitGemeinkosten: 0
   });
 
   const showSnackbar = useCallback((message, severity = 'info') => {
@@ -241,18 +244,29 @@ const InvoiceList = () => {
 
   const loadStats = async () => {
     try {
+      console.log('📊 Loading stats from:', `${API_BASE_URL}/admin/invoices/stats`);
       const response = await fetch(`${API_BASE_URL}/admin/invoices/stats`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
 
+      if (!response.ok) {
+        console.error('📊 Stats response error:', response.status, response.statusText);
+        return;
+      }
+
       const data = await response.json();
+      console.log('📊 Stats response:', data);
+      
       if (data.success) {
+        console.log('📊 Setting stats:', data.data);
         setStats(data.data);
+      } else {
+        console.error('📊 Stats API returned success=false:', data.message);
       }
     } catch (error) {
-      console.error('Fehler beim Laden der Statistiken:', error);
+      console.error('📊 Fehler beim Laden der Statistiken:', error);
     }
   };
 
@@ -947,10 +961,10 @@ const InvoiceList = () => {
       </Box>
 
       {/* Statistik Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+      <Grid container spacing={2} sx={{ mb: 3 }} alignItems="stretch">
+        <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex' }}>
+          <Card sx={{ width: '100%', height: '100%' }}>
+            <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <Typography color="textSecondary" gutterBottom>
                 Gesamte Rechnungen
               </Typography>
@@ -960,9 +974,9 @@ const InvoiceList = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+        <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex' }}>
+          <Card sx={{ width: '100%', height: '100%' }}>
+            <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <Typography color="textSecondary" gutterBottom>
                 Gesamtumsatz
               </Typography>
@@ -972,9 +986,9 @@ const InvoiceList = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+        <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex' }}>
+          <Card sx={{ width: '100%', height: '100%' }}>
+            <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <Typography color="textSecondary" gutterBottom>
                 Offene Beträge
               </Typography>
@@ -984,14 +998,29 @@ const InvoiceList = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
+        <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex' }}>
+          <Card sx={{ width: '100%', height: '100%' }}>
+            <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
               <Typography color="textSecondary" gutterBottom>
                 Bezahlt
               </Typography>
               <Typography variant="h5" component="h2" color="success.main">
                 {stats.paidAmount?.toFixed(2)}€
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={2.4} sx={{ display: 'flex' }}>
+          <Card sx={{ width: '100%', height: '100%' }}>
+            <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <Typography color="textSecondary" gutterBottom>
+                Netto-Gewinn
+              </Typography>
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', lineHeight: 1.15, mb: 0.4 }}>
+                {stats.nettoGewinnMaterial?.toFixed(2)}€ <span style={{ fontSize: '0.75em', opacity: 0.8 }}>Mat.</span>
+              </Typography>
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 'bold', lineHeight: 1.15 }}>
+                {stats.nettoGewinnMitGemeinkosten?.toFixed(2)}€ <span style={{ fontSize: '0.75em', opacity: 0.8 }}>GK</span>
               </Typography>
             </CardContent>
           </Card>
@@ -1081,7 +1110,7 @@ const InvoiceList = () => {
                 </Typography>
               </Box>
             ) : (
-              <Box spacing={2}>
+              <Box>
                 {invoices.map((invoice, _index) => (
                   <Card 
                     key={invoice._id} 

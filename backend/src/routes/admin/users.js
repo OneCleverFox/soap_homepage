@@ -2,8 +2,417 @@ const express = require('express');
 const Kunde = require('../../models/Kunde'); // Use Kunde model instead of User
 const User = require('../../models/User'); // Add User model
 const AdminSettings = require('../../models/AdminSettings');
+const Invoice = require('../../models/Invoice');
+const Order = require('../../models/Order');
+const mongoose = require('mongoose');
 
 const router = express.Router();
+
+// Rechnungen abrufen, die einem Benutzer zugewiesen werden koennen
+router.get('/:userId/assignable-invoices', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { query = '' } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungueltige Benutzer-ID'
+      });
+    }
+
+    const user = await Kunde.findById(userId).select('email');
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    const safeQuery = String(query || '').trim();
+    const escapedQuery = safeQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = escapedQuery ? new RegExp(escapedQuery, 'i') : null;
+
+    const baseOr = [
+      { 'customer.customerId': { $exists: false } },
+      { 'customer.customerId': null },
+      { 'customer.customerId': user._id },
+      { 'customer.customerData.email': user.email }
+    ];
+
+    const filter = regex
+      ? {
+          $and: [
+            { $or: baseOr },
+            {
+              $or: [
+                { invoiceNumber: regex },
+                { 'customer.customerData.email': regex },
+                { 'customer.customerData.firstName': regex },
+                { 'customer.customerData.lastName': regex }
+              ]
+            }
+          ]
+        }
+      : { $or: baseOr };
+
+    const invoices = await Invoice.find(filter)
+      .select('invoiceNumber status dates.invoiceDate amounts.total customer.customerData.email customer.customerId order.orderId order.bestellnummer')
+      .sort({ 'dates.invoiceDate': -1 })
+      .limit(100)
+      .lean();
+
+    const normalizedInvoices = invoices.map((invoice) => {
+      const customerId = invoice?.customer?.customerId;
+      return {
+        ...invoice,
+        isAssignedToUser: customerId ? String(customerId) === String(user._id) : false
+      };
+    });
+
+    res.json({
+      success: true,
+      data: normalizedInvoices
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden zuweisbarer Rechnungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Rechnungen'
+    });
+  }
+});
+
+// Rechnungen nachtraeglich einem Benutzer zuweisen
+router.put('/:userId/assign-invoices', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { invoiceIds, scopeInvoiceIds } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungueltige Benutzer-ID'
+      });
+    }
+
+    if (!Array.isArray(invoiceIds)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rechnungs-IDs muessen als Array uebergeben werden'
+      });
+    }
+
+    const validInvoiceIds = invoiceIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (invoiceIds.length > 0 && validInvoiceIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine gueltigen Rechnungs-IDs uebergeben'
+      });
+    }
+
+    const user = await Kunde.findById(userId).lean();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    const validScopeInvoiceIds = Array.isArray(scopeInvoiceIds)
+      ? scopeInvoiceIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
+      : validInvoiceIds;
+
+    const scopedInvoices = await Invoice.find({ _id: { $in: validScopeInvoiceIds } });
+    if (scopedInvoices.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Keine Rechnungen gefunden'
+      });
+    }
+
+    const selectedIdSet = new Set(validInvoiceIds.map(String));
+    const linkedOrderIdsToAssign = [];
+    const linkedOrderIdsToUnassign = [];
+    let assignedCount = 0;
+    let unassignedCount = 0;
+
+    for (const invoice of scopedInvoices) {
+      const invoiceId = String(invoice._id);
+      const shouldBeAssigned = selectedIdSet.has(invoiceId);
+      const currentlyAssignedToUser = String(invoice?.customer?.customerId || '') === String(user._id);
+
+      if (shouldBeAssigned) {
+        invoice.customer = invoice.customer || {};
+        invoice.customer.customerId = user._id;
+
+        // Kundendaten nur ergaenzen, nicht blind ueberschreiben
+        invoice.customer.customerData = {
+          ...(invoice.customer.customerData || {}),
+          firstName: invoice.customer?.customerData?.firstName || user.vorname || '',
+          lastName: invoice.customer?.customerData?.lastName || user.nachname || '',
+          email: invoice.customer?.customerData?.email || user.email || '',
+          phone: invoice.customer?.customerData?.phone || user.telefon || '',
+          street: invoice.customer?.customerData?.street || user.adresse?.strasse || '',
+          postalCode: invoice.customer?.customerData?.postalCode || user.adresse?.plz || '',
+          city: invoice.customer?.customerData?.city || user.adresse?.stadt || '',
+          country: invoice.customer?.customerData?.country || user.adresse?.land || 'Deutschland'
+        };
+
+        if (!currentlyAssignedToUser) {
+          assignedCount += 1;
+        }
+      } else if (currentlyAssignedToUser) {
+        invoice.customer = invoice.customer || {};
+        invoice.customer.customerId = null;
+        unassignedCount += 1;
+      }
+
+      if (invoice.order?.orderId && mongoose.Types.ObjectId.isValid(invoice.order.orderId)) {
+        if (shouldBeAssigned) {
+          linkedOrderIdsToAssign.push(String(invoice.order.orderId));
+        } else if (currentlyAssignedToUser) {
+          linkedOrderIdsToUnassign.push(String(invoice.order.orderId));
+        }
+      }
+      if (invoice.originalOrder && mongoose.Types.ObjectId.isValid(invoice.originalOrder)) {
+        if (shouldBeAssigned) {
+          linkedOrderIdsToAssign.push(String(invoice.originalOrder));
+        } else if (currentlyAssignedToUser) {
+          linkedOrderIdsToUnassign.push(String(invoice.originalOrder));
+        }
+      }
+
+      await invoice.save();
+    }
+
+    const uniqueAssignOrderIds = [...new Set(linkedOrderIdsToAssign)];
+    const uniqueUnassignOrderIds = [...new Set(linkedOrderIdsToUnassign)];
+    let updatedOrders = 0;
+
+    if (uniqueAssignOrderIds.length > 0) {
+      const orderUpdate = {
+        kunde: user._id,
+        'besteller.kundennummer': user.kundennummer || undefined
+      };
+
+      const cleanedOrderUpdate = Object.fromEntries(
+        Object.entries(orderUpdate).filter(([, value]) => value !== undefined)
+      );
+
+      const assignResult = await Order.updateMany(
+        { _id: { $in: uniqueAssignOrderIds } },
+        { $set: cleanedOrderUpdate }
+      );
+
+      updatedOrders += assignResult.modifiedCount || 0;
+    }
+
+    if (uniqueUnassignOrderIds.length > 0) {
+      const unassignResult = await Order.updateMany(
+        {
+          _id: { $in: uniqueUnassignOrderIds },
+          kunde: user._id
+        },
+        {
+          $set: { kunde: null },
+          $unset: { 'besteller.kundennummer': '' }
+        }
+      );
+
+      updatedOrders += unassignResult.modifiedCount || 0;
+    }
+
+    res.json({
+      success: true,
+      message: 'Rechnungszuordnung aktualisiert',
+      data: {
+        assignedInvoices: assignedCount,
+        unassignedInvoices: unassignedCount,
+        updatedOrders
+      }
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Zuweisen der Rechnungen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Zuweisen der Rechnungen'
+    });
+  }
+});
+
+// Bestell- und Rechnungs-Insights fuer einen Benutzer
+router.get('/:userId/order-insights', async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungueltige Benutzer-ID'
+      });
+    }
+
+    const user = await Kunde.findById(userId)
+      .select('vorname nachname email kundennummer letzteAnmeldung anzahlAnmeldungen createdAt')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    const normalizedEmail = (user.email || '').trim().toLowerCase();
+    const escapedEmail = normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const [ordersById, ordersByEmail, standaloneInvoicesById, standaloneInvoicesByEmail] = await Promise.all([
+      Order.find({ kunde: user._id }).lean(),
+      Order.find({ 'besteller.email': normalizedEmail }).lean(),
+      Invoice.find({
+        'customer.customerId': user._id,
+        $and: [
+          {
+            $or: [
+              { 'order.orderId': { $exists: false } },
+              { 'order.orderId': null }
+            ]
+          },
+          {
+            $or: [
+              { originalOrder: { $exists: false } },
+              { originalOrder: null }
+            ]
+          }
+        ]
+      }).lean(),
+      Invoice.find({
+        'customer.customerData.email': { $regex: new RegExp(`^${escapedEmail}$`, 'i') },
+        $and: [
+          {
+            $or: [
+              { 'order.orderId': { $exists: false } },
+              { 'order.orderId': null }
+            ]
+          },
+          {
+            $or: [
+              { originalOrder: { $exists: false } },
+              { originalOrder: null }
+            ]
+          }
+        ]
+      }).lean()
+    ]);
+
+    const ordersMap = new Map();
+    [...ordersById, ...ordersByEmail].forEach((order) => {
+      ordersMap.set(String(order._id), order);
+    });
+    const orders = Array.from(ordersMap.values());
+
+    const invoicesMap = new Map();
+    [...standaloneInvoicesById, ...standaloneInvoicesByEmail].forEach((invoice) => {
+      invoicesMap.set(String(invoice._id), invoice);
+    });
+    const standaloneInvoices = Array.from(invoicesMap.values());
+
+    const orderEntries = orders.map((order) => ({
+      id: String(order._id),
+      type: 'order',
+      reference: order.bestellnummer || String(order._id),
+      date: order.createdAt,
+      status: order.status || 'unbekannt',
+      total: Number(order.preise?.gesamtsumme || order.gesamtpreis || 0),
+      items: (order.artikel || []).map((item) => ({
+        name: item?.produktSnapshot?.name || 'Produkt',
+        quantity: Number(item?.menge || 0),
+        unitPrice: Number(item?.einzelpreis || 0),
+        total: Number(item?.gesamtpreis || 0),
+        details: {
+          kategorie: item?.produktSnapshot?.kategorie || '',
+          duftrichtung: item?.produktSnapshot?.duftrichtung || '',
+          inhaltsstoffe: item?.produktSnapshot?.inhaltsstoffe || []
+        }
+      }))
+    }));
+
+    const invoiceEntries = standaloneInvoices.map((invoice) => ({
+      id: String(invoice._id),
+      type: 'invoice',
+      reference: invoice.invoiceNumber || String(invoice._id),
+      date: invoice?.dates?.invoiceDate || invoice.createdAt,
+      status: invoice.status || 'unbekannt',
+      total: Number(invoice?.amounts?.total || 0),
+      items: (invoice.items || []).map((item) => ({
+        name: item?.productData?.name || 'Produkt',
+        quantity: Number(item?.quantity || 0),
+        unitPrice: Number(item?.unitPrice || 0),
+        total: Number(item?.total || 0),
+        details: {
+          kategorie: item?.productData?.category || '',
+          sku: item?.productData?.sku || ''
+        }
+      }))
+    }));
+
+    const entries = [...orderEntries, ...invoiceEntries].sort((a, b) => {
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+
+    const productMap = new Map();
+    entries.forEach((entry) => {
+      (entry.items || []).forEach((item) => {
+        const key = String(item.name || 'Produkt').trim();
+        const existing = productMap.get(key) || { name: key, quantity: 0, revenue: 0, count: 0 };
+        existing.quantity += Number(item.quantity || 0);
+        existing.revenue += Number(item.total || 0);
+        existing.count += 1;
+        productMap.set(key, existing);
+      });
+    });
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => {
+        if (b.quantity !== a.quantity) return b.quantity - a.quantity;
+        return b.revenue - a.revenue;
+      })
+      .slice(0, 5);
+
+    const totalSpent = entries.reduce((sum, entry) => sum + Number(entry.total || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: String(user._id),
+          name: `${user.vorname || ''} ${user.nachname || ''}`.trim() || user.email,
+          email: user.email,
+          kundennummer: user.kundennummer || '',
+          lastLogin: user.letzteAnmeldung || null,
+          loginCount: Number(user.anzahlAnmeldungen || 0),
+          registeredAt: user.createdAt || null
+        },
+        metrics: {
+          totalEntries: entries.length,
+          totalOrders: orderEntries.length,
+          totalStandaloneInvoices: invoiceEntries.length,
+          totalSpent: Math.round(totalSpent * 100) / 100,
+          averageOrderValue: entries.length > 0 ? Math.round((totalSpent / entries.length) * 100) / 100 : 0,
+          topProducts
+        },
+        entries
+      }
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Laden der Bestell-Insights:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Bestell-Insights'
+    });
+  }
+});
 
 // Benutzer manuell verifizieren
 router.put('/verify/:userId', async (req, res) => {

@@ -3,6 +3,7 @@ const Order = require('../models/Order');
 const Kunde = require('../models/Kunde');
 const Product = require('../models/Product');
 const InvoiceTemplate = require('../models/InvoiceTemplate');
+const Warenberechnung = require('../models/Warenberechnung');
 const emailService = require('../services/emailService');
 const PDFService = require('../services/PDFService');
 const fs = require('fs').promises;
@@ -215,9 +216,23 @@ class InvoiceService {
   // Rechnungsstatistiken abrufen
   async getInvoiceStats(req, res) {
     try {
+      console.log('📊 [INVOICE STATS] Starting stats calculation...');
+      
       const totalInvoices = await Invoice.countDocuments();
+      console.log('📊 [INVOICE STATS] Total invoices:', totalInvoices);
       
       const aggregateResults = await Invoice.aggregate([
+        {
+          $addFields: {
+            isPaidInvoice: {
+              $or: [
+                { $eq: ['$status', 'paid'] },
+                { $eq: ['$payment.status', 'paid'] },
+                { $ne: [{ $ifNull: ['$payment.paidDate', null] }, null] }
+              ]
+            }
+          }
+        },
         {
           $group: {
             _id: null,
@@ -225,24 +240,7 @@ class InvoiceService {
             pendingAmount: { 
               $sum: {
                 $cond: [
-                  {
-                    $and: [
-                      { $ne: ['$status', 'paid'] },
-                      {
-                        $or: [
-                          { $eq: ['$payment.status', null] },
-                          { $ne: ['$payment.status', 'paid'] }
-                        ]
-                      },
-                      {
-                        $or: [
-                          { $eq: ['$payment.paidDate', null] },
-                          { $eq: ['$payment.paidDate', undefined] },
-                          { $not: '$payment.paidDate' }
-                        ]
-                      }
-                    ]
-                  },
+                  { $not: ['$isPaidInvoice'] },
                   '$amounts.total',
                   0
                 ]
@@ -251,13 +249,7 @@ class InvoiceService {
             paidAmount: { 
               $sum: {
                 $cond: [
-                  {
-                    $or: [
-                      { $eq: ['$status', 'paid'] },
-                      { $eq: ['$payment.status', 'paid'] },
-                      { $ne: ['$payment.paidDate', null] }
-                    ]
-                  },
+                  '$isPaidInvoice',
                   '$amounts.total',
                   0
                 ]
@@ -272,6 +264,104 @@ class InvoiceService {
         pendingAmount: 0,
         paidAmount: 0
       };
+      
+      console.log('📊 [INVOICE STATS] Aggregated stats:', stats);
+
+      // Materialkosten und Pauschale (Gemeinkosten) berechnen
+      let totalMaterialCosts = 0;
+      let totalPauschale = 0;
+      let paidMaterialCosts = 0;
+      let paidPauschale = 0;
+
+      try {
+        // Alle Rechnungen laden; Produkte stehen i.d.R. direkt in invoice.items.
+        const allInvoices = await Invoice.find({}).populate('order.orderId');
+        console.log('📊 [INVOICE STATS] Found invoices:', allInvoices.length);
+
+        const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        for (const invoice of allInvoices) {
+          const isPaidInvoice = invoice?.status === 'paid'
+            || invoice?.payment?.status === 'paid'
+            || Boolean(invoice?.payment?.paidDate);
+
+          const invoiceItems = Array.isArray(invoice.items) ? invoice.items : [];
+          let sourceItems = invoiceItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity || 1,
+            productName: item?.productData?.name || ''
+          }));
+
+          // Fallback für Legacy-Rechnungen ohne items-Snapshot
+          if (sourceItems.length === 0) {
+            const orderItems = invoice?.order?.orderId?.artikel || [];
+            sourceItems = orderItems.map((item) => ({
+              productId: item.produktId,
+              quantity: item.menge || 1,
+              productName: item?.produktSnapshot?.name || ''
+            }));
+          }
+
+          if (sourceItems.length === 0) {
+            continue;
+          }
+
+          for (const sourceItem of sourceItems) {
+            let warenberechnung = null;
+
+            if (sourceItem.productId) {
+              warenberechnung = await Warenberechnung.findOne({
+                portfolioProdukt: sourceItem.productId
+              }).exec();
+            }
+
+            // Fallback-Matching über Produktname für Positionen ohne productId
+            if (!warenberechnung && sourceItem.productName) {
+              warenberechnung = await Warenberechnung.findOne({
+                produktName: new RegExp(`^${escapeRegex(sourceItem.productName)}$`, 'i')
+              }).exec();
+            }
+
+            if (!warenberechnung) {
+              continue;
+            }
+
+            const quantity = sourceItem.quantity || 1;
+            const mat = (warenberechnung.zwischensummeEK || 0) * quantity;
+            const pauschal = (warenberechnung.pauschale || 0) * quantity;
+
+            totalMaterialCosts += mat;
+            totalPauschale += pauschal;
+
+            if (isPaidInvoice) {
+              paidMaterialCosts += mat;
+              paidPauschale += pauschal;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Fehler beim Berechnen der Materialkosten:', err);
+      }
+
+      // Netto-Gewinn Varianten:
+      // 1. Nur Material: Gesamtumsatz - Materialkosten
+      const nettoGewinnMaterial = stats.totalAmount - totalMaterialCosts;
+      
+      // 2. Mit Gemeinkosten: Gesamtumsatz - Pauschale (=Material × Faktor)
+      const nettoGewinnMitGemeinkosten = stats.totalAmount - totalPauschale;
+
+      // Paid-basierte Varianten: nur aus tatsächlichen Einnahmen (bezahlte Rechnungen)
+      const nettoGewinnMaterialPaid = stats.paidAmount - paidMaterialCosts;
+      const nettoGewinnMitGemeinkostenPaid = stats.paidAmount - paidPauschale;
+      
+      console.log('📊 [INVOICE STATS] Material costs:', totalMaterialCosts);
+      console.log('📊 [INVOICE STATS] Pauschale (GK):', totalPauschale);
+      console.log('📊 [INVOICE STATS] Paid material costs:', paidMaterialCosts);
+      console.log('📊 [INVOICE STATS] Paid pauschale (GK):', paidPauschale);
+      console.log('📊 [INVOICE STATS] Netto profit (material only):', nettoGewinnMaterial);
+      console.log('📊 [INVOICE STATS] Netto profit (with GK):', nettoGewinnMitGemeinkosten);
+      console.log('📊 [INVOICE STATS] Netto profit paid (material only):', nettoGewinnMaterialPaid);
+      console.log('📊 [INVOICE STATS] Netto profit paid (with GK):', nettoGewinnMitGemeinkostenPaid);
 
       res.json({
         success: true,
@@ -279,7 +369,14 @@ class InvoiceService {
           totalInvoices,
           totalAmount: stats.totalAmount,
           pendingAmount: stats.pendingAmount,
-          paidAmount: stats.paidAmount
+          paidAmount: stats.paidAmount,
+          materialCosts: Math.round(totalMaterialCosts * 100) / 100,
+          paidMaterialCosts: Math.round(paidMaterialCosts * 100) / 100,
+          paidPauschale: Math.round(paidPauschale * 100) / 100,
+          nettoGewinnMaterial: Math.round(nettoGewinnMaterial * 100) / 100,
+          nettoGewinnMitGemeinkosten: Math.round(nettoGewinnMitGemeinkosten * 100) / 100,
+          nettoGewinnMaterialPaid: Math.round(nettoGewinnMaterialPaid * 100) / 100,
+          nettoGewinnMitGemeinkostenPaid: Math.round(nettoGewinnMitGemeinkostenPaid * 100) / 100
         }
       });
     } catch (error) {
