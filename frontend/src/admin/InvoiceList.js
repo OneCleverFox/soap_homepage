@@ -525,14 +525,38 @@ const InvoiceList = () => {
       if (response.ok) {
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
+        const fileName = `Rechnung-${invoices.find(i => i._id === invoiceId)?.invoiceNumber}.pdf`;
+
+        // Mobile Browser (insb. iOS Safari) unterstuetzen programmgesteuerte Downloads via <a download>
+        // nur eingeschraenkt. Deshalb dort PDF oeffnen und Speichern/Teilen dem Browser ueberlassen.
+        const isTouchDevice = isMobile || window.matchMedia('(pointer: coarse)').matches;
+
+        if (isTouchDevice) {
+          const popup = window.open(url, '_blank', 'noopener,noreferrer');
+          if (!popup) {
+            window.location.href = url;
+          }
+
+          setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+          }, 60000);
+
+          showSnackbar('PDF wurde geöffnet. Dort können Sie die Datei speichern oder teilen.', 'info');
+          return;
+        }
+
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `Rechnung-${invoices.find(i => i._id === invoiceId)?.invoiceNumber}.pdf`;
+        a.download = fileName;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+        }, 1000);
+
         showSnackbar('PDF erfolgreich heruntergeladen', 'success');
       } else {
         const error = await response.json();
