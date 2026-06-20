@@ -391,7 +391,7 @@ class InvoiceController {
           },
           contact: {
             phone: companyData.contact?.phone || '+49 123 456789',
-            email: companyData.contact?.email || 'info@gluecksmomente-manufaktur.de',
+            email: companyData.contact?.email || 'info.gluecksmomente.manufaktur@gmail.com',
             website: companyData.contact?.website || 'www.gluecksmomente-manufaktur.de'
           },
           taxInfo: {

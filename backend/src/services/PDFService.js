@@ -138,7 +138,7 @@ class PDFService {
       // Company Info für Header/Footer extrahieren
       const fallbackCompany = {
         name: 'Glücksmomente Manufaktur',
-        contact: { email: 'info@gluecksmomente-manufaktur.de' }
+        contact: { email: 'info.gluecksmomente.manufaktur@gmail.com' }
       };
       const companyInfo = {
         ...fallbackCompany,

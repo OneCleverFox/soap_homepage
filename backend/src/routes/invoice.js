@@ -54,7 +54,7 @@ router.get('/sample-data', (req, res) => {
       },
       contact: {
         phone: '+49 123 456789',
-        email: 'info@gluecksmomente-manufaktur.de',
+        email: 'info.gluecksmomente.manufaktur@gmail.com',
         website: 'www.gluecksmomente-manufaktur.de'
       },
       taxInfo: {
@@ -121,6 +121,12 @@ router.get('/sample-data', (req, res) => {
 });
 
 // E-Mail-Test-Funktionen
+const createTestEmailMeta = (type) => ({
+  isTest: true,
+  type,
+  timestamp: new Date().toISOString()
+});
+
 router.post('/test-email/verification', async (req, res) => {
   try {
     const { email } = req.body;
@@ -128,8 +134,13 @@ router.post('/test-email/verification', async (req, res) => {
     const result = await emailService.sendVerificationEmail(
       targetEmail,
       'test-token-123',
-      req.user.name || 'Test User'
+      req.user.name || 'Test User',
+      createTestEmailMeta('verification')
     );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] E-Mail-Verifizierungs-Test gesendet:', {
       to: targetEmail,
@@ -158,8 +169,13 @@ router.post('/test-email/welcome', async (req, res) => {
     const targetEmail = email || req.user.email;
     const result = await emailService.sendWelcomeEmail(
       targetEmail,
-      req.user.name || 'Test User'
+      req.user.name || 'Test User',
+      createTestEmailMeta('welcome')
     );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] Willkommens-E-Mail-Test gesendet:', {
       to: targetEmail,
@@ -190,8 +206,15 @@ router.post('/test-email/password-reset', async (req, res) => {
     const result = await emailService.sendPasswordResetEmail(
       targetEmail,
       resetUrl,
-      req.user.name || 'Test User'
+      req.user.name || 'Test User',
+      null,
+      null,
+      createTestEmailMeta('password-reset')
     );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] Passwort-Reset-Test gesendet:', {
       to: targetEmail,
@@ -221,6 +244,7 @@ router.post('/test-email/order-confirmation', async (req, res) => {
     const mockOrder = {
       _id: 'test-order-123',
       bestellnummer: 'TEST-2024-001',
+      erstelltAm: new Date(),
       besteller: {
         vorname: 'Test',
         nachname: 'Kunde',
@@ -234,13 +258,23 @@ router.post('/test-email/order-confirmation', async (req, res) => {
           gesamtpreis: 25.00
         }
       ],
+      preise: {
+        gesamtsumme: 25.00
+      },
       gesamtpreis: 25.00,
       createdAt: new Date(),
       userId: req.user._id || null,
       kundeId: null
     };
     
-    const result = await emailService.sendOrderConfirmationEmail(mockOrder);
+    const result = await emailService.sendOrderConfirmationEmail(
+      mockOrder,
+      createTestEmailMeta('order-confirmation')
+    );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] Bestellbestätigungs-Test gesendet:', {
       to: targetEmail,
@@ -267,25 +301,34 @@ router.post('/test-email/order-confirmation', async (req, res) => {
 router.post('/test-email/admin-notification', async (req, res) => {
   try {
     const mockOrder = {
-      bestellnummer: 'TEST-2024-001',
-      besteller: {
-        vorname: 'Test',
-        nachname: 'Kunde',
-        email: 'test@example.com'
+      bestellung: {
+        _id: 'test-order-admin-001',
+        bestellnummer: 'TEST-2024-001',
+        bestelldatum: new Date(),
+        kontakt: {
+          email: 'test@example.com'
+        },
+        artikel: [
+          {
+            name: 'Test Produkt (ADMIN)',
+            menge: 1,
+            preis: 15.00
+          }
+        ]
       },
-      artikel: [
-        {
-          name: 'Test Produkt (ADMIN)',
-          menge: 1,
-          einzelpreis: 15.00,
-          gesamtpreis: 15.00
-        }
-      ],
-      gesamtpreis: 15.00,
-      createdAt: new Date()
+      kundenname: 'Test Kunde',
+      gesamtbetrag: 15.00
     };
     
-    const result = await emailService.sendAdminOrderNotification(mockOrder);
+    const result = await emailService.sendAdminOrderNotification(
+      mockOrder,
+      undefined,
+      createTestEmailMeta('admin-notification')
+    );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] Admin-Benachrichtigungs-Test gesendet:', {
       orderNumber: mockOrder.bestellnummer,
@@ -319,7 +362,14 @@ router.post('/test-email/admin-inquiry-notification', async (req, res) => {
       createdAt: new Date()
     };
     
-    const result = await emailService.sendAdminInquiryNotification(mockInquiry);
+    const result = await emailService.sendAdminInquiryNotification(
+      mockInquiry,
+      createTestEmailMeta('admin-inquiry-notification')
+    );
+
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
     
     console.log('✅ [Admin] Admin-Anfrage-Benachrichtigungs-Test gesendet:', {
       inquiryId: mockInquiry._id,
@@ -340,6 +390,54 @@ router.post('/test-email/admin-inquiry-notification', async (req, res) => {
       message: 'Fehler beim E-Mail-Versand', 
       error: error.message 
     });
+  }
+});
+
+router.post('/test-email/password-changed', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const targetEmail = email || (req.user && req.user.email) || process.env.ADMIN_EMAIL;
+    const result = await emailService.sendPasswordResetSuccessEmail(
+      targetEmail,
+      (req.user && req.user.name) || 'Test User',
+      createTestEmailMeta('password-changed')
+    );
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
+    res.json({ success: true, message: `Passwort-geändert-E-Mail erfolgreich an ${targetEmail} gesendet`, data: result });
+  } catch (error) {
+    console.error('❌ [Admin] E-Mail-Test fehlgeschlagen:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim E-Mail-Versand', error: error.message });
+  }
+});
+
+router.post('/test-email/order-rejection', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const targetEmail = email || (req.user && req.user.email) || process.env.ADMIN_EMAIL;
+    const mockOrder = {
+      _id: 'test-order-456',
+      bestellnummer: 'TEST-2024-002',
+      erstelltAm: new Date(),
+      besteller: { vorname: 'Test', nachname: 'Kunde', email: targetEmail },
+      artikel: [{ name: 'Rosen-Seife (TEST)', menge: 1, einzelpreis: 10.00, gesamtpreis: 10.00 }],
+      preise: { gesamtsumme: 10.00 },
+      gesamtpreis: 10.00,
+      createdAt: new Date()
+    };
+    const result = await emailService.sendOrderRejectionEmail(
+      mockOrder,
+      'Dies ist ein Test-Versand.',
+      createTestEmailMeta('order-rejection')
+    );
+    if (!result?.success) {
+      throw new Error(result?.error || 'Versand fehlgeschlagen');
+    }
+    res.json({ success: true, message: `Bestellablehnung-E-Mail erfolgreich an ${targetEmail} gesendet`, data: result });
+  } catch (error) {
+    console.error('❌ [Admin] E-Mail-Test fehlgeschlagen:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim E-Mail-Versand', error: error.message });
   }
 });
 

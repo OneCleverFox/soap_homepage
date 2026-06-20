@@ -61,10 +61,10 @@ const AdminCart = lazy(() => import('./admin/AdminCart'));
 const AdminGuV = lazy(() => import('./admin/AdminGuV'));
 const AdminSettingsPanel = lazy(() => import('./admin/AdminSettingsPanel'));
 const AdminInvoiceConfiguration = lazy(() => import('./admin/AdminInvoiceConfiguration'));
-const AdminEmailConfiguration = lazy(() => import('./admin/AdminEmailConfiguration'));
 const AdminInvoiceDesigner = lazy(() => import('./admin/AdminInvoiceDesigner'));
 const CreateInvoice = lazy(() => import('./admin/CreateInvoice'));
 const InvoiceList = lazy(() => import('./admin/InvoiceList'));
+const AdminServiceLeistungen = lazy(() => import('./admin/AdminServiceLeistungen'));
 const AdminGallery = lazy(() => import('./admin/AdminGallery'));
 const AdminDocumentsPage = lazy(() => import('./admin/AdminDocumentsPage'));
 const AdminDocumentEditor = lazy(() => import('./admin/AdminDocumentEditor'));
@@ -356,17 +356,6 @@ function App() {
             }
           />
           <Route
-            path="/admin/email-tests"
-            element={
-              <>
-                <Navbar />
-                <ProtectedRoute requiredRole="admin">
-                  <AdminEmailConfiguration />
-                </ProtectedRoute>
-              </>
-            }
-          />
-          <Route
             path="/admin/gallery"
             element={
               <>
@@ -395,6 +384,17 @@ function App() {
                 <Navbar />
                 <ProtectedRoute requiredRole="admin">
                   <InvoiceList />
+                </ProtectedRoute>
+              </>
+            }
+          />
+          <Route
+            path="/admin/service-leistungen"
+            element={
+              <>
+                <Navbar />
+                <ProtectedRoute requiredRole="admin">
+                  <AdminServiceLeistungen />
                 </ProtectedRoute>
               </>
             }

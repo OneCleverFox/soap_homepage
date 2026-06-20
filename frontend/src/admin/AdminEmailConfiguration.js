@@ -62,13 +62,54 @@ const AdminEmailConfiguration = () => {
   const [templateEditor, setTemplateEditor] = useState(false);
   const [templateContent, setTemplateContent] = useState('');
   const [templatePreview, setTemplatePreview] = useState('');
+  const [editorTab, setEditorTab] = useState(0);
+
+  const normalizeTriggerForEmailType = (emailType, triggerValue) => {
+    const legacyTriggerMap = {
+      registration: 'user_registration',
+      'after-verification': 'email_verified',
+      auto: 'manual',
+      order_placed: 'manual',
+      'order-placed': 'manual',
+      order_rejected: 'manual',
+      'order-rejected': 'manual',
+      new_order: 'manual',
+      new_inquiry: 'manual',
+      'inquiry-submitted': 'manual',
+      password_reset_request: 'manual'
+    };
+
+    const allowedTriggers = (triggerOptionsMap[emailType] || []).map((option) => option.value);
+    const mappedTrigger = legacyTriggerMap[triggerValue] || triggerValue;
+
+    if (allowedTriggers.includes(mappedTrigger)) {
+      return mappedTrigger;
+    }
+
+    return allowedTriggers[0] || '';
+  };
+
+  const normalizeEmailConfigs = (configs = {}) => {
+    return Object.fromEntries(
+      Object.entries(configs).map(([key, config]) => [
+        key,
+        {
+          ...config,
+          trigger: normalizeTriggerForEmailType(key, config?.trigger)
+        }
+      ])
+    );
+  };
 
   const loadEmailConfig = useCallback(async () => {
     try {
-      const response = await api.get('/admin/email-config');
+      const response = await api.get('/admin-settings/email/config');
       if (response.data.success) {
-        setEmailConfigs(response.data.emailConfigs);
-        setGlobalEmailSettings(response.data.globalSettings);
+        // Stelle sicher, dass emailConfigs populated werden und nicht undefined
+        const configs = normalizeEmailConfigs(response.data.emailConfigs || {});
+        setEmailConfigs(prev => ({ ...prev, ...configs }));
+        // Mergen statt überschreiben, damit lokale Defaults (z.B. adminEmail) erhalten bleiben
+        setGlobalEmailSettings(prev => ({ ...prev, ...(response.data.globalSettings || {}) }));
       }
       
       // Templates laden
@@ -91,7 +132,7 @@ const AdminEmailConfiguration = () => {
   // Templates von Backend laden
   const loadTemplates = async () => {
     try {
-      const response = await api.get('/admin/email-templates');
+      const response = await api.get('/admin-settings/email/templates');
       if (response.data.success) {
         // Response kann templates ODER emailConfigs enthalten
         const templates = response.data.templates || response.data.emailConfigs || {};
@@ -108,53 +149,50 @@ const AdminEmailConfiguration = () => {
 
   // E-Mail-Konfigurationen
   const [emailConfigs, setEmailConfigs] = useState({
-    verification: {
-      enabled: true,
-      automatic: true,
-      trigger: 'user_registration',
-      subject: '✅ E-Mail-Adresse bestätigen - Gluecksmomente Seifenmanufaktur',
-      template: 'default'
-    },
-    welcome: {
-      enabled: true,
-      automatic: true,
-      trigger: 'email_verified',
-      subject: '🌸 Willkommen bei Gluecksmomente Manufaktur!',
-      template: 'default'
-    },
-    passwordReset: {
-      enabled: true,
-      automatic: true,
-      trigger: 'password_reset_request',
-      subject: '🔒 Passwort zurücksetzen - Gluecksmomente Manufaktur',
-      template: 'default'
-    },
-    orderConfirmation: {
-      enabled: true,
-      automatic: true,
-      trigger: 'order_placed',
-      subject: '📦 Bestellbestätigung - Gluecksmomente Manufaktur',
-      template: 'default'
-    },
-    adminNotification: {
-      enabled: true,
-      automatic: true,
-      trigger: 'new_order',
-      subject: '🚨 Neue Bestellung eingegangen - {{orderNumber}}',
-      template: 'default'
-    },
-    adminInquiryNotification: {
-      enabled: true,
-      automatic: true,
-      trigger: 'new_inquiry',
-      subject: '📝 Neue Kundenanfrage von {{customerName}}',
-      template: 'default'
-    }
+    verification: { enabled: true, subject: '', trigger: 'user_registration' },
+    welcome: { enabled: true, subject: '', trigger: 'email_verified' },
+    passwordreset: { enabled: true, subject: '', trigger: 'manual' },
+    passwordchanged: { enabled: true, subject: '', trigger: 'manual' },
+    orderconfirmation: { enabled: true, subject: '', trigger: 'manual' },
+    orderrejection: { enabled: true, subject: '', trigger: 'manual' },
+    adminordernotification: { enabled: true, subject: '', trigger: 'manual' },
+    admininquirynotification: { enabled: true, subject: '', trigger: 'manual' }
   });
+  
+  // Trigger-Optionen für Select-Dropdowns (als triggerOptionsMap)
+  const triggerOptionsMap = {
+    verification: [
+      { label: 'Benutzer-Registrierung', value: 'user_registration' },
+      { label: 'Manuell', value: 'manual' }
+    ],
+    welcome: [
+      { label: 'E-Mail verifiziert', value: 'email_verified' },
+      { label: 'Benutzer-Registrierung', value: 'user_registration' },
+      { label: 'Manuell', value: 'manual' }
+    ],
+    passwordreset: [
+      { label: 'Manuell', value: 'manual' }
+    ],
+    passwordchanged: [
+      { label: 'Manuell', value: 'manual' }
+    ],
+    orderconfirmation: [
+      { label: 'Manuell', value: 'manual' }
+    ],
+    orderrejection: [
+      { label: 'Manuell', value: 'manual' }
+    ],
+    adminordernotification: [
+      { label: 'Manuell', value: 'manual' }
+    ],
+    admininquirynotification: [
+      { label: 'Manuell', value: 'manual' }
+    ]
+  };
 
   const [globalEmailSettings, setGlobalEmailSettings] = useState({
     fromName: 'Gluecksmomente Manufaktur',
-    fromEmail: 'info@gluecksmomente-manufaktur.de',
+    fromEmail: 'info.gluecksmomente.manufaktur@gmail.com',
     adminEmail: 'ralle.jacob84@googlemail.com',
     emailEnabled: true,
     defaultLanguage: 'de',
@@ -184,28 +222,42 @@ const AdminEmailConfiguration = () => {
       icon: '🌸'
     },
     { 
-      id: 'password-reset', 
+      id: 'passwordreset', 
       label: 'Passwort zurücksetzen', 
       description: 'Bei Passwort-Reset-Anfrage',
       color: 'warning',
       icon: '🔒'
     },
     { 
-      id: 'order-confirmation', 
+      id: 'passwordchanged', 
+      label: 'Passwort-Änderung bestätigt', 
+      description: 'Nach erfolgreicher Änderung',
+      color: 'info',
+      icon: '✅'
+    },
+    { 
+      id: 'orderconfirmation', 
       label: 'Bestellbestätigung', 
       description: 'Nach abgeschlossener Bestellung',
       color: 'info',
       icon: '📦'
     },
     { 
-      id: 'admin-notification', 
+      id: 'orderrejection', 
+      label: 'Bestellung abgelehnt', 
+      description: 'Wenn Bestellung nicht verarbeitet wird',
+      color: 'error',
+      icon: '❌'
+    },
+    { 
+      id: 'adminordernotification', 
       label: 'Admin-Bestellbenachrichtigung', 
       description: 'Bei neuen Bestellungen',
       color: 'secondary',
       icon: '🚨'
     },
     { 
-      id: 'admin-inquiry-notification', 
+      id: 'admininquirynotification', 
       label: 'Admin-Anfragebenachrichtigung', 
       description: 'Bei neuen Kundenanfragen',
       color: 'warning',
@@ -213,56 +265,40 @@ const AdminEmailConfiguration = () => {
     }
   ];
 
-  const triggerOptions = {
-    verification: [
-      { value: 'user_registration', label: 'Bei Nutzer-Registrierung' },
-      { value: 'manual', label: 'Nur manuell' }
-    ],
-    welcome: [
-      { value: 'email_verified', label: 'Nach E-Mail-Verifizierung' },
-      { value: 'user_registration', label: 'Sofort nach Registrierung' },
-      { value: 'manual', label: 'Nur manuell' }
-    ],
-    passwordReset: [
-      { value: 'password_reset_request', label: 'Bei Passwort-Reset-Anfrage' },
-      { value: 'manual', label: 'Nur manuell' }
-    ],
-    orderConfirmation: [
-      { value: 'order_placed', label: 'Sofort nach Bestellung' },
-      { value: 'order_paid', label: 'Nach Zahlungsbestätigung' },
-      { value: 'manual', label: 'Nur manuell' }
-    ],
-    adminNotification: [
-      { value: 'new_order', label: 'Bei jeder neuen Bestellung' },
-      { value: 'high_value_order', label: 'Nur bei hohen Beträgen (>100€)' },
-      { value: 'manual', label: 'Nur manuell' }
-    ],
-    adminInquiryNotification: [
-      { value: 'new_inquiry', label: 'Bei jeder neuen Anfrage' },
-      { value: 'urgent_inquiry', label: 'Nur bei dringenden Anfragen' },
-      { value: 'manual', label: 'Nur manuell' }
-    ]
+  // Mapping von Email-Typ-ID zu Backend-Route
+  const testEmailRouteMap = {
+    verification: 'verification',
+    welcome: 'welcome',
+    passwordreset: 'password-reset',
+    passwordchanged: 'password-changed',
+    orderconfirmation: 'order-confirmation',
+    orderrejection: 'order-rejection',
+    adminordernotification: 'admin-notification',
+    admininquirynotification: 'admin-inquiry-notification'
   };
 
   // E-Mail testen
   const sendTestEmail = async (emailType, customEmail = null) => {
     setLoading(true);
     
-    const targetEmail = customEmail || globalEmailSettings.adminEmail;
+    const targetEmail = customEmail || globalEmailSettings.adminEmail || '';
     
     console.log('📧 [Frontend] E-Mail-Test gestartet...');
     console.log('  📧 E-Mail-Typ:', emailType);
-    console.log('  🎯 Ziel-E-Mail:', targetEmail);
+    console.log('  🎯 Ziel-E-Mail:', targetEmail || '(wird vom Backend bestimmt)');
     console.log('  ⏰ Zeitpunkt:', new Date().toLocaleString());
     
     try {
       const payload = {};
       if (customEmail) {
         payload.email = customEmail;
+      } else if (targetEmail) {
+        payload.email = targetEmail;
       }
 
+      const routePath = testEmailRouteMap[emailType] || emailType;
       console.log('  📡 Sende Anfrage an Backend...');
-      const response = await api.post(`/invoice/test-email/${emailType}`, payload);
+      const response = await api.post(`/invoice/test-email/${routePath}`, payload);
       
       const newResult = {
         id: Date.now(),
@@ -318,25 +354,31 @@ const AdminEmailConfiguration = () => {
   // Template-Management-Funktionen
   const openTemplateEditor = async (templateType) => {
     try {
-      const response = await api.get(`/admin/email-templates/${templateType}`);
+      const response = await api.get(`/admin-settings/email/templates/${templateType}`);
       if (response.data.success) {
         setSelectedTemplate(templateType);
-        setTemplateContent(response.data.template);
+        setTemplateContent(response.data.template || '');
         setTemplateEditor(true);
       }
     } catch (error) {
-      console.error('Fehler beim Laden des Templates:', error);
-      setSnackbar({
-        open: true,
-        message: 'Fehler beim Laden des Templates',
-        severity: 'error'
-      });
+      if (error.response?.status === 404) {
+        setSelectedTemplate(templateType);
+        setTemplateContent('');
+        setTemplateEditor(true);
+      } else {
+        console.error('Fehler beim Laden des Templates:', error);
+        setSnackbar({
+          open: true,
+          message: 'Fehler beim Laden des Templates',
+          severity: 'error'
+        });
+      }
     }
   };
 
   const saveTemplate = async () => {
     try {
-      const response = await api.post(`/admin/email-templates/${selectedTemplate}`, {
+      const response = await api.post(`/admin-settings/email/templates/${selectedTemplate}`, {
         template: templateContent
       });
       
@@ -359,13 +401,100 @@ const AdminEmailConfiguration = () => {
     }
   };
 
+  const getPreviewStylesByTemplate = (templateType) => {
+    const paletteByType = {
+      verification: { start: '#8B4B61', end: '#5D3242', border: '#E8D5B7', button: '#8B4B61', pageBg: '#FEFDFB' },
+      welcome: { start: '#A8D5B5', end: '#7FB88A', border: '#C8E6D0', button: '#7FB88A', pageBg: '#FEFDFB' },
+      'password-reset': { start: '#E8D5B7', end: '#D4B895', border: '#F5EEDD', button: '#8B4B61', pageBg: '#FEFDFB' },
+      'order-confirmation': { start: '#8B4B61', end: '#5D3242', border: '#E8D5B7', button: '#8B4B61', pageBg: '#FEFDFB' },
+      'admin-notification': { start: '#B17A89', end: '#8B4B61', border: '#E8D5B7', button: '#8B4B61', pageBg: '#FEFDFB' },
+      'admin-inquiry-notification': { start: '#B17A89', end: '#8B4B61', border: '#E8D5B7', button: '#8B4B61', pageBg: '#FEFDFB' }
+    };
+
+    const colors = paletteByType[templateType] || paletteByType.verification;
+
+    return {
+      wrapper: `font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; color: #2C2C2C; line-height: 1.65; background:${colors.pageBg}; padding:16px; border-radius:16px;`,
+      headerCentered: `background:linear-gradient(135deg,${colors.start},${colors.end}); color:white; padding:28px 24px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(93,50,66,0.16);`,
+      header: `background:linear-gradient(135deg,${colors.start},${colors.end}); color:white; padding:26px 24px; border-radius:14px 14px 0 0; box-shadow:0 8px 24px rgba(93,50,66,0.16);`,
+      body: `border:1px solid ${colors.border}; border-top:none; border-radius:0 0 14px 14px; padding:24px; background:white; box-shadow:0 6px 20px rgba(93,50,66,0.08);`,
+      panel: 'background:#F5EEDD; border:1px solid #E8D5B7; border-radius:10px; padding:14px 16px;',
+      button: `display:inline-block; background:linear-gradient(135deg,${colors.button},#5D3242); color:#fff; text-decoration:none; padding:12px 22px; border-radius:999px; font-weight:700; box-shadow:0 6px 16px rgba(139,75,97,0.25);`
+    };
+  };
+
+  const buildTemplatePreview = (rawTemplate, templateType) => {
+    const styles = getPreviewStylesByTemplate(templateType);
+    let html = rawTemplate || '';
+
+    html = html
+      .replace(/\$\{styles\.wrapper\}/g, styles.wrapper)
+      .replace(/\$\{styles\.headerCentered\}/g, styles.headerCentered)
+      .replace(/\$\{styles\.header\}/g, styles.header)
+      .replace(/\$\{styles\.body\}/g, styles.body)
+      .replace(/\$\{styles\.panel\}/g, styles.panel)
+      .replace(/\$\{styles\.button\}/g, styles.button)
+      .replace(/\$\{developmentWarning\}/g, '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:12px 14px;margin:12px 0;color:#7c2d12;"><strong>Hinweis (Vorschau):</strong> Development-Weiterleitungsinfo</div>');
+
+    html = html.replace(/\$\{this\.renderTemplateBadge\('([^']+)'\)\}/g, (_, text) => {
+      return `<span style="display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.35);color:white;font-size:12px;font-weight:700;letter-spacing:0.2px;margin-top:10px;">${text}</span>`;
+    });
+
+    html = html.replace(/\$\{this\.renderTemplateButton\(([^,]+),\s*'([^']+)'\s*,\s*styles\.button\)\}/g, (_, __urlExpr, label) => {
+      return `<a href="#" style="${styles.button}">${label}</a>`;
+    });
+
+    html = html.replace(/\$\{this\.renderTemplateFooter\(\)\}/g, `
+      <div style="margin-top:22px; padding-top:14px; border-top:1px solid #E8D5B7; text-align:center;">
+        <p style="margin:0; font-size:12px; color:#5D3242;">Mit Liebe gestaltet von der Gluecksmomente Manufaktur</p>
+      </div>
+    `);
+
+    html = html.replace(/\$\{this\.renderTemplateInfoBox\('([^']+)',\s*\[([\s\S]*?)\],\s*'([^']+)'\)\}/g, (_, title, rawItems) => {
+      const items = [...rawItems.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+      const listHtml = items.map((item) => `<li>${item}</li>`).join('');
+      return `
+        <div style="background:#F5EEDD; border:1px solid #E8D5B7; border-radius:10px; padding:14px 16px; margin:16px 0;">
+          <p style="margin:0 0 6px 0; font-weight:700; color:#5D3242;">${title}</p>
+          <ul style="margin:0; padding-left:18px; color:#5D3242;">${listHtml}</ul>
+        </div>
+      `;
+    });
+
+    html = html.replace(/\$\{bestellung\.artikel\.map\([\s\S]*?\.join\('\'\)\}/g, `
+      <tr>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6;">Beispielartikel A</td>
+        <td style="text-align:center; padding:10px; border-bottom:1px solid #f3f4f6;">2</td>
+        <td style="text-align:right; padding:10px; border-bottom:1px solid #f3f4f6;">39,90 EUR</td>
+      </tr>
+      <tr>
+        <td style="padding:10px; border-bottom:1px solid #f3f4f6;">Beispielartikel B</td>
+        <td style="text-align:center; padding:10px; border-bottom:1px solid #f3f4f6;">1</td>
+        <td style="text-align:right; padding:10px; border-bottom:1px solid #f3f4f6;">19,90 EUR</td>
+      </tr>
+    `);
+
+    html = html
+      .replace(/\$\{userName \|\| 'Kunde'\}/g, 'Max Mustermann')
+      .replace(/\$\{userName \|\| 'und herzlich willkommen'\}/g, 'Max Mustermann')
+      .replace(/\$\{userName\}/g, 'Max Mustermann')
+      .replace(/\$\{resetUrl\}/g, 'https://example.com/reset?token=demo')
+      .replace(/\$\{verificationUrl\}/g, 'https://example.com/verify-email?token=demo')
+      .replace(/\$\{customerName\}/g, 'Max Mustermann')
+      .replace(/\$\{kundenname \|\| 'Kunde'\}/g, 'Max Mustermann')
+      .replace(/\$\{to\}/g, 'max@example.com')
+      .replace(/\$\{[^}]+\}/g, '');
+
+    return html;
+  };
+
   const previewTemplate = () => {
-    setTemplatePreview(templateContent);
+    setTemplatePreview(buildTemplatePreview(templateContent, selectedTemplate));
   };
 
   const sendTestEmailWithCurrentTemplate = async (emailType) => {
     try {
-      const response = await api.post(`/admin/test-email-with-template/${emailType}`, {
+      const response = await api.post(`/admin-settings/email/test-email-with-template/${emailType}`, {
         template: templateContent || templates[emailType],
         email: globalEmailSettings.adminEmail
       });
@@ -400,7 +529,7 @@ const AdminEmailConfiguration = () => {
   const saveEmailConfig = async () => {
     setSaveLoading(true);
     try {
-      const response = await api.post('/admin/email-config', { 
+      const response = await api.post('/admin-settings/email/config', { 
         emailConfigs, 
         globalEmailSettings 
       });
@@ -467,12 +596,13 @@ const AdminEmailConfiguration = () => {
               <TextField
                 fullWidth
                 label="Admin E-Mail"
-                value={globalEmailSettings.adminEmail}
+                value={globalEmailSettings.adminEmail || ''}
                 onChange={(e) => setGlobalEmailSettings(prev => ({
                   ...prev,
                   adminEmail: e.target.value
                 }))}
                 margin="normal"
+                helperText="Empfänger für alle Admin-Benachrichtigungen"
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -505,93 +635,6 @@ const AdminEmailConfiguration = () => {
             </Grid>
           </Grid>
 
-          {/* Admin-Benachrichtigung-Einstellungen */}
-          <Divider sx={{ my: 3 }} />
-          <Box display="flex" alignItems="center" mb={2}>
-            <NotificationIcon sx={{ mr: 2, color: 'warning.main' }} />
-            <Typography variant="h6">Admin-Benachrichtigungen</Typography>
-          </Box>
-          
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Admin E-Mail-Adresse"
-                value={globalEmailSettings.adminEmail}
-                onChange={(e) => setGlobalEmailSettings(prev => ({
-                  ...prev,
-                  adminEmail: e.target.value
-                }))}
-                margin="normal"
-                helperText="E-Mail-Adresse für alle Admin-Benachrichtigungen"
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                type="number"
-                label="Schwellenwert für hohe Beträge (€)"
-                value={globalEmailSettings.notifications?.highValueThreshold || 100}
-                onChange={(e) => setGlobalEmailSettings(prev => ({
-                  ...prev,
-                  notifications: {
-                    ...prev.notifications,
-                    highValueThreshold: parseFloat(e.target.value) || 100
-                  }
-                }))}
-                margin="normal"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Box display="flex" flexWrap="wrap" gap={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={globalEmailSettings.notifications?.newOrders || false}
-                      onChange={(e) => setGlobalEmailSettings(prev => ({
-                        ...prev,
-                        notifications: {
-                          ...prev.notifications,
-                          newOrders: e.target.checked
-                        }
-                      }))}
-                    />
-                  }
-                  label="📦 Neue Bestellungen"
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={globalEmailSettings.notifications?.newInquiries || false}
-                      onChange={(e) => setGlobalEmailSettings(prev => ({
-                        ...prev,
-                        notifications: {
-                          ...prev.notifications,
-                          newInquiries: e.target.checked
-                        }
-                      }))}
-                    />
-                  }
-                  label="📝 Neue Anfragen"
-                />
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={globalEmailSettings.notifications?.highValueOrders || false}
-                      onChange={(e) => setGlobalEmailSettings(prev => ({
-                        ...prev,
-                        notifications: {
-                          ...prev.notifications,
-                          highValueOrders: e.target.checked
-                        }
-                      }))}
-                    />
-                  }
-                  label="💰 Hohe Beträge"
-                />
-              </Box>
-            </Grid>
-          </Grid>
         </Paper>
       </Grid>
 
@@ -612,13 +655,12 @@ const AdminEmailConfiguration = () => {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={emailConfigs[emailType.id.replace('-', '')]?.enabled || false}
+                        checked={emailConfigs[emailType.id]?.enabled || false}
                         onChange={(e) => {
-                          const configKey = emailType.id.replace('-', '');
                           setEmailConfigs(prev => ({
                             ...prev,
-                            [configKey]: {
-                              ...prev[configKey],
+                            [emailType.id]: {
+                              ...prev[emailType.id],
                               enabled: e.target.checked
                             }
                           }));
@@ -637,13 +679,12 @@ const AdminEmailConfiguration = () => {
                     <TextField
                       fullWidth
                       label="Betreff"
-                      value={emailConfigs[emailType.id.replace('-', '')]?.subject || ''}
+                      value={emailConfigs[emailType.id]?.subject || ''}
                       onChange={(e) => {
-                        const configKey = emailType.id.replace('-', '');
                         setEmailConfigs(prev => ({
                           ...prev,
-                          [configKey]: {
-                            ...prev[configKey],
+                          [emailType.id]: {
+                            ...prev[emailType.id],
                             subject: e.target.value
                           }
                         }));
@@ -655,21 +696,20 @@ const AdminEmailConfiguration = () => {
                     <FormControl fullWidth margin="normal">
                       <InputLabel>Auslöser</InputLabel>
                       <Select
-                        value={emailConfigs[emailType.id.replace('-', '')]?.trigger || 
-                               (triggerOptions[emailType.id.replace('-', '')] || [])[0]?.value || ''}
+                        value={emailConfigs[emailType.id]?.trigger || 
+                               (triggerOptionsMap[emailType.id] || [])[0]?.value || ''}
                         label="Auslöser"
                         onChange={(e) => {
-                          const configKey = emailType.id.replace('-', '');
                           setEmailConfigs(prev => ({
                             ...prev,
-                            [configKey]: {
-                              ...prev[configKey],
+                            [emailType.id]: {
+                              ...prev[emailType.id],
                               trigger: e.target.value
                             }
                           }));
                         }}
                       >
-                        {(triggerOptions[emailType.id.replace('-', '')] || []).map((option) => (
+                        {(triggerOptionsMap[emailType.id] || []).map((option) => (
                           <MenuItem key={option.value} value={option.value}>
                             {option.label}
                           </MenuItem>
@@ -816,6 +856,17 @@ const AdminEmailConfiguration = () => {
     </Grid>
   );
 
+  const openTemplatePreviewDirect = async (templateType) => {
+    try {
+      const response = await api.get(`/admin-settings/email/templates/${templateType}`);
+      if (response.data.success) {
+        setTemplatePreview(buildTemplatePreview(response.data.template, templateType));
+      }
+    } catch (error) {
+      setSnackbar({ open: true, message: 'Vorschau konnte nicht geladen werden', severity: 'error' });
+    }
+  };
+
   // Template-Management Tab
   const renderTemplateManagementTab = () => (
     <Grid container spacing={3}>
@@ -825,7 +876,7 @@ const AdminEmailConfiguration = () => {
             📝 E-Mail-Template-Verwaltung
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Bearbeiten Sie die HTML-Templates für alle E-Mail-Typen. Änderungen werden sofort für Tests und Live-E-Mails verwendet.
+            Klick auf <strong>Bearbeiten</strong> öffnet den HTML-Editor. <strong>Vorschau</strong> zeigt die fertige Mail. <strong>Testen</strong> sendet eine E-Mail an Ihre Admin-Adresse.
           </Typography>
 
           <Grid container spacing={3}>
@@ -833,15 +884,14 @@ const AdminEmailConfiguration = () => {
               <Grid item xs={12} md={6} lg={4} key={emailType.id}>
                 <Card variant="outlined">
                   <CardContent>
-                    <Box display="flex" alignItems="center" gap={1} mb={2}>
-                      <Typography variant="h6">
-                        {emailType.icon} {emailType.label}
-                      </Typography>
+                    <Box display="flex" alignItems="center" gap={1} mb={1}>
+                      <Typography sx={{ fontSize: '1.4rem' }}>{emailType.icon}</Typography>
+                      <Typography variant="subtitle1" fontWeight={600}>{emailType.label}</Typography>
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                       {emailType.description}
                     </Typography>
-                    
+
                     <Box display="flex" gap={1} flexWrap="wrap">
                       <Button
                         startIcon={<EditIcon />}
@@ -855,7 +905,7 @@ const AdminEmailConfiguration = () => {
                         startIcon={<PreviewIcon />}
                         variant="outlined"
                         size="small"
-                        onClick={() => openTemplateEditor(emailType.id)}
+                        onClick={() => openTemplatePreviewDirect(emailType.id)}
                       >
                         Vorschau
                       </Button>
@@ -864,7 +914,8 @@ const AdminEmailConfiguration = () => {
                         variant="contained"
                         size="small"
                         color="primary"
-                        onClick={() => sendTestEmailWithCurrentTemplate(emailType.id)}
+                        onClick={() => sendTestEmail(emailType.id)}
+                        disabled={loading}
                       >
                         Testen
                       </Button>
@@ -873,59 +924,6 @@ const AdminEmailConfiguration = () => {
                 </Card>
               </Grid>
             ))}
-          </Grid>
-        </Paper>
-      </Grid>
-
-      {/* Template-Übersicht */}
-      <Grid item xs={12}>
-        <Paper elevation={2} sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            🔍 Template-Übersicht
-          </Typography>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Diese Templates werden für alle E-Mails verwendet. Änderungen wirken sich sofort auf Test- und Live-E-Mails aus.
-          </Alert>
-          
-          <Grid container spacing={2}>
-            {templates && Object.keys(templates).length > 0 ? (
-              Object.keys(templates).map((templateKey) => (
-                <Grid item xs={12} md={6} key={templateKey}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      {emailTypes.find(t => t.id === templateKey)?.label || templateKey}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Letzte Änderung: {new Date().toLocaleDateString()}
-                    </Typography>
-                    <Box display="flex" gap={1}>
-                      <Button
-                        startIcon={<CodeIcon />}
-                        variant="outlined"
-                        size="small"
-                        onClick={() => openTemplateEditor(templateKey)}
-                      >
-                        Code ansehen
-                      </Button>
-                      <Button
-                        startIcon={<FileCopyIcon />}
-                        variant="outlined"
-                        size="small"
-                        onClick={() => navigator.clipboard.writeText(templates[templateKey] || '')}
-                      >
-                        Kopieren
-                      </Button>
-                    </Box>
-                  </Paper>
-                </Grid>
-              ))
-            ) : (
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  Keine Templates gefunden. Templates werden geladen...
-                </Alert>
-              </Grid>
-            )}
           </Grid>
         </Paper>
       </Grid>
@@ -971,121 +969,101 @@ const AdminEmailConfiguration = () => {
       {currentTab === 1 && renderTestingTab()}
       {currentTab === 2 && renderTemplateManagementTab()}
 
-      {/* Template-Editor Dialog */}
+      {/* Template-Editor Dialog – kombiniert Code + Vorschau als Tabs */}
       <Dialog
         open={templateEditor}
-        onClose={() => setTemplateEditor(false)}
+        onClose={() => { setTemplateEditor(false); setEditorTab(0); }}
         maxWidth="lg"
         fullWidth
-        PaperProps={{
-          sx: { height: '90vh' }
-        }}
+        PaperProps={{ sx: { height: '92vh' } }}
       >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <CodeIcon />
-            Template bearbeiten: {emailTypes.find(t => t.id === selectedTemplate)?.label}
-          </Box>
-        </DialogTitle>
-        <DialogContent sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ mb: 2 }}>
-            <Alert severity="info">
-              Verfügbare Variablen: $&#123;userName&#125;, $&#123;userEmail&#125;, $&#123;verificationUrl&#125;, $&#123;resetUrl&#125;, $&#123;orderData&#125;, etc.
-            </Alert>
-          </Box>
-          
-          <Box display="flex" gap={2} sx={{ mb: 2 }}>
-            <Button
-              startIcon={<PreviewIcon />}
-              variant="outlined"
-              onClick={previewTemplate}
-            >
-              Vorschau
-            </Button>
+        <DialogTitle sx={{ pb: 0 }}>
+          <Box display="flex" alignItems="center" justifyContent="space-between">
+            <Box display="flex" alignItems="center" gap={1}>
+              <CodeIcon />
+              {emailTypes.find(t => t.id === selectedTemplate)?.icon}{' '}
+              {emailTypes.find(t => t.id === selectedTemplate)?.label}
+            </Box>
             <Button
               startIcon={<SendIcon />}
-              variant="outlined"
-              color="primary"
-              onClick={() => sendTestEmailWithCurrentTemplate(selectedTemplate)}
+              variant="contained"
+              size="small"
+              onClick={() => sendTestEmail(selectedTemplate)}
+              disabled={loading}
             >
-              Test senden
-            </Button>
-            <Button
-              startIcon={<RefreshIcon />}
-              variant="outlined"
-              onClick={() => loadTemplates()}
-            >
-              Neu laden
+              Test-Mail senden
             </Button>
           </Box>
+          <Tabs
+            value={editorTab}
+            onChange={(_, v) => {
+              setEditorTab(v);
+              if (v === 1) setTemplatePreview(buildTemplatePreview(templateContent, selectedTemplate));
+            }}
+            sx={{ mt: 1 }}
+          >
+            <Tab label="HTML-Code" icon={<CodeIcon />} iconPosition="start" />
+            <Tab label="Vorschau" icon={<PreviewIcon />} iconPosition="start" />
+          </Tabs>
+        </DialogTitle>
 
-          <TextField
-            fullWidth
-            multiline
-            label="HTML-Template"
-            value={templateContent}
-            onChange={(e) => setTemplateContent(e.target.value)}
-            sx={{ 
-              flex: 1,
-              '& .MuiInputBase-root': {
-                height: '100%',
-                alignItems: 'stretch'
-              },
-              '& textarea': {
-                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
-                fontSize: '14px',
-                lineHeight: '1.5'
-              }
-            }}
-            InputProps={{
-              style: { height: '100%' }
-            }}
-          />
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', pt: 2 }}>
+          {editorTab === 0 && (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Verfügbare Variablen: $&#123;userName&#125;, $&#123;verificationUrl&#125;, $&#123;resetUrl&#125;, $&#123;loginUrl&#125; usw.
+              </Alert>
+              <TextField
+                fullWidth
+                multiline
+                label="HTML-Template"
+                value={templateContent}
+                onChange={(e) => setTemplateContent(e.target.value)}
+                sx={{
+                  flex: 1,
+                  '& .MuiInputBase-root': { height: '100%', alignItems: 'stretch' },
+                  '& textarea': { fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace', fontSize: '13px', lineHeight: '1.5' }
+                }}
+                InputProps={{ style: { height: '100%' } }}
+              />
+            </>
+          )}
+          {editorTab === 1 && (
+            <Box
+              sx={{ flex: 1, overflow: 'auto', border: '1px solid #E8D5B7', borderRadius: 2, p: 1, background: '#FEFDFB' }}
+              dangerouslySetInnerHTML={{ __html: templatePreview }}
+            />
+          )}
         </DialogContent>
+
         <DialogActions>
-          <Button onClick={() => setTemplateEditor(false)}>
-            Abbrechen
-          </Button>
-          <Button onClick={saveTemplate} variant="contained" startIcon={<SaveIcon />}>
-            Speichern
-          </Button>
+          <Button onClick={() => { setTemplateEditor(false); setEditorTab(0); }}>Abbrechen</Button>
+          <Button onClick={saveTemplate} variant="contained" startIcon={<SaveIcon />}>Speichern</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Template-Vorschau Dialog */}
+      {/* Standalone-Vorschau Dialog (vom Vorschau-Button in den Karten) */}
       <Dialog
-        open={Boolean(templatePreview)}
+        open={Boolean(templatePreview) && !templateEditor}
         onClose={() => setTemplatePreview('')}
         maxWidth="md"
         fullWidth
       >
         <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <PreviewIcon />
-            Template-Vorschau
-          </Box>
+          <Box display="flex" alignItems="center" gap={1}><PreviewIcon />Template-Vorschau</Box>
         </DialogTitle>
         <DialogContent>
           <Box
-            sx={{
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              p: 2,
-              backgroundColor: '#f9f9f9',
-              maxHeight: '70vh',
-              overflow: 'auto'
-            }}
+            sx={{ border: '1px solid #E8D5B7', borderRadius: 2, p: 1, background: '#FEFDFB', maxHeight: '70vh', overflow: 'auto' }}
             dangerouslySetInnerHTML={{ __html: templatePreview }}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setTemplatePreview('')}>
-            Schließen
-          </Button>
+          <Button onClick={() => setTemplatePreview('')}>Schließen</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Legacy Template-Editor Dialog */}
+      {/* Legacy Template-Editor Dialog – kann entfernt bleiben */}
       <Dialog
         open={editDialog.open}
         onClose={() => setEditDialog({ open: false, emailType: null, template: '' })}

@@ -11,6 +11,7 @@ const kundenRoutes = require('./kunden');
 const usersRoutes = require('./users');
 const rohstoffeRoutes = require('./rohstoffe');
 const documentsRoutes = require('./documents');
+const serviceLeistungenRoutes = require('./serviceLeistungen');
 
 const router = express.Router();
 
@@ -27,9 +28,17 @@ router.use('/kunden', kundenRoutes);
 router.use('/users', usersRoutes);
 router.use('/rohstoffe', rohstoffeRoutes);
 router.use('/documents', documentsRoutes);
+router.use('/service-leistungen', serviceLeistungenRoutes);
 
 // Legacy-Kompatibilität für E-Mail-Konfiguration
-router.use('/email-config', emailRoutes); // Direkte Weiterleitung 
-router.use('/email-templates', emailRoutes);
+router.use('/email-config', (req, _res, next) => {
+	req.url = req.url === '/' ? '/config' : `/config${req.url}`;
+	next();
+}, emailRoutes);
+
+router.use('/email-templates', (req, _res, next) => {
+	req.url = req.url === '/' ? '/templates' : `/templates${req.url}`;
+	next();
+}, emailRoutes);
 
 module.exports = router;

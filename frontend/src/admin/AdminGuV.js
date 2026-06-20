@@ -871,29 +871,36 @@ const AdminGuV = () => {
 				</Box>
 
 				<Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-					<TableContainer sx={{ maxHeight: 620 }}>
-						<Table stickyHeader size="small">
+					<TableContainer sx={{ maxHeight: 620, overflowX: 'hidden' }}>
+						<Table stickyHeader size="small" sx={{ width: '100%', tableLayout: { xs: 'fixed', sm: 'auto' } }}>
 							<TableHead>
 								<TableRow>
 									<TableCell
 										sx={{
-											position: 'sticky',
-											left: 0,
-											zIndex: 4,
+											position: { sm: 'sticky' },
+											left: { sm: 0 },
+											zIndex: { sm: 4 },
 											backgroundColor: 'background.paper',
-											minWidth: 170
+											minWidth: { xs: 0, sm: 170 },
+											width: { xs: '48%', sm: 'auto' },
+											px: { xs: 1, sm: 2 }
 										}}
 									>
-										Beleg
+										<Typography variant="body2" fontWeight={700} sx={{ display: { xs: 'block', sm: 'none' } }}>
+											Beschreibung
+										</Typography>
+										<Typography variant="body2" fontWeight={700} sx={{ display: { xs: 'none', sm: 'block' } }}>
+											Beleg
+										</Typography>
 									</TableCell>
-									<TableCell sx={{ minWidth: 110 }}>Datum</TableCell>
+									<TableCell sx={{ minWidth: 110, display: { xs: 'none', sm: 'table-cell' } }}>Datum</TableCell>
 									<TableCell sx={{ minWidth: 130, display: { xs: 'none', sm: 'table-cell' } }}>
 										Typ
 									</TableCell>
 									<TableCell sx={{ minWidth: 280, display: { xs: 'none', sm: 'table-cell' } }}>
 										Beschreibung
 									</TableCell>
-									<TableCell align="right" sx={{ minWidth: 120 }}>
+									<TableCell align="right" sx={{ minWidth: { xs: 88, sm: 120 }, width: { xs: '24%', sm: 'auto' }, px: { xs: 1, sm: 2 } }}>
 										Betrag
 									</TableCell>
 									<TableCell sx={{ minWidth: 140, display: { xs: 'none', sm: 'table-cell' } }}>
@@ -905,11 +912,13 @@ const AdminGuV = () => {
 									<TableCell
 										align="right"
 										sx={{
-											position: 'sticky',
-											right: 0,
-											zIndex: 4,
+											position: { sm: 'sticky' },
+											right: { sm: 0 },
+											zIndex: { sm: 4 },
 											backgroundColor: 'background.paper',
-											minWidth: 150
+											minWidth: { xs: 92, sm: 150 },
+											width: { xs: '28%', sm: 'auto' },
+											px: { xs: 1, sm: 2 }
 										}}
 									>
 										Aktionen
@@ -943,22 +952,28 @@ const AdminGuV = () => {
 											<TableRow key={entry._id} hover>
 												<TableCell
 													sx={{
-														position: 'sticky',
-														left: 0,
-														zIndex: 2,
-														backgroundColor: 'background.paper'
+														position: { sm: 'sticky' },
+														left: { sm: 0 },
+														zIndex: { sm: 2 },
+														backgroundColor: 'background.paper',
+														px: { xs: 1, sm: 2 }
 													}}
 												>
 													<Stack spacing={0.4}>
-														<Typography variant="body2" fontWeight={700}>
-															{shortId(entry._id)}
+														<Typography variant="body2" fontWeight={700} noWrap sx={{ fontSize: { xs: '0.78rem', sm: '0.875rem' } }}>
+															{entry.beschreibung || 'Keine Beschreibung'}
 														</Typography>
-														<Typography variant="caption" color="text.secondary" noWrap>
-															{entry.rechnungsteller || 'Kein Aussteller'}
+														<Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', sm: 'none' } }}>
+															{formatDate(entry.datum)}
+														</Typography>
+														<Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }} noWrap>
+															{shortId(entry._id)}
 														</Typography>
 													</Stack>
 												</TableCell>
-												<TableCell>{formatDate(entry.datum)}</TableCell>
+												<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
+													{formatDate(entry.datum)}
+												</TableCell>
 												<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
 													<Chip
 														size="small"
@@ -971,7 +986,7 @@ const AdminGuV = () => {
 														{entry.beschreibung}
 													</Typography>
 												</TableCell>
-												<TableCell align="right" sx={{ fontWeight: 700 }}>
+												<TableCell align="right" sx={{ fontWeight: 700, px: { xs: 1, sm: 2 } }}>
 													{formatCurrency(entry.betrag)}
 												</TableCell>
 												<TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
@@ -987,26 +1002,28 @@ const AdminGuV = () => {
 												<TableCell
 													align="right"
 													sx={{
-														position: 'sticky',
-														right: 0,
-														zIndex: 2,
-														backgroundColor: 'background.paper'
+														position: { sm: 'sticky' },
+														right: { sm: 0 },
+														zIndex: { sm: 2 },
+														backgroundColor: 'background.paper',
+														px: { xs: 0.25, sm: 2 }
 													}}
 												>
-													<Stack direction="row" spacing={0.4} justifyContent="flex-end">
+													<Stack direction="row" spacing={{ xs: 0, sm: 0.4 }} justifyContent="flex-end">
 														<Tooltip title="Beleg anzeigen">
 															<span>
 																<IconButton
 																	size="small"
 																	onClick={() => handleOpenReceiptViewer(entry)}
 																	disabled={!entry.image_url && !entry.dokument_url}
+																	sx={{ p: { xs: 0.35, sm: 0.5 } }}
 																>
 																	<RemoveRedEyeIcon fontSize="small" />
 																</IconButton>
 															</span>
 														</Tooltip>
 														<Tooltip title="Bearbeiten">
-															<IconButton size="small" onClick={() => handleOpenDialog(entry)}>
+															<IconButton size="small" onClick={() => handleOpenDialog(entry)} sx={{ p: { xs: 0.35, sm: 0.5 } }}>
 																<EditIcon fontSize="small" />
 															</IconButton>
 														</Tooltip>
@@ -1017,6 +1034,7 @@ const AdminGuV = () => {
 																	color="error"
 																	onClick={() => handleDelete(entry._id)}
 																	disabled={loading.delete}
+																	sx={{ p: { xs: 0.35, sm: 0.5 } }}
 																>
 																	<DeleteIcon fontSize="small" />
 																</IconButton>
@@ -1033,6 +1051,36 @@ const AdminGuV = () => {
 
 					<Divider />
 
+					<Box
+						sx={{
+							display: { xs: 'flex', sm: 'none' },
+							justifyContent: 'flex-end',
+							px: 1,
+							pt: 1,
+							pb: 0.5
+						}}
+					>
+						<TextField
+							select
+							size="small"
+							label="Pro Seite"
+							value={pagination.rowsPerPage}
+							onChange={(event) => {
+								const nextSize = Number(event.target.value);
+								setPagination((prev) => ({
+									...prev,
+									rowsPerPage: nextSize,
+									page: 0
+								}));
+							}}
+							sx={{ width: 132 }}
+						>
+							<MenuItem value={20}>20</MenuItem>
+							<MenuItem value={50}>50</MenuItem>
+							<MenuItem value={100}>100</MenuItem>
+						</TextField>
+					</Box>
+
 					<TablePagination
 						component="div"
 						count={pagination.total}
@@ -1047,8 +1095,32 @@ const AdminGuV = () => {
 								page: 0
 							}));
 						}}
-						rowsPerPageOptions={[20, 50, 100, 200]}
+						rowsPerPageOptions={[20, 50, 100]}
 						labelRowsPerPage="Rechnungen pro Seite"
+						sx={{
+							overflowX: 'hidden',
+							'.MuiTablePagination-toolbar': {
+								px: { xs: 1, sm: 2 },
+								minHeight: { xs: 44, sm: 52 },
+								flexWrap: { xs: 'wrap', sm: 'nowrap' },
+								justifyContent: { xs: 'space-between', sm: 'flex-end' },
+								rowGap: { xs: 0.5, sm: 0 }
+							},
+							'.MuiTablePagination-selectLabel, .MuiTablePagination-select': {
+								display: { xs: 'none', sm: 'block' }
+							},
+							'.MuiTablePagination-input': {
+								display: { xs: 'none', sm: 'inline-flex' }
+							},
+							'.MuiTablePagination-displayedRows': {
+								mx: { xs: 0.5, sm: 2 },
+								fontSize: { xs: '0.75rem', sm: '0.875rem' },
+								whiteSpace: 'nowrap'
+							},
+							'.MuiTablePagination-actions': {
+								ml: { xs: 0, sm: 2 }
+							}
+						}}
 					/>
 				</Paper>
 			</Stack>

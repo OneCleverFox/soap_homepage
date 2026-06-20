@@ -1,5 +1,7 @@
 const express = require('express');
-const templateExtractor = require('../../services/TemplateExtractor');
+const TemplateExtractor = require('../../services/TemplateExtractor');
+
+const templateExtractor = new TemplateExtractor();
 
 const router = express.Router();
 
@@ -55,7 +57,7 @@ router.get('/config', async (req, res) => {
 
     const globalSettings = {
       fromName: 'Gluecksmomente Manufaktur',
-      fromEmail: process.env.EMAIL_FROM || 'info@gluecksmomente-manufaktur.de',
+      fromEmail: process.env.EMAIL_FROM || 'info.gluecksmomente.manufaktur@gmail.com',
       adminEmail: process.env.ADMIN_EMAIL || 'ralle.jacob84@googlemail.com',
       emailEnabled: true,
       defaultLanguage: 'de',
@@ -161,7 +163,7 @@ router.get('/', async (req, res) => {
 
     const globalSettings = {
       fromName: 'Gluecksmomente Manufaktur',
-      fromEmail: process.env.EMAIL_FROM || 'info@gluecksmomente-manufaktur.de',
+      fromEmail: process.env.EMAIL_FROM || 'info.gluecksmomente.manufaktur@gmail.com',
       adminEmail: process.env.ADMIN_EMAIL || 'ralle.jacob84@googlemail.com',
       emailEnabled: true,
       defaultLanguage: 'de',
@@ -226,7 +228,9 @@ router.get('/templates', async (req, res) => {
       'verification',
       'welcome', 
       'password-reset',
-      'order-confirmation'
+      'order-confirmation',
+      'admin-notification',
+      'admin-inquiry-notification'
     ];
 
     const allTemplates = await templateExtractor.extractTemplates();
@@ -259,7 +263,9 @@ router.get('/templates/:type', async (req, res) => {
       'verification': 'sendVerificationEmail',
       'welcome': 'sendWelcomeEmail', 
       'password-reset': 'sendPasswordResetEmail',
-      'order-confirmation': 'sendOrderConfirmation'
+      'order-confirmation': 'sendOrderConfirmation',
+      'admin-notification': 'sendAdminOrderNotification',
+      'admin-inquiry-notification': 'sendAdminInquiryNotification'
     };
 
     const methodName = methodMapping[type];
@@ -307,7 +313,9 @@ router.post('/templates/:type', async (req, res) => {
       'verification': 'sendVerificationEmail',
       'welcome': 'sendWelcomeEmail',
       'password-reset': 'sendPasswordResetEmail', 
-      'order-confirmation': 'sendOrderConfirmation'
+      'order-confirmation': 'sendOrderConfirmation',
+      'admin-notification': 'sendAdminOrderNotification',
+      'admin-inquiry-notification': 'sendAdminInquiryNotification'
     };
 
     const methodName = methodMapping[type];
@@ -369,7 +377,7 @@ async function sendTestEmailWithCustomTemplate(type, template, email, testData) 
   console.log('📧 [Admin] Test-E-Mail mit Custom Template:', { type, email });
   
   try {
-    const emailServiceInstance = new (require('../../services/emailService'))();
+    const emailServiceInstance = require('../../services/emailService');
     
     // Template-Variablen ersetzen
     let processedTemplate = template;
@@ -378,14 +386,18 @@ async function sendTestEmailWithCustomTemplate(type, template, email, testData) 
       processedTemplate = processedTemplate.replace(regex, testData[key]);
     });
 
-    const result = await emailServiceInstance.resend.emails.send({
-      from: 'Glücksmomente Manufaktur <info@gluecksmomente-manufaktur.de>',
+    const result = await emailServiceInstance.sendWithResendFallback({
+      from: emailServiceInstance.getSenderAddress(),
       to: email,
       subject: `[TEST] ${getEmailSubject(type)}`,
       html: processedTemplate
     });
 
-    return { success: true, messageId: result.data?.id };
+    if (result?.error) {
+      return { success: false, error: result.error.message || 'Versand fehlgeschlagen' };
+    }
+
+    return { success: true, messageId: result.data?.id || result.id };
   } catch (error) {
     console.error('❌ Test-E-Mail Fehler:', error);
     return { success: false, error: error.message };
@@ -397,7 +409,9 @@ function getEmailSubject(type) {
     'verification': 'E-Mail bestätigen - Glücksmomente Manufaktur',
     'welcome': 'Willkommen bei Glücksmomente Manufaktur',
     'password-reset': 'Passwort zurücksetzen - Glücksmomente Manufaktur',
-    'order-confirmation': 'Bestellbestätigung - Glücksmomente Manufaktur'
+    'order-confirmation': 'Bestellbestätigung - Glücksmomente Manufaktur',
+    'admin-notification': 'Neue Bestellung eingegangen',
+    'admin-inquiry-notification': 'Neue Kundenanfrage'
   };
   return subjects[type] || 'Test E-Mail';
 }
@@ -424,6 +438,20 @@ function generateTestData(type) {
         ...baseData,
         orderNumber: 'TEST-' + Date.now(),
         orderData: { total: 29.99, items: ['Test Seife'] }
+      };
+    case 'admin-notification':
+      return {
+        ...baseData,
+        customerName: 'Max Mustermann',
+        orderNumber: 'TEST-' + Date.now(),
+        totalAmount: '29,99'
+      };
+    case 'admin-inquiry-notification':
+      return {
+        ...baseData,
+        customerName: 'Erika Beispiel',
+        customerPhone: '0123456789',
+        inquiryDate: new Date().toLocaleDateString('de-DE')
       };
     default:
       return baseData;

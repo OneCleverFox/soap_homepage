@@ -1157,15 +1157,16 @@ const resetPassword = async (req, res) => {
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     
-    // Account aktivieren falls noch nicht verifiziert
-    if (user.status === 'unverified') {
-      user.status = 'active';
-      user.emailVerified = true;
-    }
-
     await user.save();
 
     console.log('✅ Passwort erfolgreich zurückgesetzt für:', user.email);
+
+    // Sicherheitsbenachrichtigung nach erfolgreicher Passwortänderung
+    try {
+      await emailService.sendPasswordResetSuccessEmail(user.email, user.firstName || user.username);
+    } catch (notifyError) {
+      console.error('⚠️ Passwort-Änderungsbenachrichtigung konnte nicht gesendet werden:', notifyError.message);
+    }
 
     res.status(200).json({
       success: true,

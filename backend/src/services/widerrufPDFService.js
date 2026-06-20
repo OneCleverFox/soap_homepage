@@ -19,7 +19,7 @@ class WiderrufPDFService {
       .filter(Boolean)
       .join(', ');
 
-    const shopEmail = contact.email || 'info@gluecksmomente-manufaktur.de';
+    const shopEmail = contact.email || 'info.gluecksmomente.manufaktur@gmail.com';
     const shopWebsite = contact.website || 'www.gluecksmomente-manufaktur.de';
     const shopPhone = contact.phone || '';
 

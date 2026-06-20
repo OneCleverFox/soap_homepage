@@ -62,7 +62,7 @@ class InvoiceService {
 
       const invoices = await Invoice.find(filter)
         .populate('template', 'name')
-        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber order notes.internal')
+        .select('invoiceNumber dates.invoiceDate dates.dueDate status amounts.total payment customer.customerData template sequenceNumber order notes.internal emailSent')
         .sort({ 'dates.invoiceDate': -1 })
         .limit(limit)
         .skip(skip);
@@ -427,6 +427,7 @@ class InvoiceService {
         customerData,
         items,
         shippingCost = 0,
+        includeVat,
         paymentMethod,
         deliveryDate,
         notes,
@@ -516,6 +517,7 @@ class InvoiceService {
 
         processedItems.push({
           productId: item.productId || null,
+          serviceLeistungId: item.serviceLeistungId || null,
           productData,
           quantity: item.quantity,
           unitPrice: parseFloat(item.unitPrice),
@@ -537,7 +539,8 @@ class InvoiceService {
       // Beträge berechnen
       const subtotal = processedItems.reduce((sum, item) => sum + item.total, 0);
       const shippingCostNum = parseFloat(shippingCost) || 0;
-      const vatAmount = isSmallBusiness ? 0 : (subtotal + shippingCostNum) * 0.19;
+      const shouldApplyVat = !isSmallBusiness && Boolean(includeVat);
+      const vatAmount = shouldApplyVat ? (subtotal + shippingCostNum) * 0.19 : 0;
       const total = subtotal + shippingCostNum + vatAmount;
       
       // Fälligkeitsdatum berechnen (30 Tage nach Rechnungsdatum)
@@ -555,7 +558,8 @@ class InvoiceService {
           subtotal: subtotal,
           shippingCost: shippingCostNum,
           vatAmount: vatAmount,
-          vatRate: isSmallBusiness ? 0 : 19,
+          vatRate: shouldApplyVat ? 19 : 0,
+          displayVat: shouldApplyVat,
           total: total
         },
         dates: {
@@ -568,7 +572,8 @@ class InvoiceService {
         },
         template: templateId || null,
         tax: {
-          isSmallBusiness
+          isSmallBusiness,
+          vatExempt: !shouldApplyVat
         },
         status: 'sent', // Manuell erstellte Rechnungen sind direkt 'versendet', nicht 'draft'
         notes: {
@@ -1085,6 +1090,161 @@ class InvoiceService {
     }
   }
 
+  // Bestehende Rechnung per E-Mail an den hinterlegten Kunden senden
+  async sendInvoiceEmailById(req, res) {
+    try {
+      const { id } = req.params;
+
+      const invoice = await Invoice.findById(id)
+        .populate('customer.customerId', 'vorname nachname firma email telefon kundennummer adresse')
+        .populate('template', 'name companyInfo');
+
+      if (!invoice) {
+        return res.status(404).json({
+          success: false,
+          message: 'Rechnung nicht gefunden'
+        });
+      }
+
+      const customerEmail = invoice.customer?.customerData?.email;
+      if (!customerEmail) {
+        return res.status(400).json({
+          success: false,
+          message: 'Für diese Rechnung ist keine Kunden-E-Mail hinterlegt'
+        });
+      }
+
+      const previouslySent = Boolean(invoice.emailSent?.sent);
+      const previousSendInfo = previouslySent
+        ? {
+            sentDate: invoice.emailSent.sentDate,
+            sentTo: invoice.emailSent.sentTo || customerEmail
+          }
+        : null;
+
+      let template;
+      if (invoice.template && invoice.template._id) {
+        template = await InvoiceTemplate.findById(invoice.template._id);
+      }
+      if (!template) {
+        template = await InvoiceTemplate.findOne({ isDefault: true });
+      }
+
+      if (!template) {
+        template = {
+          companyInfo: {
+            name: 'Glücksmomente Manufaktur',
+            isSmallBusiness: true
+          }
+        };
+      }
+
+      const bestellungData = {
+        bestellnummer: invoice.invoiceNumber,
+        bestelldatum: invoice.dates?.invoiceDate ? new Date(invoice.dates.invoiceDate).toISOString() : new Date().toISOString(),
+        faelligkeitsdatum: invoice.dates?.dueDate ? new Date(invoice.dates.dueDate).toISOString() : null,
+        kundennummer: `K-${invoice._id.toString().slice(-6).toUpperCase()}`,
+        besteller: {
+          vorname: invoice.customer?.customerData?.firstName || '',
+          nachname: invoice.customer?.customerData?.lastName || '',
+          firma: invoice.customer?.customerData?.company || '',
+          email: customerEmail,
+          adresse: {
+            strasse: invoice.customer?.customerData?.street || '',
+            plz: invoice.customer?.customerData?.postalCode || '',
+            stadt: invoice.customer?.customerData?.city || ''
+          }
+        },
+        rechnungsadresse: {
+          vorname: invoice.customer?.customerData?.firstName || '',
+          nachname: invoice.customer?.customerData?.lastName || '',
+          firma: invoice.customer?.customerData?.company || '',
+          strasse: (invoice.customer?.customerData?.street || '').split(' ')[0] || '',
+          hausnummer: (invoice.customer?.customerData?.street || '').split(' ').slice(1).join(' ') || '',
+          plz: invoice.customer?.customerData?.postalCode || '',
+          stadt: invoice.customer?.customerData?.city || '',
+          land: invoice.customer?.customerData?.country || 'Deutschland'
+        },
+        artikel: (invoice.items || []).map(item => ({
+          name: item.productData?.name || item.name || 'Produktname fehlt',
+          beschreibung: item.productData?.description || item.description || '',
+          sku: item.productData?.sku || '',
+          menge: item.quantity,
+          preis: item.unitPrice,
+          einzelpreis: item.unitPrice,
+          gesamtpreis: item.total
+        })),
+        gesamtsumme: invoice.amounts?.total || 0,
+        versandkosten: invoice.amounts?.shippingCost || 0,
+        zahlungsmethode: invoice.payment?.method || 'Überweisung',
+        notes: {
+          customer: invoice.notes?.customer || '',
+          internal: invoice.notes?.internal || ''
+        }
+      };
+
+      const isSmallBusiness = template.companyInfo?.isSmallBusiness || false;
+      const productTotal = invoice.amounts?.subtotal || ((invoice.amounts?.total || 0) - (invoice.amounts?.shippingCost || 0));
+      const shippingCost = invoice.amounts?.shippingCost || 0;
+
+      if (isSmallBusiness) {
+        bestellungData.nettosumme = productTotal;
+        bestellungData.mwst = 0;
+      } else {
+        const totalIncludingShipping = productTotal + shippingCost;
+        bestellungData.nettosumme = totalIncludingShipping / 1.19;
+        bestellungData.mwst = totalIncludingShipping - bestellungData.nettosumme;
+      }
+
+      let pdfBuffer = null;
+      try {
+        pdfBuffer = await PDFService.generateInvoicePDF(bestellungData, template);
+      } catch (pdfError) {
+        console.warn('⚠️ PDF-Generierung fehlgeschlagen, E-Mail wird ohne PDF versendet:', pdfError.message);
+      }
+
+      const emailResult = await emailService.sendInvoiceEmail(customerEmail, invoice, pdfBuffer);
+      if (!emailResult.success) {
+        return res.status(500).json({
+          success: false,
+          message: emailResult.error || 'E-Mail konnte nicht versendet werden'
+        });
+      }
+
+      invoice.emailSent = {
+        sent: true,
+        sentDate: new Date(),
+        sentTo: customerEmail
+      };
+      if (invoice.status === 'draft') {
+        invoice.status = 'sent';
+      }
+      await invoice.save();
+
+      res.json({
+        success: true,
+        message: previouslySent
+          ? `Rechnung ${invoice.invoiceNumber} wurde erneut per E-Mail an ${customerEmail} gesendet`
+          : `Rechnung ${invoice.invoiceNumber} wurde per E-Mail an ${customerEmail} gesendet`,
+        alreadySent: previouslySent,
+        data: {
+          invoiceId: invoice._id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerEmail,
+          messageId: emailResult.messageId || null,
+          previousSend: previousSendInfo
+        }
+      });
+    } catch (error) {
+      console.error('Fehler beim Versenden der Rechnungs-E-Mail:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Fehler beim Versenden der Rechnung per E-Mail',
+        error: error.message
+      });
+    }
+  }
+
   // PDF für Rechnung herunterladen
   async downloadInvoicePDF(req, res) {
     try {
@@ -1230,6 +1390,213 @@ class InvoiceService {
       res.status(500).json({
         success: false,
         message: 'Fehler beim Erstellen der PDF',
+        error: error.message
+      });
+    }
+  }
+
+  // Vorschau der Rechnung (HTML-Preview vor Erstellung)
+  async previewInvoice(req, res) {
+    try {
+      const {
+        customerData,
+        items,
+        shippingCost = 0,
+        includeVat,
+        notes,
+        templateId
+      } = req.body;
+
+      // Validierung
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Mindestens ein Artikel ist erforderlich'
+        });
+      }
+
+      // Artikel verarbeiten
+      const processedItems = [];
+      for (const item of items) {
+        let productData = {
+          name: item.name || 'Unbekanntes Produkt',
+          description: item.description || '',
+          sku: item.sku || '',
+          category: item.category || ''
+        };
+
+        // Falls Produkt-ID vorhanden, Daten aus DB laden
+        if (item.productId) {
+          const Product = require('../models/Product');
+          const product = await Product.findById(item.productId);
+          if (product) {
+            productData = {
+              name: product.name,
+              description: product.beschreibung,
+              sku: product.sku || product._id.toString(),
+              category: product.kategorie
+            };
+          }
+        }
+
+        processedItems.push({
+          productId: item.productId || null,
+          serviceLeistungId: item.serviceLeistungId || null,
+          productData,
+          quantity: item.quantity,
+          unitPrice: parseFloat(item.unitPrice),
+          total: item.quantity * parseFloat(item.unitPrice)
+        });
+      }
+
+      // Template laden für Steuer-Einstellungen
+      let template = null;
+      let isSmallBusiness = false;
+      
+      if (templateId) {
+        template = await InvoiceTemplate.findById(templateId);
+        if (template) {
+          isSmallBusiness = template.companyInfo?.isSmallBusiness || false;
+        }
+      }
+
+      // Beträge berechnen
+      const subtotal = processedItems.reduce((sum, item) => sum + item.total, 0);
+      const shippingCostNum = parseFloat(shippingCost) || 0;
+      const shouldApplyVat = !isSmallBusiness && Boolean(includeVat);
+      const vatAmount = shouldApplyVat ? (subtotal + shippingCostNum) * 0.19 : 0;
+      const total = subtotal + shippingCostNum + vatAmount;
+      
+      // Fälligkeitsdatum berechnen (30 Tage nach heute)
+      const invoiceDate = new Date();
+      const dueDate = new Date(invoiceDate);
+      dueDate.setDate(dueDate.getDate() + 30);
+
+      // HTML generieren mit buildProductsTable
+      const InvoiceController = require('./invoiceController');
+      const invoiceController = new InvoiceController();
+
+      // Produkttabelle-HTML generieren
+      const productsTableHtml = invoiceController.buildProductsTable(
+        processedItems.map(item => ({
+          name: item.productData.name,
+          sku: item.productData.sku,
+          description: item.productData.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        })),
+        1,
+        true
+      );
+
+      // Zusammenfassung HTML
+      const summaryHtml = `
+        <div style="margin-top: 20px; padding: 15px; background-color: #f5f5f5; border-radius: 5px;">
+          <table style="width: 100%; border-collapse: collapse;">
+            <tbody>
+              <tr>
+                <td style="text-align: right; padding: 5px 10px;"><strong>Zwischensumme:</strong></td>
+                <td style="text-align: right; padding: 5px 10px;">${subtotal.toFixed(2)}€</td>
+              </tr>
+              ${shippingCostNum > 0 ? `
+              <tr>
+                <td style="text-align: right; padding: 5px 10px;"><strong>Versandkosten:</strong></td>
+                <td style="text-align: right; padding: 5px 10px;">${shippingCostNum.toFixed(2)}€</td>
+              </tr>
+              ` : ''}
+              ${!isSmallBusiness ? `
+              <tr>
+                <td style="text-align: right; padding: 5px 10px;"><strong>MwSt. (19%):</strong></td>
+                <td style="text-align: right; padding: 5px 10px;">${vatAmount.toFixed(2)}€</td>
+              </tr>
+              ` : ''}
+              <tr style="border-top: 2px solid #333;">
+                <td style="text-align: right; padding: 5px 10px;"><strong>GESAMTSUMME:</strong></td>
+                <td style="text-align: right; padding: 5px 10px;"><strong>${total.toFixed(2)}€</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      // Kunden-Informationen HTML
+      const customerHtml = `
+        <div style="margin-bottom: 20px;">
+          <h3>Rechnungsempfänger:</h3>
+          <p>
+            ${customerData.salutation || 'Herr'} ${customerData.firstName || ''} ${customerData.lastName || ''}<br>
+            ${customerData.company ? customerData.company + '<br>' : ''}
+            ${customerData.street || ''}<br>
+            ${customerData.postalCode || ''} ${customerData.city || ''}<br>
+            ${customerData.country || 'Deutschland'}
+          </p>
+        </div>
+      `;
+
+      // Komplette Vorschau HTML
+      const previewHtml = `
+        <!DOCTYPE html>
+        <html lang="de">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Rechnungsvorschau</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; background-color: #f0f0f0; }
+            .preview-container { background-color: white; padding: 30px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f5f5f5; font-weight: bold; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .product-name { font-weight: bold; }
+            .product-sku { font-size: 0.9em; color: #666; }
+            .product-description { color: #555; font-style: italic; }
+            h2 { color: #333; border-bottom: 2px solid #0066cc; padding-bottom: 10px; }
+            h3 { color: #666; margin-top: 20px; }
+            .preview-header { background-color: #e8f0ff; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+            .preview-note { background-color: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="preview-container">
+            <div class="preview-header">
+              <h2>📋 RECHNUNGSVORSCHAU</h2>
+              <p><strong>Rechnungsdatum:</strong> ${invoiceDate.toLocaleDateString('de-DE')}</p>
+              <p><strong>Fälligkeitsdatum:</strong> ${dueDate.toLocaleDateString('de-DE')}</p>
+            </div>
+            
+            ${customerHtml}
+            
+            <h2 style="margin-top: 30px;">Artikel</h2>
+            ${productsTableHtml}
+            
+            <h2 style="margin-top: 30px;">Summen</h2>
+            ${summaryHtml}
+            
+            <div class="preview-note">
+              <strong>💡 Hinweis:</strong> Dies ist eine Vorschau. Die tatsächliche Rechnung enthält möglicherweise zusätzliche Informationen (Firmendaten, Zahlungsbedingungen, etc.).
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      res.json({
+        success: true,
+        data: {
+          html: previewHtml,
+          preview: true
+        }
+      });
+
+    } catch (error) {
+      console.error('Fehler bei der Rechnungsvorschau:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Fehler bei der Rechnungsvorschau',
         error: error.message
       });
     }

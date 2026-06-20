@@ -92,7 +92,7 @@ const emailOutSchema = new mongoose.Schema({
     errorMessage: String,
     provider: {
       type: String,
-      enum: ['resend', 'sendgrid', 'ses', 'smtp'],
+      enum: ['resend', 'sendgrid', 'ses', 'smtp', 'gmail'],
       default: 'resend'
     },
     providerMessageId: String,

@@ -44,6 +44,10 @@ const invoiceSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product'
     },
+    serviceLeistungId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ServiceLeistung'
+    },
     
     // Produktdaten zum Zeitpunkt der Rechnung (Snapshot)
     productData: {

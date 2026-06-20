@@ -1,5 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Paper,
   Typography,
@@ -25,8 +28,10 @@ import {
   DialogContent,
   DialogActions,
   Alert,
+  Chip,
   Divider,
   Autocomplete,
+  InputAdornment,
   Snackbar,
   Switch,
   FormControlLabel,
@@ -36,7 +41,11 @@ import {
 } from '@mui/material';
 import {
   Add as AddIcon,
+  ArchiveOutlined as InactiveIcon,
+  AutoFixHigh as PlotterIcon,
+  BuildCircleOutlined as ServiceIcon,
   Delete as DeleteIcon,
+  ExpandMore as ExpandMoreIcon,
   Receipt as ReceiptIcon,
   Search as SearchIcon,
   CardGiftcard as GiftIcon,
@@ -114,6 +123,346 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   }
 }));
 
+const SERVICE_CATEGORY_ORDER = ['standard', 'plotterarbeiten'];
+const SERVICE_CATEGORY_LABELS = {
+  standard: '🛠️ Leistungen',
+  plotterarbeiten: '✂️ Plotterarbeiten',
+  inactive: '🗄️ Inaktive Leistungen'
+};
+
+const normalizeServiceType = (value) =>
+  String(value || '').toLowerCase() === 'plotterarbeiten' ? 'plotterarbeiten' : 'standard';
+
+const isPlotterService = (serviceEntry) => normalizeServiceType(serviceEntry?.serviceType) === 'plotterarbeiten';
+
+const ServiceCatalog = ({
+  services = [],
+  onServiceSelect,
+  isMobile = false,
+  isSmallMobile = false
+}) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedCategories, setExpandedCategories] = useState({
+    standard: true,
+    plotterarbeiten: true,
+    inactive: false
+  });
+
+  const groupedServices = useMemo(() => {
+    const groups = {
+      standard: { active: [], inactive: [] },
+      plotterarbeiten: { active: [], inactive: [] }
+    };
+
+    services.forEach((service) => {
+      const isActive = service.isActive !== false;
+      const category = normalizeServiceType(service.serviceType);
+
+      if (!groups[category]) {
+        return;
+      }
+
+      if (isActive) {
+        groups[category].active.push(service);
+      } else {
+        groups[category].inactive.push(service);
+      }
+    });
+
+    return groups;
+  }, [services]);
+
+  const filterServices = (serviceList) => {
+    if (!searchTerm.trim()) {
+      return serviceList;
+    }
+
+    const lowerSearch = searchTerm.toLowerCase();
+    return serviceList.filter((service) =>
+      service.name?.toLowerCase().includes(lowerSearch) ||
+      service.description?.toLowerCase().includes(lowerSearch) ||
+      service.invoiceNote?.toLowerCase().includes(lowerSearch) ||
+      service.sku?.toLowerCase().includes(lowerSearch)
+    );
+  };
+
+  const handleCategoryToggle = (category) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
+  const ServiceCard = ({ service, isInactive = false }) => {
+    const isPlotter = normalizeServiceType(service.serviceType) === 'plotterarbeiten';
+
+    return (
+      <Card
+        sx={{
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            boxShadow: 6,
+            transform: 'translateY(-4px)',
+            backgroundColor: '#f5f5f5'
+          },
+          minHeight: isMobile ? 'auto' : 120,
+          opacity: isInactive ? 0.7 : 1,
+          position: 'relative',
+          backgroundColor: isInactive ? '#f5f5f5' : '#fafafa'
+        }}
+        onClick={() => onServiceSelect(service)}
+      >
+        {isInactive ? (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              backgroundColor: '#fff3cd',
+              color: '#856404',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontSize: '0.7rem',
+              fontWeight: 600
+            }}
+          >
+            <InactiveIcon sx={{ fontSize: '0.9rem' }} />
+            Inaktiv
+          </Box>
+        ) : null}
+        <CardContent sx={{ p: isSmallMobile ? 1.5 : 2, pb: isSmallMobile ? 1.5 : 2 }}>
+          <Typography
+            variant="subtitle2"
+            gutterBottom
+            sx={{
+              fontSize: isSmallMobile ? '0.95rem' : '0.875rem',
+              fontWeight: 'bold',
+              mb: 1,
+              pr: isInactive ? 3 : 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75
+            }}
+          >
+            {isPlotter ? <PlotterIcon fontSize="small" color="primary" /> : <ServiceIcon fontSize="small" color="action" />}
+            {service.name}
+          </Typography>
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1 }}>
+            <Typography
+              variant="body2"
+              color="primary"
+              sx={{
+                fontSize: isSmallMobile ? '1rem' : '0.875rem',
+                fontWeight: 'bold'
+              }}
+            >
+              💵 {Number(service.defaultPrice || 0).toFixed(2)}€
+            </Typography>
+            {service.sku ? (
+              <Typography
+                variant="caption"
+                sx={{
+                  backgroundColor: '#e3f2fd',
+                  color: '#1976d2',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: '4px',
+                  fontSize: '0.65rem'
+                }}
+              >
+                SKU: {service.sku}
+              </Typography>
+            ) : null}
+          </Box>
+
+          {service.description || service.invoiceNote ? (
+            <Typography
+              variant="caption"
+              display="block"
+              color="textSecondary"
+              sx={{
+                fontSize: '0.75rem',
+                mt: 0.5,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {service.description || service.invoiceNote}
+            </Typography>
+          ) : null}
+
+          <Box sx={{ mt: 1, pt: 1, borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography
+              variant="caption"
+              display="block"
+              color="textSecondary"
+              sx={{ fontSize: isSmallMobile ? '0.75rem' : '0.7rem', pt: 0.5 }}
+            >
+              ✓ Anklicken zum Hinzufügen
+            </Typography>
+            {isPlotter ? (
+              <Chip size="small" label={`${(service.sizeProfiles || []).length} Größen`} color="primary" variant="outlined" />
+            ) : null}
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const CategorySection = ({ category, isInactive = false }) => {
+    const activeServices = filterServices(groupedServices[category]?.active || []);
+    const inactiveServices = filterServices(
+      category === 'all'
+        ? Object.values(groupedServices).reduce((acc, cat) => [...acc, ...cat.inactive], [])
+        : (groupedServices[category]?.inactive || [])
+    );
+
+    const servicesToShow = isInactive ? inactiveServices : activeServices;
+    if (servicesToShow.length === 0 && !isInactive) {
+      return null;
+    }
+
+    const categoryLabel = isInactive ? SERVICE_CATEGORY_LABELS.inactive : SERVICE_CATEGORY_LABELS[category];
+    const expandKey = isInactive ? 'inactive' : category;
+
+    return (
+      <Accordion
+        key={`section-${category}-${isInactive}`}
+        defaultExpanded={expandedCategories[expandKey]}
+        onChange={() => handleCategoryToggle(expandKey)}
+        sx={{
+          mb: 2,
+          boxShadow: 'none',
+          border: '1px solid #e0e0e0',
+          '&.Mui-expanded': {
+            margin: 0
+          }
+        }}
+      >
+        <AccordionSummary
+          expandIcon={<ExpandMoreIcon />}
+          sx={{
+            backgroundColor: isInactive ? '#fffbf0' : category === 'plotterarbeiten' ? '#e3f2fd' : '#e8f5e9',
+            borderBottom: expandedCategories[expandKey] ? '1px solid #e0e0e0' : 'none',
+            minHeight: isMobile ? 48 : 56,
+            '&:hover': {
+              backgroundColor: isInactive ? '#fffaf5' : category === 'plotterarbeiten' ? '#e8f4ff' : '#e0f2f1'
+            },
+            transition: 'background-color 0.2s ease'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pr: 1 }}>
+            <Typography sx={{ fontWeight: 600, fontSize: isMobile ? '0.95rem' : '1rem' }}>
+              {categoryLabel}
+            </Typography>
+            <Chip label={`${servicesToShow.length}`} size="small" color={isInactive ? 'default' : 'primary'} variant="outlined" sx={{ ml: 1 }} />
+          </Box>
+        </AccordionSummary>
+
+        <AccordionDetails sx={{ p: isSmallMobile ? 1 : 2, backgroundColor: '#fafafa' }}>
+          {servicesToShow.length === 0 ? (
+            <Typography variant="body2" color="textSecondary" align="center" sx={{ py: 3 }}>
+              {searchTerm ? `Keine Leistungen gefunden für "${searchTerm}"` : 'Keine Leistungen in dieser Kategorie'}
+            </Typography>
+          ) : (
+            <Grid container spacing={isSmallMobile ? 1 : 1.5}>
+              {servicesToShow.map((service) => (
+                <Grid item xs={12} sm={isMobile ? 6 : 5} md={isMobile && expandedCategories[expandKey] ? 4 : 3} key={service._id}>
+                  <ServiceCard service={service} isInactive={isInactive} />
+                </Grid>
+              ))}
+            </Grid>
+          )}
+        </AccordionDetails>
+      </Accordion>
+    );
+  };
+
+  const hasAnyServices = Object.values(groupedServices).some((cat) => cat.active.length > 0 || cat.inactive.length > 0);
+  if (!hasAnyServices) {
+    return (
+      <Box sx={{ py: 4, textAlign: 'center' }}>
+        <Box sx={{ mb: 2, fontSize: '3rem' }}>📭</Box>
+        <Typography color="textSecondary" variant="body1">
+          Keine Leistungen verfügbar
+        </Typography>
+        <Typography color="textSecondary" variant="caption" sx={{ display: 'block', mt: 1 }}>
+          Es werden keine Leistungen im Katalog gefunden.
+        </Typography>
+      </Box>
+    );
+  }
+
+  const totalInactive = Object.values(groupedServices).reduce((sum, cat) => sum + cat.inactive.length, 0);
+  const allServices = Object.values(groupedServices).reduce((acc, cat) => [...acc, ...cat.active, ...cat.inactive], []);
+  const filteredCount = filterServices(allServices).length;
+
+  return (
+    <Box>
+      <TextField
+        fullWidth
+        placeholder="🔍 Leistung suchen... (Name, Beschreibung, SKU)"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        variant="outlined"
+        size={isMobile ? 'small' : 'medium'}
+        sx={{
+          mb: 3,
+          '& .MuiOutlinedInput-root': {
+            backgroundColor: 'white'
+          }
+        }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <SearchIcon sx={{ color: 'text.secondary' }} />
+            </InputAdornment>
+          ),
+          endAdornment: searchTerm ? (
+            <InputAdornment position="end">
+              <Box
+                onClick={() => setSearchTerm('')}
+                sx={{
+                  cursor: 'pointer',
+                  p: 0.5,
+                  borderRadius: '50%',
+                  '&:hover': { backgroundColor: '#f5f5f5' }
+                }}
+              >
+                ✕
+              </Box>
+            </InputAdornment>
+          ) : null
+        }}
+      />
+
+      {searchTerm ? (
+        <Typography variant="caption" sx={{ display: 'block', mb: 2, color: 'text.secondary', fontStyle: 'italic' }}>
+          Suchbegriff: "{searchTerm}" (Treffer: {filteredCount})
+        </Typography>
+      ) : null}
+
+      {SERVICE_CATEGORY_ORDER.map((category) => (
+        <CategorySection key={`active-${category}`} category={category} isInactive={false} />
+      ))}
+
+      {totalInactive > 0 ? <CategorySection key="inactive" category="all" isInactive={true} /> : null}
+
+      {searchTerm && filterServices(allServices).length === 0 ? (
+        <Box sx={{ py: 4, textAlign: 'center' }}>
+          <Typography color="textSecondary">❌ Keine Leistungen gefunden für "{searchTerm}"</Typography>
+        </Box>
+      ) : null}
+    </Box>
+  );
+};
+
 const CreateInvoice = () => {
   // Responsive Detection
   const theme = useTheme();
@@ -123,6 +472,7 @@ const CreateInvoice = () => {
   // State Management
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [serviceLeistungen, setServiceLeistungen] = useState([]);
   const [templates, setTemplates] = useState([]);
   
   // Rechnung Daten
@@ -143,14 +493,23 @@ const CreateInvoice = () => {
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [shippingCost, setShippingCost] = useState(0);
   const [selectedTemplate, setSelectedTemplate] = useState('');
+  const [includeVat, setIncludeVat] = useState(false);
   const [notes, setNotes] = useState({ internal: '', customer: '' });
   const [sendEmail, setSendEmail] = useState(true); // Toggle für E-Mail-Versand
   
   // UI State
   const [saving, setSaving] = useState(false);
   const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [serviceSearchOpen, setServiceSearchOpen] = useState(false);
+  const [selectedServiceLeistung, setSelectedServiceLeistung] = useState(null);
+  const [plotterWidthCm, setPlotterWidthCm] = useState('');
+  const [plotterHeightCm, setPlotterHeightCm] = useState('');
+  const [plotterCustomPrice, setPlotterCustomPrice] = useState('');
+  const [plotterDetailText, setPlotterDetailText] = useState('');
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
   const [unitPriceDrafts, setUnitPriceDrafts] = useState({});
 
   // Lade initiale Daten
@@ -160,6 +519,7 @@ const CreateInvoice = () => {
     }
     loadCustomers();
     loadProducts();
+    loadServiceLeistungen();
     loadTemplates();
   }, []);
 
@@ -170,6 +530,29 @@ const CreateInvoice = () => {
       loadProducts();
     }
   }, [productSearchOpen]);
+
+  const selectedTemplateConfig = useMemo(
+    () => templates.find((template) => template._id === selectedTemplate) || null,
+    [selectedTemplate, templates]
+  );
+
+  const templateIsSmallBusiness = Boolean(selectedTemplateConfig?.companyInfo?.isSmallBusiness);
+
+  useEffect(() => {
+    if (templateIsSmallBusiness) {
+      setIncludeVat(false);
+    }
+  }, [templateIsSmallBusiness]);
+
+  useEffect(() => {
+    if (!isPlotterService(selectedServiceLeistung)) {
+      setPlotterWidthCm('');
+      setPlotterHeightCm('');
+      setPlotterCustomPrice('');
+      setPlotterDetailText('');
+      return;
+    }
+  }, [selectedServiceLeistung]);
 
   const loadCustomers = async () => {
     try {
@@ -245,10 +628,28 @@ const CreateInvoice = () => {
         const defaultTemplate = data.data.find(t => t.isDefault);
         if (defaultTemplate) {
           setSelectedTemplate(defaultTemplate._id);
+          setIncludeVat(!(defaultTemplate.companyInfo?.isSmallBusiness));
         }
       }
     } catch (error) {
       console.error('Fehler beim Laden der Templates:', error);
+    }
+  };
+
+  const loadServiceLeistungen = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/service-leistungen`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setServiceLeistungen(data.data || []);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden von Service & Leistung:', error);
     }
   };
 
@@ -358,17 +759,112 @@ const CreateInvoice = () => {
     setInvoiceItems(prev => [...prev, newItem]);
   };
 
-  const addGiftService = () => {
+  const getPlotterCalculationDetails = (serviceEntry) => {
+    const foliePerSqm = Number(serviceEntry?.plotterBasePricePerSqm || 0);
+    const transferfoliePerSqm = Number(serviceEntry?.plotterMaterialCostPerSqm || 0);
+    const laborCostPerSqm = Number(serviceEntry?.plotterLaborCostPerSqm || 0);
+    const overheadFactor = Number(serviceEntry?.plotterOverheadFactor ?? 3);
+
+    const baseMaterialPerSqm = foliePerSqm + transferfoliePerSqm;
+    const overheadAppliedMaterialPerSqm = baseMaterialPerSqm * overheadFactor;
+    const effectivePricePerSqm = overheadAppliedMaterialPerSqm + laborCostPerSqm;
+
+    return {
+      foliePerSqm,
+      transferfoliePerSqm,
+      baseMaterialPerSqm,
+      overheadFactor,
+      overheadAppliedMaterialPerSqm,
+      laborCostPerSqm,
+      effectivePricePerSqm
+    };
+  };
+
+  const getPlotterCalculatedPrice = (serviceEntry) => {
+    if (!isPlotterService(serviceEntry)) {
+      return Number(serviceEntry?.defaultPrice || 0);
+    }
+
+    const customPrice = normalizePriceInput(plotterCustomPrice);
+    if (customPrice !== null) {
+      return customPrice;
+    }
+
+    const width = normalizePriceInput(plotterWidthCm);
+    const height = normalizePriceInput(plotterHeightCm);
+    const { effectivePricePerSqm } = getPlotterCalculationDetails(serviceEntry);
+    const minimumPrice = Number(serviceEntry.plotterMinimumPrice || 0);
+
+    if (width !== null && height !== null && width > 0 && height > 0 && effectivePricePerSqm > 0) {
+      const areaSqm = (width * height) / 10000;
+      return Math.max(minimumPrice, areaSqm * effectivePricePerSqm);
+    }
+
+    return Number(serviceEntry.defaultPrice || 0);
+  };
+
+  const buildPlotterDescription = (serviceEntry) => {
+    const baseDescription = serviceEntry.description || serviceEntry.invoiceNote || '';
+    if (!isPlotterService(serviceEntry)) {
+      return baseDescription;
+    }
+
+    const descriptionParts = [];
+
+    if (baseDescription) {
+      descriptionParts.push(baseDescription);
+    }
+
+    const width = normalizePriceInput(plotterWidthCm);
+    const height = normalizePriceInput(plotterHeightCm);
+    if (width !== null && height !== null && width > 0 && height > 0) {
+      descriptionParts.push(`Größe: ${width}x${height} cm`);
+    }
+
+    if (plotterDetailText.trim()) {
+      descriptionParts.push(`Anhang: ${plotterDetailText.trim()}`);
+    }
+
+    return descriptionParts.join(' | ');
+  };
+
+  const addServiceLeistung = (serviceEntry) => {
+    if (!serviceEntry) {
+      showSnackbar('Bitte zuerst einen Service oder eine Leistung auswählen', 'warning');
+      return;
+    }
+
+    const calculatedPrice = getPlotterCalculatedPrice(serviceEntry);
+
     const newItem = {
       productId: null,
-      name: 'Geschenkeservice',
-      description: 'Besondere Geschenkverpackung mit dekorativen Materialien, bereit zum Verschenken.',
-      sku: 'SERVICE-GIFT',
-      category: 'dienstleistung',
+      serviceLeistungId: serviceEntry._id,
+      name: serviceEntry.name,
+      description: buildPlotterDescription(serviceEntry),
+      sku: serviceEntry.sku || '',
+      category: serviceEntry.serviceType || 'dienstleistung',
       quantity: 1,
-      unitPrice: 5
+      unitPrice: Math.max(0, calculatedPrice)
     };
+
     setInvoiceItems(prev => [...prev, newItem]);
+    setSelectedServiceLeistung(null);
+    setPlotterWidthCm('');
+    setPlotterHeightCm('');
+    setPlotterCustomPrice('');
+    setPlotterDetailText('');
+    setServiceSearchOpen(false);
+  };
+
+  const handleServiceSelect = (serviceEntry) => {
+    setSelectedServiceLeistung(serviceEntry);
+
+    if (!isPlotterService(serviceEntry)) {
+      addServiceLeistung(serviceEntry);
+      return;
+    }
+
+    setServiceSearchOpen(false);
   };
 
   const updateCustomProduct = (index, field, value) => {
@@ -383,9 +879,17 @@ const CreateInvoice = () => {
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
     const shipping = parseFloat(shippingCost) || 0;
-    
-    // Hier könnte VAT-Berechnung basierend auf Template-Einstellungen erfolgen
-    return subtotal + shipping;
+    const vatAmount = includeVat ? (subtotal + shipping) * 0.19 : 0;
+    return subtotal + shipping + vatAmount;
+  };
+
+  const calculateVatAmount = () => {
+    if (!includeVat) {
+      return 0;
+    }
+    const subtotal = calculateSubtotal();
+    const shipping = parseFloat(shippingCost) || 0;
+    return (subtotal + shipping) * 0.19;
   };
 
   const createInvoice = async () => {
@@ -448,6 +952,7 @@ const CreateInvoice = () => {
         },
         items: invoiceItems.map(item => ({
           productId: item.productId,
+          serviceLeistungId: item.serviceLeistungId || null,
           name: item.name,
           description: item.description,
           sku: item.sku,
@@ -456,6 +961,7 @@ const CreateInvoice = () => {
           unitPrice: item.unitPrice
         })),
         shippingCost: parseFloat(shippingCost) || 0,
+        includeVat,
         templateId: selectedTemplate,
         notes,
         sendEmailToCustomer: sendEmail && (useNewCustomer ? newCustomer.email : selectedCustomer?.email) // E-Mail nur wenn Toggle aktiv und E-Mail vorhanden
@@ -488,6 +994,100 @@ const CreateInvoice = () => {
     }
   };
 
+  const previewInvoice = async () => {
+    // Gleiche Validierung wie createInvoice
+    if (invoiceItems.length === 0) {
+      showSnackbar('Mindestens ein Artikel muss hinzugefügt werden', 'error');
+      return;
+    }
+
+    if (!useNewCustomer && !selectedCustomer) {
+      showSnackbar('Bitte wählen Sie einen Kunden aus', 'error');
+      return;
+    }
+
+    if (useNewCustomer) {
+      if (!newCustomer.street || !newCustomer.postalCode || !newCustomer.city) {
+        showSnackbar('Bitte füllen Sie alle Pflichtfelder für den neuen Kunden aus', 'error');
+        return;
+      }
+    } else {
+      if (!selectedCustomer) {
+        showSnackbar('Bitte wählen Sie einen Kunden aus', 'error');
+        return;
+      }
+      
+      if (!selectedCustomer.adresse?.strasse || !selectedCustomer.adresse?.plz || !selectedCustomer.adresse?.stadt) {
+        showSnackbar('Gewählter Kunde hat unvollständige Adressdaten', 'error');
+        return;
+      }
+    }
+
+    try {
+      const invoiceData = {
+        customerData: useNewCustomer ? {
+          salutation: newCustomer.salutation || 'Herr',
+          firstName: newCustomer.firstName || '',
+          lastName: newCustomer.lastName || '',
+          company: newCustomer.company || '',
+          street: newCustomer.street,
+          postalCode: newCustomer.postalCode,
+          city: newCustomer.city,
+          country: newCustomer.country || 'Deutschland',
+          email: newCustomer.email || '',
+          phone: newCustomer.phone || ''
+        } : {
+          salutation: selectedCustomer?.anrede || 'Herr',
+          firstName: selectedCustomer?.vorname || '',
+          lastName: selectedCustomer?.nachname || '',
+          company: selectedCustomer?.firma || '',
+          street: selectedCustomer?.adresse?.strasse || '',
+          postalCode: selectedCustomer?.adresse?.plz || '',
+          city: selectedCustomer?.adresse?.stadt || '',
+          country: selectedCustomer?.adresse?.land || 'Deutschland',
+          email: selectedCustomer?.email || '',
+          phone: selectedCustomer?.telefon || ''
+        },
+        items: invoiceItems.map(item => ({
+          productId: item.productId,
+          serviceLeistungId: item.serviceLeistungId || null,
+          name: item.name,
+          description: item.description,
+          sku: item.sku,
+          category: item.category,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice
+        })),
+        shippingCost: parseFloat(shippingCost) || 0,
+        includeVat,
+        templateId: selectedTemplate,
+        notes
+      };
+
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/preview`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(invoiceData)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setPreviewHtml(result.data.html);
+        setPreviewOpen(true);
+      } else {
+        showSnackbar(result.message || 'Fehler bei der Rechnungsvorschau', 'error');
+      }
+
+    } catch (error) {
+      console.error('Fehler bei der Rechnungsvorschau:', error);
+      showSnackbar('Fehler bei der Rechnungsvorschau', 'error');
+    }
+  };
+
   const resetForm = () => {
     setSelectedCustomer(null);
     setUseNewCustomer(false);
@@ -504,7 +1104,13 @@ const CreateInvoice = () => {
     });
     setInvoiceItems([]);
     setUnitPriceDrafts({});
+    setSelectedServiceLeistung(null);
+    setPlotterWidthCm('');
+    setPlotterHeightCm('');
+    setPlotterCustomPrice('');
+    setPlotterDetailText('');
     setShippingCost(0);
+    setIncludeVat(false);
     setNotes({ internal: '', customer: '' });
     setSendEmail(true); // E-Mail-Toggle zurücksetzen
   };
@@ -720,14 +1326,105 @@ const CreateInvoice = () => {
               <Button
                 variant="outlined"
                 startIcon={<GiftIcon />}
-                onClick={addGiftService}
+                onClick={() => setServiceSearchOpen(true)}
                 size="medium"
                 fullWidth={isMobile}
                 sx={{ fontSize: '0.9rem' }}
               >
-                Geschenkeservice
+                Service hinzufügen
               </Button>
             </Box>
+
+            {selectedServiceLeistung ? (
+              <Alert
+                severity={isPlotterService(selectedServiceLeistung) ? 'info' : 'success'}
+                action={
+                  <Button color="inherit" size="small" onClick={() => setSelectedServiceLeistung(null)}>
+                    Entfernen
+                  </Button>
+                }
+              >
+                {selectedServiceLeistung.name}
+                {!isPlotterService(selectedServiceLeistung) && selectedServiceLeistung.defaultPrice != null
+                  ? ` - ${Number(selectedServiceLeistung.defaultPrice).toFixed(2)} €`
+                  : ''}
+              </Alert>
+            ) : null}
+
+            {isPlotterService(selectedServiceLeistung) ? (
+              <Grid container spacing={1}>
+                <Grid item xs={6} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="Breite (cm)"
+                    value={plotterWidthCm}
+                    onChange={(event) => setPlotterWidthCm(event.target.value)}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="Höhe (cm)"
+                    value={plotterHeightCm}
+                    onChange={(event) => setPlotterHeightCm(event.target.value)}
+                    inputProps={{ min: 0, step: 0.1 }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="number"
+                    label="Preis überschreiben (optional)"
+                    value={plotterCustomPrice}
+                    onChange={(event) => setPlotterCustomPrice(event.target.value)}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    helperText={`Berechneter Preis: ${getPlotterCalculatedPrice(selectedServiceLeistung).toFixed(2)} €`}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Zusatztext (optional)"
+                    value={plotterDetailText}
+                    onChange={(event) => setPlotterDetailText(event.target.value)}
+                    helperText="Beschreibt optional, was genau hergestellt wurde"
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  {(() => {
+                    const details = getPlotterCalculationDetails(selectedServiceLeistung);
+                    return (
+                  <Alert severity="info">
+                    Folie/m²: {details.foliePerSqm.toFixed(2)} €
+                    {' · '}
+                    Transferfolie/m²: {details.transferfoliePerSqm.toFixed(2)} €
+                    {` · Grundpreis/m² ${(details.baseMaterialPerSqm).toFixed(2)} €`}
+                    {` · GK-Faktor x${details.overheadFactor.toFixed(2)} = ${details.overheadAppliedMaterialPerSqm.toFixed(2)} €`}
+                    {details.laborCostPerSqm > 0
+                      ? ` · Arbeit/m² ${details.laborCostPerSqm.toFixed(2)} €`
+                      : ''}
+                    {` · Summe/m² ${details.effectivePricePerSqm.toFixed(2)} €`}
+                    {Number(selectedServiceLeistung.plotterMinimumPrice || 0) > 0
+                      ? ` · Mindestpreis ${Number(selectedServiceLeistung.plotterMinimumPrice || 0).toFixed(2)} €`
+                      : ''}
+                  </Alert>
+                    );
+                  })()}
+                </Grid>
+                <Grid item xs={12}>
+                  <Button variant="contained" onClick={() => addServiceLeistung(selectedServiceLeistung)}>
+                    Plotterarbeit hinzufügen
+                  </Button>
+                </Grid>
+              </Grid>
+            ) : null}
           </Box>
         </Box>
         <CardContent sx={{ pt: 0 }}>
@@ -954,6 +1651,9 @@ const CreateInvoice = () => {
                 <Typography variant="body2" gutterBottom>
                   Versandkosten: {parseFloat(shippingCost || 0).toFixed(2)}€
                 </Typography>
+                <Typography variant="body2" gutterBottom>
+                  MwSt (19%): {calculateVatAmount().toFixed(2)}€
+                </Typography>
                 <Divider sx={{ my: 1 }} />
                 <Typography variant="h6" color="primary">
                   Gesamtsumme: {calculateTotal().toFixed(2)}€
@@ -1001,20 +1701,36 @@ const CreateInvoice = () => {
                 )}
               </Box>
               
-              <Button
-                fullWidth
-                variant="contained"
-                size="large"
-                onClick={createInvoice}
-                disabled={saving || invoiceItems.length === 0}
-                startIcon={<ReceiptIcon />}
-                sx={{ 
-                  minHeight: isMobile ? 56 : 'auto',
-                  fontSize: isMobile ? '1.1rem' : '1rem'
-                }}
-              >
-                {saving ? 'Erstelle Rechnung...' : 'Rechnung erstellen'}
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1, flexDirection: isMobile ? 'column' : 'row' }}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="large"
+                  onClick={previewInvoice}
+                  disabled={saving || invoiceItems.length === 0}
+                  startIcon={<ReceiptIcon />}
+                  sx={{ 
+                    minHeight: isMobile ? 56 : 'auto',
+                    fontSize: isMobile ? '1rem' : '0.95rem'
+                  }}
+                >
+                  Vorschau
+                </Button>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  size="large"
+                  onClick={createInvoice}
+                  disabled={saving || invoiceItems.length === 0}
+                  startIcon={<ReceiptIcon />}
+                  sx={{ 
+                    minHeight: isMobile ? 56 : 'auto',
+                    fontSize: isMobile ? '1.1rem' : '1rem'
+                  }}
+                >
+                  {saving ? 'Erstelle Rechnung...' : 'Rechnung erstellen'}
+                </Button>
+              </Box>
             </CardContent>
           </StyledPaper>
         </Grid>
@@ -1050,6 +1766,18 @@ const CreateInvoice = () => {
                       ))}
                     </Select>
                   </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={includeVat}
+                        onChange={(e) => setIncludeVat(e.target.checked)}
+                        disabled={templateIsSmallBusiness}
+                      />
+                    }
+                    label={templateIsSmallBusiness ? 'MwSt ausweisen (deaktiviert wegen Kleinunternehmerregelung)' : 'MwSt ausweisen (optional)'}
+                  />
                 </Grid>
                 <Grid item xs={12}>
                   <TextField
@@ -1108,6 +1836,89 @@ const CreateInvoice = () => {
         <DialogActions sx={{ borderTop: '1px solid #eee', p: 2 }}>
           <Button onClick={() => setProductSearchOpen(false)} variant="outlined">
             Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={serviceSearchOpen}
+        onClose={() => {
+          setServiceSearchOpen(false);
+        }}
+        maxWidth="md"
+        fullWidth
+        fullScreen={isSmallMobile}
+      >
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <GiftIcon />
+            <Typography variant="h6">Leistung suchen</Typography>
+          </Box>
+          {isSmallMobile && (
+            <IconButton onClick={() => {
+              setServiceSearchOpen(false);
+            }}>
+              <CloseIcon />
+            </IconButton>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2 }}>
+          <ServiceCatalog
+            services={serviceLeistungen}
+            onServiceSelect={handleServiceSelect}
+            isMobile={isMobile}
+            isSmallMobile={isSmallMobile}
+          />
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #eee', p: 2 }}>
+          <Button onClick={() => {
+            setServiceSearchOpen(false);
+          }} variant="outlined">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Preview Modal */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        fullScreen={isSmallMobile}
+      >
+        <DialogTitle sx={{ fontWeight: 700, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ReceiptIcon />
+            <Typography variant="h6">Rechnungsvorschau</Typography>
+          </Box>
+          {isSmallMobile && (
+            <IconButton onClick={() => setPreviewOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          )}
+        </DialogTitle>
+        <DialogContent sx={{ mt: 2, p: 0, height: '600px', overflow: 'auto' }}>
+          {previewHtml && (
+            <Box
+              sx={{
+                '& *': {
+                  maxWidth: '100%'
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: previewHtml }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions sx={{ borderTop: '1px solid #eee', p: 2 }}>
+          <Button onClick={() => setPreviewOpen(false)} variant="outlined">
+            Schließen
+          </Button>
+          <Button onClick={() => {
+            setPreviewOpen(false);
+            createInvoice();
+          }} variant="contained" startIcon={<ReceiptIcon />}>
+            Rechnung erstellen
           </Button>
         </DialogActions>
       </Dialog>

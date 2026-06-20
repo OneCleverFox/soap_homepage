@@ -13,6 +13,11 @@ router.get('/', invoiceService.getAllInvoices);
 // @access  Private (Admin)
 router.post('/', invoiceService.createInvoice);
 
+// @route   POST /api/admin/invoices/preview
+// @desc    Preview invoice before creating
+// @access  Private (Admin)
+router.post('/preview', invoiceService.previewInvoice);
+
 // @route   GET /api/admin/invoices/stats
 // @desc    Get invoice statistics
 // @access  Private (Admin)
@@ -27,6 +32,11 @@ router.get('/:id', invoiceService.getInvoiceById);
 // @desc    Download invoice PDF
 // @access  Private (Admin)
 router.get('/:id/pdf', invoiceService.downloadInvoicePDF);
+
+// @route   POST /api/admin/invoices/:id/send-email
+// @desc    Send existing invoice via email to customer
+// @access  Private (Admin)
+router.post('/:id/send-email', invoiceService.sendInvoiceEmailById);
 
 // @route   PUT /api/admin/invoices/:id
 // @desc    Update invoice

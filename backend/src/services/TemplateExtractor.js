@@ -15,7 +15,9 @@ class TemplateExtractor {
         'verification': this.extractTemplate(emailServiceContent, 'sendVerificationEmail'),
         'welcome': this.extractTemplate(emailServiceContent, 'sendWelcomeEmail'),  
         'password-reset': this.extractTemplate(emailServiceContent, 'sendPasswordResetEmail'),
-        'order-confirmation': this.extractTemplate(emailServiceContent, 'sendOrderConfirmation')
+        'order-confirmation': this.extractTemplate(emailServiceContent, 'sendOrderConfirmation'),
+        'admin-notification': this.extractTemplate(emailServiceContent, 'sendAdminOrderNotification'),
+        'admin-inquiry-notification': this.extractTemplate(emailServiceContent, 'sendAdminInquiryNotification')
       };
 
       return templates;

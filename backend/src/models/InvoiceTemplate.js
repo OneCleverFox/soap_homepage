@@ -24,12 +24,12 @@ const invoiceTemplateSchema = new mongoose.Schema({
     },
     contact: {
       phone: { type: String, default: '+49 123 456789' },
-      email: { type: String, default: 'info@gluecksmomente-manufaktur.de' },
+      email: { type: String, default: 'info.gluecksmomente.manufaktur@gmail.com' },
       website: { type: String, default: 'www.gluecksmomente-manufaktur.de' }
     },
     taxInfo: {
-      taxNumber: { type: String, default: 'DE123456789' },
-      vatId: { type: String, default: 'USt-IdNr.: DE123456789' },
+      taxNumber: { type: String, default: 'DE123456789' }, // pragma: allowlist secret
+      vatId: { type: String, default: 'USt-IdNr.: DE123456789' }, // pragma: allowlist secret
       ceo: { type: String, default: '' },
       legalForm: { type: String, default: '' },
       taxOffice: { type: String, default: '' },

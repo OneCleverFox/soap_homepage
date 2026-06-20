@@ -37,6 +37,7 @@ import {
   Receipt as ReceiptIcon,
   Visibility as ViewIcon,
   Download as DownloadIcon,
+  Email as EmailIcon,
   MoreVert as MoreVertIcon,
   Add as AddIcon,
   Search as SearchIcon,
@@ -149,6 +150,8 @@ const InvoiceList = () => {
   const [actionMenuInvoice, setActionMenuInvoice] = useState(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+  const [sendMailConfirmOpen, setSendMailConfirmOpen] = useState(false);
+  const [invoiceToSend, setInvoiceToSend] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [productSearchDialogOpen, setProductSearchDialogOpen] = useState(false);
   const [products, setProducts] = useState([]);
@@ -568,6 +571,56 @@ const InvoiceList = () => {
     }
   };
 
+  const sendInvoiceByEmail = async (invoice, forceResend = false) => {
+    const customerEmail = invoice?.customerEmail || invoice?.customer?.customerData?.email;
+
+    if (!customerEmail) {
+      showSnackbar('Keine Kunden-E-Mail hinterlegt', 'warning');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoice._id}/send-email`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ forceResend })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        showSnackbar(`Rechnung wurde an ${customerEmail} gesendet`, 'success');
+        loadInvoices();
+      } else if (response.status === 409 && data.alreadySent) {
+        showSnackbar(data.message || 'Diese Rechnung wurde bereits per E-Mail gesendet', 'warning');
+      } else {
+        showSnackbar(data.message || 'Fehler beim E-Mail-Versand', 'error');
+      }
+    } catch (error) {
+      console.error('Fehler beim Versenden der Rechnungs-E-Mail:', error);
+      showSnackbar('Fehler beim E-Mail-Versand', 'error');
+    }
+  };
+
+  const openSendMailConfirm = (invoice) => {
+    setInvoiceToSend(invoice);
+    setSendMailConfirmOpen(true);
+  };
+
+  const closeSendMailConfirm = () => {
+    setSendMailConfirmOpen(false);
+    setInvoiceToSend(null);
+  };
+
+  const confirmSendInvoiceByEmail = async () => {
+    if (!invoiceToSend) return;
+    const alreadySent = Boolean(invoiceToSend?.emailSent?.sent);
+    await sendInvoiceByEmail(invoiceToSend, alreadySent);
+    closeSendMailConfirm();
+  };
+
   // Vorschau-Funktion - lädt PDF und öffnet es im Browser
   const previewInvoice = async (invoiceId) => {
     try {
@@ -678,6 +731,17 @@ const InvoiceList = () => {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
+    });
+  };
+
+  const formatDateTime = (date) => {
+    if (!date) return '-';
+    return new Date(date).toLocaleString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -1265,6 +1329,11 @@ const InvoiceList = () => {
                           <Typography variant="caption" color="textSecondary">
                             {invoice.customerEmail || ''}
                           </Typography>
+                          {invoice.emailSent?.sent && (
+                            <Typography variant="caption" color="success.main" display="block">
+                              E-Mail gesendet: {formatDateTime(invoice.emailSent?.sentDate)}
+                            </Typography>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
@@ -1364,6 +1433,16 @@ const InvoiceList = () => {
           <DownloadIcon sx={{ mr: 1 }} fontSize="small" />
           PDF herunterladen
         </MenuItem>
+        {actionMenuInvoice &&
+         Boolean(actionMenuInvoice.customerEmail || actionMenuInvoice.customer?.customerData?.email) && (
+          <MenuItem onClick={() => {
+            openSendMailConfirm(actionMenuInvoice);
+            closeActionMenu();
+          }}>
+            <EmailIcon sx={{ mr: 1 }} fontSize="small" />
+            Als Mail senden
+          </MenuItem>
+        )}
         {actionMenuInvoice && 
          !(actionMenuInvoice.payment && (actionMenuInvoice.payment.status === 'paid' || actionMenuInvoice.payment.paidDate)) && 
          actionMenuInvoice.status !== 'paid' && (
@@ -1394,6 +1473,38 @@ const InvoiceList = () => {
           Löschen
         </MenuItem>
       </Menu>
+
+      <Dialog
+        open={sendMailConfirmOpen}
+        onClose={closeSendMailConfirm}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {invoiceToSend?.emailSent?.sent ? 'Rechnung erneut per E-Mail senden?' : 'Rechnung per E-Mail senden?'}
+        </DialogTitle>
+        <DialogContent>
+          {invoiceToSend?.emailSent?.sent && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Diese Rechnung wurde bereits am {formatDateTime(invoiceToSend?.emailSent?.sentDate)}
+              {invoiceToSend?.emailSent?.sentTo ? ` an ${invoiceToSend.emailSent.sentTo}` : ''} gesendet.
+            </Alert>
+          )}
+          <Typography variant="body2">
+            {`Soll die Rechnung ${invoiceToSend?.invoiceNumber || ''} wirklich an `}
+            <strong>{invoiceToSend?.customerEmail || invoiceToSend?.customer?.customerData?.email || 'die hinterlegte Adresse'}</strong>
+            {invoiceToSend?.emailSent?.sent ? ' erneut gesendet werden?' : ' gesendet werden?'}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeSendMailConfirm} variant="outlined">
+            Abbrechen
+          </Button>
+          <Button onClick={confirmSendInvoiceByEmail} variant="contained" startIcon={<EmailIcon />}>
+            {invoiceToSend?.emailSent?.sent ? 'Erneut senden' : 'Wirklich senden'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Rechnungsdetails Dialog */}
       <Dialog 

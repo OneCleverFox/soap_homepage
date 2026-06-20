@@ -33,6 +33,7 @@ import {
 } from '@mui/material';
 import {
   PaymentRounded,
+  Email,
   ShoppingCart,
   Store,
   Refresh,
@@ -45,6 +46,7 @@ import {
   VisibilityOff
 } from '@mui/icons-material';
 import api from '../services/api';
+import AdminEmailConfiguration from './AdminEmailConfiguration';
 
 const AdminSettingsPanel = () => {
   const _theme = useTheme();
@@ -52,6 +54,19 @@ const AdminSettingsPanel = () => {
   const [currentTab, setCurrentTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [emailDiagnosticsLoading, setEmailDiagnosticsLoading] = useState(false);
+  const [emailTestLoading, setEmailTestLoading] = useState(false);
+  const [emailDiagnostics, setEmailDiagnostics] = useState({
+    environment: 'development',
+    resendConfigured: false,
+    emailServiceDisabled: true,
+    fromEmail: '',
+    fromName: '',
+    adminEmail: '',
+    adminAlertEmail: '',
+    notificationEmail: ''
+  });
+  const [lastEmailTest, setLastEmailTest] = useState(null);
   
   // Konfigurationsstates
   const [paypalConfig, setPaypalConfig] = useState({
@@ -119,6 +134,49 @@ const AdminSettingsPanel = () => {
       setLoading(false);
     }
   }, [showSnackbar]); // showSnackbar als Abhängigkeit hinzugefügt
+
+  const loadEmailDiagnostics = useCallback(async () => {
+    try {
+      setEmailDiagnosticsLoading(true);
+      const response = await api.get('/admin-settings/email-diagnostics');
+      if (response.data.success) {
+        setEmailDiagnostics(response.data.data || {});
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Mail-Diagnose:', error);
+      showSnackbar('Fehler beim Laden der Mail-Diagnose', 'error');
+    } finally {
+      setEmailDiagnosticsLoading(false);
+    }
+  }, [showSnackbar]);
+
+  const testEmailNotification = async (type) => {
+    try {
+      setEmailTestLoading(true);
+      const response = await api.post('/admin-settings/test-email-notification', { type });
+      const success = Boolean(response.data?.success);
+      setLastEmailTest({
+        type,
+        success,
+        message: response.data?.message || '',
+        messageId: response.data?.data?.messageId || response.data?.data?.data?.id || null,
+        timestamp: new Date().toISOString()
+      });
+      showSnackbar(response.data?.message || 'Test-E-Mail versendet', success ? 'success' : 'warning');
+    } catch (error) {
+      const message = error.response?.data?.message || 'Fehler beim Senden der Test-Benachrichtigung';
+      setLastEmailTest({
+        type,
+        success: false,
+        message,
+        messageId: null,
+        timestamp: new Date().toISOString()
+      });
+      showSnackbar(message, 'error');
+    } finally {
+      setEmailTestLoading(false);
+    }
+  };
 
   // Einstellungen speichern
   const saveSettings = async (section, config) => {
@@ -223,7 +281,8 @@ const AdminSettingsPanel = () => {
 
   useEffect(() => {
     loadSettings();
-  }, [loadSettings]);
+    loadEmailDiagnostics();
+  }, [loadSettings, loadEmailDiagnostics]);
 
   if (loading) {
     return (
@@ -248,7 +307,10 @@ const AdminSettingsPanel = () => {
         <Button
           variant="outlined"
           startIcon={<Refresh />}
-          onClick={loadSettings}
+          onClick={() => {
+            loadSettings();
+            loadEmailDiagnostics();
+          }}
           disabled={loading}
         >
           Aktualisieren
@@ -260,7 +322,7 @@ const AdminSettingsPanel = () => {
         <CardContent>
           <Typography variant="h6" gutterBottom>📊 System-Status</Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
               <Box display="flex" alignItems="center" gap={1}>
                 <PaymentRounded />
                 <Typography>PayPal:</Typography>
@@ -271,7 +333,7 @@ const AdminSettingsPanel = () => {
                 />
               </Box>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
               <Box display="flex" alignItems="center" gap={1}>
                 <ShoppingCart />
                 <Typography>Checkout:</Typography>
@@ -282,7 +344,7 @@ const AdminSettingsPanel = () => {
                 />
               </Box>
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={3}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Store />
                 <Typography>Shop:</Typography>
@@ -290,6 +352,17 @@ const AdminSettingsPanel = () => {
                   label={shopConfig.status} 
                   color={getStatusColor(shopConfig.status)} 
                   size="small" 
+                />
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={3}>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Email />
+                <Typography>E-Mail:</Typography>
+                <Chip
+                  label={emailDiagnostics.resendConfigured && !emailDiagnostics.emailServiceDisabled ? 'aktiv' : 'deaktiviert'}
+                  color={emailDiagnostics.resendConfigured && !emailDiagnostics.emailServiceDisabled ? 'success' : 'warning'}
+                  size="small"
                 />
               </Box>
             </Grid>
@@ -307,6 +380,7 @@ const AdminSettingsPanel = () => {
           <Tab icon={<PaymentRounded />} label="PayPal" />
           <Tab icon={<ShoppingCart />} label="Checkout" />
           <Tab icon={<Store />} label="Shop" />
+          <Tab icon={<Email />} label="E-Mail" />
         </Tabs>
       </Paper>
 
@@ -336,6 +410,22 @@ const AdminSettingsPanel = () => {
             saving={saving}
             onSave={saveSettings}
           />
+        )}
+
+        {currentTab === 3 && (
+          <Box>
+            <EmailDiagnosticsTab
+              diagnostics={emailDiagnostics}
+              loading={emailDiagnosticsLoading}
+              testing={emailTestLoading}
+              lastTest={lastEmailTest}
+              onReload={loadEmailDiagnostics}
+              onTest={testEmailNotification}
+            />
+            <Box mt={3}>
+              <AdminEmailConfiguration />
+            </Box>
+          </Box>
         )}
       </Box>
 
@@ -1241,6 +1331,73 @@ Ihr Team von Glücksmomente`;
             </Button>
           </Grid>
         </Grid>
+      </CardContent>
+    </Card>
+  );
+};
+
+const EmailDiagnosticsTab = ({ diagnostics, loading, testing, lastTest, onReload, onTest }) => {
+  const statusLabel = diagnostics.resendConfigured && !diagnostics.emailServiceDisabled ? 'bereit' : 'nicht bereit';
+  const statusColor = diagnostics.resendConfigured && !diagnostics.emailServiceDisabled ? 'success' : 'warning';
+
+  return (
+    <Card>
+      <CardContent>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+          <Typography variant="h6">📧 E-Mail-Diagnose & Tests</Typography>
+          <Button variant="outlined" startIcon={<Refresh />} onClick={onReload} disabled={loading}>
+            Aktualisieren
+          </Button>
+        </Box>
+
+        {loading ? (
+          <Box display="flex" justifyContent="center" py={4}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : (
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Environment" value={diagnostics.environment || ''} InputProps={{ readOnly: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box display="flex" alignItems="center" height="100%" gap={1}>
+                <Typography>Status:</Typography>
+                <Chip label={statusLabel} color={statusColor} size="small" />
+              </Box>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Absender" value={diagnostics.fromEmail || ''} InputProps={{ readOnly: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Absender-Name" value={diagnostics.fromName || ''} InputProps={{ readOnly: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Admin E-Mail" value={diagnostics.adminEmail || ''} InputProps={{ readOnly: true }} />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField fullWidth label="Benachrichtigungs-E-Mail" value={diagnostics.notificationEmail || diagnostics.adminAlertEmail || ''} InputProps={{ readOnly: true }} />
+            </Grid>
+          </Grid>
+        )}
+
+        <Box mt={3} display="flex" gap={2} flexWrap="wrap">
+          <Button variant="contained" onClick={() => onTest('inquiry')} disabled={testing || loading}>
+            Test: Anfrage-Benachrichtigung
+          </Button>
+          <Button variant="contained" onClick={() => onTest('order')} disabled={testing || loading}>
+            Test: Bestell-Benachrichtigung
+          </Button>
+          {testing && <CircularProgress size={22} />}
+        </Box>
+
+        {lastTest && (
+          <Box mt={3}>
+            <Alert severity={lastTest.success ? 'success' : 'error'}>
+              {lastTest.message}
+              {lastTest.messageId ? ` (Message-ID: ${lastTest.messageId})` : ''}
+            </Alert>
+          </Box>
+        )}
       </CardContent>
     </Card>
   );

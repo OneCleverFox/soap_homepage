@@ -109,6 +109,23 @@ router.post('/paypal-success', validateCheckoutStatus, validatePayPalStatus, asy
         
         await neueBestellung.save();
         console.log('✅ Bestellung nach PayPal-Erfolg gespeichert mit Status "bezahlt":', bestellungData.bestellnummer);
+
+        // Admin per E-Mail benachrichtigen, damit schnell reagiert werden kann
+        try {
+          const adminNotificationResult = await emailService.sendAdminOrderNotification({
+            bestellung: neueBestellung,
+            kundenname: `${neueBestellung.besteller?.vorname || ''} ${neueBestellung.besteller?.nachname || ''}`.trim() || 'Unbekannt',
+            gesamtbetrag: neueBestellung.preise?.gesamtsumme || 0
+          });
+
+          if (adminNotificationResult.success) {
+            console.log(`✅ Admin-Benachrichtigung gesendet für Bestellung ${neueBestellung.bestellnummer}`);
+          } else {
+            console.warn(`⚠️ Admin-Benachrichtigung fehlgeschlagen für Bestellung ${neueBestellung.bestellnummer}:`, adminNotificationResult.error);
+          }
+        } catch (adminEmailError) {
+          console.error('❌ Fehler beim Senden der Admin-Benachrichtigung:', adminEmailError);
+        }
         
         // ✅ Automatische Rechnungserstellung nach erfolgreicher Zahlung
         try {

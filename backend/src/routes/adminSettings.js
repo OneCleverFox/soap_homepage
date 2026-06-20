@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const AdminSettings = require('../models/AdminSettings');
 const { auth } = require('../middleware/auth');
+const emailService = require('../services/emailService');
 
 // Middleware: Nur Admin-Zugriff
 const requireAdmin = (req, res, next) => {
@@ -90,6 +91,104 @@ router.get('/settings', auth, requireAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen der Einstellungen'
+    });
+  }
+});
+
+// 📧 GET: Mail-Diagnose für Admin-Einstellungsseite
+router.get('/email-diagnostics', auth, requireAdmin, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        environment: process.env.NODE_ENV || 'development',
+        resendConfigured: Boolean(process.env.RESEND_API_KEY),
+        emailServiceDisabled: Boolean(emailService.isDisabled),
+        fromEmail: emailService.fromEmail || process.env.EMAIL_FROM || '',
+        fromName: emailService.fromName || 'Gluecksmomente Manufaktur',
+        adminEmail: process.env.ADMIN_EMAIL || '',
+        adminAlertEmail: process.env.ADMIN_ALERT_EMAIL || process.env.ADMIN_EMAIL || '',
+        notificationEmail: emailService.notificationEmail || process.env.ADMIN_ALERT_EMAIL || process.env.ADMIN_EMAIL || ''
+      }
+    });
+  } catch (error) {
+    console.error('❌ Fehler bei Mail-Diagnose:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Mail-Diagnose',
+      error: error.message
+    });
+  }
+});
+
+// 📧 POST: Test-Admin-Benachrichtigung versenden
+router.post('/test-email-notification', auth, requireAdmin, async (req, res) => {
+  try {
+    const { type = 'inquiry' } = req.body || {};
+    let result;
+
+    if (type === 'order') {
+      result = await emailService.sendAdminOrderNotification({
+        bestellung: {
+          _id: 'test-order-admin-settings',
+          bestellnummer: `TEST-${Date.now()}`,
+          bestelldatum: new Date(),
+          kontakt: { email: 'kunde@example.com' },
+          artikel: [{ name: 'Testprodukt', typ: 'Test', menge: 1, preis: 12.34 }],
+          rechnungsadresse: {
+            vorname: 'Max',
+            nachname: 'Muster',
+            strasse: 'Teststrasse',
+            hausnummer: '1',
+            plz: '12345',
+            stadt: 'Teststadt'
+          },
+          lieferadresse: {
+            vorname: 'Max',
+            nachname: 'Muster',
+            strasse: 'Teststrasse',
+            hausnummer: '1',
+            plz: '12345',
+            stadt: 'Teststadt'
+          },
+          zahlung: { transaktionsId: 'TEST-TX-ADMIN' },
+          notizen: { kunde: 'Test-Bestellung aus Admin-Einstellungen' }
+        },
+        kundenname: 'Max Muster',
+        gesamtbetrag: 12.34
+      });
+    } else {
+      result = await emailService.sendAdminInquiryNotification({
+        _id: 'test-inquiry-admin-settings',
+        customer: {
+          name: 'Test Kunde',
+          email: 'kunde@example.com',
+          phone: '0123456789'
+        },
+        customerNote: 'Test-Anfrage aus Admin-Einstellungen',
+        createdAt: new Date()
+      });
+    }
+
+    if (!result?.success) {
+      return res.status(400).json({
+        success: false,
+        message: result?.error || 'Test-Benachrichtigung fehlgeschlagen',
+        data: result || null
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Test-${type === 'order' ? 'Bestell' : 'Anfrage'}-Benachrichtigung wurde versendet`,
+      data: result
+    });
+  } catch (error) {
+    console.error('❌ Fehler beim Senden der Test-Benachrichtigung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Senden der Test-Benachrichtigung',
+      error: error.message
     });
   }
 });
@@ -441,5 +540,343 @@ function updateEnvVariable(envContent, varName, newValue) {
     return envContent + `\n${newLine}`;
   }
 }
+
+// 📧 EMAIL CONFIG ENDPOINTS
+const EmailConfig = require('../models/EmailConfig');
+
+const emailTriggerOptions = {
+  verification: ['user_registration', 'manual'],
+  welcome: ['email_verified', 'user_registration', 'manual'],
+  passwordreset: ['manual'],
+  passwordchanged: ['manual'],
+  orderconfirmation: ['manual'],
+  orderrejection: ['manual'],
+  adminordernotification: ['manual'],
+  admininquirynotification: ['manual']
+};
+
+const legacyTriggerMap = {
+  registration: 'user_registration',
+  'after-verification': 'email_verified',
+  auto: 'manual',
+  order_placed: 'manual',
+  'order-placed': 'manual',
+  order_rejected: 'manual',
+  'order-rejected': 'manual',
+  new_order: 'manual',
+  new_inquiry: 'manual',
+  'inquiry-submitted': 'manual',
+  password_reset_request: 'manual'
+};
+
+function normalizeEmailTrigger(configKey, triggerValue) {
+  const allowedTriggers = emailTriggerOptions[configKey] || ['manual'];
+  const mappedTrigger = legacyTriggerMap[triggerValue] || triggerValue;
+
+  if (allowedTriggers.includes(mappedTrigger)) {
+    return mappedTrigger;
+  }
+
+  return allowedTriggers[0] || 'manual';
+}
+
+function normalizeEmailConfigSet(emailConfigs = {}) {
+  return Object.fromEntries(
+    Object.entries(emailConfigs).map(([key, config]) => [
+      key,
+      {
+        ...config,
+        trigger: normalizeEmailTrigger(key, config?.trigger)
+      }
+    ])
+  );
+}
+
+// GET: E-Mail-Konfiguration abrufen
+router.get('/email/config', auth, requireAdmin, async (req, res) => {
+  try {
+    const emailConfig = await EmailConfig.getInstance();
+    
+    // Globale Settings zusammenstellen
+    const globalSettings = {
+      emailEnabled: emailConfig.emailEnabled,
+      fromEmail: emailConfig.fromEmail,
+      fromName: emailConfig.fromName,
+      replyToEmail: emailConfig.replyToEmail,
+      adminEmail: emailConfig.adminEmail
+    };
+    
+    // Email-Typ-Konfigurationen zusammenstellen
+    const emailConfigs = normalizeEmailConfigSet({
+      verification: emailConfig.verification,
+      welcome: emailConfig.welcome,
+      passwordreset: emailConfig.passwordreset,
+      passwordchanged: emailConfig.passwordchanged,
+      orderconfirmation: emailConfig.orderconfirmation,
+      orderrejection: emailConfig.orderrejection,
+      adminordernotification: emailConfig.adminordernotification,
+      admininquirynotification: emailConfig.admininquirynotification
+    });
+    
+    console.log('📧 E-Mail-Konfiguration abgerufen');
+    
+    res.json({
+      success: true,
+      globalSettings,
+      emailConfigs,
+      configCount: Object.keys(emailConfigs).length,
+      hasGlobalSettings: !!globalSettings.emailEnabled
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Abrufen der E-Mail-Konfiguration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+// POST: E-Mail-Konfiguration speichern
+router.post('/email/config', auth, requireAdmin, async (req, res) => {
+  try {
+    const { globalSettings, emailConfigs } = req.body;
+    const emailConfig = await EmailConfig.getInstance();
+    const updatedBy = req.user?.email || 'Admin';
+    
+    console.log('📧 E-Mail-Konfiguration speichern...');
+    
+    // Globale Settings aktualisieren
+    if (globalSettings) {
+      if (globalSettings.emailEnabled !== undefined) emailConfig.emailEnabled = globalSettings.emailEnabled;
+      if (globalSettings.fromEmail) emailConfig.fromEmail = globalSettings.fromEmail;
+      if (globalSettings.fromName) emailConfig.fromName = globalSettings.fromName;
+      if (globalSettings.replyToEmail) emailConfig.replyToEmail = globalSettings.replyToEmail;
+      if (globalSettings.adminEmail) emailConfig.adminEmail = globalSettings.adminEmail;
+    }
+    
+    // Email-Typ-Konfigurationen aktualisieren
+    if (emailConfigs) {
+      const emailTypeKeys = ['verification', 'welcome', 'passwordreset', 'passwordchanged', 
+                            'orderconfirmation', 'orderrejection', 'adminordernotification', 
+                            'admininquirynotification'];
+      
+      for (const key of emailTypeKeys) {
+        if (emailConfigs[key]) {
+          emailConfig[key] = {
+            enabled: emailConfigs[key].enabled !== false,
+            subject: emailConfigs[key].subject || emailConfig[key]?.subject,
+            trigger: normalizeEmailTrigger(key, emailConfigs[key].trigger || emailConfig[key]?.trigger)
+          };
+        }
+      }
+    }
+    
+    // Metadata
+    emailConfig.updatedBy = updatedBy;
+    
+    // Speichern
+    await emailConfig.save();
+    
+    console.log('✅ [Admin] E-Mail-Konfiguration gespeichert:', { 
+      configCount: Object.keys(emailConfigs || {}).length,
+      hasGlobalSettings: !!globalSettings?.emailEnabled 
+    });
+    
+    res.json({
+      success: true,
+      message: 'E-Mail-Konfiguration erfolgreich gespeichert',
+      config: emailConfig
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Speichern der E-Mail-Konfiguration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern der E-Mail-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+// GET: E-Mail-Template abrufen
+router.get('/email/templates/:type', auth, requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const emailConfig = await EmailConfig.getInstance();
+    
+    const template = emailConfig.templates?.get(type);
+    
+    if (!template) {
+      const defaultTemplates = {
+        verification:               '<p>Hallo {{userName}},</p><p>bitte bestätigen Sie Ihre E-Mail-Adresse: <a href="{{verificationUrl}}">Hier klicken</a></p>',
+        welcome:                    '<p>Hallo {{userName}},</p><p>herzlich willkommen bei Glücksmomente Manufaktur! Ihr Konto ist jetzt aktiv.</p>',
+        passwordreset:              '<p>Hallo {{userName}},</p><p>zum Zurücksetzen Ihres Passworts klicken Sie hier: <a href="{{resetUrl}}">Passwort zurücksetzen</a></p>',
+        passwordchanged:            '<p>Hallo {{userName}},</p><p>Ihr Passwort wurde erfolgreich geändert. Falls Sie das nicht waren, kontaktieren Sie uns bitte sofort.</p>',
+        orderconfirmation:          '<p>Hallo {{userName}},</p><p>Ihre Bestellung {{orderNumber}} wurde erfolgreich aufgenommen. Vielen Dank!</p>',
+        orderrejection:             '<p>Hallo {{userName}},</p><p>leider können wir Ihre Bestellung {{orderNumber}} nicht bearbeiten.</p>',
+        adminordernotification:     '<p>Neue Bestellung eingegangen: {{orderNumber}}</p><p>Kunde: {{customerName}}</p><p>Betrag: {{totalAmount}} €</p>',
+        admininquirynotification:   '<p>Neue Anfrage von: {{customerName}} ({{customerEmail}})</p><p>Telefon: {{customerPhone}}</p><p>Nachricht:</p><p>{{message}}</p>'
+      };
+      return res.json({
+        success: true,
+        type,
+        template: defaultTemplates[type] || `<p>Kein Template für "${type}" hinterlegt. Hier können Sie Ihr eigenes HTML eingeben.</p>`,
+        isDefault: true
+      });
+    }
+    
+    res.json({
+      success: true,
+      type,
+      template,
+      isDefault: false
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Abrufen des E-Mail-Templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen des E-Mail-Templates',
+      error: error.message
+    });
+  }
+});
+
+// GET: Alle E-Mail-Templates abrufen
+router.get('/email/templates', auth, requireAdmin, async (req, res) => {
+  try {
+    const emailConfig = await EmailConfig.getInstance();
+    const templates = {};
+    
+    if (emailConfig.templates) {
+      for (const [key, value] of emailConfig.templates) {
+        templates[key] = value;
+      }
+    }
+    
+    res.json({
+      success: true,
+      templates,
+      count: Object.keys(templates).length
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Abrufen der E-Mail-Templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der E-Mail-Templates',
+      error: error.message
+    });
+  }
+});
+
+// POST: E-Mail-Template speichern
+router.post('/email/templates/:type', auth, requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { template } = req.body;
+    const emailConfig = await EmailConfig.getInstance();
+    const updatedBy = req.user?.email || 'Admin';
+    
+    if (!template) {
+      return res.status(400).json({
+        success: false,
+        message: 'Template ist erforderlich'
+      });
+    }
+    
+    // Template als String speichern
+    emailConfig.templates.set(type, template);
+    emailConfig.updatedBy = updatedBy;
+    
+    await emailConfig.save();
+    
+    console.log(`✅ E-Mail-Template gespeichert: ${type}`);
+    
+    res.json({
+      success: true,
+      message: `Template für "${type}" erfolgreich gespeichert`,
+      type,
+      templateLength: template.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Speichern des E-Mail-Templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern des E-Mail-Templates',
+      error: error.message
+    });
+  }
+});
+
+// POST: Test-Email mit aktuellem Template versenden
+router.post('/email/test-email-with-template/:type', auth, requireAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { recipientEmail } = req.body;
+    const emailConfig = await EmailConfig.getInstance();
+    
+    const testEmail = recipientEmail || emailConfig.adminEmail;
+    if (!testEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Test-E-Mail-Adresse verfügbar'
+      });
+    }
+    
+    const template = emailConfig.templates?.get(type);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: `Template für "${type}" nicht gefunden`
+      });
+    }
+    
+    // Test-Email versenden mit Resend API
+    try {
+      const result = await emailService.sendWithResendFallback({
+        from: emailConfig.fromEmail,
+        to: testEmail,
+        subject: `[TEST] ${emailConfig[type]?.subject || `Test - ${type}`}`,
+        html: template
+      });
+      
+      if (!result?.success && result?.error) {
+        return res.status(400).json({
+          success: false,
+          message: 'Test-E-Mail konnte nicht versendet werden',
+          error: result.error
+        });
+      }
+      
+      console.log(`✅ Test-Email versendet: ${type} → ${testEmail}`);
+      
+      res.json({
+        success: true,
+        message: `Test-Email für "${type}" wurde versendet an ${testEmail}`,
+        result: result
+      });
+      
+    } catch (sendError) {
+      console.error('❌ Fehler beim Versenden der Test-Email:', sendError);
+      res.status(400).json({
+        success: false,
+        message: 'Test-E-Mail konnte nicht versendet werden',
+        error: sendError.message
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Fehler beim Versenden der Test-Email:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Versenden der Test-Email',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

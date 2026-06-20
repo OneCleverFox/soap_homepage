@@ -1,46 +1,61 @@
 const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const EmailOut = require('../models/EmailOut');
 
 class EmailService {
   constructor() {
-    // API-Key aus Umgebungsvariablen laden
-    const apiKey = process.env.RESEND_API_KEY;
-    
-    // Prüfe auf Platzhalter-Keys
-    const isPlaceholderKey = !apiKey || 
-      apiKey.includes('placeholder') || 
-      apiKey.includes('testing') ||
-      apiKey.includes('123456') ||
-      apiKey === 're_123456789_placeholder_key_for_testing';
-    
-    if (!apiKey || isPlaceholderKey) {
-      console.warn('⚠️ RESEND_API_KEY nicht konfiguriert oder Platzhalter - E-Mail-Service im DEMO-MODUS');
-      console.warn('📝 Für echte E-Mails: https://resend.com → API Key generieren → .env RESEND_API_KEY=re_xxxxx setzen');
-      this.isDisabled = true;
-      this.isDemoMode = true;
-      return;
-    }
-    
-    this.resend = new Resend(apiKey);
-    
-    // Production/Development E-Mail-Konfiguration
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
     this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
-    
-    // Domain-Konfiguration basierend auf Environment
-    if (this.isProduction) {
-      this.fromEmail = 'info@gluecksmomente-manufaktur.de';
-      this.fromName = 'Glücksmomente Manufaktur';
-    } else {
-      // Development: Verwende auch die verifizierte Domain
-      this.fromEmail = 'info@gluecksmomente-manufaktur.de';
-      this.fromName = 'Glücksmomente Manufaktur (DEV)';
+    this.notificationEmail = process.env.ADMIN_ALERT_EMAIL || this.adminEmail;
+
+    const smtpUser = (process.env.GMAIL_USER || process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+    const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim();
+
+    if (smtpUser && smtpPass) {
+      this.smtpTransport = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      });
+      this.activeProvider = 'gmail';
     }
-    
-    this.isDisabled = false;
-    
-    // Stille Initialisierung - Logs nur bei Fehlern
+
+    // Optionaler Resend-Fallback (default: AUS, um Gmail-only sicherzustellen)
+    this.enableResendFallback = String(process.env.ENABLE_RESEND_FALLBACK || '').toLowerCase() === 'true';
+
+    // Optionaler Resend-Fallback
+    const apiKey = process.env.RESEND_API_KEY;
+    const isPlaceholderKey = !apiKey ||
+      apiKey.includes('placeholder') ||
+      apiKey.includes('testing') ||
+      apiKey.includes('123456') ||
+      apiKey === 're_123456789_placeholder_key_for_testing';
+
+    if (this.enableResendFallback && apiKey && !isPlaceholderKey) {
+      this.resend = new Resend(apiKey);
+      if (!this.activeProvider) {
+        this.activeProvider = 'resend';
+      }
+    }
+
+    const configuredFromEmail = (process.env.EMAIL_FROM || smtpUser || '').trim();
+
+    // Absenderadresse: bevorzugt aus ENV, sonst Gmail-Fallback
+    this.fromEmail = configuredFromEmail || 'info.gluecksmomente.manufaktur@gmail.com';
+    this.fromName = this.isProduction ? 'Glücksmomente Manufaktur' : 'Glücksmomente Manufaktur (DEV)';
+
+    this.isDisabled = !this.smtpTransport && !this.resend;
+    this.isDemoMode = this.isDisabled;
+
+    if (this.isDisabled) {
+      console.warn('⚠️ Kein E-Mail-Provider konfiguriert - E-Mail-Service im DEMO-MODUS');
+      console.warn('📝 Für Gmail: GMAIL_USER + GMAIL_APP_PASSWORD setzen');
+    } else if (!this.enableResendFallback) {
+      console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend-Fallback deaktiviert)');
+    }
   }
 
   // E-Mail-Logging in MongoDB
@@ -65,7 +80,7 @@ class EmailService {
         },
         delivery: {
           status: 'pending',
-          provider: 'resend'
+          provider: this.activeProvider || 'smtp'
         },
         contextData: emailData.contextData || {},
         environment: this.environment,
@@ -102,6 +117,122 @@ class EmailService {
     }
   }
 
+  // Legacy-Wrapper für bestehenden Code
+  async saveEmailLog(emailData) {
+    const typeMap = {
+      verification: 'email_verification',
+      welcome: 'welcome_email',
+      'password-reset': 'password_reset',
+      password_reset: 'password_reset',
+      'profile-update': 'profile_update_notification',
+      profile_update_notification: 'profile_update_notification',
+      'account-deletion': 'account_deletion_confirmation',
+      'order-confirmation': 'order_confirmation',
+      'order-rejection': 'order_rejection',
+      'admin-inquiry-notification': 'system_notification',
+      'admin-notification': 'system_notification',
+      invoice: 'invoice'
+    };
+
+    const normalizedType = typeMap[emailData.type] || 'system_notification';
+
+    const mapped = {
+      type: normalizedType,
+      to: emailData.to || this.notificationEmail,
+      recipientName: emailData.recipientName,
+      userId: emailData.userId,
+      kundeId: emailData.kundeId,
+      subject: emailData.subject || '(ohne Betreff)',
+      htmlBody: emailData.content || emailData.htmlBody || '',
+      textBody: emailData.textBody || '',
+      contextData: {
+        success: emailData.success,
+        simulation: emailData.simulation,
+        messageId: emailData.messageId,
+        error: emailData.error,
+        orderId: emailData.orderId,
+        orderNumber: emailData.orderNumber,
+        inquiryId: emailData.inquiryId
+      }
+    };
+
+    return this.logEmail(mapped);
+  }
+
+  getSenderAddress() {
+    return `${this.fromName} <${this.fromEmail}>`;
+  }
+
+  buildTestEmailSubject(baseSubject, testMeta = null) {
+    if (!testMeta?.isTest) {
+      return baseSubject;
+    }
+
+    const typeLabel = String(testMeta.type || 'mail').toUpperCase();
+    const timestamp = testMeta.timestamp
+      ? new Date(testMeta.timestamp).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    return `Admin-Hinweis [TEST ${typeLabel} ${timestamp}]: ${baseSubject}`;
+  }
+
+  async sendWithResendFallback(emailData) {
+    if (this.smtpTransport) {
+      try {
+        const smtpMail = {
+          from: emailData.from || this.getSenderAddress(),
+          to: emailData.to,
+          subject: emailData.subject,
+          html: emailData.html,
+          text: emailData.text,
+          replyTo: emailData.replyTo || undefined,
+          priority: emailData.priority || undefined,
+          attachments: (emailData.attachments || []).map((att) => ({
+            filename: att.filename,
+            content: att.content,
+            encoding: typeof att.content === 'string' ? 'base64' : undefined,
+            contentType: att.contentType
+          }))
+        };
+
+        const info = await this.smtpTransport.sendMail(smtpMail);
+        return {
+          id: info.messageId,
+          data: { id: info.messageId },
+          provider: 'gmail'
+        };
+      } catch (smtpError) {
+        console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
+        if (!this.resend) {
+          return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
+        }
+      }
+    }
+
+    if (this.resend) {
+      const primaryResult = await this.resend.emails.send(emailData);
+      const errorMessage = primaryResult?.error?.message || '';
+
+      if (
+        primaryResult?.error &&
+        !this.isProduction &&
+        /domain is not verified/i.test(errorMessage)
+      ) {
+        console.warn('⚠️ Resend-Domain noch nicht verifiziert - DEV-Fallback auf onboarding@resend.dev');
+        const fallbackEmailData = {
+          ...emailData,
+          from: 'Gluecksmomente Manufaktur (DEV) <onboarding@resend.dev>'
+        };
+
+        return this.resend.emails.send(fallbackEmailData);
+      }
+
+      return primaryResult;
+    }
+
+    return { error: { message: 'Kein E-Mail-Provider konfiguriert' } };
+  }
+
   // Intelligente E-Mail-Weiterleitung für Development
   getEmailRecipient(originalRecipient) {
     // In Production: Direkt an Zielempfänger
@@ -127,7 +258,115 @@ class EmailService {
     };
   }
 
-  async sendVerificationEmail(to, verificationToken, userName) {
+  getTemplateStyles(theme = 'blue') {
+    const palettes = {
+      blue: {
+        pageBg: '#FEFDFB',
+        start: '#8B4B61',
+        end: '#5D3242',
+        border: '#E8D5B7',
+        button: '#8B4B61'
+      },
+      green: {
+        pageBg: '#FEFDFB',
+        start: '#A8D5B5',
+        end: '#7FB88A',
+        border: '#C8E6D0',
+        button: '#7FB88A'
+      },
+      amber: {
+        pageBg: '#FEFDFB',
+        start: '#E8D5B7',
+        end: '#D4B895',
+        border: '#F5EEDD',
+        button: '#8B4B61'
+      },
+      indigo: {
+        pageBg: '#FEFDFB',
+        start: '#B17A89',
+        end: '#8B4B61',
+        border: '#E8D5B7',
+        button: '#8B4B61'
+      },
+      red: {
+        pageBg: '#FEFDFB',
+        start: '#B17A89',
+        end: '#8B4B61',
+        border: '#E8D5B7',
+        button: '#8B4B61'
+      }
+    };
+
+    const colors = palettes[theme] || palettes.blue;
+
+    return {
+      wrapper: `font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; color: #2C2C2C; line-height: 1.65; background:${colors.pageBg}; padding:16px; border-radius:16px;`,
+      headerCentered: `background:linear-gradient(135deg,${colors.start},${colors.end}); color:white; padding:28px 24px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(93,50,66,0.16);`,
+      header: `background:linear-gradient(135deg,${colors.start},${colors.end}); color:white; padding:26px 24px; border-radius:14px 14px 0 0; box-shadow:0 8px 24px rgba(93,50,66,0.16);`,
+      body: `border:1px solid ${colors.border}; border-top:none; border-radius:0 0 14px 14px; padding:24px; background:white; box-shadow:0 6px 20px rgba(93,50,66,0.08);`,
+      panel: 'background:#F5EEDD; border:1px solid #E8D5B7; border-radius:10px; padding:14px 16px;',
+      button: `display:inline-block; background:linear-gradient(135deg,${colors.button},#5D3242); color:#fff; text-decoration:none; padding:12px 22px; border-radius:999px; font-weight:700; box-shadow:0 6px 16px rgba(139,75,97,0.25);`,
+      smallMuted: 'font-size:13px; color:#5D3242; margin:0;'
+    };
+  }
+
+  renderTemplateButton(url, label, buttonStyle) {
+    return `<a href="${url}" style="${buttonStyle}">${label}</a>`;
+  }
+
+  renderTemplateBadge(text) {
+    return `<span style="display:inline-block; padding:6px 12px; border-radius:999px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.35); color:white; font-size:12px; font-weight:700; letter-spacing:0.2px; margin-top:10px;">${text}</span>`;
+  }
+
+  renderTemplateInfoBox(title, listItems = [], tone = 'info') {
+    const tones = {
+      info: {
+        background: '#F5EEDD',
+        border: '#E8D5B7',
+        titleColor: '#5D3242',
+        textColor: '#5D3242'
+      },
+      success: {
+        background: '#EAF6EF',
+        border: '#C8E6D0',
+        titleColor: '#3E6D4A',
+        textColor: '#3E6D4A'
+      },
+      warning: {
+        background: '#FDF6EA',
+        border: '#E8D5B7',
+        titleColor: '#7A5B2F',
+        textColor: '#7A5B2F'
+      },
+      danger: {
+        background: '#F8ECEF',
+        border: '#D9B2BE',
+        titleColor: '#7A2D43',
+        textColor: '#7A2D43'
+      }
+    };
+
+    const palette = tones[tone] || tones.info;
+
+    return `
+      <div style="background:${palette.background}; border:1px solid ${palette.border}; border-radius:10px; padding:14px 16px; margin:16px 0;">
+        <p style="margin:0 0 6px 0; font-weight:700; color:${palette.titleColor};">${title}</p>
+        <ul style="margin:0; padding-left:18px; color:${palette.textColor};">
+          ${listItems.map((item) => `<li>${item}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  renderTemplateFooter() {
+    return `
+      <div style="margin-top:22px; padding-top:14px; border-top:1px solid #E8D5B7; text-align:center;">
+        <p style="margin:0; font-size:12px; color:#5D3242;">Mit Liebe gestaltet von der Glücksmomente Manufaktur</p>
+      </div>
+    `;
+  }
+
+  async sendVerificationEmail(to, verificationToken, userName, testMeta = null) {
     console.log('📧 [E-Mail Service] Verifikations-E-Mail angefordert:', { to, userName });
     
     if (this.isDisabled) {
@@ -158,102 +397,104 @@ class EmailService {
     
     try {
       const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/verify-email?token=${verificationToken}`;
-      
-      const htmlContent = `<div style="font-family: 'Georgia', 'Times New Roman', serif; max-width: 600px; margin: 0 auto; padding: 20px; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 15px;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px; text-align: center; border-radius: 15px 15px 0 0; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-            <h1 style="color: white; margin: 0; font-size: 32px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">🌸 Glücksmomente Manufaktur</h1>
-            <p style="color: white; margin: 15px 0 0 0; font-size: 18px; opacity: 0.95; font-style: italic;">Wo Träume zu duftenden Realitäten werden</p>
-          </div>
-          
-          <div style="background: white; padding: 40px; border-radius: 0 0 15px 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.1);">
-            <h2 style="color: #2c3e50; margin-bottom: 25px; font-size: 24px; text-align: center;">Hallo ${userName}! 🌺</h2>
-            
-            <div style="background: #f8f9fa; padding: 25px; border-radius: 12px; margin: 25px 0; border-left: 5px solid #667eea;">
-              <p style="color: #555; line-height: 1.8; margin: 0; font-size: 16px;">
-                <strong>Herzlich willkommen in unserer besonderen Welt der handgemachten Seifen!</strong> ✨<br><br>
-                
-                Es freut uns riesig, dass Sie sich für die Glücksmomente Manufaktur entschieden haben. 
-                Wir kreieren mit Liebe und Sorgfalt einzigartige Seifen aus natürlichen Zutaten, 
-                die nicht nur Ihre Haut verwöhnen, sondern auch kleine Glücksmomente in Ihren Alltag bringen.
-              </p>
-            </div>
-            
-            <div style="background: #e8f4fd; padding: 25px; border-radius: 12px; margin: 30px 0; text-align: center;">
-              <p style="color: #1e4a73; line-height: 1.6; margin-bottom: 25px; font-size: 17px;">
-                <strong>🔐 Letzter Schritt zur Vollendung:</strong><br>
-                Bestätigen Sie bitte Ihre E-Mail-Adresse, damit wir Sie über neue Duftkreationen, 
-                exklusive Angebote und kleine Geheimnisse der Seifenherstellung informieren können.
-              </p>
-              
-              <a href="${verificationUrl}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        color: white; 
-                        text-decoration: none; 
-                        padding: 18px 35px; 
-                        border-radius: 30px; 
-                        font-weight: bold; 
-                        font-size: 18px; 
-                        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
-                        transition: all 0.3s ease;
-                        display: inline-block;
-                        margin: 10px;">
-                ✨ E-Mail jetzt bestätigen ✨
-              </a>
-            </div>
-            
-            <div style="background: #fff3cd; padding: 20px; border-radius: 12px; margin: 25px 0; border: 2px dashed #ffc107;">
-              <h3 style="color: #856404; margin: 0 0 15px 0; font-size: 18px;">🎁 Was Sie nach der Bestätigung erwartet:</h3>
-              <ul style="color: #6c757d; line-height: 1.8; margin: 10px 0; padding-left: 25px;">
-                <li><strong>10% Willkommensrabatt</strong> auf Ihre erste Bestellung</li>
-                <li><strong>Exklusive Seifenrezepte</strong> und Pflegetipps</li>
-                <li><strong>Früher Zugang</strong> zu neuen Kollektionen</li>
-                <li><strong>Persönliche Beratung</strong> für Ihre Hautbedürfnisse</li>
-                <li><strong>Monatliche Inspiration</strong> rund um natürliche Pflege</li>
-              </ul>
-            </div>
-            
-            <div style="margin: 30px 0; padding: 20px; background: #f1f8e9; border-radius: 12px; text-align: center;">
-              <p style="color: #2e7d32; margin: 0; font-style: italic; font-size: 16px;">
-                "Jede Seife erzählt eine Geschichte. Lassen Sie uns gemeinsam Ihre Geschichte schreiben."<br>
-                <strong>- Das Team der Glücksmomente Manufaktur</strong>
-              </p>
-            </div>
-            
-            <hr style="border: none; border-top: 2px solid #e9ecef; margin: 30px 0;">
-            
-            <div style="text-align: center;">
-              <p style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0;">
-                <strong>Hinweis:</strong> Falls der Button nicht funktioniert, kopieren Sie bitte diesen Link:<br>
-                <a href="${verificationUrl}" style="color: #667eea; word-break: break-all; font-size: 12px;">${verificationUrl}</a><br><br>
-                
-                <em>Dieser Bestätigungslink ist 24 Stunden gültig.</em><br>
-                Bei Fragen erreichen Sie uns unter: <strong>info@gluecksmomente-manufaktur.de</strong>
-              </p>
-            </div>
-          </div>
-        </div>`;
 
-      const result = await this.resend.emails.send({
-        from: this.fromEmail,
-        to: to,
-        subject: '🌸 Willkommen bei Glücksmomente - E-Mail bestätigen',
-        html: htmlContent
+      const htmlContent = `
+        <div style="font-family:Arial,sans-serif; max-width:680px; margin:0 auto; color:#2C2C2C; line-height:1.65; background:#FEFDFB; padding:16px; border-radius:16px;">
+
+          <div style="background:linear-gradient(135deg,#8B4B61,#5D3242); color:white; padding:36px 28px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(93,50,66,0.18);">
+            <p style="margin:0 0 10px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase; opacity:0.75;">Glücksmomente Manufaktur</p>
+            <h1 style="margin:0; font-size:30px; font-weight:700;">Herzlich willkommen${userName ? `, ${userName}` : ''}!</h1>
+            <p style="margin:12px 0 0 0; font-size:16px; opacity:0.92;">Wie schön, dass Sie da sind. Ein letzter Schritt fehlt noch.</p>
+            <span style="display:inline-block; margin-top:16px; padding:6px 16px; border-radius:999px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); color:white; font-size:12px; font-weight:700; letter-spacing:1px;">KONTO AKTIVIERUNG</span>
+          </div>
+
+          <div style="border:1px solid #E8D5B7; border-top:none; border-radius:0 0 14px 14px; padding:32px 28px; background:white; box-shadow:0 6px 20px rgba(93,50,66,0.08);">
+
+            <p style="margin:0 0 16px 0; font-size:16px;">vielen Dank für Ihre Registrierung. Um Ihr Konto zu aktivieren und alle Funktionen sofort nutzen zu können, bestätigen Sie bitte einmalig Ihre E-Mail-Adresse mit dem Button unten.</p>
+
+            <div style="text-align:center; margin:28px 0 10px 0;">
+              <a href="${verificationUrl}" style="display:inline-block; background:linear-gradient(135deg,#8B4B61,#5D3242); color:#fff; text-decoration:none; padding:15px 36px; border-radius:999px; font-weight:700; font-size:16px; box-shadow:0 6px 18px rgba(139,75,97,0.32);">E-Mail-Adresse bestätigen</a>
+            </div>
+            <p style="text-align:center; font-size:13px; color:#999; margin:8px 0 28px 0;">Der Link ist 24 Stunden gültig und kann nur einmal verwendet werden.</p>
+
+            <hr style="border:none; border-top:1px solid #F5EEDD; margin:24px 0;">
+
+            <h2 style="margin:0 0 14px 0; font-size:20px; color:#5D3242;">Was Sie in Ihrem Konto erwartet</h2>
+            <p style="margin:0 0 18px 0; font-size:15px; color:#555;">Nach der Aktivierung stehen Ihnen alle Bereiche Ihres persönlichen Kundenkontos sofort zur Verfügung:</p>
+
+            <table style="width:100%; border-collapse:collapse;">
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F5EEDD; border:2px solid #E8D5B7; text-align:center; line-height:40px; font-size:20px;">📦</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Bestellungen &amp; Anfragen</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Alle Ihre Anfragen und Bestellungen übersichtlich an einem Ort – mit vollem Überblick über den aktuellen Status.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#EAF6EF; border:2px solid #C8E6D0; text-align:center; line-height:40px; font-size:20px;">👤</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Persönliche Daten</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Hinterlegte Kontaktdaten sorgen für eine schnellere und reibungslosere Bearbeitung Ihrer Anfragen.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F8ECEF; border:2px solid #D9B2BE; text-align:center; line-height:40px; font-size:20px;">🔔</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Informationen &amp; Neuheiten</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Wir informieren Sie gezielt über für Sie relevante Angebote, Neuheiten und wichtige Änderungen.</p>
+              </td></tr>
+            </table>
+
+            <div style="background:#F5EEDD; border:1px solid #E8D5B7; border-radius:12px; padding:18px 20px; margin:24px 0 20px 0;">
+              <p style="margin:0 0 10px 0; font-weight:700; color:#5D3242; font-size:15px;">Ihre nächsten Schritte</p>
+              <ol style="margin:0; padding-left:20px; color:#5D3242; font-size:14px; line-height:1.8;">
+                <li>Klicken Sie auf den Button oben, um Ihr Konto zu aktivieren.</li>
+                <li>Melden Sie sich anschließend mit Ihren Zugangsdaten an.</li>
+                <li>Ergänzen Sie Ihre Kontaktdaten für eine schnellere Bearbeitung.</li>
+                <li>Stellen Sie bei Bedarf eine Anfrage oder sehen Sie sich unsere Angebote an.</li>
+              </ol>
+            </div>
+
+            <div style="background:#f9f9f9; border:1px solid #eee; border-radius:10px; padding:14px 16px; margin:0 0 24px 0;">
+              <p style="margin:0; font-size:13px; color:#888;"><strong style="color:#5D3242;">Sicherheitshinweis:</strong> Falls Sie sich nicht bei uns registriert haben, ignorieren Sie diese E-Mail bitte. Ihr Aktivierungslink ist ausschließlich für Sie bestimmt und läuft automatisch ab.</p>
+            </div>
+
+            <p style="margin:0 0 6px 0; font-size:13px; color:#aaa;">Falls der Button nicht funktioniert, kopieren Sie bitte diesen Link:</p>
+            <p style="margin:0 0 24px 0; font-size:12px; word-break:break-all;"><a href="${verificationUrl}" style="color:#8B4B61;">${verificationUrl}</a></p>
+
+            <div style="margin-top:22px; padding-top:14px; border-top:1px solid #E8D5B7; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#5D3242;">Mit Liebe gestaltet von der <strong>Glücksmomente Manufaktur</strong></p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const subject = this.buildTestEmailSubject('Bitte E-Mail-Adresse bestätigen', testMeta);
+
+      const result = await this.sendWithResendFallback({
+        from: this.getSenderAddress(),
+        to,
+        subject,
+        html: htmlContent,
+        replyTo: testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: testMeta?.isTest ? 'high' : undefined
       });
 
-      console.log('✅ [EmailService] Verification email sent successfully!');
-      console.log('📧 [EmailService] Verification Response:', JSON.stringify(result, null, 2));
-      return { 
-        success: true, 
-        messageId: result?.id || result?.data?.id || 'sent-without-id',
+      if (result?.error) {
+        return { success: false, error: result.error.message || 'Resend API Error', fullResponse: result };
+      }
+
+      return {
+        success: true,
+        messageId: result?.data?.id || result?.id || 'sent-without-id',
         fullResponse: result
       };
+      
     } catch (error) {
       console.error('❌ Email sending failed:', error);
       return { success: false, error: error.message };
     }
   }
 
-  async sendWelcomeEmail(to, userName) {
+  async sendWelcomeEmail(to, userName, testMeta = null) {
     console.log('📧 [E-Mail Service] Willkommens-E-Mail angefordert:', { to, userName });
     
     if (this.isDisabled) {
@@ -281,97 +522,103 @@ class EmailService {
     }
     
     try {
+      const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Herzlich Willkommen!</h1>
-            <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Ihr Konto ist jetzt aktiv</p>
+        <div style="font-family:Arial,sans-serif; max-width:680px; margin:0 auto; color:#2C2C2C; line-height:1.65; background:#FEFDFB; padding:16px; border-radius:16px;">
+
+          <div style="background:linear-gradient(135deg,#A8D5B5,#7FB88A); color:white; padding:36px 28px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(127,184,138,0.22);">
+            <p style="margin:0 0 10px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase; opacity:0.75;">Glücksmomente Manufaktur</p>
+            <h1 style="margin:0; font-size:30px; font-weight:700;">Ihr Konto ist jetzt aktiv! 🎉</h1>
+            <p style="margin:12px 0 0 0; font-size:16px; opacity:0.92;">Hallo ${userName || 'und herzlich willkommen'} – wir freuen uns sehr, Sie an Bord zu haben.</p>
+            <span style="display:inline-block; margin-top:16px; padding:6px 16px; border-radius:999px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.35); color:white; font-size:12px; font-weight:700; letter-spacing:1px;">WILLKOMMEN</span>
           </div>
-          
-          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h2 style="color: #333; margin-bottom: 20px;">Hallo ${userName}! 🌟</h2>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              Fantastisch! Ihre E-Mail-Adresse wurde erfolgreich bestätigt und Ihr Konto ist jetzt vollständig aktiviert.
-            </p>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 30px;">
-              Sie können sich jetzt anmelden und unsere wunderbaren handgemachten Seifen entdecken!
-            </p>
-            
-            <div style="background: #fff3cd; padding: 25px; border-radius: 12px; margin: 30px 0; border: 2px dashed #ffc107;">
-              <h3 style="color: #856404; margin: 0 0 20px 0; font-size: 20px; text-align: center;">🎁 Ihr exklusiver Willkommensbonus erwartet Sie!</h3>
-              
-              <div style="background: white; padding: 20px; border-radius: 8px; margin: 15px 0; text-align: center; border: 3px solid #ffc107;">
-                <h4 style="color: #dc3545; margin: 0 0 10px 0; font-size: 24px;">10% RABATT</h4>
-                <p style="margin: 0; font-size: 14px; color: #6c757d;">Auf Ihre erste Bestellung<br>Code: <strong style="color: #dc3545;">WILLKOMMEN10</strong></p>
-              </div>
+
+          <div style="border:1px solid #C8E6D0; border-top:none; border-radius:0 0 14px 14px; padding:32px 28px; background:white; box-shadow:0 6px 20px rgba(127,184,138,0.1);">
+
+            <p style="margin:0 0 16px 0; font-size:16px;">Vielen Dank für Ihr Vertrauen. Ihre E-Mail-Adresse wurde erfolgreich bestätigt und Ihr Konto ist ab sofort vollständig aktiviert. Wir freuen uns darauf, Sie bestmöglich zu unterstützen.</p>
+
+            <div style="text-align:center; margin:28px 0 10px 0;">
+              <a href="${loginUrl}" style="display:inline-block; background:linear-gradient(135deg,#7FB88A,#5D9E6A); color:#fff; text-decoration:none; padding:15px 36px; border-radius:999px; font-weight:700; font-size:16px; box-shadow:0 6px 18px rgba(127,184,138,0.35);">Jetzt anmelden</a>
             </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}/login" 
-                 style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); 
-                        color: white; 
-                        text-decoration: none; 
-                        padding: 18px 35px; 
-                        border-radius: 25px; 
-                        font-weight: bold; 
-                        font-size: 16px; 
-                        display: inline-block;
-                        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
-                        transition: all 0.3s ease;">
-                🚪 Jetzt anmelden & entdecken
-              </a>
-            </div>
-            
-            <div style="background: #f1f8e9; padding: 25px; border-radius: 12px; margin: 30px 0;">
-              <h3 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">🌿 Was macht unsere Seifen besonders?</h3>
-              <ul style="color: #6c757d; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
-                <li><strong>100% natürliche Inhaltsstoffe</strong> - keine künstlichen Zusätze</li>
-                <li><strong>Handgemacht mit Liebe</strong> - jede Seife ist ein Unikat</li>
-                <li><strong>Nachhaltig verpackt</strong> - umweltfreundlich und plastikfrei</li>
-                <li><strong>Für jeden Hauttyp</strong> - auch für sensible Haut geeignet</li>
-                <li><strong>Fair produziert</strong> - mit hochwertigen Bio-Ölen</li>
+            <p style="text-align:center; font-size:13px; color:#999; margin:8px 0 28px 0;">Nutzen Sie die E-Mail-Adresse und das Passwort, mit dem Sie sich registriert haben.</p>
+
+            <hr style="border:none; border-top:1px solid #EAF6EF; margin:24px 0;">
+
+            <h2 style="margin:0 0 14px 0; font-size:20px; color:#3E6D4A;">Was Sie jetzt in Ihrem Konto finden</h2>
+
+            <table style="width:100%; border-collapse:collapse;">
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#EAF6EF; border:2px solid #C8E6D0; text-align:center; line-height:40px; font-size:20px;">📋</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Ihre Anfragen &amp; Bestellungen</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Behalten Sie den Überblick über alle Ihre Anfragen und sehen Sie jederzeit den aktuellen Bearbeitungsstand ein.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F5EEDD; border:2px solid #E8D5B7; text-align:center; line-height:40px; font-size:20px;">⚙️</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Profil &amp; Kontaktdaten</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Hinterlegen Sie Ihre Daten für eine schnellere und reibungslosere Abwicklung. Sie sparen Zeit bei jeder weiteren Anfrage.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F8ECEF; border:2px solid #D9B2BE; text-align:center; line-height:40px; font-size:20px;">🔔</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Statusupdates</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Sie werden automatisch informiert, sobald sich der Status Ihrer Anfragen oder Bestellungen ändert.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#EAF6EF; border:2px solid #C8E6D0; text-align:center; line-height:40px; font-size:20px;">💌</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Persönlicher Kontakt</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Bei Fragen erreichen Sie uns jederzeit direkt per E-Mail. Wir antworten schnell und unkompliziert.</p>
+              </td></tr>
+            </table>
+
+            <div style="background:#EAF6EF; border:1px solid #C8E6D0; border-radius:12px; padding:18px 20px; margin:24px 0 20px 0;">
+              <p style="margin:0 0 10px 0; font-weight:700; color:#3E6D4A; font-size:15px;">Tipps für einen guten Start</p>
+              <ul style="margin:0; padding-left:20px; color:#3E6D4A; font-size:14px; line-height:1.8;">
+                <li>Vervollständigen Sie Ihr Profil mit aktuellen Kontaktdaten.</li>
+                <li>Stellen Sie Ihre erste Anfrage über das Kontaktformular.</li>
+                <li>Speichern Sie die Anmeldeseite für schnellen Zugriff.</li>
+                <li>Sprechen Sie uns bei Fragen jederzeit direkt an – wir helfen gerne.</li>
               </ul>
             </div>
-            
-            <div style="margin: 30px 0; padding: 20px; background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%); border-radius: 12px; text-align: center;">
-              <p style="color: #2e7d32; margin: 0; font-style: italic; font-size: 16px; line-height: 1.6;">
-                💚 "Bei uns finden Sie nicht nur Seifen, sondern kleine Glücksmomente für Ihre tägliche Pflegeroutine. Lassen Sie sich verwöhnen!"<br><br>
-                <strong>- Mit herzlichen Grüßen, Ihr Team der Glücksmomente Manufaktur</strong>
-              </p>
+
+            <div style="background:#f9f9f9; border:1px solid #eee; border-radius:10px; padding:14px 16px; margin:0 0 24px 0;">
+              <p style="margin:0; font-size:14px; color:#666;">Bei Fragen stehen wir Ihnen jederzeit gerne zur Verfügung. Antworten Sie einfach direkt auf diese E-Mail oder nutzen Sie das Kontaktformular auf unserer Website.</p>
             </div>
-            
-            <hr style="border: none; border-top: 2px solid #e9ecef; margin: 30px 0;">
-            
-            <div style="text-align: center;">
-              <p style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0;">
-                <strong>Haben Sie Fragen?</strong><br>
-                Wir sind gerne für Sie da: <strong>info@gluecksmomente-manufaktur.de</strong><br><br>
-                
-                <em>Folgen Sie uns auch auf unseren sozialen Medien für Pflegetipps und Neuigkeiten!</em>
-              </p>
+
+            <div style="margin-top:22px; padding-top:14px; border-top:1px solid #C8E6D0; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#3E6D4A;">Mit Liebe gestaltet von der <strong>Glücksmomente Manufaktur</strong></p>
             </div>
           </div>
         </div>
       `;
 
-      const result = await this.resend.emails.send({
-        from: this.fromEmail,
-        to: to,
-        subject: '🎉 Konto erfolgreich aktiviert - Willkommen bei Glücksmomente!',
-        html: htmlContent
+      const subject = this.buildTestEmailSubject('Willkommen – Ihr Konto ist aktiv', testMeta);
+
+      const result = await this.sendWithResendFallback({
+        from: this.getSenderAddress(),
+        to,
+        subject,
+        html: htmlContent,
+        replyTo: testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: testMeta?.isTest ? 'high' : undefined
       });
 
-      console.log('✅ Welcome email sent:', result);
-      return { success: true, messageId: result.id };
+      if (result?.error) {
+        return { success: false, error: result.error.message || 'Resend API Error', fullResponse: result };
+      }
+
+      return { success: true, messageId: result?.data?.id || result?.id || 'sent-without-id', fullResponse: result };
+
     } catch (error) {
       console.error('❌ Welcome email sending failed:', error);
       return { success: false, error: error.message };
     }
   }
 
-  async sendPasswordResetEmail(to, resetUrl, userName, userId = null, kundeId = null) {
+  async sendPasswordResetEmail(to, resetUrl, userName, userId = null, kundeId = null, testMeta = null) {
     console.log('📧 [E-Mail Service] Passwort-Reset-E-Mail angefordert:', { to, userName });
     
     if (this.isDisabled) {
@@ -421,9 +668,12 @@ class EmailService {
       recipientName: userName,
       userId: userId,
       kundeId: kundeId,
-      subject: recipientInfo.isRedirected 
-        ? `🧪 [DEV] Passwort zurücksetzen für ${to} - Glücksmomente Manufaktur`
-        : '🔐 Passwort zurücksetzen - Glücksmomente Manufaktur',
+      subject: this.buildTestEmailSubject(
+        recipientInfo.isRedirected
+          ? `🧪 [DEV] Passwort zurücksetzen für ${to} - Glücksmomente Manufaktur`
+          : '🔐 Passwort zurücksetzen - Glücksmomente Manufaktur',
+        testMeta
+      ),
       contextData: {
         resetUrl: resetUrl,
         resetExpiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 Stunde
@@ -437,6 +687,7 @@ class EmailService {
     
     try {
       console.log('📧 [EmailService] Preparing email content...');
+      const styles = this.getTemplateStyles('amber');
       
       // Development warning wenn E-Mail weitergeleitet wird
       const developmentWarning = recipientInfo.isRedirected ? `
@@ -448,148 +699,110 @@ class EmailService {
           </p>
         </div>
       ` : '';
-      
+
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🌸 Glücksmomente Manufaktur</h1>
-            <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Passwort zurücksetzen</p>
+        <div style="font-family:Arial,sans-serif; max-width:680px; margin:0 auto; color:#2C2C2C; line-height:1.65; background:#FEFDFB; padding:16px; border-radius:16px;">
+
+          <div style="background:linear-gradient(135deg,#8B4B61,#5D3242); color:white; padding:36px 28px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(93,50,66,0.18);">
+            <p style="margin:0 0 10px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase; opacity:0.75;">Glücksmomente Manufaktur</p>
+            <h1 style="margin:0; font-size:28px; font-weight:700;">Passwort zurücksetzen</h1>
+            <p style="margin:12px 0 0 0; font-size:16px; opacity:0.92;">Hallo ${userName || 'Kunde'}, wir haben eine Anfrage für Ihr Konto erhalten.</p>
+            <span style="display:inline-block; margin-top:16px; padding:6px 16px; border-radius:999px; background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); color:white; font-size:12px; font-weight:700; letter-spacing:1px;">SICHERHEITSMAIL</span>
           </div>
-          
-          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+
+          <div style="border:1px solid #E8D5B7; border-top:none; border-radius:0 0 14px 14px; padding:32px 28px; background:white; box-shadow:0 6px 20px rgba(93,50,66,0.08);">
             ${developmentWarning}
-            <h2 style="color: #333; margin-bottom: 20px;">Hallo ${userName || 'liebe/r Kunde/in'}! 🤝</h2>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              Kein Problem! Wir helfen Ihnen gerne dabei, wieder Zugang zu Ihrem Konto bei der Glücksmomente Manufaktur zu erhalten. 
-              Sicherheit ist uns sehr wichtig, deshalb senden wir Ihnen diesen speziellen Link.
-            </p>
-            
-            <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 12px; padding: 20px; margin: 25px 0;">
-              <h3 style="color: #856404; margin: 0 0 15px 0; font-size: 18px;">🛡️ Ihre Sicherheit ist uns wichtig</h3>
-              <p style="color: #856404; margin: 0; line-height: 1.6;">
-                <strong>⏰ Zeitbegrenzung:</strong> Dieser sichere Link ist 60 Minuten gültig<br>
-                <strong>🔐 Einmalige Nutzung:</strong> Nach der Verwendung wird der Link automatisch deaktiviert<br>
-                <strong>🛡️ Nur Sie:</strong> Dieser Link wurde speziell für Ihre E-Mail-Adresse erstellt
-              </p>
+
+            <p style="margin:0 0 14px 0; font-size:16px;">Wir haben eine Anfrage erhalten, das Passwort für Ihr Konto zurückzusetzen. Wenn Sie diese Anfrage selbst gestellt haben, klicken Sie bitte auf den folgenden Button.</p>
+            <p style="margin:0 0 22px 0; font-size:15px; color:#555;">Zum Schutz Ihres Kontos empfehlen wir ein starkes, einzigartiges Passwort, das Sie ausschließlich für dieses Konto verwenden.</p>
+
+            <div style="text-align:center; margin:28px 0 10px 0;">
+              <a href="${resetUrl}" style="display:inline-block; background:linear-gradient(135deg,#8B4B61,#5D3242); color:#fff; text-decoration:none; padding:15px 36px; border-radius:999px; font-weight:700; font-size:16px; box-shadow:0 6px 18px rgba(139,75,97,0.32);">Neues Passwort festlegen</a>
             </div>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 30px;">
-              Klicken Sie einfach auf den Button unten und erstellen Sie Ihr neues Passwort. 
-              Danach können Sie sich wie gewohnt anmelden und Ihre Lieblungsseifen bestellen:
-            </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                        color: white; 
-                        padding: 18px 45px; 
-                        text-decoration: none; 
-                        border-radius: 25px; 
-                        font-weight: bold; 
-                        font-size: 16px;
-                        display: inline-block;
-                        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-                        transition: all 0.3s ease;">
-                🔑 Neues Passwort erstellen
-              </a>
-            </div>
-            
-            <div style="background: #e8f5e8; border: 2px solid #4caf50; border-radius: 12px; padding: 25px; margin: 30px 0;">
-              <h3 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">💡 Tipps für ein sicheres Passwort</h3>
-              <ul style="color: #2e7d32; margin: 0; padding-left: 20px; line-height: 1.8;">
-                <li><strong>Mindestens 8 Zeichen</strong> - je länger, desto sicherer</li>
-                <li><strong>Groß- und Kleinbuchstaben</strong> kombinieren</li>
-                <li><strong>Zahlen und Sonderzeichen</strong> verwenden</li>
-                <li><strong>Einzigartiges Passwort</strong> - nicht bei anderen Diensten verwenden</li>
-                <li><strong>Passwort-Manager</strong> können dabei helfen</li>
+            <p style="text-align:center; font-size:13px; color:#999; margin:8px 0 28px 0;">Der Link ist 60 Minuten gültig und kann nur einmal verwendet werden.</p>
+
+            <hr style="border:none; border-top:1px solid #F5EEDD; margin:24px 0;">
+
+            <h2 style="margin:0 0 14px 0; font-size:18px; color:#5D3242;">Tipps für ein sicheres Passwort</h2>
+            <table style="width:100%; border-collapse:collapse;">
+              <tr><td style="width:50px; vertical-align:top; padding:6px 0;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#F5EEDD; border:2px solid #E8D5B7; text-align:center; line-height:36px; font-size:16px;">🔢</div>
+              </td><td style="vertical-align:top; padding:6px 0 6px 14px;">
+                <p style="margin:0; font-weight:700; font-size:14px;">Mindestens 12 Zeichen</p>
+                <p style="margin:3px 0 0 0; font-size:13px; color:#666;">Je länger, desto besser. Kombinieren Sie Buchstaben, Zahlen und Sonderzeichen.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:6px 0;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#EAF6EF; border:2px solid #C8E6D0; text-align:center; line-height:36px; font-size:16px;">🔁</div>
+              </td><td style="vertical-align:top; padding:6px 0 6px 14px;">
+                <p style="margin:0; font-weight:700; font-size:14px;">Kein Passwort doppelt nutzen</p>
+                <p style="margin:3px 0 0 0; font-size:13px; color:#666;">Verwenden Sie für jedes Konto ein eigenes Passwort. Ein Passwort-Manager kann dabei helfen.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:6px 0;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#F8ECEF; border:2px solid #D9B2BE; text-align:center; line-height:36px; font-size:16px;">🚫</div>
+              </td><td style="vertical-align:top; padding:6px 0 6px 14px;">
+                <p style="margin:0; font-weight:700; font-size:14px;">Keine persönlichen Daten</p>
+                <p style="margin:3px 0 0 0; font-size:13px; color:#666;">Verwenden Sie keine Namen, Geburtstage oder einfach erratbare Zeichenfolgen.</p>
+              </td></tr>
+            </table>
+
+            <div style="background:#FDF6EA; border:1px solid #E8D5B7; border-radius:12px; padding:16px 18px; margin:24px 0 20px 0;">
+              <p style="margin:0 0 8px 0; font-weight:700; color:#7A5B2F; font-size:15px;">Wichtige Sicherheitshinweise</p>
+              <ul style="margin:0; padding-left:18px; color:#7A5B2F; font-size:14px; line-height:1.8;">
+                <li>Der Link ist genau 60 Minuten gültig.</li>
+                <li>Der Link kann nur einmal verwendet werden und ist danach ungültig.</li>
+                <li>Falls Sie keine Anfrage gestellt haben, ignorieren Sie diese E-Mail – Ihr Passwort bleibt unverändert.</li>
+                <li>Bei verdächtigen Aktivitäten kontaktieren Sie uns bitte umgehend.</li>
               </ul>
             </div>
-            
-            <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; margin: 25px 0;">
-              <h3 style="color: #495057; margin: 0 0 10px 0; font-size: 16px;">🤔 Diese Anfrage nicht gestellt?</h3>
-              <p style="color: #6c757d; margin: 0; line-height: 1.6;">
-                Keine Sorge! Falls Sie diese Passwort-Zurücksetzung nicht angefordert haben, können Sie diese E-Mail einfach ignorieren. 
-                Ihr Konto bleibt vollkommen sicher und es werden keine Änderungen vorgenommen.
-              </p>
+
+            <p style="margin:0 0 6px 0; font-size:13px; color:#aaa;">Falls der Button nicht funktioniert, kopieren Sie bitte diesen Link:</p>
+            <p style="margin:0 0 24px 0; font-size:12px; word-break:break-all;"><a href="${resetUrl}" style="color:#8B4B61;">${resetUrl}</a></p>
+
+            <div style="margin-top:22px; padding-top:14px; border-top:1px solid #E8D5B7; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#5D3242;">Mit Liebe gestaltet von der <strong>Glücksmomente Manufaktur</strong></p>
             </div>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 20px; font-size: 14px;">
-              <strong>💻 Button funktioniert nicht?</strong> Kein Problem! Kopieren Sie einfach diesen Link in Ihren Browser:<br>
-              <span style="background: #f5f5f5; padding: 8px; border-radius: 4px; word-break: break-all; font-family: monospace; font-size: 12px; color: #667eea;">${resetUrl}</span>
-            </p>
-            
-            <hr style="border: none; border-top: 2px solid #e9ecef; margin: 30px 0;">
-            
-            <div style="text-align: center;">
-              <p style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0;">
-                <strong>🤝 Brauchen Sie Hilfe?</strong><br>
-                Unser freundliches Team ist gerne für Sie da!<br>
-                📧 <strong>info@gluecksmomente-manufaktur.de</strong><br><br>
-                
-                <em>Wir wünschen Ihnen weiterhin viel Freude mit unseren natürlichen Seifen!</em><br>
-                <strong style="color: #667eea;">💚 Das Team der Glücksmomente Manufaktur</strong>
-              </p>
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-            Diese E-Mail wurde automatisch erstellt. Bitte antworten Sie nicht auf diese E-Mail.
           </div>
         </div>
       `;
 
+      // sendPasswordResetEmail: testMeta auf emailData.testMeta mappen
+      emailData.testMeta = testMeta;
+
       // E-Mail Content für Logging speichern
       emailData.htmlBody = htmlContent;
-      
+
       // E-Mail in MongoDB loggen BEVOR sie gesendet wird
       const emailLog = await this.logEmail(emailData);
-      
-      console.log('📧 [EmailService] Sending email via Resend API...');
-      
-      const result = await this.resend.emails.send({
-        from: `${this.fromName} <${this.fromEmail}>`,
+
+      const result = await this.sendWithResendFallback({
+        from: this.getSenderAddress(),
         to: finalRecipient,
         subject: emailData.subject,
-        html: htmlContent
+        html: htmlContent,
+        replyTo: emailData.testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: emailData.testMeta?.isTest ? 'high' : undefined
       });
 
-      console.log('✅ [EmailService] Resend API call completed!');
-      console.log('📧 [EmailService] Full Resend Response:', JSON.stringify(result, null, 2));
-      
-      // Ergebnis verarbeiten und Log updaten
       let emailResult;
-      
-      if (result.error) {
-        console.error('❌ [EmailService] Resend API Error:', result.error);
-        emailResult = { 
-          success: false, 
-          error: `Resend API Error: ${result.error.message} (Status: ${result.error.statusCode})`,
-          fullResponse: result
-        };
-      } else if (!result.data || !result.data.id) {
-        console.error('❌ [EmailService] Unexpected Resend response structure');
-        emailResult = { 
-          success: false, 
-          error: 'Unexpected response from email service',
+      if (result?.error) {
+        emailResult = {
+          success: false,
+          error: `Resend API Error: ${result.error.message} (Status: ${result.error.statusCode || 'n/a'})`,
           fullResponse: result
         };
       } else {
-        console.log('✅ [EmailService] Password reset email sent successfully!');
-        console.log('📧 [EmailService] Message ID:', result.data.id);
-        emailResult = { 
-          success: true, 
-          messageId: result.data.id,
-          fullResponse: result
-        };
+        const messageId = result?.data?.id || result?.id;
+        emailResult = messageId
+          ? { success: true, messageId, fullResponse: result }
+          : { success: false, error: 'Unexpected response from email service', fullResponse: result };
       }
-      
-      // E-Mail-Log mit Ergebnis aktualisieren
+
       if (emailLog) {
         await this.updateEmailLog(emailLog._id, emailResult);
       }
-      
+
       return emailResult;
+      
     } catch (error) {
       console.error('❌ [EmailService] Password reset email sending failed!');
       console.error('❌ [EmailService] Error details:', {
@@ -610,6 +823,94 @@ class EmailService {
     }
   }
 
+  async sendPasswordResetSuccessEmail(to, userName, testMeta = null) {
+    if (this.isDisabled) {
+      return { success: true, messageId: 'demo-password-reset-success' };
+    }
+
+    try {
+      const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/login`;
+
+      const htmlContent = `
+        <div style="font-family:Arial,sans-serif; max-width:680px; margin:0 auto; color:#2C2C2C; line-height:1.65; background:#FEFDFB; padding:16px; border-radius:16px;">
+
+          <div style="background:linear-gradient(135deg,#A8D5B5,#7FB88A); color:white; padding:36px 28px; border-radius:14px 14px 0 0; text-align:center; box-shadow:0 8px 24px rgba(127,184,138,0.22);">
+            <p style="margin:0 0 10px 0; font-size:12px; letter-spacing:2px; text-transform:uppercase; opacity:0.75;">Glücksmomente Manufaktur</p>
+            <h1 style="margin:0; font-size:28px; font-weight:700;">Passwort erfolgreich geändert ✓</h1>
+            <p style="margin:12px 0 0 0; font-size:16px; opacity:0.92;">Hallo ${userName || 'Kunde'}, Ihre Änderung wurde bestätigt.</p>
+            <span style="display:inline-block; margin-top:16px; padding:6px 16px; border-radius:999px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.35); color:white; font-size:12px; font-weight:700; letter-spacing:1px;">SICHERHEITSINFO</span>
+          </div>
+
+          <div style="border:1px solid #C8E6D0; border-top:none; border-radius:0 0 14px 14px; padding:32px 28px; background:white; box-shadow:0 6px 20px rgba(127,184,138,0.1);">
+
+            <p style="margin:0 0 14px 0; font-size:16px;">Ihr Passwort wurde soeben erfolgreich geändert. Wenn Sie diese Änderung selbst vorgenommen haben, ist keine weitere Aktion erforderlich.</p>
+
+            <div style="background:#FDF6EA; border:1px solid #E8D5B7; border-radius:12px; padding:16px 20px; margin:0 0 24px 0;">
+              <p style="margin:0 0 6px 0; font-weight:700; color:#7A5B2F; font-size:15px;">⚠️ Nicht Sie selbst?</p>
+              <p style="margin:0; font-size:14px; color:#7A5B2F;">Falls Sie diese Änderung nicht veranlasst haben, setzen Sie Ihr Passwort bitte sofort erneut zurück und kontaktieren Sie uns umgehend. Ihr Konto könnte gefährdet sein.</p>
+            </div>
+
+            <div style="text-align:center; margin:24px 0;">
+              <a href="${loginUrl}" style="display:inline-block; background:linear-gradient(135deg,#7FB88A,#5D9E6A); color:#fff; text-decoration:none; padding:14px 32px; border-radius:999px; font-weight:700; font-size:16px; box-shadow:0 6px 18px rgba(127,184,138,0.35);">Zur Anmeldung</a>
+            </div>
+
+            <hr style="border:none; border-top:1px solid #EAF6EF; margin:24px 0;">
+
+            <h2 style="margin:0 0 14px 0; font-size:18px; color:#3E6D4A;">Tipps für ein sicheres Konto</h2>
+
+            <table style="width:100%; border-collapse:collapse;">
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#EAF6EF; border:2px solid #C8E6D0; text-align:center; line-height:40px; font-size:20px;">🔒</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Starkes Passwort</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Verwenden Sie mindestens 12 Zeichen – idealerweise eine Kombination aus Buchstaben, Zahlen und Sonderzeichen.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F5EEDD; border:2px solid #E8D5B7; text-align:center; line-height:40px; font-size:20px;">📵</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Passwort nicht weitergeben</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Teilen Sie Ihr Passwort niemals mit anderen Personen, auch nicht telefonisch oder per E-Mail.</p>
+              </td></tr>
+              <tr><td style="width:50px; vertical-align:top; padding:8px 0;">
+                <div style="width:40px; height:40px; border-radius:50%; background:#F8ECEF; border:2px solid #D9B2BE; text-align:center; line-height:40px; font-size:20px;">🧠</div>
+              </td><td style="vertical-align:top; padding:8px 0 8px 14px;">
+                <p style="margin:0; font-weight:700; font-size:15px;">Passwort-Manager nutzen</p>
+                <p style="margin:4px 0 0 0; font-size:14px; color:#666;">Ein Passwort-Manager hilft Ihnen, für jedes Konto ein einzigartiges, sicheres Passwort zu verwenden.</p>
+              </td></tr>
+            </table>
+
+            <div style="background:#EAF6EF; border:1px solid #C8E6D0; border-radius:12px; padding:16px 18px; margin:24px 0 20px 0;">
+              <p style="margin:0; font-size:14px; color:#3E6D4A;">Diese Nachricht wurde automatisch aus Sicherheitsgründen versandt. Wenn Sie Fragen haben, antworten Sie einfach auf diese E-Mail.</p>
+            </div>
+
+            <div style="margin-top:22px; padding-top:14px; border-top:1px solid #C8E6D0; text-align:center;">
+              <p style="margin:0; font-size:12px; color:#3E6D4A;">Mit Liebe gestaltet von der <strong>Glücksmomente Manufaktur</strong></p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const subject = this.buildTestEmailSubject('Sicherheitsinfo: Passwort wurde geändert', testMeta);
+
+      const result = await this.sendWithResendFallback({
+        from: this.getSenderAddress(),
+        to,
+        subject,
+        html: htmlContent,
+        replyTo: testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: testMeta?.isTest ? 'high' : undefined
+      });
+
+      if (result?.error) {
+        return { success: false, error: result.error.message || 'Resend API Error' };
+      }
+
+      return { success: true, messageId: result?.data?.id || result?.id || 'sent-without-id' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
   async sendProfileUpdateNotification(to, userName, changes) {
     if (this.isDisabled) {
       console.log('📧 E-Mail-Service deaktiviert - Profil-Update-E-Mail würde gesendet werden an:', to);
@@ -619,56 +920,55 @@ class EmailService {
     
     try {
       const changesList = changes.map(change => `<li style="margin: 5px 0;">${change}</li>`).join('');
+      const styles = this.getTemplateStyles('green');
       
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🌸 Glücksmomente Manufaktur</h1>
-            <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Profil-Änderung bestätigt</p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Profiländerung bestätigt</h1>
+            <p style="color: white; margin: 10px 0 0 0; font-size: 16px; opacity:0.95;">Hallo ${userName || 'Kunde'}, die Änderungen wurden erfolgreich gespeichert.</p>
+            ${this.renderTemplateBadge('PROFIL AKTUALISIERT')}
           </div>
           
-          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
-            <h2 style="color: #333; margin-bottom: 20px;">Hallo ${userName}! 👤</h2>
+          <div style="${styles.body}">
+            <h2 style="color: #2C2C2C; margin-bottom: 20px;">Ihre aktualisierten Angaben</h2>
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              Ihr Profil bei der Glücksmomente Manufaktur wurde erfolgreich aktualisiert.
-              Diese E-Mail dient zu Ihrer Sicherheit als Bestätigung.
+            <p style="color: #2C2C2C; line-height: 1.6; margin-bottom: 25px;">
+              Diese E-Mail dient Ihrer Sicherheit und informiert Sie über die zuletzt gespeicherten Änderungen.
             </p>
             
-            <div style="background: #E8F5E8; border: 1px solid #4CAF50; border-radius: 8px; padding: 20px; margin: 25px 0;">
-              <h3 style="color: #2E7D32; margin: 0 0 15px 0; font-size: 16px;">📝 Folgende Änderungen wurden vorgenommen:</h3>
-              <ul style="color: #2E7D32; margin: 0; padding-left: 20px; line-height: 1.6;">
+            <div style="${styles.panel}; margin: 25px 0;">
+              <h3 style="color: #5D3242; margin: 0 0 15px 0; font-size: 16px;">Folgende Änderungen wurden vorgenommen:</h3>
+              <ul style="color: #2C2C2C; margin: 0; padding-left: 20px; line-height: 1.6;">
                 ${changesList}
               </ul>
             </div>
             
-            <div style="background: #FFF3E0; border-left: 4px solid #FF9800; padding: 15px; margin: 20px 0;">
-              <p style="color: #E65100; margin: 0; font-weight: bold;">🔒 Sicherheitshinweis:</p>
-              <p style="color: #E65100; margin: 5px 0 0 0;">
-                Falls Sie diese Änderungen nicht vorgenommen haben, wenden Sie sich bitte umgehend an unseren Support.
-              </p>
-            </div>
+            ${this.renderTemplateInfoBox('Sicherheitshinweis', [
+              'Falls Sie diese Änderungen nicht selbst vorgenommen haben, wenden Sie sich bitte umgehend an den Support.'
+            ], 'warning')}
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+            <p style="color: #2C2C2C; line-height: 1.6; margin-bottom: 20px;">
               <strong>Zeitpunkt der Änderung:</strong> ${new Date().toLocaleString('de-DE')}<br>
               <strong>Ihre E-Mail:</strong> ${to}
             </p>
             
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
             
-            <p style="color: #999; font-size: 14px; text-align: center; margin: 0;">
+            <p style="color: #5D3242; font-size: 14px; text-align: center; margin: 0;">
               Bei Fragen stehen wir Ihnen gerne zur Verfügung.<br>
-              <strong style="color: #4CAF50;">Das Team der Glücksmomente Manufaktur</strong>
+              <strong style="color: #8B4B61;">Das Team der Glücksmomente Manufaktur</strong>
             </p>
+            ${this.renderTemplateFooter()}
           </div>
           
-          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+          <div style="text-align: center; margin-top: 20px; color: #5D3242; font-size: 12px;">
             Diese E-Mail wurde automatisch erstellt. Bitte antworten Sie nicht auf diese E-Mail.
           </div>
         </div>
       `;
 
-      const result = await this.resend.emails.send({
+      const result = await this.sendWithResendFallback({
         from: this.fromEmail,
         to: to,
         subject: '✅ Profil-Änderung bestätigt - Glücksmomente Manufaktur',
@@ -691,14 +991,16 @@ class EmailService {
     }
     
     try {
+      const styles = this.getTemplateStyles('red');
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #757575 0%, #616161 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 28px;">🌸 Glücksmomente Manufaktur</h1>
-            <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">Account-Löschung bestätigt</p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="color: white; margin: 0; font-size: 28px;">Account-Löschung bestätigt</h1>
+            <p style="color: white; margin: 10px 0 0 0; font-size: 16px; opacity:0.95;">Ihr Wunsch wurde erfolgreich umgesetzt.</p>
+            ${this.renderTemplateBadge('KONTOSTATUS GEÄNDERT')}
           </div>
           
-          <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+          <div style="${styles.body}">
             <h2 style="color: #333; margin-bottom: 20px;">Auf Wiedersehen, ${userName}! 👋</h2>
             
             <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
@@ -706,9 +1008,9 @@ class EmailService {
               Wir bedauern, dass Sie uns verlassen.
             </p>
             
-            <div style="background: #FFEBEE; border: 1px solid #F44336; border-radius: 8px; padding: 20px; margin: 25px 0;">
-              <h3 style="color: #C62828; margin: 0 0 15px 0; font-size: 16px;">🗑️ Gelöschte Account-Daten:</h3>
-              <ul style="color: #C62828; margin: 0; padding-left: 20px; line-height: 1.6;">
+            <div style="${styles.panel}; margin: 25px 0;">
+              <h3 style="color: #5D3242; margin: 0 0 15px 0; font-size: 16px;">Gelöschte Account-Daten:</h3>
+              <ul style="color: #2C2C2C; margin: 0; padding-left: 20px; line-height: 1.6;">
                 <li>Benutzername: <strong>${username}</strong></li>
                 <li>E-Mail: <strong>${to}</strong></li>
                 <li>Löschungsgrund: <strong>${reason}</strong></li>
@@ -716,22 +1018,18 @@ class EmailService {
               </ul>
             </div>
             
-            <div style="background: #E3F2FD; border-left: 4px solid #2196F3; padding: 15px; margin: 20px 0;">
-              <p style="color: #1565C0; margin: 0; font-weight: bold;">ℹ️ Was passiert jetzt:</p>
-              <ul style="color: #1565C0; margin: 5px 0 0 0; padding-left: 20px;">
-                <li>Alle Ihre persönlichen Daten wurden unwiderruflich gelöscht</li>
-                <li>Sie erhalten keine weiteren E-Mails von uns</li>
-                <li>Ihre Bestellhistorie ist nicht mehr einsehbar</li>
-                <li>Sie können sich jederzeit mit einer neuen E-Mail wieder registrieren</li>
-              </ul>
-            </div>
+            ${this.renderTemplateInfoBox('Was passiert jetzt?', [
+              'Alle persönlichen Daten wurden unwiderruflich gelöscht.',
+              'Sie erhalten keine weiteren E-Mails zu diesem Konto.',
+              'Eine neue Registrierung ist jederzeit mit einer neuen E-Mail möglich.'
+            ], 'info')}
             
             <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
               Sollten Sie Ihre Meinung ändern, können Sie sich jederzeit mit einer neuen E-Mail-Adresse 
               wieder bei uns registrieren. Wir würden uns freuen, Sie wieder bei uns begrüßen zu dürfen!
             </p>
             
-            <div style="text-align: center; background: #F5F5F5; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <div style="text-align: center; background: #F5EEDD; padding: 20px; border-radius: 8px; margin: 25px 0;">
               <p style="color: #666; margin: 0; font-size: 16px;">
                 💝 Vielen Dank für die Zeit, die Sie bei uns verbracht haben!
               </p>
@@ -741,8 +1039,9 @@ class EmailService {
             
             <p style="color: #999; font-size: 14px; text-align: center; margin: 0;">
               Alles Gute wünscht Ihnen<br>
-              <strong style="color: #757575;">Das Team der Glücksmomente Manufaktur</strong>
+              <strong style="color: #8B4B61;">Das Team der Glücksmomente Manufaktur</strong>
             </p>
+            ${this.renderTemplateFooter()}
           </div>
           
           <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
@@ -751,7 +1050,7 @@ class EmailService {
         </div>
       `;
 
-      const result = await this.resend.emails.send({
+      const result = await this.sendWithResendFallback({
         from: this.fromEmail,
         to: to,
         subject: '👋 Account gelöscht - Auf Wiedersehen von Glücksmomente Manufaktur',
@@ -775,6 +1074,7 @@ class EmailService {
 
     try {
       const { bestellung, kundenname } = orderData;
+      const styles = this.getTemplateStyles('blue');
       
       const formatPrice = (price) => {
         return new Intl.NumberFormat('de-DE', {
@@ -792,166 +1092,77 @@ class EmailService {
       };
 
       const htmlContent = `
-        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 35px; border-radius: 12px 12px 0 0; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px;">🎉 Hurra! Ihre Bestellung ist bei uns!</h1>
-            <p style="margin: 15px 0 5px 0; font-size: 18px; opacity: 0.9;">
-              Liebe/r ${kundenname}, wir freuen uns riesig!
-            </p>
-            <p style="margin: 0; font-size: 16px; opacity: 0.8;">
-              Ihre wunderbaren handgemachten Seifen sind schon in Arbeit ✨
-            </p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="margin:0; font-size:26px;">Vielen Dank für Ihre Bestellung</h1>
+            <p style="margin:10px 0 0 0; opacity:0.95;">Hallo ${kundenname || 'Kunde'}, Ihre Bestellung ist erfolgreich bei uns eingegangen.</p>
+            ${this.renderTemplateBadge('BESTELLUNG EINGEGANGEN')}
           </div>
-          
-          <div style="background: white; padding: 30px; border: 1px solid #eee; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-            
-            <div style="background: #e8f5e8; padding: 25px; border-radius: 12px; margin-bottom: 30px; border: 2px solid #4caf50;">
-              <h2 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 20px; text-align: center;">💚 Herzlichen Dank für Ihr Vertrauen!</h2>
-              <p style="margin: 0; color: #2e7d32; text-align: center; line-height: 1.6;">
-                Sie haben sich für natürliche, handgemachte Qualität entschieden. Das macht uns sehr stolz!<br>
-                <strong>Jede Seife wird mit viel Liebe für Sie hergestellt.</strong>
-              </p>
+          <div style="${styles.body}">
+            <div style="${styles.panel}; margin-bottom:18px;">
+              <p style="margin:0 0 4px 0;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
+              <p style="margin:0 0 4px 0;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.bestelldatum)}</p>
+              <p style="margin:0;"><strong>Status:</strong> Bestätigung versendet</p>
             </div>
 
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-              <h2 style="color: #333; margin: 0 0 15px 0; font-size: 20px;">📦 Ihre Bestelldetails</h2>
-              <p style="margin: 5px 0; color: #666;"><strong>Bestellnummer:</strong> <span style="color: #667eea; font-weight: bold;">${bestellung.bestellnummer}</span></p>
-              <p style="margin: 5px 0; color: #666;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.bestelldatum)}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Status:</strong> <span style="background: #4caf50; color: white; padding: 4px 12px; border-radius: 20px; font-size: 14px; font-weight: bold;">✓ Bestätigt & in Bearbeitung</span></p>
-            </div>
+            <p style="margin:0 0 14px 0;">Wir kümmern uns nun um die weitere Bearbeitung Ihrer Bestellung und informieren Sie bei wichtigen Statusänderungen.</p>
 
-            <h3 style="color: #333; margin: 30px 0 15px 0;">🛍️ Ihre Artikel</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            <h3 style="margin:0 0 10px 0;">Bestellübersicht</h3>
+            <table style="width:100%; border-collapse:collapse; background:#fff; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;">
               <thead>
-                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                  <th style="text-align: left; padding: 12px; border-bottom: 1px solid #dee2e6;">Artikel</th>
-                  <th style="text-align: center; padding: 12px; border-bottom: 1px solid #dee2e6;">Menge</th>
-                  <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Preis</th>
+                <tr style="background:#f9fafb;">
+                  <th style="text-align:left; padding:10px; border-bottom:1px solid #e5e7eb;">Artikel</th>
+                  <th style="text-align:center; padding:10px; border-bottom:1px solid #e5e7eb;">Menge</th>
+                  <th style="text-align:right; padding:10px; border-bottom:1px solid #e5e7eb;">Gesamtpreis</th>
                 </tr>
               </thead>
               <tbody>
-                ${bestellung.artikel.map(artikel => `
+                ${bestellung.artikel.map((artikel) => `
                   <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #f1f1f1;">${artikel.name}</td>
-                    <td style="text-align: center; padding: 12px; border-bottom: 1px solid #f1f1f1;">${artikel.menge}</td>
-                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.preis * artikel.menge)}</td>
+                    <td style="padding:10px; border-bottom:1px solid #f3f4f6;">${artikel.name}</td>
+                    <td style="text-align:center; padding:10px; border-bottom:1px solid #f3f4f6;">${artikel.menge}</td>
+                    <td style="text-align:right; padding:10px; border-bottom:1px solid #f3f4f6;">${formatPrice((artikel.preis || 0) * (artikel.menge || 0))}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
 
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>Zwischensumme:</span>
-                <span>${formatPrice(bestellung.gesamt.netto - (bestellung.versandkosten || 0))}</span>
-              </div>
-              ${bestellung.versandkosten ? `
-                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                  <span>Versandkosten:</span>
-                  <span>${formatPrice(bestellung.versandkosten)}</span>
-                </div>
-              ` : ''}
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>MwSt. (19%):</span>
-                <span>${formatPrice(bestellung.gesamt.mwst)}</span>
-              </div>
-              <hr style="border: none; border-top: 1px solid #dee2e6; margin: 15px 0;">
-              <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; color: #333;">
-                <span>Gesamtsumme:</span>
-                <span style="color: #28a745;">${formatPrice(bestellung.gesamt.brutto)}</span>
-              </div>
+            <div style="margin-top:18px; background:#ecfeff; border:1px solid #a5f3fc; border-radius:10px; padding:14px 16px;">
+              <p style="margin:0; font-size:18px; font-weight:700; color:#0c4a6e;">Gesamtsumme: ${formatPrice(bestellung.gesamt?.brutto || bestellung.gesamtsumme || 0)}</p>
             </div>
 
-            <h3 style="color: #333; margin: 30px 0 15px 0;">📍 Lieferadresse</h3>
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-              <p style="margin: 0; color: #666;">
-                ${bestellung.lieferadresse.vorname} ${bestellung.lieferadresse.nachname}<br>
-                ${bestellung.lieferadresse.strasse} ${bestellung.lieferadresse.hausnummer}<br>
-                ${bestellung.lieferadresse.plz} ${bestellung.lieferadresse.stadt}
-              </p>
-            </div>
+            ${this.renderTemplateInfoBox('Wie geht es weiter?', [
+              'Sie erhalten bei Bedarf weitere Informationen zum Bearbeitungsstand.',
+              'Ihre Rechnung ist bereits als PDF im Anhang enthalten.',
+              'Bei Rückfragen antworten Sie einfach direkt auf diese E-Mail.'
+            ], 'info')}
 
-            <div style="background: #e8f5e8; border: 3px solid #4caf50; border-radius: 12px; padding: 25px; margin: 30px 0;">
-              <h4 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 18px;">✅ Zahlung erfolgreich erhalten!</h4>
-              <p style="color: #2e7d32; margin: 0; line-height: 1.6;">
-                Fantastisch! Ihre Zahlung über PayPal wurde erfolgreich verarbeitet. 
-                <strong>Wir beginnen sofort mit der liebevollen Vorbereitung Ihrer Bestellung.</strong><br><br>
-                🎯 <strong>Nächster Schritt:</strong> Unsere Seifenmeister greifen zu den besten Zutaten für Sie!
-              </p>
-            </div>
-
-            <div style="background: #fff3cd; border: 3px solid #ffc107; border-radius: 12px; padding: 25px; margin: 30px 0;">
-              <h4 style="color: #856404; margin: 0 0 15px 0; font-size: 18px;">📦 Versand & Lieferung - Transparent & Zuverlässig</h4>
-              <div style="color: #856404;">
-                <p style="margin: 0 0 10px 0;">🚚 <strong>Lieferzeit:</strong> 3-5 Werktage nach Zahlungseingang</p>
-                <p style="margin: 0 0 10px 0;">📬 <strong>Versandpartner:</strong> DHL & DPD (klimaneutral)</p>
-                <p style="margin: 0 0 10px 0;">🔍 <strong>Sendungsverfolgung:</strong> Link per E-Mail sobald versandt</p>
-                <p style="margin: 0 0 10px 0;">📦 <strong>Verpackung:</strong> Plastikfrei & nachhaltig</p>
-                <p style="margin: 0; font-style: italic;">💡 <strong>Tipp:</strong> Seifen bei Raumtemperatur lagern für beste Haltbarkeit</p>
-              </div>
-            </div>
-
-            <div style="background: #f3e5f5; border: 2px solid #ce93d8; border-radius: 12px; padding: 25px; margin: 30px 0;">
-              <h4 style="color: #7b1fa2; margin: 0 0 15px 0; font-size: 18px;">🌿 Wussten Sie schon?</h4>
-              <p style="color: #7b1fa2; margin: 0; line-height: 1.6;">
-                <strong>Jede unserer Seifen reift mindestens 6 Wochen,</strong> bevor sie zu Ihnen kommt. 
-                So entwickeln sie ihre besonders milde und pflegende Wirkung. 
-                <em>Handwerk braucht Zeit - und das schmeckt man!</em> 🥰
-              </p>
-            </div>
-
-            <div style="text-align: center; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 30px; border-radius: 12px; margin: 30px 0; border: 3px dashed #6c757d;">
-              <h3 style="color: #495057; margin: 0 0 15px 0; font-size: 20px;">🎁 Kleines Dankeschön</h3>
-              <p style="color: #6c757d; margin: 0; font-size: 16px; line-height: 1.6;">
-                Als Zeichen unserer Wertschätung legen wir Ihrer Sendung<br>
-                <strong style="color: #dc3545;">ein kleines Überraschungsgeschenk</strong> bei!<br><br>
-                💝 <em>Lassen Sie sich überraschen...</em>
-              </p>
-            </div>
-            
-            <hr style="border: none; border-top: 2px solid #e9ecef; margin: 30px 0;">
-            
-            <div style="text-align: center;">
-              <p style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0;">
-                <strong>Fragen zu Ihrer Bestellung? Wir sind für Sie da! 🤝</strong><br>
-                📧 <strong>info@gluecksmomente-manufaktur.de</strong><br>
-                📞 <strong>Mo-Fr 9-17 Uhr</strong><br><br>
-                
-                <em>Folgen Sie uns für Pflegetipps, Behind-the-Scenes & mehr:</em><br>
-                📱 Instagram | 👍 Facebook | 💌 Newsletter
-              </p>
-            </div>
-            
-            <div style="margin: 30px 0; padding: 20px; background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%); border-radius: 12px; text-align: center;">
-              <p style="color: #2e7d32; margin: 0; font-style: italic; font-size: 16px; line-height: 1.6;">
-                💚 "Möge jede Berührung mit unseren Seifen ein kleiner Moment der Freude in Ihrem Alltag sein."<br><br>
-                <strong>Von Herzen - Ihr Team der Glücksmomente Manufaktur</strong>
-              </p>
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-            Im Anhang finden Sie Ihre Rechnung als PDF.<br>
-            Diese E-Mail wurde automatisch erstellt.
+            <p style="font-size:14px; color:#334155; margin:16px 0 8px 0;">Die Rechnung finden Sie als PDF im Anhang dieser E-Mail.</p>
+            <p style="font-size:13px; color:#6b7280; margin:0;">Bei Fragen zu Ihrer Bestellung antworten Sie gerne direkt auf diese E-Mail.</p>
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
 
       const emailData = {
-        from: `${this.fromName} <${this.fromEmail}>`,
+        from: this.getSenderAddress(),
         to: customerEmail,
-        subject: `🎉 Bestellbestätigung - ${bestellung.bestellnummer}`,
+        subject: `Bestellbestätigung - ${bestellung.bestellnummer}`,
         html: htmlContent,
         attachments: pdfAttachment ? [{
           filename: `Rechnung_${bestellung.bestellnummer}.pdf`,
-          content: pdfAttachment
+          content: Buffer.isBuffer(pdfAttachment) ? pdfAttachment.toString('base64') : String(pdfAttachment),
+          contentType: 'application/pdf'
         }] : undefined
       };
 
-      const result = await this.resend.emails.send(emailData);
+      const result = await this.sendWithResendFallback(emailData);
+      if (result?.error) {
+        return { success: false, error: result.error.message || 'Resend API Error' };
+      }
 
-      console.log('✅ Order confirmation email sent to customer:', result);
-      return { success: true, messageId: result.id };
+      return { success: true, messageId: result?.data?.id || result?.id || 'sent-without-id' };
+
     } catch (error) {
       console.error('❌ Order confirmation email failed:', error);
       return { success: false, error: error.message };
@@ -960,10 +1171,13 @@ class EmailService {
 
   // 🔔 Admin-Benachrichtigung für neue Bestellungen
   // Admin-Benachrichtigung für neue Anfragen
-  async sendAdminInquiryNotification(inquiry) {
+  async sendAdminInquiryNotification(inquiry, testMeta = null) {
+    const debugCustomerEmail = inquiry?.customer?.email || inquiry?.email;
+    const fallbackCustomerName = inquiry?.customer?.name || inquiry?.name || 'Unbekannt';
+    const fallbackCustomerEmail = inquiry?.customer?.email || inquiry?.email || 'nicht-verfuegbar@example.com';
     console.log('📧 [E-Mail Service] Admin-Anfrage-Benachrichtigung angefordert:', { 
       inquiryId: inquiry._id,
-      customerEmail: inquiry.email 
+      customerEmail: debugCustomerEmail 
     });
     
     if (this.isDisabled) {
@@ -976,7 +1190,7 @@ class EmailService {
       console.log('   💡 Tipp: Für echte E-Mails Resend API-Key konfigurieren');
       
       await this.saveEmailLog({
-        to: this.adminEmail,
+        to: this.notificationEmail,
         subject: '📝 Neue Kundenanfrage eingegangen',
         type: 'admin-inquiry-notification',
         success: true,
@@ -994,6 +1208,12 @@ class EmailService {
     }
 
     try {
+      const customerName = inquiry.customer?.name || inquiry.name || 'Unbekannt';
+      const customerEmail = inquiry.customer?.email || inquiry.email || 'nicht-verfuegbar@example.com';
+      const customerPhone = inquiry.customer?.phone || inquiry.phone || 'Nicht angegeben';
+      const customerMessage = inquiry.customerNote || inquiry.message || 'Keine spezifische Nachricht hinterlassen - Kunde möchte vermutlich allgemeine Informationen.';
+      const styles = this.getTemplateStyles('indigo');
+
       const formatDate = (date) => {
         return new Intl.DateTimeFormat('de-DE', {
           year: 'numeric',
@@ -1005,131 +1225,68 @@ class EmailService {
       };
 
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px; background-color: #f8f9fa;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 35px; text-align: center; border-radius: 12px 12px 0 0; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">🎯 Neue Kundenanfrage eingegangen!</h1>
-            <p style="margin: 10px 0 5px 0; opacity: 0.9; font-size: 16px;">Glücksmomente Manufaktur - Kundenkontakt</p>
-            <p style="margin: 0; opacity: 0.8; font-size: 14px;">Ein interessierter Kunde möchte mit Ihnen sprechen ✨</p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.header}">
+            <h1 style="margin:0; font-size:25px;">Neue Kundenanfrage eingegangen</h1>
+            <p style="margin:10px 0 0 0; opacity:0.95;">Bitte prüfen Sie die Anfrage und veranlassen Sie eine zeitnahe Rückmeldung.</p>
+            ${this.renderTemplateBadge('ADMIN BENACHRICHTIGUNG')}
           </div>
-          
-          <div style="background: white; padding: 35px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-            
-            <div style="background: #e8f5e8; border: 3px solid #4caf50; border-radius: 12px; padding: 25px; margin-bottom: 30px;">
-              <h2 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 20px;">🚨 Schnelle Antwort erwünscht!</h2>
-              <p style="color: #2e7d32; margin: 0; line-height: 1.6;">
-                Ein Kunde hat eine Anfrage gestellt und wartet auf Ihre Antwort. 
-                <strong>Schnelle und persönliche Antworten stärken das Vertrauen!</strong>
-              </p>
+          <div style="${styles.body}">
+            <div style="${styles.panel}; margin-bottom:18px;">
+              <p style="margin:0 0 4px 0;"><strong>Name:</strong> ${customerName}</p>
+              <p style="margin:0 0 4px 0;"><strong>E-Mail:</strong> <a href="mailto:${customerEmail}" style="color:#3730a3;">${customerEmail}</a></p>
+              <p style="margin:0 0 4px 0;"><strong>Telefon:</strong> ${customerPhone}</p>
+              <p style="margin:0;"><strong>Eingang:</strong> ${formatDate(inquiry.createdAt || new Date())}</p>
             </div>
 
-            <div style="background: #f8f9fa; padding: 25px; border-radius: 12px; margin-bottom: 25px; border-left: 6px solid #667eea;">
-              <h3 style="color: #667eea; margin-bottom: 20px; font-size: 20px;">👤 Kundeninformationen</h3>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr style="border-bottom: 1px solid #e9ecef;">
-                  <td style="padding: 12px 15px 12px 0; font-weight: bold; color: #555; width: 140px;">👨‍💼 Name:</td>
-                  <td style="padding: 12px 0; color: #333; font-size: 16px;">${inquiry.name || 'Nicht angegeben'}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #e9ecef;">
-                  <td style="padding: 12px 15px 12px 0; font-weight: bold; color: #555;">📧 E-Mail:</td>
-                  <td style="padding: 12px 0;"><a href="mailto:${inquiry.email}" style="color: #667eea; text-decoration: none; font-weight: bold; font-size: 16px;">${inquiry.email}</a></td>
-                </tr>
-                <tr style="border-bottom: 1px solid #e9ecef;">
-                  <td style="padding: 12px 15px 12px 0; font-weight: bold; color: #555;">📞 Telefon:</td>
-                  <td style="padding: 12px 0; color: #333; font-size: 16px;">${inquiry.phone || 'Nicht angegeben'}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 12px 15px 12px 0; font-weight: bold; color: #555;">⏰ Eingegangen:</td>
-                  <td style="padding: 12px 0; color: #333; font-size: 16px;">${formatDate(inquiry.createdAt || new Date())}</td>
-                </tr>
-              </table>
-            </div>
-            
-            <div style="background: #fff8e1; border: 3px solid #ffb300; border-radius: 12px; padding: 25px; margin-bottom: 30px;">
-              <h3 style="color: #e65100; margin-bottom: 20px; font-size: 20px;">💬 Kundennachricht</h3>
-              <div style="background: white; padding: 20px; border-radius: 8px; border: 2px solid #ffcc80;">
-                <p style="color: #5d4037; line-height: 1.8; white-space: pre-wrap; margin: 0; font-size: 15px;">
-                  "${inquiry.message || 'Keine spezifische Nachricht hinterlassen - Kunde möchte vermutlich allgemeine Informationen.'}"
-                </p>
-              </div>
-            </div>
-            
-            <div style="background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%); border: 3px solid #4caf50; border-radius: 12px; padding: 30px; text-align: center; margin-bottom: 30px;">
-              <h3 style="color: #2e7d32; margin-bottom: 20px; font-size: 22px;">🎯 Ihre nächsten Schritte</h3>
-              
-              <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <p style="color: #2e7d32; margin: 0; font-size: 16px; line-height: 1.6;">
-                  💡 <strong>Profi-Tipp:</strong> Eine schnelle und persönliche Antwort zeigt Professionalität<br>
-                  ⏰ <strong>Empfohlene Antwortzeit:</strong> Innerhalb von 4-8 Stunden<br>
-                  🎪 <strong>Tonfall:</strong> Freundlich, hilfsbereit und kompetent
-                </p>
-              </div>
-              
-              <div style="margin: 25px 0;">
-                <a href="mailto:${inquiry.email}?subject=Re: Ihre Anfrage bei der Glücksmomente Manufaktur&body=Liebe/r ${inquiry.name || 'Kunde/in'},%0D%0A%0D%0AVielen Dank für Ihr Interesse an unseren handgemachten Seifen! Gerne beantworte ich Ihre Frage...%0D%0A%0D%0AMit freundlichen Grüßen,%0D%0AIhr Team der Glücksmomente Manufaktur" 
-                   style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                          color: white; 
-                          padding: 18px 40px; 
-                          text-decoration: none; 
-                          border-radius: 25px; 
-                          font-weight: bold; 
-                          font-size: 16px;
-                          display: inline-block;
-                          box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-                          transition: all 0.3s ease;">
-                  📧 Sofort professionell antworten
-                </a>
-              </div>
-              
-              <p style="color: #6c757d; margin: 0; font-size: 14px; font-style: italic;">
-                ✨ E-Mail-Vorlage ist bereits vorbereitet - einfach anpassen und senden!
-              </p>
-            </div>
-            
-            <hr style="border: none; border-top: 2px solid #e9ecef; margin: 30px 0;">
-            
-            <div style="text-align: center;">
-              <p style="color: #6c757d; font-size: 14px; line-height: 1.6; margin: 0;">
-                🤖 <strong>Automatische Benachrichtigung</strong><br>
-                Glücksmomente Manufaktur - Kundenkontakt-System<br><br>
-                
-                <em>Diese Nachricht wurde automatisch generiert und benötigt keine Antwort.</em>
-              </p>
-            </div>
+            <h3 style="margin:0 0 10px 0;">Nachricht</h3>
+            <div style="background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:14px; white-space:pre-wrap;">${customerMessage}</div>
+
+            ${this.renderTemplateInfoBox('Empfohlene Bearbeitung', [
+              'Erstantwort möglichst innerhalb von 24 Stunden senden.',
+              'Bei Rückfragen den Kontakt per E-Mail oder Telefon aufnehmen.',
+              'Status im Adminbereich nach Bearbeitung aktualisieren.'
+            ], 'info')}
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
 
-      const { data, error } = await this.resend.emails.send({
+      const subject = this.buildTestEmailSubject(
+        `Admin-Hinweis: Neue Kundenanfrage von ${customerName || customerEmail}`,
+        testMeta
+      );
+
+      const result = await this.sendWithResendFallback({
         from: this.getSenderAddress(),
-        to: [this.adminEmail],
-        subject: '📝 Neue Kundenanfrage von ' + (inquiry.name || inquiry.email),
+        to: this.notificationEmail,
+        subject,
         html: htmlContent
       });
 
-      if (error) {
-        console.error('❌ [E-Mail Service] Admin-Anfrage-Benachrichtigung fehlgeschlagen:', error);
-        return { success: false, error: error.message || error, data: null };
+      if (result?.error) {
+        throw new Error(result.error.message || 'Resend API Error');
       }
 
-      // Log in DB speichern
+      const messageId = result?.data?.id || result?.id;
       await this.saveEmailLog({
-        to: this.adminEmail,
-        subject: '📝 Neue Kundenanfrage von ' + (inquiry.name || inquiry.email),
+        to: this.notificationEmail,
+        subject: 'Admin-Hinweis: Neue Kundenanfrage',
         type: 'admin-inquiry-notification',
-        messageId: data?.id,
         success: true,
+        messageId,
         inquiryId: inquiry._id
       });
 
-      console.log('✅ [E-Mail Service] Admin-Anfrage-Benachrichtigung gesendet:', data?.id);
-      return { success: true, messageId: data?.id, data };
+      return { success: true, messageId, data: result?.data || result };
+
     } catch (error) {
       console.error('❌ [E-Mail Service] Admin-Anfrage-Benachrichtigung Fehler:', error);
       
       // Log auch Fehler speichern
       await this.saveEmailLog({
-        to: this.adminEmail,
-        subject: '📝 Neue Kundenanfrage von ' + (inquiry.name || inquiry.email),
+        to: this.notificationEmail,
+        subject: 'Admin-Hinweis: Neue Kundenanfrage von ' + (fallbackCustomerName || fallbackCustomerEmail),
         type: 'admin-inquiry-notification',
         success: false,
         error: error.message,
@@ -1141,7 +1298,7 @@ class EmailService {
   }
 
   // Bestehende sendAdminOrderNotification Funktion erweitern
-  async sendAdminOrderNotification(orderData, pdfAttachment) {
+  async sendAdminOrderNotification(orderData, pdfAttachment, testMeta = null) {
     console.log('📧 [E-Mail Service] Admin-Benachrichtigung angefordert:', { 
       bestellnummer: orderData?.bestellung?.bestellnummer || orderData?.bestellnummer 
     });
@@ -1156,7 +1313,7 @@ class EmailService {
       console.log('   💡 Tipp: Für echte E-Mails Resend API-Key konfigurieren');
       
       await this.saveEmailLog({
-        to: this.adminEmail,
+        to: this.notificationEmail,
         subject: '🚨 Neue Bestellung eingegangen',
         type: 'admin-notification',
         success: true,
@@ -1176,6 +1333,7 @@ class EmailService {
 
     try {
       const { bestellung, kundenname, gesamtbetrag } = orderData;
+      const styles = this.getTemplateStyles('red');
       
       const formatPrice = (price) => {
         return new Intl.NumberFormat('de-DE', {
@@ -1195,119 +1353,70 @@ class EmailService {
       };
 
       const htmlContent = `
-        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
-          <div style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="margin: 0; font-size: 28px;">🔔 Neue Bestellung!</h1>
-            <p style="margin: 10px 0 0 0; font-size: 18px; opacity: 0.9;">
-              Bestellung ${bestellung.bestellnummer} eingegangen
-            </p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.header}">
+            <h1 style="margin:0; font-size:25px;">Neue Bestellung im System</h1>
+            <p style="margin:10px 0 0 0; opacity:0.95;">Bestellnummer ${bestellung.bestellnummer} • Gesamt ${formatPrice(gesamtbetrag)}</p>
+            ${this.renderTemplateBadge('ADMIN AUFTRAGSEINGANG')}
           </div>
-          
-          <div style="background: white; padding: 30px; border: 1px solid #eee; border-top: none;">
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-              <h2 style="color: #333; margin: 0 0 15px 0; font-size: 20px;">👤 Kundeninformationen</h2>
-              <p style="margin: 5px 0; color: #666;"><strong>Name:</strong> ${kundenname}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>E-Mail:</strong> ${bestellung.kontakt?.email || 'N/A'}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Bestellzeit:</strong> ${formatDate(bestellung.bestelldatum)}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Gesamtbetrag:</strong> <span style="color: #28a745; font-weight: bold; font-size: 18px;">${formatPrice(gesamtbetrag)}</span></p>
+          <div style="${styles.body}">
+            <div style="background:#fff7ed; border:1px solid #fdba74; border-radius:10px; padding:14px 16px; margin-bottom:16px;">
+              <p style="margin:0 0 4px 0;"><strong>Kunde:</strong> ${kundenname}</p>
+              <p style="margin:0 0 4px 0;"><strong>E-Mail:</strong> ${bestellung.kontakt?.email || 'N/A'}</p>
+              <p style="margin:0;"><strong>Bestellzeit:</strong> ${formatDate(bestellung.bestelldatum)}</p>
             </div>
 
-            <h3 style="color: #333; margin: 30px 0 15px 0;">🛍️ Bestellte Artikel</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
-              <thead>
-                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
-                  <th style="text-align: left; padding: 12px; border-bottom: 1px solid #dee2e6;">Artikel</th>
-                  <th style="text-align: center; padding: 12px; border-bottom: 1px solid #dee2e6;">Menge</th>
-                  <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Einzelpreis</th>
-                  <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Gesamt</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${bestellung.artikel.map(artikel => `
-                  <tr>
-                    <td style="padding: 12px; border-bottom: 1px solid #f1f1f1;">
-                      <strong>${artikel.name}</strong><br>
-                      <small style="color: #666;">${artikel.typ || ''}</small>
-                    </td>
-                    <td style="text-align: center; padding: 12px; border-bottom: 1px solid #f1f1f1;">${artikel.menge}</td>
-                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.preis)}</td>
-                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;"><strong>${formatPrice(artikel.preis * artikel.menge)}</strong></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+            <h3 style="margin:0 0 10px 0;">Positionen</h3>
+            <ul style="padding-left:18px; margin:0;">
+              ${bestellung.artikel.map((artikel) => `<li style="margin-bottom:6px;">${artikel.menge}x ${artikel.name} - ${formatPrice((artikel.preis || 0) * (artikel.menge || 0))}</li>`).join('')}
+            </ul>
 
-            <h3 style="color: #333; margin: 30px 0 15px 0;">📍 Adressen</h3>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
-              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <h4 style="color: #333; margin: 0 0 10px 0;">Rechnungsadresse</h4>
-                <p style="margin: 0; color: #666; line-height: 1.4;">
-                  ${bestellung.rechnungsadresse.vorname} ${bestellung.rechnungsadresse.nachname}<br>
-                  ${bestellung.rechnungsadresse.strasse} ${bestellung.rechnungsadresse.hausnummer}<br>
-                  ${bestellung.rechnungsadresse.plz} ${bestellung.rechnungsadresse.stadt}
-                </p>
-              </div>
-              <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <h4 style="color: #333; margin: 0 0 10px 0;">Lieferadresse</h4>
-                <p style="margin: 0; color: #666; line-height: 1.4;">
-                  ${bestellung.lieferadresse.vorname} ${bestellung.lieferadresse.nachname}<br>
-                  ${bestellung.lieferadresse.strasse} ${bestellung.lieferadresse.hausnummer}<br>
-                  ${bestellung.lieferadresse.plz} ${bestellung.lieferadresse.stadt}
-                </p>
-              </div>
-            </div>
-
-            ${bestellung.notizen?.kunde ? `
-              <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin: 30px 0;">
-                <h4 style="color: #856404; margin: 0 0 10px 0;">💬 Kundennotizen</h4>
-                <p style="color: #856404; margin: 0;">${bestellung.notizen.kunde}</p>
-              </div>
-            ` : ''}
-
-            <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 20px; margin: 30px 0;">
-              <h4 style="color: #155724; margin: 0 0 10px 0;">💳 Zahlung</h4>
-              <p style="color: #155724; margin: 0;">
-                <strong>Methode:</strong> PayPal<br>
-                <strong>Status:</strong> Bezahlt ✅<br>
-                <strong>Transaktions-ID:</strong> ${bestellung.zahlung?.transaktionsId || 'Wird aktualisiert'}
-              </p>
-            </div>
-
-            <div style="text-align: center; background: #F5F5F5; padding: 20px; border-radius: 8px; margin: 25px 0;">
-              <p style="color: #666; margin: 0; font-size: 16px;">
-                🚀 <strong>Nächste Schritte:</strong> Bestellung in Admin-Panel bearbeiten
-              </p>
-            </div>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            
-            <p style="color: #999; font-size: 14px; text-align: center; margin: 0;">
-              Automatische Benachrichtigung vom Bestellsystem<br>
-              <strong style="color: #757575;">Glücksmomente Manufaktur</strong>
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-            Im Anhang finden Sie die Bestelldetails als PDF.
+            ${this.renderTemplateInfoBox('Empfohlene Bearbeitung', [
+              'Bestellung inhaltlich prüfen und intern freigeben.',
+              'Rechnungsdokument im Anhang kontrollieren.',
+              'Bestellung zeitnah in die operative Bearbeitung übernehmen.'
+            ], 'danger')}
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
 
-      const emailData = {
-        from: `${this.fromName} <${this.fromEmail}>`,
-        to: this.adminEmail,
-        subject: `🔔 Neue Bestellung: ${bestellung.bestellnummer} (${formatPrice(gesamtbetrag)})`,
-        html: htmlContent,
-        attachments: pdfAttachment ? [{
+      const attachments = [];
+      if (pdfAttachment) {
+        const pdfBase64 = Buffer.isBuffer(pdfAttachment)
+          ? pdfAttachment.toString('base64')
+          : String(pdfAttachment);
+        attachments.push({
           filename: `Bestellung_${bestellung.bestellnummer}.pdf`,
-          content: pdfAttachment
-        }] : undefined
-      };
+          content: pdfBase64,
+          contentType: 'application/pdf'
+        });
+      }
 
-      const result = await this.resend.emails.send(emailData);
+      const subject = this.buildTestEmailSubject(
+        `Admin-Hinweis: Neue Bestellung ${bestellung.bestellnummer} (${formatPrice(gesamtbetrag)})`,
+        testMeta
+      );
 
-      console.log('✅ Admin order notification sent:', result);
-      return { success: true, messageId: result.id };
+      const result = await this.sendWithResendFallback({
+        from: this.getSenderAddress(),
+        to: this.notificationEmail,
+        subject,
+        html: htmlContent,
+        attachments: attachments.length > 0 ? attachments : undefined
+      });
+
+      if (result?.error) {
+        return { success: false, error: result.error.message || 'Resend API Error' };
+      }
+
+      const messageId = result?.data?.id || result?.id;
+      if (!messageId) {
+        return { success: false, error: 'Unexpected response from email provider' };
+      }
+
+      return { success: true, messageId };
+
     } catch (error) {
       console.error('❌ Admin order notification failed:', error);
       return { success: false, error: error.message };
@@ -1315,7 +1424,7 @@ class EmailService {
   }
 
   // 📧 Bestellung bestätigt E-Mail
-  async sendOrderConfirmationEmail(bestellung) {
+  async sendOrderConfirmationEmail(bestellung, testMeta = null) {
     console.log('📧 [E-Mail Service] Bestellbestätigungs-E-Mail angefordert:', { 
       bestellnummer: bestellung.bestellnummer, 
       email: bestellung.besteller?.email 
@@ -1356,6 +1465,7 @@ class EmailService {
           currency: 'EUR'
         }).format(price);
       };
+      const styles = this.getTemplateStyles('blue');
 
       const formatDate = (dateString) => {
         const date = new Date(dateString);
@@ -1369,64 +1479,32 @@ class EmailService {
       };
 
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <h1 style="margin: 0; font-size: 28px; font-weight: bold;">✅ Bestellung bestätigt!</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Ihre Bestellung wurde erfolgreich angenommen
-            </p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="margin:0; font-size:28px; font-weight:700;">Bestellung bestätigt</h1>
+            <p style="margin:10px 0 0 0; font-size:16px; opacity:0.92;">Vielen Dank ${bestellung.besteller.vorname ? `, ${bestellung.besteller.vorname}` : ''}. Wir haben Ihren Auftrag erhalten.</p>
+            ${this.renderTemplateBadge('BESTELLSTATUS AKTUALISIERT')}
           </div>
-          
-          <div style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h2 style="color: #333; margin: 0 0 20px 0; font-size: 24px;">
-              Liebe/r ${bestellung.besteller.vorname} ${bestellung.besteller.nachname},
-            </h2>
-            
-            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-              <strong>fantastische Neuigkeiten!</strong> 🎉 Wir haben Ihre Bestellung <strong>#${bestellung.bestellnummer}</strong> 
-              erhalten und freuen uns sehr, diese für Sie bearbeiten zu dürfen.
-            </p>
-            
-            <div style="background-color: #f0f8ff; border-left: 4px solid #9b4dca; padding: 20px; margin: 20px 0; border-radius: 8px;">
-              <h3 style="color: #9b4dca; margin: 0 0 15px 0; font-size: 18px;">📦 Bestellübersicht</h3>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Gesamtbetrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
+          <div style="${styles.body}">
+            <p style="margin:0 0 14px 0;">Ihre Bestellung <strong>#${bestellung.bestellnummer}</strong> wurde erfolgreich erfasst und wird nun bearbeitet.</p>
+
+            <div style="${styles.panel}; margin-bottom:16px;">
+              <p style="margin:0 0 4px 0;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
+              <p style="margin:0 0 4px 0;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
+              <p style="margin:0;"><strong>Gesamtbetrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
             </div>
-            
-            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">🎯 Wie geht es weiter?</h3>
-            <ul style="color: #555; font-size: 16px; line-height: 1.8; padding-left: 20px;">
-              <li><strong>Sofort:</strong> Wir beginnen mit der sorgfältigen Zusammenstellung Ihrer Artikel</li>
-              <li><strong>24-48h:</strong> Ihre Bestellung wird liebevoll verpackt und versandfertig gemacht</li>
-              <li><strong>Versand:</strong> Sie erhalten automatisch eine E-Mail mit der Sendungsverfolgung</li>
-              <li><strong>Ankunft:</strong> In 2-3 Werktagen erreichen Sie Ihre Glücksmomente</li>
-            </ul>
-            
-            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; margin: 25px 0; border-radius: 8px;">
-              <h4 style="color: #856404; margin: 0 0 10px 0; font-size: 16px;">💡 Wichtiger Hinweis</h4>
-              <p style="color: #856404; margin: 0; font-size: 14px; line-height: 1.5;">
-                Alle weiteren Statusmeldungen zu Ihrer Bestellung können Sie jederzeit in Ihrem 
-                <strong>persönlichen Kundenkonto</strong> auf unserer Website einsehen. Dort finden Sie auch 
-                alle Details zu Versand und Tracking-Informationen.
-              </p>
+
+            ${this.renderTemplateInfoBox('Wie geht es weiter?', [
+              'Die Bestellung wird intern geprüft und vorbereitet.',
+              'Sie erhalten weitere Informationen zum Versandstatus.',
+              'Für Rückfragen können Sie jederzeit auf diese E-Mail antworten.'
+            ], 'info')}
+
+            <div style="text-align:center; margin:24px 0;">
+              ${this.renderTemplateButton('https://gluecksmomente-manufaktur.vercel.app/kundenkonto', 'Zum Kundenkonto', styles.button)}
             </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="https://gluecksmomente-manufaktur.vercel.app/kundenkonto" 
-                 style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 15px rgba(155, 77, 202, 0.3);">
-                🔍 Zum Kundenkonto
-              </a>
-            </div>
-            
-            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 25px 0 0 0;">
-              Vielen Dank für Ihr Vertrauen in die Glücksmomente Manufaktur! ✨<br>
-              Bei Fragen stehen wir Ihnen gerne zur Verfügung.
-            </p>
-            
-            <p style="color: #999; font-size: 14px; text-align: center; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #eee;">
-              Automatische Benachrichtigung vom Bestellsystem<br>
-              <strong style="color: #9b4dca;">Glücksmomente Manufaktur</strong>
-            </p>
+
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
@@ -1434,11 +1512,13 @@ class EmailService {
       const emailData = {
         from: `${this.fromName} <${this.fromEmail}>`,
         to: bestellung.besteller.email,
-        subject: `✅ Bestellung bestätigt #${bestellung.bestellnummer} - Wir bearbeiten Ihre Bestellung`,
-        html: htmlContent
+        subject: this.buildTestEmailSubject(`Bestellbestätigung #${bestellung.bestellnummer} - Vielen Dank`, testMeta),
+        html: htmlContent,
+        replyTo: testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: testMeta?.isTest ? 'high' : undefined
       };
 
-      const result = await this.resend.emails.send(emailData);
+      const result = await this.sendWithResendFallback(emailData);
 
       // E-Mail-Versand in MongoDB loggen
       await this.logEmail({
@@ -1462,7 +1542,7 @@ class EmailService {
   }
 
   // 📧 Bestellung abgelehnt E-Mail
-  async sendOrderRejectionEmail(bestellung, reason = null) {
+  async sendOrderRejectionEmail(bestellung, reason = null, testMeta = null) {
     if (this.isDisabled) {
       console.warn('E-Mail-Service deaktiviert - Ablehnungs-E-Mail wird nicht gesendet');
       return { success: false, error: 'E-Mail-Service deaktiviert' };
@@ -1475,6 +1555,7 @@ class EmailService {
           currency: 'EUR'
         }).format(price);
       };
+      const styles = this.getTemplateStyles('red');
 
       const formatDate = (dateString) => {
         const date = new Date(dateString);
@@ -1501,70 +1582,36 @@ class EmailService {
       const actualReason = reason || defaultReason;
 
       const htmlContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
-          <div style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0;">
-            <h1 style="margin: 0; font-size: 28px; font-weight: bold;">😔 Bestellung storniert</h1>
-            <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">
-              Leider müssen wir Ihre Bestellung absagen
-            </p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="margin:0; font-size:28px; font-weight:700;">Bestellung storniert</h1>
+            <p style="margin:10px 0 0 0; font-size:16px; opacity:0.92;">Leider können wir Ihre Bestellung aktuell nicht ausführen.</p>
+            ${this.renderTemplateBadge('WICHTIGE INFORMATION')}
           </div>
-          
-          <div style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            <h2 style="color: #333; margin: 0 0 20px 0; font-size: 24px;">
-              Liebe/r ${bestellung.besteller.vorname} ${bestellung.besteller.nachname},
-            </h2>
-            
-            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-              es tut uns außerordentlich leid, Ihnen mitteilen zu müssen, dass wir Ihre Bestellung 
-              <strong>#${bestellung.bestellnummer}</strong> leider nicht wie geplant bearbeiten können.
-            </p>
-            
-            <div style="background-color: #fff5f5; border-left: 4px solid #dc3545; padding: 20px; margin: 20px 0; border-radius: 8px;">
-              <h3 style="color: #dc3545; margin: 0 0 15px 0; font-size: 18px;">📦 Bestelldetails</h3>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
-              <p style="color: #333; margin: 5px 0; font-size: 16px;"><strong>Betrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
+
+          <div style="${styles.body}">
+            <p style="margin:0 0 14px 0;">Es tut uns leid, dass wir Bestellung <strong>#${bestellung.bestellnummer}</strong> nicht wie geplant bearbeiten können.</p>
+
+            <div style="${styles.panel}; margin-bottom:16px;">
+              <p style="margin:0 0 4px 0;"><strong>Bestellnummer:</strong> ${bestellung.bestellnummer}</p>
+              <p style="margin:0 0 4px 0;"><strong>Bestelldatum:</strong> ${formatDate(bestellung.erstelltAm)}</p>
+              <p style="margin:0;"><strong>Betrag:</strong> ${formatPrice(bestellung.preise?.gesamtsumme || 0)}</p>
             </div>
-            
-            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">🔍 Grund der Stornierung</h3>
-            <div style="background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 20px; margin: 15px 0; border-radius: 8px;">
-              <p style="color: #495057; margin: 0; font-size: 15px; line-height: 1.6;">
-                ${actualReason.trim()}
-              </p>
+
+            <h3 style="margin:0 0 10px 0;">Grund der Stornierung</h3>
+            <div style="background:#f8f9fa; border:1px solid #dee2e6; border-radius:10px; padding:14px; white-space:pre-wrap;">${actualReason.trim()}</div>
+
+            ${this.renderTemplateInfoBox('Rückerstattung', [
+              `Der Betrag von ${formatPrice(bestellung.preise?.gesamtsumme || 0)} wird in der Regel innerhalb von 3-5 Werktagen zurückerstattet.`,
+              'Bei PayPal erfolgt die Rückerstattung häufig schneller.',
+              'Bei Fragen helfen wir Ihnen gerne weiter.'
+            ], 'warning')}
+
+            <div style="text-align:center; margin:24px 0;">
+              ${this.renderTemplateButton('https://gluecksmomente-manufaktur.vercel.app/products', 'Neue Bestellung aufgeben', styles.button)}
             </div>
-            
-            <h3 style="color: #333; margin: 30px 0 15px 0; font-size: 20px;">💰 Rückerstattung</h3>
-            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
-              <strong>Gute Nachricht:</strong> Der Betrag von <strong>${formatPrice(bestellung.preise?.gesamtsumme || 0)}</strong> 
-              wird Ihnen in den nächsten <strong>3-5 Werktagen</strong> vollständig auf Ihr Zahlungsmittel zurückerstattet. 
-              Bei PayPal-Zahlungen erfolgt die Rückerstattung meist sofort.
-            </p>
-            
-            <div style="background-color: #d1ecf1; border: 1px solid #b7d7e8; padding: 20px; margin: 25px 0; border-radius: 8px;">
-              <h4 style="color: #0c5460; margin: 0 0 10px 0; font-size: 16px;">🎁 Besonderes Angebot für Sie</h4>
-              <p style="color: #0c5460; margin: 0; font-size: 14px; line-height: 1.5;">
-                Als Entschuldigung für die Unannehmlichkeiten erhalten Sie bei Ihrer nächsten Bestellung 
-                einen <strong>10% Rabatt-Code: SORRY10</strong>. Dieser ist 60 Tage gültig und kann 
-                ohne Mindestbestellwert eingelöst werden.
-              </p>
-            </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="https://gluecksmomente-manufaktur.vercel.app/products" 
-                 style="background: linear-gradient(135deg, #9b4dca 0%, #6a4c93 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; font-size: 16px; display: inline-block; box-shadow: 0 4px 15px rgba(155, 77, 202, 0.3);">
-                🛍️ Neue Bestellung aufgeben
-              </a>
-            </div>
-            
-            <p style="color: #555; font-size: 16px; line-height: 1.6; margin: 25px 0 0 0;">
-              Wir entschuldigen uns nochmals für die Unannehmlichkeiten und hoffen, Sie bald wieder als Kunde 
-              begrüßen zu dürfen. Sollten Sie Fragen haben, zögern Sie nicht, uns zu kontaktieren. 💙
-            </p>
-            
-            <p style="color: #999; font-size: 14px; text-align: center; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #eee;">
-              Automatische Benachrichtigung vom Bestellsystem<br>
-              <strong style="color: #9b4dca;">Glücksmomente Manufaktur</strong>
-            </p>
+
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
@@ -1572,11 +1619,13 @@ class EmailService {
       const emailData = {
         from: `${this.fromName} <${this.fromEmail}>`,
         to: bestellung.besteller.email,
-        subject: `😔 Bestellung #${bestellung.bestellnummer} storniert - Rückerstattung wird eingeleitet`,
-        html: htmlContent
+        subject: this.buildTestEmailSubject(`Bestellung #${bestellung.bestellnummer} storniert - Rückerstattung eingeleitet`, testMeta),
+        html: htmlContent,
+        replyTo: testMeta?.isTest ? this.notificationEmail : undefined,
+        priority: testMeta?.isTest ? 'high' : undefined
       };
 
-      const result = await this.resend.emails.send(emailData);
+      const result = await this.sendWithResendFallback(emailData);
 
       // E-Mail-Versand in MongoDB loggen
       await this.logEmail({
@@ -1606,6 +1655,8 @@ class EmailService {
       return { success: false, error: 'E-Mail-Service deaktiviert' };
     }
 
+    const invoiceNumber = invoiceData?.invoiceNumber || invoiceData?.bestellnummer || 'unbekannt';
+
     try {
       const formatPrice = (price) => {
         return new Intl.NumberFormat('de-DE', {
@@ -1628,46 +1679,63 @@ class EmailService {
                           `${invoiceData.besteller.vorname} ${invoiceData.besteller.nachname}`.trim() :
                           invoiceData.customer?.customerData?.company || 
                           invoiceData.besteller?.firma || 'Liebe Kundin, lieber Kunde';
+      const styles = this.getTemplateStyles('blue');
 
       // Flexibel mit verschiedenen Datenstrukturen arbeiten
-      const invoiceNumber = invoiceData.invoiceNumber || invoiceData.bestellnummer;
       const invoiceDate = invoiceData.dates?.invoiceDate || invoiceData.bestelldatum;
       const totalAmount = invoiceData.amounts?.total || invoiceData.gesamtsumme;
+      const invoiceItems = Array.isArray(invoiceData.artikel)
+        ? invoiceData.artikel.map((artikel) => ({
+            name: artikel.name,
+            description: artikel.beschreibung || '',
+            quantity: artikel.menge,
+            unitPrice: artikel.einzelpreis,
+            totalPrice: artikel.gesamtpreis
+          }))
+        : Array.isArray(invoiceData.items)
+          ? invoiceData.items.map((item) => ({
+              name: item.productData?.name || item.name || 'Artikel',
+              description: item.productData?.description || item.description || '',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.total
+            }))
+          : [];
+      const netAmount =
+        invoiceData.nettosumme ??
+        invoiceData.amounts?.subtotal ??
+        (totalAmount || 0);
+      const vatAmount =
+        invoiceData.mwst ??
+        invoiceData.amounts?.vatAmount ??
+        0;
 
       const htmlContent = `
-        <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; line-height: 1.6;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 35px; border-radius: 12px 12px 0 0; text-align: center;">
-            <h1 style="margin: 0; font-size: 32px;">🧾 Ihre Rechnung ist da!</h1>
-            <p style="margin: 15px 0 5px 0; font-size: 18px; opacity: 0.9;">
-              ${customerName}
-            </p>
-            <p style="margin: 0; font-size: 16px; opacity: 0.8;">
-              Vielen Dank für Ihr Vertrauen in unsere handgemachten Seifen ✨
-            </p>
+        <div style="${styles.wrapper}">
+          <div style="${styles.headerCentered}">
+            <h1 style="margin:0; font-size:30px;">Vielen Dank für Ihre Bestellung</h1>
+            <p style="margin:12px 0 0 0; font-size:17px; opacity:0.9;">${customerName}</p>
+            ${this.renderTemplateBadge('RECHNUNGSDOKUMENT')}
           </div>
-          
-          <div style="background: white; padding: 30px; border: 1px solid #eee; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-            
-            <div style="background: #e8f5e8; padding: 25px; border-radius: 12px; margin-bottom: 30px; border: 2px solid #4caf50;">
-              <h2 style="color: #2e7d32; margin: 0 0 15px 0; font-size: 20px; text-align: center;">💚 Rechnung für Ihre Bestellung</h2>
-              <p style="margin: 0; color: #2e7d32; text-align: center; line-height: 1.6;">
-                Anbei finden Sie Ihre Rechnung als PDF.<br>
-                <strong>Herzlichen Dank für Ihr Vertrauen!</strong>
-              </p>
+
+          <div style="${styles.body}">
+            <p style="margin:0 0 14px 0; color:#2C2C2C; line-height:1.65;">
+              herzlichen Dank für Ihr Vertrauen in unsere Manufaktur. Es bedeutet uns sehr viel, dass Sie bei uns bestellt haben.
+              Anbei erhalten Sie Ihre Rechnung als PDF.
+            </p>
+
+            <div style="${styles.panel}; margin-bottom:18px;">
+              <h2 style="margin:0 0 10px 0; font-size:20px; color:#5D3242;">Rechnungsdetails</h2>
+              <p style="margin:5px 0;"><strong>Rechnungsnummer:</strong> ${invoiceNumber}</p>
+              <p style="margin:5px 0;"><strong>Rechnungsdatum:</strong> ${formatDate(invoiceDate)}</p>
+              <p style="margin:5px 0;"><strong>Gesamtbetrag:</strong> ${formatPrice(totalAmount)}</p>
             </div>
 
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
-              <h2 style="color: #333; margin: 0 0 15px 0; font-size: 20px;">📋 Rechnungsdetails</h2>
-              <p style="margin: 5px 0; color: #666;"><strong>Rechnungsnummer:</strong> <span style="color: #667eea; font-weight: bold;">${invoiceNumber}</span></p>
-              <p style="margin: 5px 0; color: #666;"><strong>Rechnungsdatum:</strong> ${formatDate(invoiceDate)}</p>
-              <p style="margin: 5px 0; color: #666;"><strong>Gesamtbetrag:</strong> <span style="color: #2e7d32; font-weight: bold; font-size: 18px;">${formatPrice(totalAmount)}</span></p>
-            </div>
-
-            ${invoiceData.artikel ? `
-            <h3 style="color: #333; margin: 30px 0 15px 0;">🛍️ Ihre Artikel</h3>
-            <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+            ${invoiceItems.length ? `
+            <h3 style="color: #333; margin: 22px 0 12px 0;">Ihre Artikel</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border:1px solid #E8D5B7; border-radius:10px; overflow:hidden;">
               <thead>
-                <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+                <tr style="background: #F5EEDD; border-bottom: 2px solid #E8D5B7;">
                   <th style="text-align: left; padding: 12px; border-bottom: 1px solid #dee2e6;">Artikel</th>
                   <th style="text-align: center; padding: 12px; border-bottom: 1px solid #dee2e6;">Menge</th>
                   <th style="text-align: right; padding: 12px; border-bottom: 1px solid #dee2e6;">Einzelpreis</th>
@@ -1675,29 +1743,29 @@ class EmailService {
                 </tr>
               </thead>
               <tbody>
-                ${invoiceData.artikel.map(artikel => `
+                ${invoiceItems.map(item => `
                   <tr>
                     <td style="padding: 12px; border-bottom: 1px solid #f1f1f1;">
-                      <strong>${artikel.name}</strong>
-                      ${artikel.beschreibung ? `<br><small style="color: #666;">${artikel.beschreibung}</small>` : ''}
+                      <strong>${item.name}</strong>
+                      ${item.description ? `<br><small style="color: #666;">${item.description}</small>` : ''}
                     </td>
-                    <td style="text-align: center; padding: 12px; border-bottom: 1px solid #f1f1f1;">${artikel.menge}</td>
-                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.einzelpreis)}</td>
-                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(artikel.gesamtpreis)}</td>
+                    <td style="text-align: center; padding: 12px; border-bottom: 1px solid #f1f1f1;">${item.quantity}</td>
+                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(item.unitPrice)}</td>
+                    <td style="text-align: right; padding: 12px; border-bottom: 1px solid #f1f1f1;">${formatPrice(item.totalPrice)}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
 
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 30px;">
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
               <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                 <span>Nettosumme:</span>
-                <span>${formatPrice(invoiceData.nettosumme)}</span>
+                <span>${formatPrice(netAmount)}</span>
               </div>
-              ${invoiceData.mwst > 0 ? `
+              ${vatAmount > 0 ? `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
                   <span>MwSt. (19%):</span>
-                  <span>${formatPrice(invoiceData.mwst)}</span>
+                  <span>${formatPrice(vatAmount)}</span>
                 </div>
               ` : `
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px; color: #666; font-size: 14px;">
@@ -1708,56 +1776,53 @@ class EmailService {
               <hr style="border: none; border-top: 1px solid #dee2e6; margin: 15px 0;">
               <div style="display: flex; justify-content: space-between; font-size: 18px; font-weight: bold; color: #333;">
                 <span>Gesamtsumme:</span>
-                <span style="color: #28a745;">${formatPrice(totalAmount)}</span>
+                <span style="color: #5D3242;">${formatPrice(totalAmount)}</span>
               </div>
             </div>
             ` : ''}
 
-            <div style="background: #fff3e0; padding: 20px; border-radius: 8px; border-left: 4px solid #ff9800; margin-bottom: 30px;">
-              <h3 style="color: #e65100; margin: 0 0 15px 0; font-size: 16px;">📄 Rechnungsanhang</h3>
-              <p style="margin: 0; color: #e65100;">
-                Ihre Rechnung finden Sie als PDF im Anhang dieser E-Mail.
-              </p>
+            ${this.renderTemplateInfoBox('Rechnungsanhang', [
+              'Die Rechnung finden Sie als PDF im Anhang dieser E-Mail.'
+            ], 'warning')}
+
+            ${this.renderTemplateInfoBox('Zahlungsinformation', [
+              invoiceData.zahlungsmethode === 'pending'
+                ? 'Die Zahlung für diese Rechnung steht noch aus. Details finden Sie in der PDF-Rechnung.'
+                : 'Vielen Dank für die pünktliche Zahlung.'
+            ], 'info')}
+
+            <div style="margin-top:18px; padding:12px 14px; background:#FFF8EE; border:1px solid #E8D5B7; border-radius:10px; color:#5D3242;">
+              Danke, dass Sie handgemachte Produkte aus unserer Manufaktur unterstützen. Wir wissen Ihre Bestellung sehr zu schätzen.
             </div>
 
-            <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2196f3; margin-bottom: 30px;">
-              <h3 style="color: #1565c0; margin: 0 0 15px 0; font-size: 16px;">💳 Zahlungsinformation</h3>
-              <p style="margin: 0; color: #1565c0; line-height: 1.6;">
-                ${invoiceData.zahlungsmethode === 'pending' ? 
-                  'Die Zahlung für diese Rechnung steht noch aus. Weitere Informationen finden Sie in der PDF-Rechnung.' :
-                  'Vielen Dank für die pünktliche Zahlung!'
-                }
-              </p>
+            <div style="margin-top:14px; text-align:center; font-size:14px; color:#5D3242;">
+              Bei Fragen zur Rechnung kontaktieren Sie uns gerne.
             </div>
 
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; text-align: center;">
-              <p style="color: #666; margin: 10px 0;">
-                Bei Fragen zur Rechnung kontaktieren Sie uns gerne!
-              </p>
-              <div style="color: #999; font-size: 14px; margin: 20px 0;">
-                <p style="margin: 5px 0;"><strong>Glücksmomente Manufaktur</strong></p>
-                <p style="margin: 5px 0;">📧 info@gluecksmomente-manufaktur.de</p>
-                <p style="margin: 5px 0;">📞 +49 123 456789</p>
-              </div>
-              
-              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px;">
-                <p style="color: #666; margin: 0; font-size: 12px; line-height: 1.4;">
-                  <strong>Glücksmomente Manufaktur</strong> • Wasserwerkstrasse 15 • 68642 Bürstadt<br>
-                  Geschäftsführer: Ralf Jacob • Einzelunternehmen<br>
-                  Finanzamt Bensheim • Steuernummer: DE123456789
-                </p>
-              </div>
-            </div>
+            ${this.renderTemplateFooter()}
           </div>
         </div>
       `;
 
       const attachments = [];
       if (pdfAttachment) {
-        attachments.push({
-          filename: `Rechnung_${invoiceNumber}.pdf`,
-          content: pdfAttachment
-        });
+        let pdfContent = null;
+
+        if (Buffer.isBuffer(pdfAttachment)) {
+          pdfContent = pdfAttachment;
+        } else if (pdfAttachment instanceof Uint8Array) {
+          pdfContent = Buffer.from(pdfAttachment);
+        } else if (typeof pdfAttachment === 'string') {
+          pdfContent = Buffer.from(pdfAttachment, 'base64');
+        }
+
+        if (pdfContent && pdfContent.length > 0) {
+          attachments.push({
+            filename: `Rechnung_${invoiceNumber}.pdf`,
+            content: pdfContent,
+            contentType: 'application/pdf'
+          });
+        }
       }
 
       const emailData = {
@@ -1770,7 +1835,49 @@ class EmailService {
 
       console.log(`📧 [EmailService] Sending invoice email to: ${customerEmail}`);
       
-      const result = await this.resend.emails.send(emailData);
+      const result = await this.sendWithResendFallback(emailData);
+
+      if (result?.error) {
+        const providerError = result.error;
+        console.error('❌ Invoice email failed (Provider Error):', providerError);
+
+        await this.logEmail({
+          to: customerEmail,
+          from: emailData.from,
+          subject: emailData.subject,
+          content: 'E-Mail-Versand fehlgeschlagen',
+          type: 'invoice',
+          status: 'failed',
+          invoiceId: invoiceData._id,
+          error: providerError.message || 'Provider Error'
+        });
+
+        return {
+          success: false,
+          error: providerError.message || 'Provider Error'
+        };
+      }
+
+      const messageId = result?.data?.id || result?.id;
+      if (!messageId) {
+        console.error('❌ Invoice email failed: Unexpected Resend response', result);
+
+        await this.logEmail({
+          to: customerEmail,
+          from: emailData.from,
+          subject: emailData.subject,
+          content: 'E-Mail-Versand fehlgeschlagen',
+          type: 'invoice',
+          status: 'failed',
+          invoiceId: invoiceData._id,
+          error: 'Unexpected response from email provider'
+        });
+
+        return {
+          success: false,
+          error: 'Unexpected response from email provider'
+        };
+      }
 
       // E-Mail-Versand in DB protokollieren
       await this.logEmail({
@@ -1781,11 +1888,11 @@ class EmailService {
         type: 'invoice',
         status: 'sent',
         invoiceId: invoiceData._id,
-        messageId: result.id
+        messageId
       });
 
       console.log('✅ Invoice email sent:', result);
-      return { success: true, messageId: result.id };
+      return { success: true, messageId };
     } catch (error) {
       console.error('❌ Invoice email failed:', error);
       
@@ -1843,41 +1950,33 @@ class EmailService {
       ? `<strong>Vertragsreferenz:</strong> ${contractRef}`
       : null;
 
+    const styles = this.getTemplateStyles('indigo');
     const htmlContent = `
-      <div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;line-height:1.6;color:#1a1a1a;">
-        <div style="background:linear-gradient(135deg,#7b3f7b 0%,#4a1f4a 100%);color:white;padding:30px;border-radius:12px 12px 0 0;text-align:center;">
-          <h1 style="margin:0;font-size:24px;">✅ Widerruf eingegangen</h1>
+      <div style="${styles.wrapper}">
+        <div style="${styles.headerCentered}">
+          <h1 style="margin:0;font-size:24px;">Widerruf eingegangen</h1>
           <p style="margin:12px 0 0;font-size:15px;opacity:.9;">Eingangsbestätigung gemäß § 355 BGB</p>
+          ${this.renderTemplateBadge('RECHTLICHE EINGANGSBESTÄTIGUNG')}
         </div>
-        <div style="background:#fff;padding:28px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
+        <div style="${styles.body}">
           <p>Guten Tag${customerName ? ` ${customerName}` : ''},</p>
-          <p>
-            wir bestätigen den Eingang Ihrer Widerrufserklärung. Ihr Widerruf wurde elektronisch erfasst und
-            wird nun von uns geprüft.
-          </p>
-          <div style="background:#f3e8f3;border-left:4px solid #7b3f7b;padding:14px 18px;border-radius:4px;margin:20px 0;">
-            <p style="margin:0 0 6px;font-size:13px;"><strong>Ihre Referenzdaten:</strong></p>
-            ${refLine ? `<p style="margin:0 0 4px;font-size:13px;">${refLine}</p>` : ''}
-            <p style="margin:0 0 4px;font-size:13px;"><strong>Widerrufs-ID:</strong> ${_id}</p>
-            <p style="margin:0;font-size:13px;"><strong>Eingegangen am:</strong> ${formatDate(createdAt)}</p>
+          <p>wir bestätigen den Eingang Ihrer Widerrufserklärung. Ihr Widerruf wurde elektronisch erfasst und wird nun geprüft.</p>
+
+          <div style="${styles.panel}; margin:16px 0;">
+            <p style="margin:0 0 6px;"><strong>Ihre Referenzdaten:</strong></p>
+            ${refLine ? `<p style="margin:0 0 4px;">${refLine}</p>` : ''}
+            <p style="margin:0 0 4px;"><strong>Widerrufs-ID:</strong> ${_id}</p>
+            <p style="margin:0;"><strong>Eingegangen am:</strong> ${formatDate(createdAt)}</p>
           </div>
-          <p>
-            Bitte beachten Sie: Für personalisierte Produkte, die bereits auf Ihren Wunsch hin angefertigt wurden,
-            ist das Widerrufsrecht gemäß § 312g Abs. 2 Nr. 1 BGB ausgeschlossen. Wir werden Sie gesondert
-            informieren, sofern dies für Ihre Bestellung zutrifft.
-          </p>
-          <p>
-            Wir werden Ihren Widerruf schnellstmöglich bearbeiten und Sie über das Ergebnis benachrichtigen.
-            Bei Fragen stehen wir Ihnen gerne zur Verfügung.
-          </p>
-          <p style="margin-top:24px;">
-            Mit freundlichen Grüßen,<br>
-            <strong>Glücksmomente Manufaktur</strong>
-          </p>
+
+          ${this.renderTemplateInfoBox('Wichtiger Hinweis', [
+            'Für personalisierte Produkte kann das Widerrufsrecht gemäß § 312g Abs. 2 Nr. 1 BGB ausgeschlossen sein.',
+            'Wir informieren Sie gesondert, falls dies auf Ihre Bestellung zutrifft.'
+          ], 'warning')}
+
+          <p>Wir bearbeiten Ihren Widerruf schnellstmöglich und informieren Sie über das Ergebnis. Bei Fragen sind wir gerne für Sie da.</p>
+          ${this.renderTemplateFooter()}
         </div>
-        <p style="text-align:center;font-size:11px;color:#999;margin-top:12px;">
-          Diese E-Mail wurde automatisch generiert. Bitte antworten Sie direkt auf diese E-Mail bei Rückfragen.
-        </p>
       </div>`;
 
     const emailLogEntry = await this.logEmail({
@@ -1889,7 +1988,7 @@ class EmailService {
     });
 
     try {
-      const result = await this.resend.emails.send({
+      const result = await this.sendWithResendFallback({
         from: `${this.fromName} <${this.fromEmail}>`,
         to: customerEmail,
         subject: `Eingangsbestätigung Ihres Widerrufs – Glücksmomente Manufaktur`,
