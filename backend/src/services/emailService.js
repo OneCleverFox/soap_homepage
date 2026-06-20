@@ -9,8 +9,23 @@ class EmailService {
     this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     this.notificationEmail = process.env.ADMIN_ALERT_EMAIL || this.adminEmail;
 
-    const smtpUser = (process.env.GMAIL_USER || process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
-    const smtpPass = (process.env.GMAIL_APP_PASSWORD || process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim();
+    const smtpUser = (
+      process.env.GMAIL_USER ||
+      process.env.GMAIL_EMAIL ||
+      process.env.SMTP_USER ||
+      process.env.EMAIL_USER ||
+      ''
+    ).trim();
+
+    const smtpPass = (
+      process.env.GMAIL_APP_PASSWORD ||
+      process.env.GMAIL_PASSWORD ||
+      process.env.SMTP_PASS ||
+      process.env.SMTP_PASSWORD ||
+      process.env.EMAIL_PASS ||
+      process.env.EMAIL_PASSWORD ||
+      ''
+    ).trim();
 
     if (smtpUser && smtpPass) {
       this.smtpTransport = nodemailer.createTransport({
@@ -58,7 +73,7 @@ class EmailService {
 
     if (this.isDisabled) {
       console.warn('⚠️ Kein E-Mail-Provider konfiguriert - E-Mail-Service im DEMO-MODUS');
-      console.warn('📝 Für Gmail: GMAIL_USER + GMAIL_APP_PASSWORD setzen');
+      console.warn('📝 Für Gmail: GMAIL_USER/EMAIL_USER + GMAIL_APP_PASSWORD/EMAIL_PASSWORD setzen');
     } else if (this.smtpTransport && !this.enableResendFallback) {
       console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
     }
