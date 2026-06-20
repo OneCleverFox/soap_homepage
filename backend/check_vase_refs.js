@@ -4,7 +4,11 @@ require('dotenv').config();
 async function checkVaseReferences() {
   try {
     console.log('Verbinde mit MongoDB...');
-    await mongoose.connect('mongodb+srv://soap-user:***REMOVED_DB_PASSWORD***@soap.eybn71b.mongodb.net/gluecksmomente?retryWrites=true&w=majority&appName=soap');
+    const mongoURI = process.env.MONGODB_URI || process.env.MONGO_URI || process.env.DATABASE_URL;
+    if (!mongoURI) {
+      throw new Error('Keine DB-URI gefunden (MONGODB_URI / MONGO_URI / DATABASE_URL)');
+    }
+    await mongoose.connect(mongoURI);
     console.log('✅ Connected');
     
     // Prüfe verfügbare Gießwerkstoffe
