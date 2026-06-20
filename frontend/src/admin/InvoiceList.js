@@ -152,6 +152,7 @@ const InvoiceList = () => {
   const [invoiceToDelete, setInvoiceToDelete] = useState(null);
   const [sendMailConfirmOpen, setSendMailConfirmOpen] = useState(false);
   const [invoiceToSend, setInvoiceToSend] = useState(null);
+  const [sendMailLoading, setSendMailLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [productSearchDialogOpen, setProductSearchDialogOpen] = useState(false);
   const [products, setProducts] = useState([]);
@@ -579,6 +580,8 @@ const InvoiceList = () => {
       return;
     }
 
+    setSendMailLoading(true);
+
     try {
       const response = await fetch(`${API_BASE_URL}/admin/invoices/${invoice._id}/send-email`, {
         method: 'POST',
@@ -589,18 +592,30 @@ const InvoiceList = () => {
         body: JSON.stringify({ forceResend })
       });
 
-      const data = await response.json();
-      if (data.success) {
+      let data = null;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        data = null;
+      }
+
+      if (data?.success) {
         showSnackbar(`Rechnung wurde an ${customerEmail} gesendet`, 'success');
+        closeSendMailConfirm();
         loadInvoices();
-      } else if (response.status === 409 && data.alreadySent) {
+      } else if (response.status === 409 && data?.alreadySent) {
         showSnackbar(data.message || 'Diese Rechnung wurde bereits per E-Mail gesendet', 'warning');
       } else {
-        showSnackbar(data.message || 'Fehler beim E-Mail-Versand', 'error');
+        const fallbackMessage = response.status >= 500
+          ? 'Serverfehler beim E-Mail-Versand. Bitte später erneut versuchen.'
+          : 'Fehler beim E-Mail-Versand';
+        showSnackbar(data?.message || fallbackMessage, 'error');
       }
     } catch (error) {
       console.error('Fehler beim Versenden der Rechnungs-E-Mail:', error);
       showSnackbar('Fehler beim E-Mail-Versand', 'error');
+    } finally {
+      setSendMailLoading(false);
     }
   };
 
@@ -610,15 +625,17 @@ const InvoiceList = () => {
   };
 
   const closeSendMailConfirm = () => {
+    if (sendMailLoading) {
+      return;
+    }
     setSendMailConfirmOpen(false);
     setInvoiceToSend(null);
   };
 
   const confirmSendInvoiceByEmail = async () => {
-    if (!invoiceToSend) return;
+    if (!invoiceToSend || sendMailLoading) return;
     const alreadySent = Boolean(invoiceToSend?.emailSent?.sent);
     await sendInvoiceByEmail(invoiceToSend, alreadySent);
-    closeSendMailConfirm();
   };
 
   // Vorschau-Funktion - lädt PDF und öffnet es im Browser
@@ -1476,7 +1493,7 @@ const InvoiceList = () => {
 
       <Dialog
         open={sendMailConfirmOpen}
-        onClose={closeSendMailConfirm}
+        onClose={sendMailLoading ? undefined : closeSendMailConfirm}
         maxWidth="xs"
         fullWidth
       >
@@ -1497,11 +1514,13 @@ const InvoiceList = () => {
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeSendMailConfirm} variant="outlined">
+          <Button onClick={closeSendMailConfirm} variant="outlined" disabled={sendMailLoading}>
             Abbrechen
           </Button>
-          <Button onClick={confirmSendInvoiceByEmail} variant="contained" startIcon={<EmailIcon />}>
-            {invoiceToSend?.emailSent?.sent ? 'Erneut senden' : 'Wirklich senden'}
+          <Button onClick={confirmSendInvoiceByEmail} variant="contained" startIcon={<EmailIcon />} disabled={sendMailLoading}>
+            {sendMailLoading
+              ? 'Wird gesendet...'
+              : (invoiceToSend?.emailSent?.sent ? 'Erneut senden' : 'Wirklich senden')}
           </Button>
         </DialogActions>
       </Dialog>
