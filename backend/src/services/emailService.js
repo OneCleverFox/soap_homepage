@@ -28,6 +28,9 @@ class EmailService {
       ''
     ).trim();
 
+    this.smtpUserConfigured = Boolean(smtpUser);
+    this.smtpPassConfigured = Boolean(smtpPass);
+
     if (smtpUser && smtpPass) {
       this.smtpTransport = nodemailer.createTransport({
         service: 'gmail',
@@ -37,6 +40,9 @@ class EmailService {
         }
       });
       this.activeProvider = 'gmail';
+      console.log('📧 SMTP-Konfiguration erkannt: user=true, pass=true');
+    } else {
+      console.warn(`📧 SMTP-Konfiguration unvollständig: user=${this.smtpUserConfigured}, pass=${this.smtpPassConfigured}`);
     }
 
     // Optionaler Resend-Fallback (default: AUS, um Gmail-only sicherzustellen)

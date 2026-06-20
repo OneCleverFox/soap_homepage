@@ -275,6 +275,29 @@ function validateCriticalEnvVars() {
   startupLogger.env('JWT_SECRET', !!process.env.JWT_SECRET, true);
   startupLogger.env('MONGODB_URI', !!process.env.MONGODB_URI, true);
   startupLogger.env('RESEND_API_KEY', !!process.env.RESEND_API_KEY);
+
+  const smtpUserConfigured = Boolean(
+    process.env.GMAIL_USER ||
+    process.env.GMAIL_EMAIL ||
+    process.env.SMTP_USER ||
+    process.env.EMAIL_USER
+  );
+
+  const smtpPassConfigured = Boolean(
+    process.env.GMAIL_APP_PASSWORD ||
+    process.env.GMAIL_PASSWORD ||
+    process.env.SMTP_PASS ||
+    process.env.SMTP_PASSWORD ||
+    process.env.EMAIL_PASS ||
+    process.env.EMAIL_PASSWORD
+  );
+
+  startupLogger.env('SMTP_USER (GMAIL_USER/EMAIL_USER)', smtpUserConfigured);
+  startupLogger.env('SMTP_PASSWORD (GMAIL_APP_PASSWORD/EMAIL_PASSWORD)', smtpPassConfigured);
+
+  if (process.env.NODE_ENV === 'production' && (!smtpUserConfigured || !smtpPassConfigured)) {
+    startupLogger.warn('SMTP', 'Nicht vollständig konfiguriert - Rechnungsversand liefert 503 in SMTP-ONLY Modus');
+  }
   
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
     startupLogger.warn('JWT_SECRET', 'Too short (< 32 characters)');
