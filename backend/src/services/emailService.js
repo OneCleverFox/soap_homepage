@@ -40,17 +40,21 @@ class EmailService {
     this.smtpPassConfigured = Boolean(smtpPass);
 
     if (smtpUser && smtpPass) {
+      this.smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+      this.smtpPort = Number(process.env.SMTP_PORT || 465);
+      this.smtpSecure = String(process.env.SMTP_SECURE || 'true').toLowerCase() !== 'false';
+
       this.smtpTransport = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: Number(process.env.SMTP_PORT || 465),
-        secure: String(process.env.SMTP_SECURE || 'true').toLowerCase() !== 'false',
+        host: this.smtpHost,
+        port: this.smtpPort,
+        secure: this.smtpSecure,
         family: 4,
         connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 6000),
         greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 6000),
         socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
         dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 8000),
         tls: {
-          servername: process.env.SMTP_HOST || 'smtp.gmail.com'
+          servername: this.smtpHost
         },
         auth: {
           user: smtpUser,
@@ -129,6 +133,45 @@ class EmailService {
       message.includes('enetunreach') ||
       message.includes('ehostunreach')
     );
+  }
+
+  async tryAlternateGmailPort(smtpMail) {
+    // Häufig ist in Cloud-Umgebungen nur einer der beiden Gmail-Ports erreichbar.
+    const shouldTryAlternatePort =
+      this.smtpHost === 'smtp.gmail.com' &&
+      this.smtpPort === 465 &&
+      this.smtpSecure === true;
+
+    if (!shouldTryAlternatePort) {
+      return null;
+    }
+
+    try {
+      const alternateTransport = nodemailer.createTransport({
+        host: this.smtpHost,
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        family: 4,
+        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 6000),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 6000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
+        dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 8000),
+        tls: {
+          servername: this.smtpHost
+        },
+        auth: this.smtpTransport?.options?.auth
+      });
+
+      const info = await alternateTransport.sendMail(smtpMail);
+      return {
+        id: info.messageId,
+        data: { id: info.messageId },
+        provider: 'gmail-587'
+      };
+    } catch (alternateError) {
+      return { error: alternateError };
+    }
   }
 
   getResendSenderAddress() {
@@ -296,6 +339,17 @@ class EmailService {
         };
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
+
+        if (this.isSmtpNetworkError(smtpError)) {
+          const alternateResult = await this.tryAlternateGmailPort(smtpMail);
+          if (alternateResult && !alternateResult.error) {
+            console.warn('⚠️ SMTP 465 fehlgeschlagen - Versand über 587 erfolgreich');
+            return alternateResult;
+          }
+          if (alternateResult?.error) {
+            console.error('❌ Alternativer Gmail-Port 587 fehlgeschlagen:', alternateResult.error.message);
+          }
+        }
 
         const shouldFallbackToResend = this.resend && (this.enableResendFallback || this.isSmtpNetworkError(smtpError));
 
