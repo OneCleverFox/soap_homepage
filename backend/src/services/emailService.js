@@ -35,8 +35,9 @@ class EmailService {
       apiKey === 're_123456789_placeholder_key_for_testing';
 
     const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
+    const shouldEnableResend = hasValidResendApiKey && (!this.smtpTransport || this.enableResendFallback);
 
-    if (hasValidResendApiKey) {
+    if (shouldEnableResend) {
       this.resend = new Resend(apiKey);
       if (!this.activeProvider) {
         this.activeProvider = 'resend';
@@ -58,7 +59,7 @@ class EmailService {
       console.warn('⚠️ Kein E-Mail-Provider konfiguriert - E-Mail-Service im DEMO-MODUS');
       console.warn('📝 Für Gmail: GMAIL_USER + GMAIL_APP_PASSWORD setzen');
     } else if (this.smtpTransport && !this.enableResendFallback) {
-      console.log('📧 E-Mail-Service im Gmail-primary Modus gestartet (Resend nur als Fehler-Fallback)');
+      console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
     }
   }
 
