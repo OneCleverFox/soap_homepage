@@ -1205,9 +1205,32 @@ class InvoiceService {
 
       const emailResult = await emailService.sendInvoiceEmail(customerEmail, invoice, pdfBuffer);
       if (!emailResult.success) {
-        return res.status(500).json({
+        const rawEmailError = String(emailResult.error || 'E-Mail konnte nicht versendet werden');
+        const lowerEmailError = rawEmailError.toLowerCase();
+
+        const isRecipientRestrictionError =
+          lowerEmailError.includes('you can only send testing emails') ||
+          lowerEmailError.includes('verify a domain at resend.com/domains') ||
+          lowerEmailError.includes('domain is not verified');
+
+        const isEmailProviderConfigError =
+          lowerEmailError.includes('e-mail-service deaktiviert') ||
+          lowerEmailError.includes('kein e-mail-provider konfiguriert');
+
+        const responseStatus = isRecipientRestrictionError
+          ? 422
+          : isEmailProviderConfigError
+            ? 503
+            : 502;
+
+        return res.status(responseStatus).json({
           success: false,
-          message: emailResult.error || 'E-Mail konnte nicht versendet werden'
+          message: rawEmailError,
+          code: isRecipientRestrictionError
+            ? 'EMAIL_RECIPIENT_RESTRICTION'
+            : isEmailProviderConfigError
+              ? 'EMAIL_PROVIDER_NOT_CONFIGURED'
+              : 'EMAIL_DELIVERY_FAILED'
         });
       }
 
