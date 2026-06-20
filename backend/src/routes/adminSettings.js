@@ -103,6 +103,12 @@ router.get('/email-diagnostics', auth, requireAdmin, async (req, res) => {
       data: {
         environment: process.env.NODE_ENV || 'development',
         resendConfigured: Boolean(process.env.RESEND_API_KEY),
+        resendFallbackEnabled: Boolean(emailService.enableResendFallback),
+        resendRuntimeAvailable: Boolean(emailService.resend),
+        smtpConfigured: Boolean(emailService.smtpUserConfigured && emailService.smtpPassConfigured),
+        smtpRuntimeAvailable: Boolean(emailService.smtpTransport),
+        smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
+        smtpPort: Number(process.env.SMTP_PORT || 465),
         emailServiceDisabled: Boolean(emailService.isDisabled),
         fromEmail: emailService.fromEmail || process.env.EMAIL_FROM || '',
         fromName: emailService.fromName || 'Gluecksmomente Manufaktur',

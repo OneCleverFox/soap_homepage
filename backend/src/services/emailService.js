@@ -79,8 +79,7 @@ class EmailService {
 
     const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
     // Resend ist standardmäßig in Production deaktiviert; kann aber explizit via ENABLE_RESEND_FALLBACK aktiviert werden.
-    const canUseResendInCurrentMode = !this.smtpOnlyMode || this.enableResendFallback;
-    const shouldEnableResend = hasValidResendApiKey && canUseResendInCurrentMode;
+    const shouldEnableResend = hasValidResendApiKey;
 
     if (shouldEnableResend) {
       this.resend = new Resend(apiKey);
@@ -110,7 +109,26 @@ class EmailService {
       console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
     } else if (this.smtpTransport && this.enableResendFallback && this.resend) {
       console.log('📧 E-Mail-Service mit SMTP + Resend-Fallback gestartet');
+    } else if (this.smtpTransport && this.resend && !this.enableResendFallback) {
+      console.log('📧 E-Mail-Service mit SMTP aktiv; Resend ist vorbereitet, Fallback nur bei Netzwerkfehlern');
     }
+  }
+
+  isSmtpNetworkError(error) {
+    const code = String(error?.code || '').toUpperCase();
+    const message = String(error?.message || '').toLowerCase();
+
+    return (
+      code === 'ENETUNREACH' ||
+      code === 'EHOSTUNREACH' ||
+      code === 'ETIMEDOUT' ||
+      code === 'ECONNECTION' ||
+      message.includes('connection timeout') ||
+      message.includes('timed out') ||
+      message.includes('enetwork') ||
+      message.includes('enetunreach') ||
+      message.includes('ehostunreach')
+    );
   }
 
   getResendSenderAddress() {
@@ -279,7 +297,9 @@ class EmailService {
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
 
-        if (this.enableResendFallback && this.resend) {
+        const shouldFallbackToResend = this.resend && (this.enableResendFallback || this.isSmtpNetworkError(smtpError));
+
+        if (shouldFallbackToResend) {
           console.warn('⚠️ SMTP fehlgeschlagen - versuche Resend-Fallback...');
           try {
             const resendEmailData = {
