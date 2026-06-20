@@ -314,23 +314,23 @@ class EmailService {
 
   async sendWithResendFallback(emailData) {
     if (this.smtpTransport) {
-      try {
-        const smtpMail = {
-          from: emailData.from || this.getSenderAddress(),
-          to: emailData.to,
-          subject: emailData.subject,
-          html: emailData.html,
-          text: emailData.text,
-          replyTo: emailData.replyTo || undefined,
-          priority: emailData.priority || undefined,
-          attachments: (emailData.attachments || []).map((att) => ({
-            filename: att.filename,
-            content: att.content,
-            encoding: typeof att.content === 'string' ? 'base64' : undefined,
-            contentType: att.contentType
-          }))
-        };
+      const smtpMail = {
+        from: emailData.from || this.getSenderAddress(),
+        to: emailData.to,
+        subject: emailData.subject,
+        html: emailData.html,
+        text: emailData.text,
+        replyTo: emailData.replyTo || undefined,
+        priority: emailData.priority || undefined,
+        attachments: (emailData.attachments || []).map((att) => ({
+          filename: att.filename,
+          content: att.content,
+          encoding: typeof att.content === 'string' ? 'base64' : undefined,
+          contentType: att.contentType
+        }))
+      };
 
+      try {
         const info = await this.smtpTransport.sendMail(smtpMail);
         return {
           id: info.messageId,
