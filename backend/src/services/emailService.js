@@ -6,6 +6,7 @@ class EmailService {
   constructor() {
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
+    this.smtpOnlyMode = this.isProduction || String(process.env.SMTP_ONLY || '').toLowerCase() === 'true';
     this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     this.notificationEmail = process.env.ADMIN_ALERT_EMAIL || this.adminEmail;
 
@@ -50,8 +51,8 @@ class EmailService {
       apiKey === 're_123456789_placeholder_key_for_testing';
 
     const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
-    // Resend only when SMTP is not configured.
-    const shouldEnableResend = hasValidResendApiKey && !this.smtpTransport;
+    // In production we enforce SMTP-only mode to avoid unexpected Resend restrictions.
+    const shouldEnableResend = hasValidResendApiKey && !this.smtpTransport && !this.smtpOnlyMode;
 
     if (shouldEnableResend) {
       this.resend = new Resend(apiKey);
@@ -74,6 +75,9 @@ class EmailService {
     if (this.isDisabled) {
       console.warn('⚠️ Kein E-Mail-Provider konfiguriert - E-Mail-Service im DEMO-MODUS');
       console.warn('📝 Für Gmail: GMAIL_USER/EMAIL_USER + GMAIL_APP_PASSWORD/EMAIL_PASSWORD setzen');
+      if (this.smtpOnlyMode) {
+        console.warn('⚠️ SMTP-ONLY ist aktiv: Resend wird in dieser Umgebung nicht verwendet');
+      }
     } else if (this.smtpTransport && !this.enableResendFallback) {
       console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
     }
@@ -246,6 +250,10 @@ class EmailService {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
         return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
       }
+    }
+
+    if (this.smtpOnlyMode) {
+      return { error: { message: 'SMTP ist nicht konfiguriert (SMTP-ONLY aktiv). Bitte EMAIL_USER/GMAIL_USER und EMAIL_PASSWORD/GMAIL_APP_PASSWORD in Railway setzen.' } };
     }
 
     if (this.resend) {
