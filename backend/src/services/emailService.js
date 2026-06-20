@@ -15,6 +15,7 @@ class EmailService {
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
     this.smtpOnlyMode = this.isProduction || String(process.env.SMTP_ONLY || '').toLowerCase() === 'true';
+    this.smtpForceIpv4 = String(process.env.SMTP_FORCE_IPV4 || 'true').toLowerCase() !== 'false';
     this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     this.notificationEmail = process.env.ADMIN_ALERT_EMAIL || this.adminEmail;
 
@@ -38,6 +39,7 @@ class EmailService {
 
     this.smtpUserConfigured = Boolean(smtpUser);
     this.smtpPassConfigured = Boolean(smtpPass);
+    this.smtpAuth = { user: smtpUser, pass: smtpPass };
     this.smtpBackoffMs = Number(process.env.SMTP_FAILURE_BACKOFF_MS || 300000);
     this.smtpDisabledUntil = 0;
 
@@ -58,10 +60,7 @@ class EmailService {
         tls: {
           servername: this.smtpHost
         },
-        auth: {
-          user: smtpUser,
-          pass: smtpPass
-        }
+        auth: this.smtpAuth
       });
       this.activeProvider = 'gmail';
       console.log('📧 SMTP-Konfiguration erkannt: user=true, pass=true');
@@ -113,11 +112,42 @@ class EmailService {
       }
     } else if (this.smtpTransport && !this.enableResendFallback) {
       console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
-    } else if (this.smtpTransport && this.enableResendFallback && this.resend) {
+    } else if (this.smtpTransport && this.enableResendFallback && this.resend && !this.smtpOnlyMode) {
       console.log('📧 E-Mail-Service mit SMTP + Resend-Fallback gestartet');
     } else if (this.smtpTransport && this.resend && !this.enableResendFallback) {
       console.log('📧 E-Mail-Service mit SMTP aktiv; Resend ist vorbereitet, Fallback nur bei Netzwerkfehlern');
     }
+  }
+
+  async createSmtpTransportForAttempt({ port, secure, requireTLS = false } = {}) {
+    let connectHost = this.smtpHost;
+
+    if (this.smtpForceIpv4) {
+      try {
+        const ipv4Records = await dns.promises.resolve4(this.smtpHost);
+        if (ipv4Records && ipv4Records.length > 0) {
+          connectHost = ipv4Records[0];
+        }
+      } catch (resolveError) {
+        console.warn('⚠️ SMTP IPv4-Auflösung fehlgeschlagen, verwende Hostname:', resolveError.message);
+      }
+    }
+
+    return nodemailer.createTransport({
+      host: connectHost,
+      port: Number(port || this.smtpPort || 465),
+      secure: typeof secure === 'boolean' ? secure : this.smtpSecure,
+      requireTLS,
+      family: 4,
+      connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 6000),
+      greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 6000),
+      socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
+      dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 8000),
+      tls: {
+        servername: this.smtpHost
+      },
+      auth: this.smtpAuth
+    });
   }
 
   isSmtpNetworkError(error) {
@@ -149,20 +179,10 @@ class EmailService {
     }
 
     try {
-      const alternateTransport = nodemailer.createTransport({
-        host: this.smtpHost,
+      const alternateTransport = await this.createSmtpTransportForAttempt({
         port: 587,
         secure: false,
-        requireTLS: true,
-        family: 4,
-        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 6000),
-        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 6000),
-        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
-        dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 8000),
-        tls: {
-          servername: this.smtpHost
-        },
-        auth: this.smtpTransport?.options?.auth
+        requireTLS: true
       });
 
       const info = await alternateTransport.sendMail(smtpMail);
@@ -356,7 +376,7 @@ class EmailService {
   }
 
   async sendWithResendFallback(emailData) {
-    if (this.smtpTransport && this.resend && Date.now() < this.smtpDisabledUntil) {
+    if (!this.smtpOnlyMode && this.smtpTransport && this.resend && Date.now() < this.smtpDisabledUntil) {
       console.warn('⚠️ SMTP temporär deaktiviert nach Netzwerkfehlern - direkter Resend-Versand');
       return this.sendViaResend(emailData, 'SMTP temporär deaktiviert nach Netzwerkfehlern');
     }
@@ -379,7 +399,11 @@ class EmailService {
       };
 
       try {
-        const info = await this.smtpTransport.sendMail(smtpMail);
+        const smtpTransport = await this.createSmtpTransportForAttempt({
+          port: this.smtpPort,
+          secure: this.smtpSecure
+        });
+        const info = await smtpTransport.sendMail(smtpMail);
         return {
           id: info.messageId,
           data: { id: info.messageId },
@@ -403,7 +427,7 @@ class EmailService {
           console.warn(`⚠️ SMTP wird für ${this.smtpBackoffMs}ms übersprungen`);
         }
 
-        const shouldFallbackToResend = this.resend && (this.enableResendFallback || isNetworkError);
+        const shouldFallbackToResend = !this.smtpOnlyMode && this.resend && (this.enableResendFallback || isNetworkError);
 
         if (shouldFallbackToResend) {
           console.warn('⚠️ SMTP fehlgeschlagen - versuche Resend-Fallback...');
