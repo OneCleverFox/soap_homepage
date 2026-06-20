@@ -62,8 +62,9 @@ class EmailService {
       apiKey === 're_123456789_placeholder_key_for_testing';
 
     const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
-    // In production we enforce SMTP-only mode to avoid unexpected Resend restrictions.
-    const shouldEnableResend = hasValidResendApiKey && !this.smtpTransport && !this.smtpOnlyMode;
+    // Resend ist standardmäßig in Production deaktiviert; kann aber explizit via ENABLE_RESEND_FALLBACK aktiviert werden.
+    const canUseResendInCurrentMode = !this.smtpOnlyMode || this.enableResendFallback;
+    const shouldEnableResend = hasValidResendApiKey && canUseResendInCurrentMode;
 
     if (shouldEnableResend) {
       this.resend = new Resend(apiKey);
@@ -91,6 +92,8 @@ class EmailService {
       }
     } else if (this.smtpTransport && !this.enableResendFallback) {
       console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
+    } else if (this.smtpTransport && this.enableResendFallback && this.resend) {
+      console.log('📧 E-Mail-Service mit SMTP + Resend-Fallback gestartet');
     }
   }
 
@@ -259,6 +262,38 @@ class EmailService {
         };
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
+
+        if (this.enableResendFallback && this.resend) {
+          console.warn('⚠️ SMTP fehlgeschlagen - versuche Resend-Fallback...');
+          try {
+            const resendEmailData = {
+              ...emailData,
+              from: this.getResendSenderAddress()
+            };
+            const resendResult = await this.resend.emails.send(resendEmailData);
+            if (!resendResult?.error) {
+              return {
+                ...resendResult,
+                provider: 'resend',
+                fallbackFrom: 'gmail'
+              };
+            }
+
+            const resendError = resendResult?.error?.message || 'Unbekannter Resend-Fehler';
+            return {
+              error: {
+                message: `Gmail SMTP Fehler: ${smtpError.message}; Resend-Fallback Fehler: ${resendError}`
+              }
+            };
+          } catch (resendFallbackError) {
+            return {
+              error: {
+                message: `Gmail SMTP Fehler: ${smtpError.message}; Resend-Fallback Ausnahme: ${resendFallbackError.message}`
+              }
+            };
+          }
+        }
+
         return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
       }
     }
