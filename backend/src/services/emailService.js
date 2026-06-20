@@ -38,6 +38,8 @@ class EmailService {
 
     this.smtpUserConfigured = Boolean(smtpUser);
     this.smtpPassConfigured = Boolean(smtpPass);
+    this.smtpBackoffMs = Number(process.env.SMTP_FAILURE_BACKOFF_MS || 300000);
+    this.smtpDisabledUntil = 0;
 
     if (smtpUser && smtpPass) {
       this.smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
@@ -171,6 +173,47 @@ class EmailService {
       };
     } catch (alternateError) {
       return { error: alternateError };
+    }
+  }
+
+  async sendViaResend(emailData, smtpErrorMessage = null) {
+    if (!this.resend) {
+      if (smtpErrorMessage) {
+        return { error: { message: `Gmail SMTP Fehler: ${smtpErrorMessage}` } };
+      }
+      return { error: { message: 'Kein E-Mail-Provider konfiguriert' } };
+    }
+
+    const resendEmailData = {
+      ...emailData,
+      from: this.getResendSenderAddress()
+    };
+
+    try {
+      const resendResult = await this.resend.emails.send(resendEmailData);
+      if (!resendResult?.error) {
+        return {
+          ...resendResult,
+          provider: 'resend'
+        };
+      }
+
+      const resendError = resendResult?.error?.message || 'Unbekannter Resend-Fehler';
+      return {
+        error: {
+          message: smtpErrorMessage
+            ? `Gmail SMTP Fehler: ${smtpErrorMessage}; Resend-Fallback Fehler: ${resendError}`
+            : resendError
+        }
+      };
+    } catch (resendFallbackError) {
+      return {
+        error: {
+          message: smtpErrorMessage
+            ? `Gmail SMTP Fehler: ${smtpErrorMessage}; Resend-Fallback Ausnahme: ${resendFallbackError.message}`
+            : `Resend-Fallback Ausnahme: ${resendFallbackError.message}`
+        }
+      };
     }
   }
 
@@ -313,6 +356,11 @@ class EmailService {
   }
 
   async sendWithResendFallback(emailData) {
+    if (this.smtpTransport && this.resend && Date.now() < this.smtpDisabledUntil) {
+      console.warn('⚠️ SMTP temporär deaktiviert nach Netzwerkfehlern - direkter Resend-Versand');
+      return this.sendViaResend(emailData, 'SMTP temporär deaktiviert nach Netzwerkfehlern');
+    }
+
     if (this.smtpTransport) {
       const smtpMail = {
         from: emailData.from || this.getSenderAddress(),
@@ -340,7 +388,9 @@ class EmailService {
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
 
-        if (this.isSmtpNetworkError(smtpError)) {
+        const isNetworkError = this.isSmtpNetworkError(smtpError);
+
+        if (isNetworkError) {
           const alternateResult = await this.tryAlternateGmailPort(smtpMail);
           if (alternateResult && !alternateResult.error) {
             console.warn('⚠️ SMTP 465 fehlgeschlagen - Versand über 587 erfolgreich');
@@ -349,56 +399,34 @@ class EmailService {
           if (alternateResult?.error) {
             console.error('❌ Alternativer Gmail-Port 587 fehlgeschlagen:', alternateResult.error.message);
           }
+          this.smtpDisabledUntil = Date.now() + this.smtpBackoffMs;
+          console.warn(`⚠️ SMTP wird für ${this.smtpBackoffMs}ms übersprungen`);
         }
 
-        const shouldFallbackToResend = this.resend && (this.enableResendFallback || this.isSmtpNetworkError(smtpError));
+        const shouldFallbackToResend = this.resend && (this.enableResendFallback || isNetworkError);
 
         if (shouldFallbackToResend) {
           console.warn('⚠️ SMTP fehlgeschlagen - versuche Resend-Fallback...');
-          try {
-            const resendEmailData = {
-              ...emailData,
-              from: this.getResendSenderAddress()
-            };
-            const resendResult = await this.resend.emails.send(resendEmailData);
-            if (!resendResult?.error) {
-              return {
-                ...resendResult,
-                provider: 'resend',
-                fallbackFrom: 'gmail'
-              };
-            }
-
-            const resendError = resendResult?.error?.message || 'Unbekannter Resend-Fehler';
+          const resendResult = await this.sendViaResend(emailData, smtpError.message);
+          if (!resendResult?.error && resendResult) {
             return {
-              error: {
-                message: `Gmail SMTP Fehler: ${smtpError.message}; Resend-Fallback Fehler: ${resendError}`
-              }
-            };
-          } catch (resendFallbackError) {
-            return {
-              error: {
-                message: `Gmail SMTP Fehler: ${smtpError.message}; Resend-Fallback Ausnahme: ${resendFallbackError.message}`
-              }
+              ...resendResult,
+              fallbackFrom: 'gmail'
             };
           }
+          return resendResult;
         }
 
         return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
       }
     }
 
-    if (this.smtpOnlyMode) {
+    if (this.smtpOnlyMode && !this.smtpTransport && !this.resend) {
       return { error: { message: 'SMTP ist nicht konfiguriert (SMTP-ONLY aktiv). Bitte EMAIL_USER/GMAIL_USER und EMAIL_PASSWORD/GMAIL_APP_PASSWORD in Railway setzen.' } };
     }
 
     if (this.resend) {
-      const resendEmailData = {
-        ...emailData,
-        from: this.getResendSenderAddress()
-      };
-
-      const primaryResult = await this.resend.emails.send(resendEmailData);
+      const primaryResult = await this.sendViaResend(emailData);
       const errorMessage = primaryResult?.error?.message || '';
 
       if (
