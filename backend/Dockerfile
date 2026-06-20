@@ -4,10 +4,19 @@ WORKDIR /app
 
 # Build tools for native modules (e.g. sharp on Alpine)
 RUN apk add --no-cache \
+  chromium \
+  nss \
+  freetype \
+  harfbuzz \
+  ca-certificates \
+  ttf-freefont \
     vips-dev \
     python3 \
     make \
     g++
+
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Install production dependencies for backend only
 COPY package*.json ./

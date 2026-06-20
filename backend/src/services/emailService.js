@@ -34,7 +34,10 @@ class EmailService {
       apiKey.includes('123456') ||
       apiKey === 're_123456789_placeholder_key_for_testing';
 
-    if (this.enableResendFallback && apiKey && !isPlaceholderKey) {
+    const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
+    const shouldUseResend = hasValidResendApiKey && (this.enableResendFallback || !this.smtpTransport);
+
+    if (shouldUseResend) {
       this.resend = new Resend(apiKey);
       if (!this.activeProvider) {
         this.activeProvider = 'resend';

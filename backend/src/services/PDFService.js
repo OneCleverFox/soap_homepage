@@ -26,6 +26,47 @@ const loadPayPalQrDataUrl = () => {
 
 const paypalQrDataUrl = loadPayPalQrDataUrl();
 
+const resolveChromeExecutablePath = () => {
+  const envCandidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_PATH,
+    process.env.CHROME_BIN
+  ].filter(Boolean);
+
+  const linuxCandidates = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome'
+  ];
+
+  const candidates = [...envCandidates, ...linuxCandidates];
+  return candidates.find((candidatePath) => fsSync.existsSync(candidatePath));
+};
+
+const buildPuppeteerLaunchOptions = () => {
+  const executablePath = resolveChromeExecutablePath();
+  const launchOptions = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote'
+    ]
+  };
+
+  if (executablePath) {
+    launchOptions.executablePath = executablePath;
+    console.log(`🌐 Verwende Chrome-Binary: ${executablePath}`);
+  } else {
+    console.warn('⚠️ Kein explizites Chrome-Binary gefunden - verwende Puppeteer Standardauflösung');
+  }
+
+  return launchOptions;
+};
+
 class PDFService {
   static async enrichMissingDescriptions(bestellung) {
     if (!bestellung || !Array.isArray(bestellung.artikel) || bestellung.artikel.length === 0) {
@@ -120,10 +161,7 @@ class PDFService {
       await PDFService.enrichMissingDescriptions(bestellung);
       
       // Browser starten
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      browser = await puppeteer.launch(buildPuppeteerLaunchOptions());
       
       const page = await browser.newPage();
       
