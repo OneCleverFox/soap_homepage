@@ -35,7 +35,8 @@ class EmailService {
       apiKey === 're_123456789_placeholder_key_for_testing';
 
     const hasValidResendApiKey = Boolean(apiKey && !isPlaceholderKey);
-    const shouldEnableResend = hasValidResendApiKey && (!this.smtpTransport || this.enableResendFallback);
+    // Resend only when SMTP is not configured.
+    const shouldEnableResend = hasValidResendApiKey && !this.smtpTransport;
 
     if (shouldEnableResend) {
       this.resend = new Resend(apiKey);
@@ -228,9 +229,7 @@ class EmailService {
         };
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
-        if (!this.resend) {
-          return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
-        }
+        return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
       }
     }
 
