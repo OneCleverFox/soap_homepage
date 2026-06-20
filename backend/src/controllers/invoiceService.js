@@ -1221,7 +1221,7 @@ class InvoiceService {
           ? 422
           : isEmailProviderConfigError
             ? 503
-            : 502;
+            : 503;
 
         return res.status(responseStatus).json({
           success: false,

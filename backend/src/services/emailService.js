@@ -1,9 +1,17 @@
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 const EmailOut = require('../models/EmailOut');
 
 class EmailService {
   constructor() {
+    try {
+      dns.setDefaultResultOrder('ipv4first');
+    } catch (dnsOrderError) {
+      // Nicht kritisch - Transport nutzt zusätzlich family: 4.
+      console.warn('⚠️ Konnte DNS ipv4first nicht setzen:', dnsOrderError.message);
+    }
+
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
     this.smtpOnlyMode = this.isProduction || String(process.env.SMTP_ONLY || '').toLowerCase() === 'true';
@@ -33,12 +41,17 @@ class EmailService {
 
     if (smtpUser && smtpPass) {
       this.smtpTransport = nodemailer.createTransport({
-        service: 'gmail',
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT || 465),
+        secure: String(process.env.SMTP_SECURE || 'true').toLowerCase() !== 'false',
         family: 4,
-        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 10000),
-        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 10000),
-        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 15000),
+        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 6000),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 6000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 10000),
         dnsTimeout: Number(process.env.SMTP_DNS_TIMEOUT || 8000),
+        tls: {
+          servername: process.env.SMTP_HOST || 'smtp.gmail.com'
+        },
         auth: {
           user: smtpUser,
           pass: smtpPass
@@ -50,8 +63,11 @@ class EmailService {
       console.warn(`📧 SMTP-Konfiguration unvollständig: user=${this.smtpUserConfigured}, pass=${this.smtpPassConfigured}`);
     }
 
-    // Optionaler Resend-Fallback (default: AUS, um Gmail-only sicherzustellen)
-    this.enableResendFallback = String(process.env.ENABLE_RESEND_FALLBACK || '').toLowerCase() === 'true';
+    // Optionaler Resend-Fallback: explizite ENV gewinnt; ohne ENV in Production standardmäßig AN.
+    const resendFallbackFlag = String(process.env.ENABLE_RESEND_FALLBACK || '').trim().toLowerCase();
+    this.enableResendFallback = resendFallbackFlag
+      ? resendFallbackFlag === 'true'
+      : this.isProduction;
 
     // Optionaler Resend-Fallback
     const apiKey = process.env.RESEND_API_KEY;
