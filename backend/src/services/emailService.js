@@ -224,7 +224,9 @@ class EmailService {
 
     try {
       // RFC 2822 MIME-Nachricht aufbauen
-      const fromAddress = `${this.fromName} <${this.gmailOAuthFrom}>`;
+      // Absendername mit Umlauten MIME-encodieren (RFC 2047)
+      const encodedFromName = `=?UTF-8?B?${Buffer.from(this.fromName).toString('base64')}?=`;
+      const fromAddress = `${encodedFromName} <${this.gmailOAuthFrom}>`;
       const toAddress = emailData.to;
       const subject = emailData.subject || '(kein Betreff)';
 
