@@ -102,18 +102,19 @@ router.get('/email-diagnostics', auth, requireAdmin, async (req, res) => {
       success: true,
       data: {
         environment: process.env.NODE_ENV || 'development',
-        resendConfigured: Boolean(process.env.RESEND_API_KEY),
-        resendFallbackEnabled: Boolean(emailService.enableResendFallback),
-        resendRuntimeAvailable: Boolean(emailService.resend),
+        gmailApiConfigured: Boolean(emailService.gmailOAuthConfigured),
+        gmailApiFrom: emailService.gmailOAuthFrom || '',
         smtpConfigured: Boolean(emailService.smtpUserConfigured && emailService.smtpPassConfigured),
         smtpRuntimeAvailable: Boolean(emailService.smtpTransport),
         smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
         smtpPort: Number(process.env.SMTP_PORT || 465),
+        resendConfigured: Boolean(process.env.RESEND_API_KEY),
+        resendRuntimeAvailable: Boolean(emailService.resend),
         emailServiceDisabled: Boolean(emailService.isDisabled),
+        activeProvider: emailService.gmailOAuthConfigured ? 'gmail-api' : (emailService.smtpTransport ? 'gmail-smtp' : 'none'),
         fromEmail: emailService.fromEmail || process.env.EMAIL_FROM || '',
         fromName: emailService.fromName || 'Gluecksmomente Manufaktur',
         adminEmail: process.env.ADMIN_EMAIL || '',
-        adminAlertEmail: process.env.ADMIN_ALERT_EMAIL || process.env.ADMIN_EMAIL || '',
         notificationEmail: emailService.notificationEmail || process.env.ADMIN_ALERT_EMAIL || process.env.ADMIN_EMAIL || ''
       }
     });

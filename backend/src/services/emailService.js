@@ -1,6 +1,7 @@
 const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
 const dns = require('dns');
+const { google } = require('googleapis');
 const EmailOut = require('../models/EmailOut');
 
 class EmailService {
@@ -15,6 +16,25 @@ class EmailService {
     this.environment = process.env.NODE_ENV || 'development';
     this.isProduction = this.environment === 'production';
     this.smtpOnlyMode = this.isProduction || String(process.env.SMTP_ONLY || '').toLowerCase() === 'true';
+
+        // ─── Gmail API OAuth2 ─────────────────────────────────────────────────────
+        const gmailClientId = (process.env.GMAIL_OAUTH_CLIENT_ID || '').trim();
+        const gmailClientSecret = (process.env.GMAIL_OAUTH_CLIENT_SECRET || '').trim();
+        const gmailRefreshToken = (process.env.GMAIL_OAUTH_REFRESH_TOKEN || '').trim();
+        const gmailOAuthFrom = (process.env.GMAIL_OAUTH_FROM_EMAIL || process.env.EMAIL_USER || process.env.GMAIL_USER || '').trim();
+
+        this.gmailOAuthConfigured = Boolean(gmailClientId && gmailClientSecret && gmailRefreshToken && gmailOAuthFrom);
+        this.gmailOAuthFrom = gmailOAuthFrom;
+
+        if (this.gmailOAuthConfigured) {
+          this.gmailOAuth2Client = new google.auth.OAuth2(gmailClientId, gmailClientSecret);
+          this.gmailOAuth2Client.setCredentials({ refresh_token: gmailRefreshToken });
+          this.gmailApi = google.gmail({ version: 'v1', auth: this.gmailOAuth2Client });
+          console.log('✅ Gmail API OAuth2 konfiguriert – verwende Gmail API für E-Mail-Versand');
+        } else {
+          console.warn('⚠️ Gmail API OAuth2 nicht vollständig konfiguriert (GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, GMAIL_OAUTH_REFRESH_TOKEN, GMAIL_OAUTH_FROM_EMAIL)');
+        }
+        // ─────────────────────────────────────────────────────────────────────────
     this.smtpForceIpv4 = String(process.env.SMTP_FORCE_IPV4 || 'true').toLowerCase() !== 'false';
     this.adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
     this.notificationEmail = process.env.ADMIN_ALERT_EMAIL || this.adminEmail;
@@ -101,21 +121,19 @@ class EmailService {
     this.fromEmail = configuredFromEmail || 'info.gluecksmomente.manufaktur@gmail.com';
     this.fromName = this.isProduction ? 'Glücksmomente Manufaktur' : 'Glücksmomente Manufaktur (DEV)';
 
-    this.isDisabled = !this.smtpTransport && !this.resend;
+    this.isDisabled = !this.gmailOAuthConfigured && !this.smtpTransport && !this.resend;
     this.isDemoMode = this.isDisabled;
 
     if (this.isDisabled) {
       console.warn('⚠️ Kein E-Mail-Provider konfiguriert - E-Mail-Service im DEMO-MODUS');
-      console.warn('📝 Für Gmail: GMAIL_USER/EMAIL_USER + GMAIL_APP_PASSWORD/EMAIL_PASSWORD setzen');
+      console.warn('📝 Für Gmail API: GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, GMAIL_OAUTH_REFRESH_TOKEN, GMAIL_OAUTH_FROM_EMAIL setzen');
       if (this.smtpOnlyMode) {
         console.warn('⚠️ SMTP-ONLY ist aktiv: Resend wird in dieser Umgebung nicht verwendet');
       }
-    } else if (this.smtpTransport && !this.enableResendFallback) {
-      console.log('📧 E-Mail-Service im Gmail-only Modus gestartet (Resend deaktiviert)');
-    } else if (this.smtpTransport && this.enableResendFallback && this.resend && !this.smtpOnlyMode) {
-      console.log('📧 E-Mail-Service mit SMTP + Resend-Fallback gestartet');
-    } else if (this.smtpTransport && this.resend && !this.enableResendFallback) {
-      console.log('📧 E-Mail-Service mit SMTP aktiv; Resend ist vorbereitet, Fallback nur bei Netzwerkfehlern');
+    } else if (this.gmailOAuthConfigured) {
+      console.log('📧 E-Mail-Service: Gmail API OAuth2 (primär)' + (this.smtpTransport ? ' + SMTP (Fallback)' : ''));
+    } else if (this.smtpTransport) {
+      console.log('📧 E-Mail-Service: SMTP (Gmail API nicht konfiguriert)');
     }
   }
 
@@ -193,6 +211,81 @@ class EmailService {
       };
     } catch (alternateError) {
       return { error: alternateError };
+    }
+  }
+
+  /**
+   * Sendet eine E-Mail via Gmail API (OAuth2) – funktioniert auf Railway, da nur HTTPS Port 443 benötigt wird.
+   */
+  async sendViaGmailAPI(emailData) {
+    if (!this.gmailOAuthConfigured || !this.gmailApi) {
+      return { error: { message: 'Gmail API OAuth2 nicht konfiguriert' } };
+    }
+
+    try {
+      // RFC 2822 MIME-Nachricht aufbauen
+      const fromAddress = `${this.fromName} <${this.gmailOAuthFrom}>`;
+      const toAddress = emailData.to;
+      const subject = emailData.subject || '(kein Betreff)';
+
+      let mimeLines = [
+        `From: ${fromAddress}`,
+        `To: ${toAddress}`,
+        `Subject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=`,
+        `MIME-Version: 1.0`,
+      ];
+
+      const attachments = emailData.attachments || [];
+
+      if (attachments.length > 0) {
+        const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        mimeLines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+        mimeLines.push('');
+        mimeLines.push(`--${boundary}`);
+        mimeLines.push('Content-Type: text/html; charset=UTF-8');
+        mimeLines.push('Content-Transfer-Encoding: base64');
+        mimeLines.push('');
+        mimeLines.push(Buffer.from(emailData.html || emailData.text || '').toString('base64'));
+
+        for (const att of attachments) {
+          const contentData = typeof att.content === 'string' ? att.content : att.content.toString('base64');
+          mimeLines.push(`--${boundary}`);
+          mimeLines.push(`Content-Type: ${att.contentType || 'application/octet-stream'}; name="${att.filename}"`);
+          mimeLines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+          mimeLines.push('Content-Transfer-Encoding: base64');
+          mimeLines.push('');
+          mimeLines.push(contentData);
+        }
+        mimeLines.push(`--${boundary}--`);
+      } else {
+        mimeLines.push('Content-Type: text/html; charset=UTF-8');
+        mimeLines.push('Content-Transfer-Encoding: base64');
+        mimeLines.push('');
+        mimeLines.push(Buffer.from(emailData.html || emailData.text || '').toString('base64'));
+      }
+
+      const rawMessage = mimeLines.join('\r\n');
+      const encodedMessage = Buffer.from(rawMessage)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const response = await this.gmailApi.users.messages.send({
+        userId: 'me',
+        requestBody: { raw: encodedMessage }
+      });
+
+      const messageId = response?.data?.id || `gmail-api-${Date.now()}`;
+      console.log(`✅ Gmail API: E-Mail gesendet (id=${messageId}) an ${toAddress}`);
+      return {
+        id: messageId,
+        data: { id: messageId },
+        provider: 'gmail-api'
+      };
+    } catch (apiError) {
+      console.error('❌ Gmail API Fehler:', apiError.message);
+      return { error: { message: `Gmail API Fehler: ${apiError.message}` } };
     }
   }
 
@@ -376,12 +469,19 @@ class EmailService {
   }
 
   async sendWithResendFallback(emailData) {
-    if (!this.smtpOnlyMode && this.smtpTransport && this.resend && Date.now() < this.smtpDisabledUntil) {
-      console.warn('⚠️ SMTP temporär deaktiviert nach Netzwerkfehlern - direkter Resend-Versand');
-      return this.sendViaResend(emailData, 'SMTP temporär deaktiviert nach Netzwerkfehlern');
+    // ── 1. Gmail API OAuth2 (primär – funktioniert auf Railway via HTTPS 443) ──
+    if (this.gmailOAuthConfigured) {
+      const apiResult = await this.sendViaGmailAPI(emailData);
+      if (!apiResult?.error) {
+        return apiResult;
+      }
+      console.error('❌ Gmail API fehlgeschlagen:', apiResult.error.message);
+      // Weiter zu SMTP-Fallback
     }
 
+    // ── 2. SMTP-Fallback (falls Gmail API nicht konfiguriert oder fehlgeschlagen) ──
     if (this.smtpTransport) {
+      console.warn('⚠️ Versuche SMTP als Fallback...');
       const smtpMail = {
         from: emailData.from || this.getSenderAddress(),
         to: emailData.to,
@@ -407,70 +507,16 @@ class EmailService {
         return {
           id: info.messageId,
           data: { id: info.messageId },
-          provider: 'gmail'
+          provider: 'gmail-smtp'
         };
       } catch (smtpError) {
         console.error('❌ Gmail SMTP Versand fehlgeschlagen:', smtpError.message);
-
-        const isNetworkError = this.isSmtpNetworkError(smtpError);
-
-        if (isNetworkError) {
-          const alternateResult = await this.tryAlternateGmailPort(smtpMail);
-          if (alternateResult && !alternateResult.error) {
-            console.warn('⚠️ SMTP 465 fehlgeschlagen - Versand über 587 erfolgreich');
-            return alternateResult;
-          }
-          if (alternateResult?.error) {
-            console.error('❌ Alternativer Gmail-Port 587 fehlgeschlagen:', alternateResult.error.message);
-          }
-          this.smtpDisabledUntil = Date.now() + this.smtpBackoffMs;
-          console.warn(`⚠️ SMTP wird für ${this.smtpBackoffMs}ms übersprungen`);
-        }
-
-        const shouldFallbackToResend = !this.smtpOnlyMode && this.resend && (this.enableResendFallback || isNetworkError);
-
-        if (shouldFallbackToResend) {
-          console.warn('⚠️ SMTP fehlgeschlagen - versuche Resend-Fallback...');
-          const resendResult = await this.sendViaResend(emailData, smtpError.message);
-          if (!resendResult?.error && resendResult) {
-            return {
-              ...resendResult,
-              fallbackFrom: 'gmail'
-            };
-          }
-          return resendResult;
-        }
-
         return { error: { message: `Gmail SMTP Fehler: ${smtpError.message}` } };
       }
     }
 
-    if (this.smtpOnlyMode && !this.smtpTransport && !this.resend) {
-      return { error: { message: 'SMTP ist nicht konfiguriert (SMTP-ONLY aktiv). Bitte EMAIL_USER/GMAIL_USER und EMAIL_PASSWORD/GMAIL_APP_PASSWORD in Railway setzen.' } };
-    }
+    return { error: { message: 'Kein E-Mail-Provider verfügbar. Bitte Gmail API OAuth2 in Railway konfigurieren (GMAIL_OAUTH_CLIENT_ID, GMAIL_OAUTH_CLIENT_SECRET, GMAIL_OAUTH_REFRESH_TOKEN, GMAIL_OAUTH_FROM_EMAIL).' } };
 
-    if (this.resend) {
-      const primaryResult = await this.sendViaResend(emailData);
-      const errorMessage = primaryResult?.error?.message || '';
-
-      if (
-        primaryResult?.error &&
-        !this.isProduction &&
-        /domain is not verified/i.test(errorMessage)
-      ) {
-        console.warn('⚠️ Resend-Domain noch nicht verifiziert - DEV-Fallback auf onboarding@resend.dev');
-        const fallbackEmailData = {
-          ...emailData,
-          from: 'Gluecksmomente Manufaktur (DEV) <onboarding@resend.dev>'
-        };
-
-        return this.resend.emails.send(fallbackEmailData);
-      }
-
-      return primaryResult;
-    }
-
-    return { error: { message: 'Kein E-Mail-Provider konfiguriert' } };
   }
 
   // Intelligente E-Mail-Weiterleitung für Development
